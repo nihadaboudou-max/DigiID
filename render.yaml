@@ -15,7 +15,7 @@ services:
   - type: web
     name: digiid-backend
     runtime: docker
-    repo: https://github.com/bigdataism2024-blip/DigiID.git
+    repo: https://github.com/nihadaboudou-max/DigiID.git
     dockerfilePath: backend/Dockerfile
     dockerContext: backend
     plan: free
@@ -149,7 +149,7 @@ services:
   - type: web
     name: digiid-frontend
     runtime: docker
-    repo: https://github.com/bigdataism2024-blip/DigiID.git
+    repo: https://github.com/nihadaboudou-max/DigiID.git
     dockerfilePath: frontend/Dockerfile
     dockerContext: frontend
     plan: free
