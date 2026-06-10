@@ -16,7 +16,7 @@ services:
     name: digiid-backend
     runtime: docker
     repo: https://github.com/nihadaboudou-max/DigiID.git
-    dockerfilePath: backend/Dockerfile
+    dockerfilePath: Dockerfile
     dockerContext: backend
     plan: free
     region: frankfurt  # Europe — latence réduite pour l'Afrique de l'Ouest
@@ -150,7 +150,7 @@ services:
     name: digiid-frontend
     runtime: docker
     repo: https://github.com/nihadaboudou-max/DigiID.git
-    dockerfilePath: frontend/Dockerfile
+    dockerfilePath: Dockerfile
     dockerContext: frontend
     plan: free
     region: frankfurt
