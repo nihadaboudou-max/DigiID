@@ -17,7 +17,6 @@ services:
     runtime: docker
     repo: https://github.com/nihadaboudou-max/DigiID.git
     dockerfilePath: Dockerfile
-    dockerContext: backend
     plan: free
     region: frankfurt  # Europe — latence réduite pour l'Afrique de l'Ouest
     healthCheckPath: /api/v1/sante
@@ -150,8 +149,7 @@ services:
     name: digiid-frontend
     runtime: docker
     repo: https://github.com/nihadaboudou-max/DigiID.git
-    dockerfilePath: Dockerfile
-    dockerContext: frontend
+    dockerfilePath: Dockerfile.frontend
     plan: free
     region: frankfurt
     envVars:
