@@ -1,0 +1,8 @@
+# Dossier des migrations Alembic.
+#
+# Les fichiers de migration sont générés automatiquement par :
+#   docker compose exec backend alembic revision --autogenerate -m "description"
+#
+# Le premier fichier sera créé lors de la première migration après
+# l'installation initiale. Ne pas committer ce dossier vide sur Git
+# (le .gitkeep sert juste à le conserver dans Git).

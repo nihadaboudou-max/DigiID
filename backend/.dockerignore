@@ -1,0 +1,52 @@
+# =============================================================================
+# Fichiers à exclure du build Docker.
+# Garde l'image légère et évite d'embarquer ton environnement local.
+# =============================================================================
+
+# --- Environnement local Python ---
+.venv/
+.venvDigiID/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# --- Secrets et environnement ---
+.env
+.env.*
+!.env.exemple
+*.pem
+*.key
+
+# --- Logs et fichiers temporaires ---
+logs/
+*.log
+*.tmp
+*.bak
+
+# --- Tests et coverage ---
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# --- IDE / éditeurs ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Système ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Git ---
+.git/
+.gitignore
+
+# --- Documentation hors-périmètre image ---
+README.md

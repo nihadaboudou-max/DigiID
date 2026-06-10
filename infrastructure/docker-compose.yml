@@ -1,0 +1,153 @@
+# =============================================================================
+# DigiID — Orchestration Docker Compose (CORRIGÉ HORS-LIGNE)
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Base de données PostgreSQL
+  # ---------------------------------------------------------------------------
+  base_donnees:
+    image: postgres:16-alpine
+    container_name: digiid_postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=digiid_user
+      - POSTGRES_PASSWORD=mot_de_passe_postgres_dev
+      - POSTGRES_DB=digiid
+    volumes:
+      - donnees_postgres:/var/lib/postgresql/data
+      - ./scripts_postgres:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      # Correction : On utilise l'utilisateur "en dur" pour le test de santé
+      test: ["CMD-SHELL", "pg_isready -U digiid_user -d digiid"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - reseau_digiid
+
+  # ---------------------------------------------------------------------------
+  # Cache Redis
+  # ---------------------------------------------------------------------------
+  cache:
+    image: redis:7-alpine
+    container_name: digiid_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - donnees_redis:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - reseau_digiid
+
+  # ---------------------------------------------------------------------------
+  # Base vectorielle ChromaDB
+  # ---------------------------------------------------------------------------
+  base_vectorielle:
+    image: chromadb/chroma:latest
+    container_name: digiid_chromadb
+    restart: unless-stopped
+    volumes:
+      - donnees_chromadb:/chroma/chroma
+    ports:
+      - "8001:8000"
+    networks:
+      - reseau_digiid
+
+  # ---------------------------------------------------------------------------
+  # Ollama
+  # ---------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: digiid_ollama
+    restart: unless-stopped
+    volumes:
+      - donnees_ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - reseau_digiid
+
+  # ---------------------------------------------------------------------------
+  # Backend FastAPI
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: digiid_backend
+    user: "root"
+    restart: unless-stopped
+    env_file:
+      - ../backend/.env
+    environment:
+      # Overrides réseau Docker (prioritaires sur un .env configuré pour le dev local)
+      - POSTGRES_HOST=base_donnees
+      - REDIS_HOST=cache
+      - OLLAMA_URL=http://ollama:11434
+      - CHROMADB_HOST=base_vectorielle
+      - PYTHONPATH=/home/digiid/.local/lib/python3.11/site-packages:/app
+    depends_on:
+      base_donnees:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    volumes:
+      - ../backend:/app
+      - donnees_logs:/app/logs
+    ports:
+      - "8000:8000"
+    networks:
+      - reseau_digiid
+
+  # ---------------------------------------------------------------------------
+  # Worker Celery
+  # ---------------------------------------------------------------------------
+  worker_celery:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: digiid_worker
+    restart: unless-stopped
+    env_file:
+      - ../backend/.env
+    environment:
+      - POSTGRES_HOST=base_donnees
+      - REDIS_HOST=cache
+      - PYTHONPATH=/home/digiid/.local/lib/python3.11/site-packages:/app
+    depends_on:
+      - base_donnees
+      - cache
+    volumes:
+      - ../backend:/app
+      - donnees_logs:/app/logs
+    command: ["celery", "-A", "src.modules.monitoring.taches", "worker", "--loglevel=info", "--concurrency=2"]
+    networks:
+      - reseau_digiid
+
+# ---------------------------------------------------------------------------
+# Volumes persistants
+# ---------------------------------------------------------------------------
+volumes:
+  donnees_postgres:
+  donnees_redis:
+  donnees_chromadb:
+  donnees_ollama:
+  donnees_logs:
+
+# ---------------------------------------------------------------------------
+# Réseau interne
+# ---------------------------------------------------------------------------
+networks:
+  reseau_digiid:
+    driver: bridge
+    name: digiid_reseau

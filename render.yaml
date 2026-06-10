@@ -1,0 +1,169 @@
+# =============================================================================
+# DigiID — Render Blueprint (déploiement automatisé)
+# =============================================================================
+# Une fois ce fichier poussé sur GitHub :
+# 1. Aller sur https://dashboard.render.com
+# 2. "New Blueprint" → connecter le dépôt GitHub
+# 3. Render détecte automatiquement render.yaml
+# =============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # BACKEND — API FastAPI (Docker)
+  # --------------------------------------------------------------------------
+  - type: web
+    name: digiid-backend
+    runtime: docker
+    repo: https://github.com/bigdataism2024-blip/DigiID.git
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    plan: free
+    region: frankfurt  # Europe — latence réduite pour l'Afrique de l'Ouest
+    healthCheckPath: /api/v1/sante
+    envVars:
+      # --- Application ---
+      - key: ENVIRONNEMENT
+        value: production
+      - key: NOM_APPLICATION
+        value: DigiID
+      - key: VERSION_API
+        value: "v1"
+      - key: ACTIVER_DEBUG
+        value: "false"
+
+      # --- Sécurité (À CHANGER impérativement !) ---
+      - key: CLE_SECRETE_JWT
+        generateValue: true
+      - key: CLE_CHIFFREMENT_DONNEES
+        generateValue: true
+      - key: ALGORITHME_JWT
+        value: HS256
+      - key: DUREE_TOKEN_ACCES_MINUTES
+        value: "15"
+      - key: DUREE_TOKEN_RAFRAICHISSEMENT_JOURS
+        value: "7"
+
+      # --- PostgreSQL (Render Managed) ---
+      - key: POSTGRES_HOST
+        fromService:
+          type: postgres
+          name: digiid-db
+          property: host
+      - key: POSTGRES_PORT
+        fromService:
+          type: postgres
+          name: digiid-db
+          property: port
+      - key: POSTGRES_UTILISATEUR
+        fromService:
+          type: postgres
+          name: digiid-db
+          property: user
+      - key: POSTGRES_MOT_DE_PASSE
+        fromService:
+          type: postgres
+          name: digiid-db
+          property: password
+      - key: POSTGRES_NOM_BASE
+        fromService:
+          type: postgres
+          name: digiid-db
+          property: database
+
+      # --- Redis (Render Managed) ---
+      - key: REDIS_HOST
+        fromService:
+          type: redis
+          name: digiid-redis
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          type: redis
+          name: digiid-redis
+          property: port
+      - key: REDIS_MOT_DE_PASSE
+        fromService:
+          type: redis
+          name: digiid-redis
+          property: password
+
+      # --- LLM (Chatbot) ---
+      - key: FOURNISSEUR_LLM
+        value: groq
+      - key: GROQ_API_KEY
+        sync: false  # À définir manuellement dans le dashboard Render
+      - key: GROQ_MODELE
+        value: llama-3.3-70b-versatile
+
+      # --- CORS / Frontend ---
+      - key: ORIGINES_AUTORISEES
+        value: https://digiid-frontend.onrender.com
+      - key: URL_FRONTEND
+        value: https://digiid-frontend.onrender.com
+
+      # --- Monitoring ---
+      - key: NIVEAU_JOURNAL
+        value: INFO
+      - key: SENTRY_DSN
+        sync: false
+      - key: ACTIVER_METRIQUES_PROMETHEUS
+        value: "true"
+
+      # --- Limitations ---
+      - key: LIMITE_REQUETES_PAR_MINUTE_ANONYME
+        value: "20"
+      - key: LIMITE_REQUETES_PAR_MINUTE_AUTHENTIFIE
+        value: "120"
+      - key: LIMITE_REQUETES_PAR_MINUTE_ADMIN
+        value: "300"
+
+      # --- 2FA ---
+      - key: ACTIVER_2FA_OBLIGATOIRE_ADMIN
+        value: "true"
+      - key: DUREE_VALIDITE_CODE_2FA_SECONDES
+        value: "300"
+
+  # --------------------------------------------------------------------------
+  # POSTGRESQL — Base de données (Render Managed)
+  # --------------------------------------------------------------------------
+  - type: postgres
+    name: digiid-db
+    plan: free
+    region: frankfurt
+    ipAllowList: []  # Accès restreint (intra-Render uniquement)
+    version: 16
+
+  # --------------------------------------------------------------------------
+  # REDIS — Cache (Render Managed)
+  # --------------------------------------------------------------------------
+  - type: redis
+    name: digiid-redis
+    plan: free
+    region: frankfurt
+    maxmemoryPolicy: allkeys-lru
+
+  # --------------------------------------------------------------------------
+  # FRONTEND — Next.js (Docker)
+  # --------------------------------------------------------------------------
+  - type: web
+    name: digiid-frontend
+    runtime: docker
+    repo: https://github.com/bigdataism2024-blip/DigiID.git
+    dockerfilePath: frontend/Dockerfile
+    dockerContext: frontend
+    plan: free
+    region: frankfurt
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_URL_BACKEND
+        fromService:
+          type: web
+          name: digiid-backend
+          property: url
+      - key: URL_BACKEND
+        fromService:
+          type: web
+          name: digiid-backend
+          property: host

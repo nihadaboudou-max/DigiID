@@ -1,0 +1,65 @@
+# --- Environnement et secrets ---
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+venv/
+.venv/
+env/
+
+# --- Node / Frontend ---
+node_modules/
+.next/
+out/
+build/
+dist/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Bases de données ---
+*.sqlite
+*.sqlite3
+*.db
+
+# --- Logs ---
+logs/
+*.log
+
+# --- Volumes Docker ---
+infrastructure/donnees_postgres/
+infrastructure/donnees_redis/
+infrastructure/donnees_chromadb/
+infrastructure/donnees_ollama/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# --- Builds et caches ---
+.cache/
+.parcel-cache/
+
+# --- Fichiers temporaires ---
+*.tmp
+*.bak
+*.backup

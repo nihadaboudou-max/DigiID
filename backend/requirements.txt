@@ -1,0 +1,79 @@
+# =============================================================================
+# DigiID — Dépendances backend Python
+# Python 3.11+
+# =============================================================================
+
+# --- Framework web et serveur ---
+fastapi==0.110.0
+uvicorn[standard]==0.27.1
+gunicorn==21.2.0
+
+# --- Validation et configuration ---
+pydantic==2.6.1
+pydantic-settings==2.2.1
+email-validator==2.1.0
+
+# --- Base de données ---
+sqlalchemy==2.0.27
+alembic==1.13.1
+asyncpg==0.29.0
+psycopg2-binary
+
+# --- Sécurité et authentification ---
+argon2-cffi==23.1.0
+python-jose[cryptography]==3.3.0
+passlib[argon2]==1.7.4
+python-multipart==0.0.9
+cryptography==42.0.4
+pyotp==2.9.0
+qrcode[pil]==7.4.2
+
+# --- Cache et tâches asynchrones ---
+redis==5.0.1
+celery==5.3.6
+
+# --- Limitation de débit ---
+slowapi==0.1.9
+
+# --- Journalisation et monitoring ---
+loguru==0.7.2
+prometheus-fastapi-instrumentator==6.1.0
+sentry-sdk[fastapi]==1.40.5
+
+# --- LLM et chatbot (RAG avec LangChain) ---
+langchain==0.1.9
+langchain-community==0.0.24
+langchain-openai==0.0.7
+chromadb==0.4.22
+sentence-transformers==2.5.1
+tiktoken==0.6.0
+
+# --- Machine Learning (scoring) ---
+scikit-learn==1.4.0
+xgboost==2.0.3
+shap==0.45.0
+pandas==2.2.0
+numpy==1.26.4
+faker==23.2.1
+
+# --- Deep Learning (vérification visuelle) ---
+# Ces dépendances sont lourdes : on les installera dans un service séparé en prod
+opencv-python-headless==4.9.0.80
+insightface==0.7.3
+onnxruntime==1.17.1
+pillow==10.2.0
+
+# --- OCR (CNI, documents, cartes d'identité) ---
+pytesseract==0.3.10
+
+# --- Utilitaires ---
+python-dateutil==2.8.2
+pytz==2024.1
+httpx==0.27.0
+tenacity==8.2.3
+
+# --- Tests ---
+pytest==8.0.2
+pytest-asyncio==0.23.5
+pytest-cov==4.1.0
+factory-boy==3.3.0
