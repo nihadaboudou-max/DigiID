@@ -62,7 +62,17 @@ def configurer_journal() -> None:
 
     # --- Sortie fichier (toujours active) ---
     repertoire_logs = Path("logs")
-    repertoire_logs.mkdir(exist_ok=True)
+    try:
+        repertoire_logs.mkdir(exist_ok=True)
+    except PermissionError:
+        # Fallback : utiliser /tmp/logs si le dossier n'est pas accessible en écriture
+        import tempfile
+        repertoire_logs = Path(tempfile.gettempdir()) / "digiid_logs"
+        repertoire_logs.mkdir(exist_ok=True)
+        journal.warning(
+            f"Impossible de créer 'logs/' à la racine — utilisation de {repertoire_logs} "
+            "comme dossier de repli"
+        )
 
     # Fichier principal — tous les niveaux
     journal.add(

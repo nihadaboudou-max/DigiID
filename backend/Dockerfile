@@ -41,8 +41,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash digiid
 
-USER digiid
 WORKDIR /app
+RUN mkdir -p /app/logs && chown digiid:digiid /app/logs
+
+USER digiid
 
 # Copier les dépendances installées depuis le constructeur
 COPY --from=constructeur --chown=digiid:digiid /root/.local /home/digiid/.local

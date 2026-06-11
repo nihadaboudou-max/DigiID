@@ -16,11 +16,10 @@ services:
     name: digiid-backend
     runtime: docker
     repo: https://github.com/nihadaboudou-max/DigiID.git
-    dockerfilePath: Dockerfile
+    dockerfilePath: backend/Dockerfile
     plan: free
     region: frankfurt
     healthCheckPath: /api/v1/sante
-    preDeployCommand: python -m src.base_donnees.seed
     envVars:
       # --- Application ---
       - key: ENVIRONNEMENT

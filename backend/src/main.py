@@ -76,6 +76,19 @@ async def cycle_de_vie(application: FastAPI):
     except Exception as erreur:
         journal.warning(f"Initialisation feature flags ignorée : {erreur}")
 
+    # Seed automatique (roles RBAC + super admin) en production si les variables sont définies
+    import os
+    seed_email = os.getenv("SEED_SUPER_ADMIN_EMAIL")
+    seed_password = os.getenv("SEED_SUPER_ADMIN_MOT_DE_PASSE")
+    if seed_email and seed_password:
+        try:
+            from src.base_donnees.seed import semer_roles, creer_super_admin_initial
+            await semer_roles()
+            await creer_super_admin_initial()
+            journal.info("Seed automatique effectué avec succès")
+        except Exception as erreur:
+            journal.warning(f"Seed automatique ignoré (admin existe peut-être déjà) : {erreur}")
+
     yield  # === Application en service ===
 
     # === ARRÊT ===
