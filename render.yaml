@@ -97,7 +97,7 @@ services:
       - key: NIVEAU_JOURNAL
         value: INFO
       - key: SENTRY_DSN
-        sync: false
+        value: ""
       - key: ACTIVER_METRIQUES_PROMETHEUS
         value: "true"
 
