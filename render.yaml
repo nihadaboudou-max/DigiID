@@ -20,6 +20,7 @@ services:
     plan: free
     region: frankfurt
     healthCheckPath: /api/v1/sante
+    preDeployCommand: python -m src.base_donnees.seed
     envVars:
       # --- Application ---
       - key: ENVIRONNEMENT
