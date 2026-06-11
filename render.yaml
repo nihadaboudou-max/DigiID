@@ -18,7 +18,7 @@ services:
     repo: https://github.com/nihadaboudou-max/DigiID.git
     dockerfilePath: Dockerfile
     plan: free
-    region: frankfurt  # Europe — latence réduite pour l'Afrique de l'Ouest
+    region: frankfurt
     healthCheckPath: /api/v1/sante
     envVars:
       # --- Application ---
@@ -31,7 +31,7 @@ services:
       - key: ACTIVER_DEBUG
         value: "false"
 
-      # --- Sécurité (À CHANGER impérativement !) ---
+      # --- Sécurité (générées automatiquement) ---
       - key: CLE_SECRETE_JWT
         generateValue: true
       - key: CLE_CHIFFREMENT_DONNEES
@@ -43,47 +43,42 @@ services:
       - key: DUREE_TOKEN_RAFRAICHISSEMENT_JOURS
         value: "7"
 
-      # --- PostgreSQL (Render Managed) ---
+      # --- PostgreSQL (via databases:) ---
       - key: POSTGRES_HOST
-        fromService:
-          type: postgres
+        fromDatabase:
           name: digiid-db
           property: host
       - key: POSTGRES_PORT
-        fromService:
-          type: postgres
+        fromDatabase:
           name: digiid-db
           property: port
       - key: POSTGRES_UTILISATEUR
-        fromService:
-          type: postgres
+        fromDatabase:
           name: digiid-db
           property: user
       - key: POSTGRES_MOT_DE_PASSE
-        fromService:
-          type: postgres
+        fromDatabase:
           name: digiid-db
           property: password
       - key: POSTGRES_NOM_BASE
-        fromService:
-          type: postgres
+        fromDatabase:
           name: digiid-db
           property: database
 
-      # --- Redis (Render Managed) ---
+      # --- Redis (via service type keyvalue) ---
       - key: REDIS_HOST
         fromService:
-          type: redis
+          type: keyvalue
           name: digiid-redis
           property: host
       - key: REDIS_PORT
         fromService:
-          type: redis
+          type: keyvalue
           name: digiid-redis
           property: port
       - key: REDIS_MOT_DE_PASSE
         fromService:
-          type: redis
+          type: keyvalue
           name: digiid-redis
           property: password
 
@@ -91,7 +86,7 @@ services:
       - key: FOURNISSEUR_LLM
         value: groq
       - key: GROQ_API_KEY
-        sync: false  # À définir manuellement dans le dashboard Render
+        sync: false
       - key: GROQ_MODELE
         value: llama-3.3-70b-versatile
 
@@ -124,19 +119,9 @@ services:
         value: "300"
 
   # --------------------------------------------------------------------------
-  # POSTGRESQL — Base de données (Render Managed)
+  # REDIS — Cache (type: keyvalue dans Render)
   # --------------------------------------------------------------------------
-  - type: postgres
-    name: digiid-db
-    plan: free
-    region: frankfurt
-    ipAllowList: []  # Accès restreint (intra-Render uniquement)
-    version: 16
-
-  # --------------------------------------------------------------------------
-  # REDIS — Cache (Render Managed)
-  # --------------------------------------------------------------------------
-  - type: redis
+  - type: keyvalue
     name: digiid-redis
     plan: free
     region: frankfurt
@@ -165,3 +150,13 @@ services:
           type: web
           name: digiid-backend
           property: host
+
+# --------------------------------------------------------------------------
+# POSTGRESQL — Base de données managée
+# --------------------------------------------------------------------------
+databases:
+  - name: digiid-db
+    plan: free
+    region: frankfurt
+    ipAllowList: []
+    postgresMajorVersion: 16
