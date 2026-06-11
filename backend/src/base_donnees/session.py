@@ -20,7 +20,7 @@ from src.noyau import journal
 # --- Moteur asynchrone (un seul pour toute l'application) ---
 moteur_async = create_async_engine(
     parametres.url_base_donnees,
-    echo=parametres.debug,        # Logger les requêtes SQL en mode debug
+    echo=parametres.activer_debug,  # Logger les requêtes SQL en mode debug
     pool_size=10,                  # Connexions persistantes
     max_overflow=20,               # Connexions supplémentaires en cas de pic
     pool_pre_ping=True,            # Vérifier la connexion avant chaque emprunt
