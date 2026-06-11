@@ -42,9 +42,6 @@ WORKDIR /app
 COPY backend/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Créer l'utilisateur non-root
-RUN useradd --create-home --shell /bin/bash digiid
-
 USER digiid
 
 COPY --from=constructeur --chown=digiid:digiid /root/.local /home/digiid/.local
