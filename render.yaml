@@ -109,11 +109,25 @@ services:
       - key: LIMITE_REQUETES_PAR_MINUTE_ADMIN
         value: "300"
 
+      # --- Seed super admin (PREMIÈRE CONNEXION) ---
+      - key: SEED_SUPER_ADMIN_EMAIL
+        value: admin@digiid.africa
+      - key: SEED_SUPER_ADMIN_MOT_DE_PASSE
+        sync: false
+      - key: SEED_SUPER_ADMIN_PRENOM
+        value: Super
+      - key: SEED_SUPER_ADMIN_NOM
+        value: Admin
+
       # --- 2FA ---
       - key: ACTIVER_2FA_OBLIGATOIRE_ADMIN
         value: "true"
       - key: DUREE_VALIDITE_CODE_2FA_SECONDES
         value: "300"
+
+      # --- Port d'écoute explicite ---
+      - key: PORT
+        value: "8000"
 
   # --------------------------------------------------------------------------
   # REDIS — Cache (type: keyvalue dans Render)

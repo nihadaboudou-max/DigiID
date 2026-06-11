@@ -36,8 +36,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash digiid
 
-USER digiid
 WORKDIR /app
+
+# Copier et rendre exécutable le script d'entrée
+COPY backend/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Créer l'utilisateur non-root
+RUN useradd --create-home --shell /bin/bash digiid
+
+USER digiid
 
 COPY --from=constructeur --chown=digiid:digiid /root/.local /home/digiid/.local
 
@@ -46,7 +54,7 @@ COPY --chown=digiid:digiid backend/ .
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/sante || exit 1
 
-CMD ["uvicorn", "src.main:application", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/bin/bash", "/entrypoint.sh"]
