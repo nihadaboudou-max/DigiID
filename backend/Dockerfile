@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /installation
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --user --no-cache-dir -r requirements.txt
 
 # --- Étape 2 : image finale légère ---
@@ -49,8 +49,8 @@ USER digiid
 # Copier les dépendances installées depuis le constructeur
 COPY --from=constructeur --chown=digiid:digiid /root/.local /home/digiid/.local
 
-# Copier le code applicatif
-COPY --chown=digiid:digiid . .
+# Copier le code applicatif (backend uniquement)
+COPY --chown=digiid:digiid backend/ .
 
 # Exposer le port API
 EXPOSE 8000
