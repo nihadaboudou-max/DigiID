@@ -54,26 +54,16 @@ async def cycle_de_vie(application: FastAPI):
         journal.error(f"Connexion base de données : ÉCHEC -- {erreur}")
         raise
 
-    # Appliquer les migrations Alembic (indépendant de l'environnement)
+    # Créer les tables si elles n'existent pas (indépendant de l'environnement)
+    # En production, Render ne crée pas les tables automatiquement.
     try:
-        from alembic.config import Config
-        from alembic import command
-        chemin_alembic = "/app/alembic.ini"
-        config_alembic = Config(chemin_alembic)
-        config_alembic.set_main_option("sqlalchemy.url", parametres.url_base_donnees)
-        command.upgrade(config_alembic, "head")
-        journal.info("Migrations Alembic appliquées avec succès")
+        from src.base_donnees.base import Base
+        async with moteur_async.begin() as connexion:
+            await connexion.run_sync(Base.metadata.create_all, checkfirst=True)
+        journal.info("Tables vérifiées/créées avec succès")
     except Exception as erreur:
-        journal.warning(f"Migrations Alembic ignorées : {erreur}")
-        # Fallback : créer les tables directement si Alembic échoue
-        try:
-            from src.base_donnees.base import Base
-            async with moteur_async.begin() as connexion:
-                await connexion.run_sync(Base.metadata.create_all, checkfirst=True)
-            journal.info("Tables créées directement (fallback)")
-        except Exception as erreur2:
-            journal.error(f"Impossible de créer les tables : {erreur2}")
-            raise
+        journal.error(f"Impossible de créer/vérifier les tables : {erreur}")
+        raise
 
     # Initialiser les feature flags par défaut si nécessaire
     try:
