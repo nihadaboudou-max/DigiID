@@ -191,7 +191,21 @@ async def creer_super_admin_initial():
 
         if super_admin_existant:
             journal.info(f"Un super admin existe déjà : id={super_admin_existant.id}")
-            print(f"\n✅ Super administrateur déjà créé : id={super_admin_existant.id}")
+            # ✅ Déverrouiller et réinitialiser le mot de passe au cas où
+            from src.noyau import hacher_mot_de_passe
+            super_admin_existant.est_verrouille = False
+            super_admin_existant.date_verrouillage = None
+            super_admin_existant.tentatives_connexion_echouees = 0
+            super_admin_existant.est_actif = True
+            
+            # Mettre à jour le mot de passe si les variables sont présentes
+            mot_de_passe_update = os.getenv("SEED_SUPER_ADMIN_MOT_DE_PASSE", "Admin@DigiID2025!")
+            super_admin_existant.mot_de_passe_hash = hacher_mot_de_passe(mot_de_passe_update)
+            await session.commit()
+            
+            journal.info(f"Super admin déverrouillé et mot de passe réinitialisé : id={super_admin_existant.id}")
+            print(f"\n✅ Super administrateur déjà existant — déverrouillé et mot de passe réinitialisé.")
+            print(f"   Connecte-toi avec admin@digiid.africa / Admin@DigiID2025!")
             return
 
         # Récupérer les identifiants
