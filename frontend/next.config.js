@@ -7,10 +7,16 @@ const nextConfig = {
   },
   // Le backend tourne sur le port 8000 en local
   async rewrites() {
-    const backendUrl =
+    let backendUrl =
       process.env.NEXT_PUBLIC_URL_BACKEND ||
       process.env.URL_BACKEND ||
       "http://localhost:8000";
+
+    // Render injecte URL_BACKEND sans protocole (ex: "digiid-backend.onrender.com")
+    // Ajouter https:// si nécessaire
+    if (!backendUrl.startsWith("http://") && !backendUrl.startsWith("https://")) {
+      backendUrl = `https://${backendUrl}`;
+    }
 
     return [
       {
