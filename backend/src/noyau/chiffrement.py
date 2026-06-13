@@ -22,6 +22,8 @@ from typing import Tuple
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, InvalidHashError
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives import hashes
 
 from src.config import parametres
 
@@ -96,17 +98,39 @@ def hash_necessite_mise_a_jour(hash_stocke: str) -> bool:
 def _obtenir_cle_chiffrement() -> bytes:
     """
     Récupère la clé maître de chiffrement depuis la configuration.
-    La clé doit être encodée en base64 et représenter 32 octets (256 bits).
+
+    La clé peut être :
+    1. Une chaîne base64 représentant 32 octets (format recommandé)
+    2. N'importe quelle chaîne de caractères (convertie via HKDF en 32 octets)
+
+    Cette flexibilité évite les erreurs 500 lorsque Render génère
+    automatiquement une clé via `generateValue: true` (qui n'est pas du base64 valide).
     """
-    cle_base64 = parametres.cle_chiffrement_donnees
-    cle = base64.b64decode(cle_base64)
-    if len(cle) != 32:
+    cle_brute = parametres.cle_chiffrement_donnees
+
+    if not cle_brute:
         raise ValueError(
-            "La clé de chiffrement doit faire 32 octets (256 bits) une fois décodée. "
-            f"Longueur reçue : {len(cle)} octets. "
+            "CLE_CHIFFREMENT_DONNEES est vide. "
             "Générer une clé : python -c \"import os, base64; print(base64.b64encode(os.urandom(32)).decode())\""
         )
-    return cle
+
+    # Essayer d'abord en base64 (format natif optimal)
+    try:
+        cle = base64.b64decode(cle_brute)
+        if len(cle) == 32:
+            return cle
+    except Exception:
+        pass  # Ce n'est pas du base64, on utilise HKDF
+
+    # Fallback : dériver une clé de 32 octets via HKDF-SHA256
+    # Cela permet d'utiliser n'importe quelle chaîne (même `generateValue: true` de Render)
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info=b"digiid-encryption-key-v1",
+    )
+    return hkdf.derive(cle_brute.encode("utf-8"))
 
 
 def chiffrer_donnee(donnee_claire: str) -> str:

@@ -35,8 +35,8 @@ class ParametresApplication(BaseSettings):
     # --- Sécurité ---
     cle_secrete_jwt: str = Field(..., min_length=32,
                                   description="Clé pour signer les JWT — minimum 32 caractères")
-    cle_chiffrement_donnees: str = Field(..., min_length=32,
-                                          description="Clé maître pour le chiffrement AES — 32 octets en base64")
+    cle_chiffrement_donnees: str = Field(..., min_length=16,
+                                          description="Clé maître pour le chiffrement AES — 32 octets en base64 (ou chaîne dérivée via HKDF)")
     algorithme_jwt: str = "HS256"
     duree_token_acces_minutes: int = 15
     duree_token_rafraichissement_jours: int = 7
@@ -102,6 +102,27 @@ class ParametresApplication(BaseSettings):
     )
 
     # --- Validations et propriétés calculées ---
+
+    @field_validator("cle_chiffrement_donnees")
+    @classmethod
+    def valider_cle_chiffrement(cls, valeur: str) -> str:
+        """Vérifie que la clé de chiffrement est utilisable (base64 + 32 octets ou n'importe quelle chaîne)."""
+        if not valeur or len(valeur) < 16:
+            raise ValueError(
+                "CLE_CHIFFREMENT_DONNEES est trop courte (minimum 16 caractères). "
+                "Générer une clé : python -c \"import os, base64; print(base64.b64encode(os.urandom(32)).decode())\""
+            )
+        # Vérifier si c'est du base64 valide
+        try:
+            import base64
+            cle = base64.b64decode(valeur)
+            if len(cle) != 32:
+                # Pas 32 octets en base64 — pas grave, HKDF va dériver
+                pass
+        except Exception:
+            # Pas du base64 — pas grave, HKDF va dériver la clé
+            pass
+        return valeur
 
     @field_validator("cle_secrete_jwt")
     @classmethod
