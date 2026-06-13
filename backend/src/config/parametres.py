@@ -9,6 +9,7 @@ et utilisé partout dans l'application.
 Avantage : aucune variable d'environnement n'est lue ailleurs dans le code.
 On modifie le .env, on relance l'app, c'est tout.
 """
+import urllib.parse
 from functools import lru_cache
 from typing import List, Literal
 
@@ -138,18 +139,20 @@ class ParametresApplication(BaseSettings):
     @property
     def url_base_donnees(self) -> str:
         """URL SQLAlchemy async pour PostgreSQL."""
+        mot_de_passe_encode = urllib.parse.quote(self.postgres_mot_de_passe, safe='')
         return (
             f"postgresql+asyncpg://{self.postgres_utilisateur}:"
-            f"{self.postgres_mot_de_passe}@{self.postgres_host}:"
+            f"{mot_de_passe_encode}@{self.postgres_host}:"
             f"{self.postgres_port}/{self.postgres_nom_base}"
         )
 
     @property
     def url_base_donnees_sync(self) -> str:
         """URL SQLAlchemy synchrone pour Alembic et scripts."""
+        mot_de_passe_encode = urllib.parse.quote(self.postgres_mot_de_passe, safe='')
         return (
             f"postgresql+psycopg2://{self.postgres_utilisateur}:"
-            f"{self.postgres_mot_de_passe}@{self.postgres_host}:"
+            f"{mot_de_passe_encode}@{self.postgres_host}:"
             f"{self.postgres_port}/{self.postgres_nom_base}"
         )
 
