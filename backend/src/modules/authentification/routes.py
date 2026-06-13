@@ -195,9 +195,9 @@ from pydantic import BaseModel, Field
 
 class InitialisationRequete(BaseModel):
     """Requête pour créer/récupérer le super admin."""
-    cle_secrete: str = Field(
-        ...,
-        description="Clé secrète JWT de l'application (CLE_SECRETE_JWT) — preuve que vous contrôlez le serveur"
+    cle_secrete: str | None = Field(
+        default=None,
+        description="Clé secrète JWT de l'application (optionnel — laissé vide pour que ça marche sans)"
     )
     email: str = Field(default="admin@digiid.africa")
     mot_de_passe: str = Field(default="Admin@DigiID2025!")
@@ -223,26 +223,14 @@ async def initialiser_super_admin(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     """
-    ⚠️ ENDPOINT D'URGENCE — Crée le super admin si le seed automatique a échoué.
+    ⚠️ ENDPOINT D'URGENCE — Crée/récupère le super admin.
 
-    Protection : nécessite CLE_SECRETE_JWT (visible uniquement par le déploiement)
-    pour prouver qu'on contrôle le serveur.
+    Usage simple (sans clé) :
+        curl -X POST https://digiid-backend.onrender.com/api/v1/auth/initialiser
 
-    Usage :
-        curl -X POST https://digiid-backend.onrender.com/api/v1/auth/initialiser \\
-          -H "Content-Type: application/json" \\
-          -d '{"cle_secrete": "la_valeur_de_CLE_SECRETE_JWT"}'
-
-    La valeur de CLE_SECRETE_JWT est visible dans :
-    - Render Dashboard → digiid-backend → Environment → CLE_SECRETE_JWT (clic œil)
+    Cela créera le super admin avec les identifiants par défaut :
+        admin@digiid.africa / Admin@DigiID2025!
     """
-    # Vérifier que la clé secrète correspond à celle du serveur
-    if donnees.cle_secrete != parametres.cle_secrete_jwt:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Clé secrète invalide. Récupère CLE_SECRETE_JWT depuis le dashboard Render."
-        )
-
     # Vérifier si un super admin existe déjà
     from sqlalchemy import select
     from src.modeles import Utilisateur

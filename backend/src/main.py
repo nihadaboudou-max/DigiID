@@ -81,14 +81,22 @@ async def cycle_de_vie(application: FastAPI):
     import os
     seed_email = os.getenv("SEED_SUPER_ADMIN_EMAIL")
     seed_password = os.getenv("SEED_SUPER_ADMIN_MOT_DE_PASSE")
-    if seed_email and seed_password:
-        try:
-            from src.base_donnees.seed import semer_roles, creer_super_admin_initial
-            await semer_roles()
-            await creer_super_admin_initial()
-            journal.info("Seed automatique effectué avec succès")
-        except Exception as erreur:
-            journal.warning(f"Seed automatique ignoré (admin existe peut-être déjà) : {erreur}")
+    
+    # Toujours tenter le seed, même sans variables (fallback défini dans seed.py)
+    try:
+        from src.base_donnees.seed import semer_roles, creer_super_admin_initial
+        journal.info("=== Tentative de seed automatique ===")
+        if seed_email and seed_password:
+            journal.info(f"Seed avec email={seed_email} depuis variables d'environnement")
+        else:
+            journal.warning("Variables SEED_SUPER_ADMIN absentes — utilisation des identifiants par défaut")
+        await semer_roles()
+        await creer_super_admin_initial()
+        journal.info("✅ Seed automatique effectué avec succès")
+    except Exception as erreur:
+        journal.error(f"❌ Seed automatique échoué : {erreur}", exc_info=True)
+        # Ne pas bloquer le démarrage de l'API — le seed peut être relancé
+        # via l'endpoint d'urgence POST /api/v1/auth/initialiser
 
     yield  # === Application en service ===
 
