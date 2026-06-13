@@ -14,7 +14,7 @@ async function proxy(
   const { path: pathArray } = await params;
   const path = pathArray?.join('/') ?? '';
   const search = new URL(request.url).search;
-  const backendUrl = ${BACKEND_BASE}/src/app/api/backend/[...path]/route.ts;
+  const backendUrl = `${BACKEND_BASE}/${path}${search}`;
 
   const headers = new Headers(request.headers);
   headers.delete('host');
@@ -25,7 +25,6 @@ async function proxy(
 
   try {
     const controller = new AbortController();
-    // Timeout de 25 secondes (Render free met ~30s à se réveiller)
     const timeoutId = setTimeout(() => controller.abort(), 25000);
 
     const response = await fetch(backendUrl, {
@@ -52,9 +51,9 @@ async function proxy(
 
     const code_erreur = estTimeOut ? 'BACKEND_TIMEOUT' : estConnexion ? 'BACKEND_INDISPONIBLE' : 'ERREUR_PROXY';
     const message_utilisateur = estTimeOut
-      ? 'Le serveur met du temps à répondre. Veuillez réessayer dans quelques instants.'
+      ? 'Le serveur met du temps à r\u00e9pondre. Veuillez r\u00e9essayer dans quelques instants.'
       : estConnexion
-        ? 'Le serveur backend est temporairement indisponible. Rafraîchissez la page.'
+        ? 'Le serveur backend est temporairement indisponible. Rafra\u00eechissez la page.'
         : 'Erreur de connexion au serveur.';
 
     return NextResponse.json(

@@ -158,7 +158,7 @@ services:
         fromService:
           type: web
           name: digiid-backend
-          property: host
+          property: url
 
 # --------------------------------------------------------------------------
 # POSTGRESQL — Base de données managée
