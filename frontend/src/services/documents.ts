@@ -6,9 +6,7 @@ import { clientAPI, obtenirTokenAcces, ErreurAPI } from "./client_api";
 
 const PREFIXE = "/api/v1/utilisateur/documents";
 const URL_BASE =
-  process.env.NEXT_PUBLIC_URL_BACKEND ||
-  process.env.URL_BACKEND ||
-  "http://localhost:8000";
+  "/api/backend";
 
 export interface DocumentDetail {
   id: string;
