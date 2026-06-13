@@ -13,7 +13,7 @@ Endpoints :
 """
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
@@ -181,3 +181,111 @@ async def moi(
 ):
     """Retourne les informations de base de l'utilisateur connecté."""
     return _construire_utilisateur_reponse(utilisateur)
+
+
+# =============================================================================
+# ⚠️  ENDPOINT D'URGENCE — Création/sauvegarde du super admin
+# =============================================================================
+# Utilisé UNIQUEMENT si le seed automatique échoue au démarrage.
+# Protégé par une clé secrète présente dans CLE_SECRETE_JWT.
+# À supprimer une fois le super admin créé.
+# =============================================================================
+
+from pydantic import BaseModel, Field
+
+class InitialisationRequete(BaseModel):
+    """Requête pour créer/récupérer le super admin."""
+    cle_secrete: str = Field(
+        ...,
+        description="Clé secrète JWT de l'application (CLE_SECRETE_JWT) — preuve que vous contrôlez le serveur"
+    )
+    email: str = Field(default="admin@digiid.africa")
+    mot_de_passe: str = Field(default="Admin@DigiID2025!")
+    prenom: str = Field(default="Super")
+    nom: str = Field(default="Admin")
+
+
+class InitialisationReponse(BaseModel):
+    """Réponse de l'initialisation d'urgence."""
+    succes: bool
+    message: str
+    identifiants: dict | None = None
+
+
+@routeur_authentification.post(
+    "/initialiser",
+    response_model=InitialisationReponse,
+    summary="⚠️ URGENCE — Créer le super admin (uniquement si seed bloqué)",
+    include_in_schema=False,  # Caché de la doc OpenAPI
+)
+async def initialiser_super_admin(
+    donnees: InitialisationRequete,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """
+    ⚠️ ENDPOINT D'URGENCE — Crée le super admin si le seed automatique a échoué.
+
+    Protection : nécessite CLE_SECRETE_JWT (visible uniquement par le déploiement)
+    pour prouver qu'on contrôle le serveur.
+
+    Usage :
+        curl -X POST https://digiid-backend.onrender.com/api/v1/auth/initialiser \\
+          -H "Content-Type: application/json" \\
+          -d '{"cle_secrete": "la_valeur_de_CLE_SECRETE_JWT"}'
+
+    La valeur de CLE_SECRETE_JWT est visible dans :
+    - Render Dashboard → digiid-backend → Environment → CLE_SECRETE_JWT (clic œil)
+    """
+    # Vérifier que la clé secrète correspond à celle du serveur
+    if donnees.cle_secrete != parametres.cle_secrete_jwt:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Clé secrète invalide. Récupère CLE_SECRETE_JWT depuis le dashboard Render."
+        )
+
+    # Vérifier si un super admin existe déjà
+    from sqlalchemy import select
+    from src.modeles import Utilisateur
+    from src.config.constantes import RolesUtilisateur
+    from src.base_donnees.seed import creer_super_admin_initial, semer_roles
+
+    try:
+        # Vérifier si le super admin existe déjà
+        resultat = await session.execute(
+            select(Utilisateur).where(
+                Utilisateur.role == RolesUtilisateur.SUPER_ADMINISTRATEUR.value,
+                Utilisateur.est_supprime == False,
+            )
+        )
+        existant = resultat.scalar_one_or_none()
+
+        if existant:
+            return InitialisationReponse(
+                succes=True,
+                message="Super admin déjà existant.",
+                identifiants={
+                    "email": "admin@digiid.africa",
+                    "mot_de_passe": "[celui défini lors de la création]",
+                    "id": str(existant.id),
+                }
+            )
+
+        # Seed des rôles puis création
+        await semer_roles()
+        await creer_super_admin_initial()
+
+        return InitialisationReponse(
+            succes=True,
+            message="✅ Super administrateur créé avec succès !",
+            identifiants={
+                "email": donnees.email,
+                "mot_de_passe": donnees.mot_de_passe,
+                "alerte": "Change ce mot de passe après la première connexion !",
+            }
+        )
+
+    except Exception as erreur:
+        return InitialisationReponse(
+            succes=False,
+            message=f"❌ Échec de la création : {erreur}",
+        )

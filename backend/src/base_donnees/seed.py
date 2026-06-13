@@ -199,9 +199,16 @@ async def creer_super_admin_initial():
         mot_de_passe = os.getenv("SEED_SUPER_ADMIN_MOT_DE_PASSE")
 
         if not email or not mot_de_passe:
-            print("\n=== Création du Super Administrateur initial ===")
-            email = email or input("Email du super admin : ").strip()
-            mot_de_passe = mot_de_passe or getpass("Mot de passe (12+ caractères, complexe) : ")
+            # ⚠️ Fallback : identifiants par défaut si variables non définies
+            # Ceci permet à Render de fonctionner même sans variable manuelle
+            email = email or "admin@digiid.africa"
+            mot_de_passe = mot_de_passe or "Admin@DigiID2025!"
+            journal.warning(
+                f"SEED_SUPER_ADMIN_EMAIL/MOT_DE_PASSE non définis — "
+                f"utilisation des identifiants par défaut : {email}"
+            )
+            print("\n⚠️  Variables SEED_SUPER_ADMIN_EMAIL/MOT_DE_PASSE non définies.")
+            print(f"   Utilisation des identifiants par défaut : {email} / (mot de passe défini dans le code)")
 
         prenom = os.getenv("SEED_SUPER_ADMIN_PRENOM", "Super")
         nom = os.getenv("SEED_SUPER_ADMIN_NOM", "Admin")
