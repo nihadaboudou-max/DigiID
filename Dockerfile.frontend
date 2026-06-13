@@ -17,6 +17,9 @@ COPY frontend/ .
 ARG NEXT_PUBLIC_URL_BACKEND
 ENV NEXT_PUBLIC_URL_BACKEND=${NEXT_PUBLIC_URL_BACKEND:-http://localhost:8000}
 
+# 🔴 IMPÉRATIF : builder l'application Next.js pour générer le dossier .next
+RUN npm run build
+
 FROM node:20-alpine AS coureur
 WORKDIR /app
 ENV NODE_ENV=production
