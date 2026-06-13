@@ -11,7 +11,11 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY frontend/ .
-RUN npm run build
+
+# ✅ Rendre disponible l'URL du backend pour le rewrite Next.js
+# Cette variable EST utilisée par next.config.js pour le proxy API
+ARG NEXT_PUBLIC_URL_BACKEND
+ENV NEXT_PUBLIC_URL
 
 FROM node:20-alpine AS coureur
 WORKDIR /app

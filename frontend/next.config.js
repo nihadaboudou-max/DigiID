@@ -18,6 +18,13 @@ const nextConfig = {
       backendUrl = `https://${backendUrl}`;
     }
 
+    // ✅ En production sur Render, forcer l'URL du backend
+    if (process.env.NODE_ENV === "production" && !process.env.NEXT_PUBLIC_URL_BACKEND) {
+      backendUrl = "https://digiid-backend.onrender.com";
+    }
+
+    console.log("[next.config.js] URL_BACKEND utilisée :", backendUrl);
+
     return [
       {
         source: "/api/backend/:path*",

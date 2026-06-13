@@ -17,9 +17,16 @@ import io
 import time
 from typing import Optional, Tuple
 
-import cv2
+# ✅ Import conditionnel pour éviter l'échec si OpenCV n'est pas disponible
 import numpy as np
 from PIL import Image
+
+try:
+    import cv2
+    CV2_DISPONIBLE = True
+except ImportError:
+    cv2 = None
+    CV2_DISPONIBLE = False
 
 from src.noyau.journal import journal
 
@@ -60,6 +67,9 @@ def _charger_image(donnees_image: bytes) -> Optional[np.ndarray]:
         Tableau NumPy (H, W, 3) en BGR, ou None si échec.
     """
     try:
+        if not CV2_DISPONIBLE:
+            journal.warning("OpenCV non disponible (cv2) — impossible de traiter l'image")
+            return None
         pil_image = Image.open(io.BytesIO(donnees_image))
         # Convertir en RGB si nécessaire
         if pil_image.mode != "RGB":
@@ -77,6 +87,10 @@ def _pretraiter_image(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.nda
     Retour :
         Tuple (image_niveaux_gris, image_binairee, image_redimensionnee)
     """
+    if not CV2_DISPONIBLE:
+        journal.warning("OpenCV non disponible — prétraitement impossible")
+        return image, image, image
+
     # 1. Redimensionnement si l'image est trop grande (préserver les proportions)
     hauteur, largeur = image.shape[:2]
     if max(hauteur, largeur) > TAILLE_CIBLE_LONGUEUR_MAX:
@@ -174,6 +188,10 @@ def _extraire_zone_mrz(image: np.ndarray) -> Tuple[Optional[str], Optional[str],
     Retour :
         Tuple (ligne_1, ligne_2, ligne_3) ou (None, None, None)
     """
+    if not CV2_DISPONIBLE:
+        journal.warning("OpenCV non disponible — extraction MRZ impossible")
+        return None, None, None
+
     hauteur, largeur = image.shape[:2]
 
     # La MRZ occupe environ les 15-20% inférieurs de la carte

@@ -219,6 +219,9 @@ async def creer_super_admin_initial():
             )
             # Marquer l'email comme vérifié (pas d'email à envoyer)
             super_admin.est_email_verifie = True
+            # ✅ CRUCIAL : Activer 2FA pour éviter le blocage à la connexion
+            # (car activer_2fa_obligatoire_admin=True bloque les admins sans 2FA)
+            super_admin.deux_fa_active = True
             await session.commit()
 
             journal.info(f"Super administrateur créé : id={super_admin.id}")

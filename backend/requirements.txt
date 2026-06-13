@@ -29,29 +29,30 @@ pyotp==2.9.0
 qrcode[pil]==7.4.2
 
 # --- Cache et tâches asynchrones ---
-redis==5.0.1
-celery==5.3.6
+# redis==5.0.1        # Désactivé pour Render Free (pas de Redis)
+# celery==5.3.6       # Désactivé pour Render Free (nécessite Redis)
 
 # --- Limitation de débit ---
-slowapi==0.1.9
+slowapi==0.1.9  # Importé dans src/main.py
 
 # --- Journalisation et monitoring ---
 loguru==0.7.2
-prometheus-fastapi-instrumentator==6.1.0
+# prometheus-fastapi-instrumentator==6.1.0  # Allégé pour Render Free
 sentry-sdk[fastapi]==1.40.5
 
 # --- LLM et chatbot (RAG avec LangChain) ---
+# ⚠️ sentence-transformers désactivé pour Render Free (trop lourd : ~2 Go RAM)
 langchain==0.1.9
 langchain-community==0.0.24
 langchain-openai==0.0.7
 chromadb==0.4.22
-sentence-transformers==2.5.1
+# sentence-transformers==2.5.1  # Désactivé pour Render Free
 tiktoken==0.6.0
 
 # --- Machine Learning (scoring) ---
-scikit-learn==1.4.0
-xgboost==2.0.3
-shap==0.45.0
+# scikit-learn==1.4.0     # Allégé pour Render Free
+# xgboost==2.0.3          # Allégé pour Render Free
+# shap==0.45.0            # Allégé pour Render Free
 pandas==2.2.0
 numpy==1.26.4
 faker==23.2.1
@@ -59,12 +60,12 @@ faker==23.2.1
 # --- Deep Learning (vérification visuelle) ---
 # Ces dépendances sont lourdes : on les installera dans un service séparé en prod
 opencv-python-headless==4.9.0.80
-insightface==0.7.3
-onnxruntime==1.17.1
+# insightface==0.7.3           # Trop lourd pour Render Free (2+ Go RAM)
+# onnxruntime==1.17.1          # Trop lourd pour Render Free (2+ Go RAM)
 pillow==10.2.0
 
 # --- OCR (CNI, documents, cartes d'identité) ---
-pytesseract==0.3.10
+# pytesseract==0.3.10  # Désactivé pour Render Free (nécessite Tesseract système)
 
 # --- Utilitaires ---
 python-dateutil==2.8.2

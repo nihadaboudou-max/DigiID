@@ -65,17 +65,22 @@ services:
           name: digiid-db
           property: database
 
-      # --- Redis (via service type keyvalue) ---
+            # --- Redis (commenté : pas de service Redis sur plan Free Render) ---
+      # Si vous passez au plan Starter, décommentez et décommentez aussi le service keyvalue ci-dessus
+      # - key: REDIS_HOST
+      #   fromService:
+      #     type: keyvalue
+      #     name: digiid-redis
+      #     property: host
+      # - key: REDIS_PORT
+      #   fromService:
+      #     type: keyvalue
+      #     name: digiid-redis
+      #     property: port
       - key: REDIS_HOST
-        fromService:
-          type: keyvalue
-          name: digiid-redis
-          property: host
+        value: "localhost"  # Fallback : pas de Redis, cache mémoire utilisé
       - key: REDIS_PORT
-        fromService:
-          type: keyvalue
-          name: digiid-redis
-          property: port
+        value: "6379"
       - key: REDIS_MOT_DE_PASSE
         value: ""  # Pas de mot de passe en interne Render
 
@@ -119,9 +124,11 @@ services:
       - key: SEED_SUPER_ADMIN_NOM
         value: Admin
 
-      # --- 2FA ---
+            # --- 2FA ---
+      # ⚠️ TEMPORAIREMENT DÉSACTIVÉ : le seed ne configure pas la 2FA pour le super admin.
+      # Une fois connecté, réactiver via PATCH /api/v1/super-admin/configuration/feature-flags
       - key: ACTIVER_2FA_OBLIGATOIRE_ADMIN
-        value: "true"
+        value: "false"
       - key: DUREE_VALIDITE_CODE_2FA_SECONDES
         value: "300"
 
@@ -129,16 +136,17 @@ services:
       - key: PORT
         value: "8000"
 
-  # --------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
   # REDIS — Cache (type: keyvalue dans Render)
-  # --------------------------------------------------------------------------
-  - type: keyvalue
-    name: digiid-redis
-    plan: free
-    region: frankfurt
-    ipAllowList: []
-    maxmemoryPolicy: allkeys-lru
-
+  # ❌ DÉSACTIVÉ : Render Free ne supporte pas les services keyvalue (Redis).
+  # Le backend utilise un cache fallback en mémoire.
+  # Pour activer Redis, passer au plan Starter ($7/mois) et décommenter :
+  # - type: keyvalue
+  #   name: digiid-redis
+  #   plan: free
+  #   region: frankfurt
+  #   ipAllowList: []
+  #   maxmemoryPolicy: allkeys-lru
   # --------------------------------------------------------------------------
   # FRONTEND — Next.js (Docker)
   # --------------------------------------------------------------------------

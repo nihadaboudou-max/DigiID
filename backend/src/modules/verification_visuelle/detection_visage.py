@@ -1,14 +1,23 @@
 # -*- coding: utf-8 -*-
 """Détection de visage simple via OpenCV Haar cascades."""
 from io import BytesIO
+from typing import Optional
 
 from PIL import Image
-import cv2
 import numpy as np
 
+try:
+    import cv2
+    CV2_DISPONIBLE = True
+except ImportError:
+    cv2 = None  # type: ignore
+    CV2_DISPONIBLE = False
 
-def detecter_visage(image_bytes: bytes) -> tuple[bool, tuple[int, int, int, int] | None]:
+
+def detecter_visage(image_bytes: bytes) -> tuple[bool, Optional[tuple[int, int, int, int]]]:
     """Retourne True si un visage est détecté dans l'image."""
+    if not CV2_DISPONIBLE:
+        return False, None
     image = Image.open(BytesIO(image_bytes)).convert("RGB")
     tableau = np.array(image)
     gris = cv2.cvtColor(tableau, cv2.COLOR_RGB2GRAY)
