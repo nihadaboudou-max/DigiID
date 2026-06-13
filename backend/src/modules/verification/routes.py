@@ -98,10 +98,9 @@ async def envoyer_code_email(
     local, domaine = email_destination.split("@", 1)
     masque = local[:2] + "***@" + domaine
 
-    # ⚠️ TEMPORAIRE : Retourner le code meme en production car
-    # l'envoi d'email n'est pas encore branche (SendGrid/SMTP à configurer).
-    # Le code est aussi visible dans les logs Render : chercher [CODE DEV]
-    code_dev = code
+    # En mode developpement, retourner le code directement
+    # En production, le code est envoye par email via Resend
+    code_dev = code if parametres.est_developpement else None
 
     return ReponseEnvoi(destination_masquee=masque, code_dev=code_dev)
 
