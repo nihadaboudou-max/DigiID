@@ -230,12 +230,10 @@ async def envoyer_code_verification(
         type_verification="inscription",
     )
 
-    # En mode développement SANS SMTP configuré, ou si l'envoi a échoué,
-    # on retourne le code directement pour ne pas bloquer le développement
+    # Si l'envoi a échoué (aucun service email configuré sur Render),
+    # on retourne le code directement pour ne pas bloquer l'utilisateur
     succes_envoi = resultat.get("succes_envoi", False)
-    code_dev = None
-    if not succes_envoi or not parametres.smtp_mot_de_passe:
-        code_dev = resultat.get("code") if parametres.est_developpement else None
+    code_dev = resultat.get("code") if not succes_envoi else None
 
     return VerifEnvoyerRep(
         succes=True,
