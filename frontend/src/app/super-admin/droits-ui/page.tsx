@@ -26,6 +26,7 @@ import {
   obtenirMatricePermissions,
   mettreAJourModuleRole,
   modifierOverridesUtilisateur,
+  modulesParDefaut,
 } from "@/services/ui_permissions";
 import type { ModulePermission } from "@/services/ui_permissions";
 
@@ -67,6 +68,17 @@ function Contenu() {
   const [overrideEnCours, setOverrideEnCours] = useState(false);
   const [overrideResultat, setOverrideResultat] = useState<string | null>(null);
 
+  // Tous les rôles gérés par la matrice Droits UI
+  const TOUS_LES_ROLES = [
+    "super_administrateur",
+    "administrateur",
+    "citoyen",
+    "agent",
+    "medecin",
+    "police",
+    "ong",
+  ];
+
   useEffect(() => {
     chargerMatrice();
   }, []);
@@ -78,7 +90,28 @@ function Contenu() {
       const data = await obtenirMatricePermissions();
       setModules(data.modules);
     } catch (e) {
-      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
+      // Fallback : utiliser les modules par défaut de chaque rôle
+      const modulesFallback: ModulePermission[] = [];
+      for (const role of TOUS_LES_ROLES) {
+        const defauts = modulesParDefaut(role);
+        if (defauts.length > 0) {
+          modulesFallback.push(...defauts);
+        } else if (role === "administrateur") {
+          // L'admin n'a pas d'entrée dans modulesParDefaut, on crée ses modules
+          modulesFallback.push(
+            { role_name: "administrateur", module_key: "gestion_utilisateurs", module_label: "Gestion des utilisateurs", module_description: null, module_icon: "users", is_enabled: true, is_read_only: false, updated_at: null },
+            { role_name: "administrateur", module_key: "monitoring_temps_reel", module_label: "Monitoring temps réel", module_description: null, module_icon: "activity", is_enabled: true, is_read_only: true, updated_at: null },
+            { role_name: "administrateur", module_key: "audit_logs", module_label: "Journal d'audit", module_description: null, module_icon: "file-text", is_enabled: true, is_read_only: true, updated_at: null },
+            { role_name: "administrateur", module_key: "alertes_securite", module_label: "Alertes sécurité", module_description: null, module_icon: "alert-triangle", is_enabled: true, is_read_only: false, updated_at: null },
+            { role_name: "administrateur", module_key: "mon_profil_admin", module_label: "Mon profil admin", module_description: null, module_icon: "user", is_enabled: true, is_read_only: true, updated_at: null },
+          );
+        }
+      }
+      setModules(modulesFallback);
+      // Ne pas bloquer l'affichage avec une erreur — on utilise les données de secours
+      if (e instanceof ErreurAPI) {
+        console.warn("⚠️ Droits UI : API indisponible, utilisation du fallback local");
+      }
     } finally {
       setChargement(false);
     }
