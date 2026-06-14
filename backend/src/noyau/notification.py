@@ -2,16 +2,19 @@
 """
 Service de notifications — envoi d'emails, SMS et appels.
 
-Utilise Resend (https://resend.com) pour l'envoi d'emails en production,
-avec un fallback console en developpement (mock).
+Utilise SMTP Gmail (mot de passe d'application Google) pour l'envoi d'emails.
+Fallback sur Resend si SMTP non configure, et fallback console en dev.
 
-Configuration requise dans render.yaml :
-  - RESEND_API_KEY : cle API Resend (sync: false, a definir manuellement)
-  - EMAIL_EXPEDITEUR : adresse expediteur (ex: "DigiID <noreply@digiid.africa>")
+Configuration requise :
+  1. Activer la 2FA sur le compte Google (bigdataism2024@gmail.com)
+  2. Creer un mot de passe d'application : https://myaccount.google.com/apppasswords
+  3. Mettre le mot de passe dans .env : SMTP_MOT_DE_PASSE=xxxx xxxx xxxx xxxx
 """
-import json
 import random
+import smtplib
 import string
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Optional
 
 import httpx
@@ -30,7 +33,7 @@ def generer_code_verification(longueur: int = 6) -> str:
 
 
 # =============================================================================
-# Envoi d'emails — Resend API
+# Envoi d'emails — SMTP Gmail (principal) + Resend (fallback)
 # =============================================================================
 
 RESEND_API_URL = "https://api.resend.com/emails"
@@ -43,7 +46,12 @@ def envoyer_email(
     corps_html: Optional[str] = None,
 ) -> bool:
     """
-    Envoie un email via Resend en production, ou log dans la console en dev.
+    Envoie un email.
+
+    Priorite :
+      1. SMTP Gmail (si mot de passe d'application configure)
+      2. Resend (si cle API Resend configuree)
+      3. Console (mode dev)
 
     Args:
         destinataire: Adresse email du destinataire
@@ -54,18 +62,92 @@ def envoyer_email(
     Returns:
         bool: True si l'envoi a reussi (ou simule), False sinon
     """
-    api_key = parametres.resend_api_key
-    expediteur = parametres.email_expediteur or "DigiID <noreply@digiid.africa>"
+    expediteur = parametres.email_expediteur or "DigiID <bigdataism2024@gmail.com>"
 
-    # --- Mode dev : juste logger ---
-    if not api_key or parametres.est_developpement:
+    # --- Si pas de config email : mode mock ---
+    if parametres.est_developpement and not parametres.smtp_mot_de_passe and not parametres.resend_api_key:
         journal.info(
-            f"[EMAIL][MOCK] À: {destinataire} | Sujet: {sujet}\n"
+            f"[EMAIL][MOCK] A: {destinataire} | Sujet: {sujet}\n"
             f"Corps:\n{corps_texte}"
         )
         return True
 
-    # --- Mode production : envoyer via Resend ---
+    # --- 1. Essayer SMTP Gmail ---
+    if parametres.smtp_mot_de_passe:
+        try:
+            _envoyer_via_smtp(destinataire, sujet, corps_texte, corps_html, expediteur)
+            journal.info(
+                f"[EMAIL][SMTP] OK → {destinataire} | Sujet: {sujet}"
+            )
+            return True
+        except Exception as erreur:
+            journal.error(
+                f"[EMAIL][SMTP] ERREUR → {destinataire} : {erreur}"
+            )
+            # Fallback vers Resend si disponible
+            if not parametres.resend_api_key:
+                return False
+
+    # --- 2. Fallback Resend ---
+    if parametres.resend_api_key:
+        return _envoyer_via_resend(destinataire, sujet, corps_texte, corps_html, expediteur)
+
+    return False
+
+
+def _envoyer_via_smtp(
+    destinataire: str,
+    sujet: str,
+    corps_texte: str,
+    corps_html: Optional[str] = None,
+    expediteur: str = "DigiID <bigdataism2024@gmail.com>",
+) -> None:
+    """
+    Envoie l'email via SMTP Gmail (mot de passe d'application).
+    """
+    # Extraire l'adresse email depuis le format "DigiID <email>"
+    if "<" in expediteur and ">" in expediteur:
+        adresse_expediteur = expediteur.split("<")[1].split(">")[0].strip()
+    else:
+        adresse_expediteur = expediteur
+
+    msg = MIMEMultipart("alternative")
+    msg["From"] = expediteur
+    msg["To"] = destinataire
+    msg["Subject"] = sujet
+
+    # Version texte brut
+    msg.attach(MIMEText(corps_texte, "plain", "utf-8"))
+
+    # Version HTML (si fournie)
+    if corps_html:
+        html_complet = f"<html><body style='font-family: sans-serif; padding: 20px;'>{corps_html}</body></html>"
+        msg.attach(MIMEText(html_complet, "html", "utf-8"))
+    else:
+        msg.attach(MIMEText(corps_texte.replace("\n", "<br>"), "html", "utf-8"))
+
+    # Connexion SMTP Gmail (STARTTLS)
+    with smtplib.SMTP(parametres.smtp_serveur, parametres.smtp_port, timeout=15) as serveur:
+        serveur.starttls()
+        serveur.login(parametres.smtp_utilisateur, parametres.smtp_mot_de_passe)
+        serveur.sendmail(adresse_expediteur, [destinataire], msg.as_string())
+
+
+def _envoyer_via_resend(
+    destinataire: str,
+    sujet: str,
+    corps_texte: str,
+    corps_html: Optional[str] = None,
+    expediteur: str = "DigiID <bigdataism2024@gmail.com>",
+) -> bool:
+    """
+    Fallback : envoie via Resend (au cas ou SMTP echoue).
+    """
+    api_key = parametres.resend_api_key
+    if not api_key:
+        journal.warning("[EMAIL][RESEND] Pas de cle API Resend configuree.")
+        return False
+
     if not corps_html:
         corps_html = corps_texte.replace("\n", "<br>")
 
@@ -105,6 +187,10 @@ def envoyer_email(
         journal.error(f"[EMAIL][RESEND] EXCEPTION → {destinataire} : {erreur}")
         return False
 
+
+# =============================================================================
+# Emails specifiques
+# =============================================================================
 
 def envoyer_email_verification(
     destinataire: str,
@@ -207,7 +293,7 @@ def envoyer_sms(
     En production : utilise Twilio / AWS SNS / Orange SMS API.
     """
     journal.info(
-        f"[SMS][MOCK] À: {telephone}\n"
+        f"[SMS][MOCK] A: {telephone}\n"
         f"Message: {message}"
     )
     # TODO: Brancher Twilio en production
@@ -247,7 +333,7 @@ Je repete : {code}.
 Ce code expire dans 10 minutes.
 """
     journal.info(
-        f"[APPEL][MOCK] À: {telephone}\n"
+        f"[APPEL][MOCK] A: {telephone}\n"
         f"Message vocal: {message_tts}"
     )
     # TODO: Brancher Twilio Voice en production

@@ -94,9 +94,17 @@ class ParametresApplication(BaseSettings):
     activer_2fa_obligatoire_admin: bool = True
     duree_validite_code_2fa_secondes: int = 300
 
-    # --- Email (Resend) ---
+        # --- Email (Resend) ---
     resend_api_key: str = ""
     email_expediteur: str = "DigiID <bigdataism2024@gmail.com>"
+
+    # --- Email (SMTP Gmail - utilise le mot de passe d'application) ---
+    smtp_serveur: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_utilisateur: str = "bigdataism2024@gmail.com"
+    smtp_mot_de_passe: str = ""
+    # Mot de passe d'application Google (16 caracteres) genere depuis :
+    # https://myaccount.google.com/apppasswords
 
     # --- Configuration Pydantic ---
     model_config = SettingsConfigDict(
