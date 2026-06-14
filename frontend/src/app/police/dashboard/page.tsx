@@ -56,7 +56,7 @@ function Contenu() {
         <div className="flex gap-3">
           {can.reportFraud && (
             <Link href="/police/signalement">
-              <Bouton variante="tertre" taille="petit">Signalement fraude</Bouton>
+              <Bouton variante="secondaire" taille="petit">Signalement fraude</Bouton>
             </Link>
           )}
           {can.viewPoliceAudit && (
