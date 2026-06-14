@@ -10,8 +10,13 @@ import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { Alerte } from "@/composants/commun/Alerte";
+import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { useAuthentification } from "@/contextes/authentification";
-import { clientAPI, ErreurAPI } from "@/services/client_api";
+import { ErreurAPI } from "@/services/client_api";
+import {
+  envoyerCodeVerification as envoyerCodeAPI,
+  verifierCode as verifierCodeAPI,
+} from "@/services/authentification";
 
 export default function PageIdentiteEmail() {
   return (
@@ -28,23 +33,28 @@ export default function PageIdentiteEmail() {
 
 function Contenu() {
   const { utilisateur, rafraichirProfil } = useAuthentification();
+  const [etape, setEtape] = useState<"initial" | "code_envoye" | "verifie">(
+    utilisateur?.est_email_verifie ? "verifie" : "initial",
+  );
+  const [code, setCode] = useState("");
+  const [destinationMasquee, setDestinationMasquee] = useState("");
   const [chargement, setChargement] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [compteurRenvoi, setCompteurRenvoi] = useState(0);
 
   if (!utilisateur) return null;
 
-  async function envoyerCodeVerification() {
+  async function envoyerCode() {
     setChargement(true);
     setMessage(null);
     setErreur(null);
     try {
-      await clientAPI.post(
-        "/api/v1/verification/envoyer-email",
-        {},
-        { authentifie: true },
-      );
+      const reponse = await envoyerCodeAPI("email");
+      setDestinationMasquee(reponse.destination_masquee);
+      setEtape("code_envoye");
       setMessage("Un code de vérification t'a été envoyé par email.");
+      setCompteurRenvoi(30);
     } catch (e) {
       setErreur(
         e instanceof ErreurAPI
@@ -54,6 +64,44 @@ function Contenu() {
     } finally {
       setChargement(false);
     }
+  }
+
+  async function renvoyerCode() {
+    if (compteurRenvoi > 0) return;
+    await envoyerCode();
+  }
+
+  async function verifierCodeSaisi(evt: React.FormEvent) {
+    evt.preventDefault();
+    if (code.length !== 6) {
+      setErreur("Le code doit faire 6 chiffres.");
+      return;
+    }
+
+    setChargement(true);
+    setMessage(null);
+    setErreur(null);
+    try {
+      const reponse = await verifierCodeAPI(code, "email");
+      if (reponse.succes && reponse.est_email_verifie) {
+        setEtape("verifie");
+        setMessage("Email vérifié avec succès !");
+        await rafraichirProfil();
+      }
+    } catch (e) {
+      setErreur(
+        e instanceof ErreurAPI
+          ? e.message_utilisateur
+          : "Erreur lors de la vérification. Réessaie.",
+      );
+    } finally {
+      setChargement(false);
+    }
+  }
+
+  // Compte à rebours pour le renvoi
+  if (compteurRenvoi > 0) {
+    setTimeout(() => setCompteurRenvoi((c) => c - 1), 1000);
   }
 
   return (
@@ -79,6 +127,7 @@ function Contenu() {
       {message && <Alerte variante="succes">{message}</Alerte>}
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
 
+      {/* Carte infos email */}
       <Carte>
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
@@ -87,19 +136,19 @@ function Contenu() {
               {utilisateur.email}
             </p>
             <Badge
-              variante={utilisateur.est_email_verifie ? "succes" : "neutre"}
+              variante={etape === "verifie" ? "succes" : "neutre"}
               className="mt-2"
             >
-              {utilisateur.est_email_verifie
+              {etape === "verifie"
                 ? "Email vérifié ✓"
                 : "Non vérifié"}
             </Badge>
           </div>
 
-          {!utilisateur.est_email_verifie && (
+          {etape === "initial" && (
             <Bouton
               variante="primaire"
-              onClick={envoyerCodeVerification}
+              onClick={envoyerCode}
               chargement={chargement}
             >
               Envoyer le code de vérification
@@ -108,7 +157,67 @@ function Contenu() {
         </div>
       </Carte>
 
-      {!utilisateur.est_email_verifie && (
+      {/* Saisie du code */}
+      {etape === "code_envoye" && (
+        <>
+          <Carte>
+            <form onSubmit={verifierCodeSaisi} className="space-y-4">
+              <p className="text-sm text-ardoise-clair">
+                Un code à 6 chiffres a été envoyé à{" "}
+                <span className="font-medium text-ardoise">
+                  {destinationMasquee || utilisateur.email}
+                </span>
+              </p>
+
+              <ChampSaisie
+                libelle="Code de vérification"
+                type="text"
+                required
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="000000"
+                className="text-center text-2xl tracking-widest"
+                autoComplete="one-time-code"
+                autoFocus
+              />
+
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={renvoyerCode}
+                  className="text-sm text-lagune hover:text-lagune-fonce transition-colors disabled:text-ardoise-clair/50 disabled:cursor-not-allowed"
+                  disabled={compteurRenvoi > 0 || chargement}
+                >
+                  {compteurRenvoi > 0
+                    ? `Renvoyer (${compteurRenvoi}s)`
+                    : "Renvoyer le code"}
+                </button>
+                <Bouton
+                  type="submit"
+                  variante="primaire"
+                  chargement={chargement}
+                >
+                  Vérifier
+                </Bouton>
+              </div>
+            </form>
+          </Carte>
+
+          <Carte variante="pointilles" titre="Comment ça marche">
+            <ol className="space-y-2 text-sm text-ardoise list-decimal list-inside">
+              <li>Clique sur « Envoyer le code de vérification ».</li>
+              <li>Un code à 6 chiffres t&apos;est envoyé par email.</li>
+              <li>Saisis ce code dans le champ ci-dessus.</li>
+              <li>Ton email est vérifié ! Tu gagnes +10 points sur ton score.</li>
+            </ol>
+          </Carte>
+        </>
+      )}
+
+      {etape === "verifie" && (
         <Carte variante="pointilles" titre="Comment ça marche">
           <ol className="space-y-2 text-sm text-ardoise list-decimal list-inside">
             <li>Clique sur « Envoyer le code de vérification ».</li>
@@ -121,7 +230,7 @@ function Contenu() {
 
       {/* Info bonus */}
       <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-700">
-        <p className="font-semibold mb-1">🏆 Bonus de vérification</p>
+        <p className="font-semibold mb-1">Bonus de vérification</p>
         <p>La vérification de ton email te rapporte <strong>+10 points</strong> sur ton score DigiID.</p>
       </div>
     </div>

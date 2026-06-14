@@ -52,6 +52,24 @@ export function GarantieRole({ rolesAutorises, children }: ProprietesGarantie) {
       return;
     }
 
+    // 🔒 Vérification obligatoire de l'email
+    // Si l'email n'est pas vérifié, on redirige vers la page de vérification
+    // sauf si on y est déjà ou si l'utilisateur est super admin
+    if (
+      utilisateur &&
+      !utilisateur.est_email_verifie &&
+      utilisateur.role !== "super_administrateur" &&
+      pathname !== "/verification-email" &&
+      pathname !== "/connexion" &&
+      pathname !== "/inscription"
+    ) {
+      if (!dejaRedirige.current) {
+        dejaRedirige.current = true;
+        router.push("/verification-email");
+      }
+      return;
+    }
+
     // Tout va bien : on réinitialise le flag
     dejaRedirige.current = false;
   }, [chargement, estConnecte, utilisateur, rolesAutorises, router, pathname]);

@@ -104,3 +104,62 @@ export async function rafraichirJetons(): Promise<Jetons> {
 export async function obtenirMonProfil(): Promise<Utilisateur> {
   return clientAPI.get<Utilisateur>(`${PREFIXE}/moi`, { authentifie: true });
 }
+
+// =============================================================================
+// Vérification email
+// =============================================================================
+
+export interface EnvoyerCodeReponse {
+  succes: boolean;
+  message: string;
+  destination_masquee: string;
+  duree_validite_minutes: number;
+}
+
+export interface VerifierCodeReponse {
+  succes: boolean;
+  message: string;
+  est_email_verifie: boolean;
+}
+
+export interface StatutVerificationReponse {
+  est_email_verifie: boolean;
+  doit_verifier: boolean;
+}
+
+/**
+ * Envoie ou renvoie un code de vérification par email/SMS/appel.
+ */
+export async function envoyerCodeVerification(
+  canal: "email" | "sms" | "appel" = "email",
+): Promise<EnvoyerCodeReponse> {
+  return clientAPI.post<EnvoyerCodeReponse>(
+    `${PREFIXE}/verification/envoyer`,
+    { canal },
+    { authentifie: true },
+  );
+}
+
+/**
+ * Vérifie le code saisi par l'utilisateur et active le compte si valide.
+ */
+export async function verifierCode(
+  code: string,
+  canal: "email" | "sms" | "appel" = "email",
+): Promise<VerifierCodeReponse> {
+  return clientAPI.post<VerifierCodeReponse>(
+    `${PREFIXE}/verification/verifier`,
+    { code, canal },
+    { authentifie: true },
+  );
+}
+
+/**
+ * Vérifie le statut de vérification de l'email de l'utilisateur connecté.
+ */
+export async function obtenirStatutVerification(): Promise<StatutVerificationReponse> {
+  return clientAPI.get<StatutVerificationReponse>(
+    `${PREFIXE}/verification/statut`,
+    { authentifie: true },
+  );
+}

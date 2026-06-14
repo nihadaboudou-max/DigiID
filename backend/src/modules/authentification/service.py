@@ -33,6 +33,10 @@ from src.noyau.exceptions import (
     ErreurConflit, ErreurValidation, Erreur2FARequis, Erreur2FAInvalide,
 )
 from src.modules.authentification.totp import verifier_code_totp
+from src.modules.authentification.verification_code import (
+    generer_et_envoyer_code,
+    CANAL_EMAIL,
+)
 from src.noyau.journal import journal_audit
 
 
@@ -184,6 +188,29 @@ async def inscrire_utilisateur(
                 await session.commit()
 
     journal.info(f"Nouvel utilisateur inscrit : id={nouvel_utilisateur.id} role={role}")
+
+    # 8. Envoyer un code de vérification par email automatiquement après inscription
+    try:
+        await generer_et_envoyer_code(
+            session=session,
+            utilisateur=nouvel_utilisateur,
+            email=email,
+            telephone=telephone,
+            canal=CANAL_EMAIL,
+            type_verification="inscription",
+        )
+        journal.info(
+            f"Code de vérification envoyé automatiquement à l'inscription : "
+            f"utilisateur={nouvel_utilisateur.id}"
+        )
+    except Exception as erreur_envoi:
+        journal.warning(
+            f"Échec d'envoi du code de vérification après inscription "
+            f"(utilisateur={nouvel_utilisateur.id}) : {erreur_envoi}"
+        )
+        # Ne pas bloquer l'inscription si l'envoi échoue
+        # L'utilisateur pourra demander un renvoi depuis la page de vérification
+
     return nouvel_utilisateur
 
 

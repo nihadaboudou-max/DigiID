@@ -138,3 +138,40 @@ class InscriptionReponse(BaseModel):
     utilisateur: UtilisateurReponse
     jetons: Optional[JetonsReponse] = None
     message: str = "Inscription réussie. Bienvenue sur DigiID !"
+    verification_requise: bool = True
+
+
+# =============================================================================
+# VÉRIFICATION EMAIL
+# =============================================================================
+
+class VerificationEnvoyerRequete(BaseModel):
+    """Requête pour envoyer/renvoyer un code de vérification."""
+    canal: str = Field(default="email", description="Canal : 'email', 'sms' ou 'appel'")
+
+
+class VerificationEnvoyerReponse(BaseModel):
+    """Réponse après envoi du code de vérification."""
+    succes: bool
+    message: str
+    destination_masquee: str
+    duree_validite_minutes: int
+
+
+class VerificationVerifierRequete(BaseModel):
+    """Requête pour vérifier un code saisi."""
+    code: str = Field(..., min_length=6, max_length=6)
+    canal: str = Field(default="email")
+
+
+class VerificationVerifierReponse(BaseModel):
+    """Réponse après vérification du code."""
+    succes: bool
+    message: str
+    est_email_verifie: bool
+
+
+class VerificationStatutReponse(BaseModel):
+    """Statut de vérification actuel."""
+    est_email_verifie: bool
+    doit_verifier: bool

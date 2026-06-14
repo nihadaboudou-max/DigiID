@@ -23,12 +23,18 @@ from src.modules.authentification import service
 from src.modules.authentification.dependances import (
     utilisateur_courant, obtenir_ip_client, obtenir_agent_utilisateur,
 )
+from src.modules.authentification import verification_code as service_verification
 from src.noyau.chiffrement import dechiffrer_donnee
 from src.schemas.authentification import (
     InscriptionRequete, InscriptionReponse,
     ConnexionRequete, ConnexionReponse,
     RafraichissementRequete, JetonsReponse,
     UtilisateurReponse,
+    VerificationEnvoyerRequete as VerifEnvoyerReq,
+    VerificationEnvoyerReponse as VerifEnvoyerRep,
+    VerificationVerifierRequete as VerifVerifierReq,
+    VerificationVerifierReponse as VerifVerifierRep,
+    VerificationStatutReponse as VerifStatutRep,
 )
 
 
@@ -181,6 +187,108 @@ async def moi(
 ):
     """Retourne les informations de base de l'utilisateur connecté."""
     return _construire_utilisateur_reponse(utilisateur)
+
+
+# =============================================================================
+# Vérification email — envoi et validation de code
+# =============================================================================
+
+@routeur_authentification.post(
+    "/verification/envoyer",
+    response_model=VerifEnvoyerRep,
+    summary="Envoyer un code de vérification par email/SMS",
+)
+async def envoyer_code_verification(
+    requete: Request,
+    donnees: VerifEnvoyerReq,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+):
+    """
+    Envoie un code de vérification à l'utilisateur connecté.
+
+    Si l'email est déjà vérifié, renvoie simplement un message d'info.
+    Utile pour renvoyer le code si l'utilisateur ne l'a pas reçu.
+    """
+    if utilisateur.est_email_verifie:
+        return VerifEnvoyerRep(
+            succes=True,
+            message="Email déjà vérifié. Aucun code nécessaire.",
+            destination_masquee="",
+            duree_validite_minutes=0,
+        )
+
+    email = dechiffrer_donnee(utilisateur.email_chiffre)
+    telephone = dechiffrer_donnee(utilisateur.telephone_chiffre) if utilisateur.telephone_chiffre else None
+
+    resultat = await service_verification.renvoyer_code(
+        session=session,
+        utilisateur=utilisateur,
+        email=email,
+        telephone=telephone,
+        canal=donnees.canal,
+        type_verification="inscription",
+    )
+
+    return VerifEnvoyerRep(
+        succes=True,
+        message="Code de vérification envoyé.",
+        destination_masquee=resultat["destination_masquee"],
+        duree_validite_minutes=resultat["duree_validite_minutes"],
+    )
+
+
+@routeur_authentification.post(
+    "/verification/verifier",
+    response_model=VerifVerifierRep,
+    summary="Vérifier le code saisi par l'utilisateur",
+)
+async def verifier_code_verification(
+    requete: Request,
+    donnees: VerifVerifierReq,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+):
+    """
+    Vérifie le code reçu par email/SMS et active le compte si valide.
+    """
+    resultat = await service_verification.verifier_code(
+        session=session,
+        utilisateur_id=utilisateur.id,
+        code_saisi=donnees.code,
+        canal=donnees.canal,
+        type_verification="inscription",
+        activer_compte=True,
+    )
+
+    if resultat["est_email_verifie"]:
+        message = "Email vérifié avec succès ! Ton compte est maintenant actif."
+    else:
+        message = "Code vérifié mais une erreur est survenue. Contacte le support."
+
+    return VerifVerifierRep(
+        succes=resultat["succes"],
+        message=message,
+        est_email_verifie=resultat["est_email_verifie"],
+    )
+
+
+@routeur_authentification.get(
+    "/verification/statut",
+    response_model=VerifStatutRep,
+    summary="Vérifier si l'email est déjà confirmé",
+)
+async def statut_verification(
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+):
+    """
+    Retourne si l'email est vérifié ou si une vérification est nécessaire.
+    Utilisé par le frontend à la connexion pour savoir s'il faut rediriger.
+    """
+    return VerifStatutRep(
+        est_email_verifie=utilisateur.est_email_verifie,
+        doit_verifier=not utilisateur.est_email_verifie,
+    )
 
 
 # =============================================================================
