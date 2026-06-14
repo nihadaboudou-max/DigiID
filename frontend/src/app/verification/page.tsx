@@ -50,8 +50,8 @@ export default function PageVerification() {
     setCodeVisible(null);
     try {
       const reponse = await clientAPI.post<ReponseEnvoi>(
-        "/api/v1/verification/envoyer-email",
-        {},
+        "/api/v1/auth/verification/envoyer",
+        { canal: "email" },
         { authentifie: true },
       );
       setDestinationMasquee(reponse.destination_masquee);
@@ -74,11 +74,8 @@ export default function PageVerification() {
     setErreur(null);
     setCodeVisible(null);
     try {
-      const endpoint = canalTel === "sms"
-        ? "/api/v1/verification/envoyer-sms"
-        : "/api/v1/verification/envoyer-appel";
       const reponse = await clientAPI.post<ReponseEnvoi>(
-        endpoint,
+        "/api/v1/auth/verification/envoyer",
         { canal: canalTel },
         { authentifie: true },
       );
@@ -114,8 +111,8 @@ export default function PageVerification() {
     setErreur(null);
     try {
       const reponse = await clientAPI.post<{ succes: boolean; message: string }>(
-        "/api/v1/verification/verifier",
-        { code: codeEmail, type_verification: "inscription" },
+        "/api/v1/auth/verification/verifier",
+        { code: codeEmail, canal: "email" },
         { authentifie: true },
       );
       if (reponse.succes) {
@@ -138,8 +135,8 @@ export default function PageVerification() {
     setErreur(null);
     try {
       const reponse = await clientAPI.post<{ succes: boolean; message: string }>(
-        "/api/v1/verification/verifier",
-        { code: codeTelephone, type_verification: "inscription" },
+        "/api/v1/auth/verification/verifier",
+        { code: codeTelephone, canal: "sms" },
         { authentifie: true },
       );
       if (reponse.succes) {

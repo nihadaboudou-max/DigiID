@@ -136,10 +136,12 @@ services:
       - key: PORT
         value: "8000"
 
-            # --- Resend (email) ---
-      # Ajoute la cle API Resend manuellement sur le dashboard Render
+                        # --- Email (SMTP Gmail - mot de passe d'application) ---
+      # 1. Activer la 2FA sur bigdataism2024@gmail.com
+      # 2. Creer un mot de passe d'application : https://myaccount.google.com/apppasswords
+      # 3. Definir SMTP_MOT_DE_PASSE sur le dashboard Render
       # (sync: false = Render ne genere pas la valeur automatiquement)
-      - key: RESEND_API_KEY
+      - key: SMTP_MOT_DE_PASSE
         sync: false
       - key: EMAIL_EXPEDITEUR
         value: "DigiID <bigdataism2024@gmail.com>"
