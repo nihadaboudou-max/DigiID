@@ -150,6 +150,8 @@ async def generer_et_envoyer_code(
 
     return {
         "canal": canal,
+        "code": code if not succes else None,  # Code uniquement si l'envoi a échoué (fallback dev)
+        "succes_envoi": succes,
         "destination_masquee": _masquer_destination(destination),
         "duree_validite_minutes": DUREE_VALIDITE_CODE_MINUTES,
         "code_id": str(nouveau_code.id),

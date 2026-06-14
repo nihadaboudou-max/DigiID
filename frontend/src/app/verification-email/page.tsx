@@ -32,6 +32,7 @@ export default function PageVerificationEmail() {
   const [chargement, setChargement] = useState(false);
   const [verifie, setVerifie] = useState(false);
   const [compteurRenvoi, setCompteurRenvoi] = useState(0);
+  const [codeVisible, setCodeVisible] = useState<string | null>(null);
 
   // Envoie le premier code au chargement
   useEffect(() => {
@@ -44,6 +45,10 @@ export default function PageVerificationEmail() {
       setDestinationMasquee(reponse.destination_masquee);
       setMessageErreur(null);
       setCompteurRenvoi(30); // 30 secondes avant de pouvoir renvoyer
+      // En mode développement, le code est renvoyé directement
+      if (reponse.code_dev) {
+        setCodeVisible(reponse.code_dev);
+      }
     } catch (e) {
       if (e instanceof ErreurAPI) {
         setMessageErreur(e.message_utilisateur);
@@ -68,6 +73,9 @@ export default function PageVerificationEmail() {
       setDestinationMasquee(reponse.destination_masquee);
       setCompteurRenvoi(30);
       setMessageSucces("Nouveau code envoyé !");
+      if (reponse.code_dev) {
+        setCodeVisible(reponse.code_dev);
+      }
     } catch (e) {
       if (e instanceof ErreurAPI) {
         setMessageErreur(e.message_utilisateur);
@@ -158,6 +166,20 @@ export default function PageVerificationEmail() {
           {messageErreur && (
             <div className="bg-terre/10 border-l-4 border-terre p-4 mb-5 rounded">
               <p className="text-sm text-terre font-medium">{messageErreur}</p>
+            </div>
+          )}
+
+          {codeVisible && (
+            <div className="bg-lagune/10 border-2 border-dashed border-lagune rounded-xl p-4 mb-6 text-center">
+              <p className="text-xs text-ardoise-clair mb-1">
+                🔧 Mode développement — code de vérification :
+              </p>
+              <p className="text-3xl font-mono font-bold text-lagune tracking-widest">
+                {codeVisible}
+              </p>
+              <p className="text-xs text-terre mt-2">
+                ⚠️ Ce code ne sera pas affiché en production. Il sera envoyé par email.
+              </p>
             </div>
           )}
 

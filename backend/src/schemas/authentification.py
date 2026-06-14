@@ -156,6 +156,10 @@ class VerificationEnvoyerReponse(BaseModel):
     message: str
     destination_masquee: str
     duree_validite_minutes: int
+    code_dev: Optional[str] = Field(
+        default=None,
+        description="Code de vérification visible uniquement en mode développement",
+    )
 
 
 class VerificationVerifierRequete(BaseModel):

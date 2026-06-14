@@ -15,10 +15,11 @@ import {
 
 import {
   obtenirMonProfil,
+  rafraichirJetons,
   seConnecter as seConnecterAPI,
   seDeconnecter as seDeconnecterAPI,
 } from "@/services/authentification";
-import { obtenirTokenAcces, effacerJetons } from "@/services/client_api";
+import { obtenirTokenAcces, obtenirTokenRafraichissement, effacerJetons } from "@/services/client_api";
 
 import type { DonneesConnexion, Utilisateur } from "@/types/api";
 
@@ -45,17 +46,35 @@ export function FournisseurAuthentification({
   // ET on écoute le retour arrière (BFCache) pour forcer la revérification
   useEffect(() => {
     async function initialiser() {
-      const token = obtenirTokenAcces();
+      let token = obtenirTokenAcces();
+
+      // Si pas de token mais refresh token présent → tenter rafraîchissement
       if (!token) {
-        setUtilisateur(null);
-        setChargement(false);
-        return;
+        const refresh = obtenirTokenRafraichissement();
+        if (refresh) {
+          try {
+            const jetons = await rafraichirJetons();
+            token = jetons.token_acces;
+          } catch {
+            // Refresh token invalide ou expiré
+            setUtilisateur(null);
+            setChargement(false);
+            return;
+          }
+        } else {
+          // Pas de token ni de refresh → utilisateur non connecté
+          setUtilisateur(null);
+          setChargement(false);
+          return;
+        }
       }
+
+      // On a un token (soit existant, soit rafraîchi) → récupérer le profil
       try {
         const profil = await obtenirMonProfil();
         setUtilisateur(profil);
       } catch {
-        // Token invalide ou expiré — l'utilisateur devra se reconnecter
+        // Échec : token invalide ou autre erreur
         setUtilisateur(null);
         effacerJetons();
       } finally {

@@ -114,6 +114,7 @@ export interface EnvoyerCodeReponse {
   message: string;
   destination_masquee: string;
   duree_validite_minutes: number;
+  code_dev?: string | null;
 }
 
 export interface VerifierCodeReponse {

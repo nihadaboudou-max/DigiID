@@ -212,11 +212,14 @@ async function appel_api<T>(
         return appel_api<T>(chemin, { ...options, _retry: true });
       }
     }
-    // Rafraîchissement impossible → redirection vers connexion
-    // (uniquement côté navigateur)
-    if (typeof window !== "undefined") {
-      window.location.href = "/connexion";
-    }
+    // Rafraîchissement impossible → lancer l'erreur pour que le contexte
+    // (ou l'appelant) gère la déconnexion proprement
+    // (Ne pas rediriger ici — le contexte d'authentification gère ça)
+    throw new ErreurAPI(
+      "AUTH_TOKEN_EXPIRE",
+      "Session expirée. Veuillez vous reconnecter.",
+      401,
+    );
   }
 
   // Réponse d'erreur ?
