@@ -103,7 +103,7 @@ function Contenu() {
           <p className="text-sm text-ardoise-clair mb-3">Recherche par ID DigiID, CNI ou nom</p>
           <ChampRecherche
             placeholder="DigiID, CNI ou nom du patient..."
-            onRechercher={(v) => console.log("Recherche:", v)}
+            onChange={(e) => console.log("Recherche:", e.target.value)}
           />
         </Carte>
       )}

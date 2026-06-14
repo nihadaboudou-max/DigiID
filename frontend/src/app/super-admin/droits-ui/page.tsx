@@ -232,13 +232,13 @@ function Contenu() {
                 <div className="flex-1 min-w-[200px]">
                   <ChampRecherche
                     placeholder="Filtrer par rôle..."
-                    onRechercher={setRechercheRole}
+                    onChange={(e) => setRechercheRole(e.target.value)}
                   />
                 </div>
                 <div className="flex-1 min-w-[200px]">
                   <ChampRecherche
                     placeholder="Filtrer par module..."
-                    onRechercher={setRechercheModule}
+                    onChange={(e) => setRechercheModule(e.target.value)}
                   />
                 </div>
               </div>

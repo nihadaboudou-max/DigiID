@@ -78,7 +78,7 @@ function Contenu() {
       {/* Recherche */}
       <ChampRecherche
         placeholder="Rechercher par nom ou DigiID..."
-        onRechercher={setRecherche}
+        onChange={(e) => setRecherche(e.target.value)}
       />
 
       {/* Liste des dossiers */}

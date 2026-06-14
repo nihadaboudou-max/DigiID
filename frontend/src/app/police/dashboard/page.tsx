@@ -85,14 +85,14 @@ function Contenu() {
 
       {/* Recherche rapide */}
       <Carte titre="Recherche rapide">
-        <ChampRecherche
-          placeholder="DigiID, numéro CNI ou empreinte..."
-          onRechercher={(v) => {
-            setRecherche(v);
-            if (v.length >= 4) setResultatVisible(true);
-            else setResultatVisible(false);
-          }}
-        />
+                <ChampRecherche
+            placeholder="DigiID, numéro CNI ou empreinte..."
+            onChange={(e) => {
+              setRecherche(e.target.value);
+              if (e.target.value.length >= 4) setResultatVisible(true);
+              else setResultatVisible(false);
+            }}
+          />
         <p className="text-xs text-ardoise-clair mt-2">
           ⚠ Chaque consultation est automatiquement loguée dans le journal d'audit.
         </p>
