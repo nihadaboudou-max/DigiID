@@ -24,7 +24,6 @@ export default function NouveauDossier() {
 function Contenu() {
   const { can } = useRoleUI();
   const [digiid, setDigiid] = useState("");
-  const [patientTrouve, setPatientTrouve] = useState(false);
   const [motif, setMotif] = useState("");
   const [diagnostic, setDiagnostic] = useState("");
   const [etape, setEtape] = useState<"recherche" | "formulaire" | "confirmation">("recherche");
@@ -70,17 +69,15 @@ function Contenu() {
           </p>
           <div className="max-w-md space-y-4">
             <ChampSaisie
-              label="DigiID du patient"
-              valeur={digiid}
-              onChange={setDigiid}
+              libelle="DigiID du patient"
+              value={digiid}
+              onChange={(e) => setDigiid(e.target.value)}
               placeholder="Ex: DIG-A1B2C3D4E5F6"
             />
             <Bouton
               variante="primaire"
               disabled={digiid.length < 4}
               onClick={() => {
-                // Simulation de recherche
-                setPatientTrouve(true);
                 setEtape("formulaire");
               }}
             >
@@ -118,9 +115,9 @@ function Contenu() {
           <Carte titre="📋 Dossier médical">
             <div className="space-y-4 max-w-lg">
               <ChampSaisie
-                label="Motif de la consultation"
-                valeur={motif}
-                onChange={setMotif}
+                libelle="Motif de la consultation"
+                value={motif}
+                onChange={(e) => setMotif(e.target.value)}
                 placeholder="Ex: Consultation de routine"
               />
               <div>
