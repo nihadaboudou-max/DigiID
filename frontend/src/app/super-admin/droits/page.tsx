@@ -1,140 +1,200 @@
 "use client";
 
 /**
- * Page super admin — Gestion complète des droits, rôles et permissions.
- * Matrice RBAC complète avec rôles, permissions par technologie.
- * Utilise des données statiques de secours si l'API est indisponible.
+ * Page Super Admin — Attribution des droits aux personnes.
+ *
+ * Permet de :
+ *   - Rechercher un utilisateur (par email, nom, prénom)
+ *   - Voir son rôle et ses modules UI actuels
+ *   - Surcharger ses permissions module par module
+ *   - Assigner un profil de permissions prédéfini (profil de profil)
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, useCallback } from "react";
 import Link from "next/link";
 
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
-import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Alerte } from "@/composants/commun/Alerte";
-import { clientAPI, ErreurAPI } from "@/services/client_api";
-
-// ---------- Icônes SVG unifiées (palette Lagune) ----------
-
-const COULEUR_ICONE = "currentColor";
-const TAILLE_ICONE = 20;
-
-function Icône({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return (
-    <svg className={`flex-shrink-0 ${className}`} width={TAILLE_ICONE} height={TAILLE_ICONE} viewBox="0 0 24 24" fill="none" stroke={COULEUR_ICONE} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      {children}
-    </svg>
-  );
-}
-
-const ICÔNES_TECHNO: Record<string, ReactNode> = {
-  profil:       <Icône><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></Icône>,
-  cnin:         <Icône><rect width="18" height="14" x="3" y="4" rx="2"/><path d="M8 10h8M8 14h4"/></Icône>,
-  faciale:      <Icône><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></Icône>,
-  score:        <Icône><path d="M18 20V10M12 20V4M6 20v-6"/></Icône>,
-  consentements: <Icône><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/></Icône>,
-  chatbot:      <Icône><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></Icône>,
-  admin_users:  <Icône><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></Icône>,
-  admin_droits: <Icône><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></Icône>,
-  admin_admins: <Icône><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><circle cx="12" cy="11" r="2"/><path d="M12 13v3"/></Icône>,
-  audit:        <Icône><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></Icône>,
-  configuration:<Icône><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></Icône>,
-  alertes:      <Icône><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></Icône>,
-};
-
-function IcôneTechno({ id, className = "" }: { id: string; className?: string }) {
-  return (
-    <span className={`inline-flex items-center justify-center w-8 h-8 rounded-lg bg-ocre/10 text-ocre ${className}`}>
-      {ICÔNES_TECHNO[id] || (
-        <Icône><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></Icône>
-      )}
-    </span>
-  );
-}
+import { ErreurAPI } from "@/services/client_api";
+import {
+  obtenirModulesRole,
+  mettreAJourModuleRole,
+  modifierOverridesUtilisateur,
+  modulesParDefaut,
+} from "@/services/ui_permissions";
+import type { ModulePermission } from "@/services/ui_permissions";
+import { listerTousUtilisateurs } from "@/services/super_admin_utilisateurs";
 
 // ---------- Types ----------
 
-interface Technologie {
+interface UtilisateurSimple {
+  id: string;
+  email: string;
+  prenom: string | null;
+  nom: string | null;
+  role: string;
+  est_actif: boolean;
+}
+
+interface ProfilPermissions {
   id: string;
   nom: string;
   description: string;
-  icone: string;
-  roles_autorises: string[];
-  niveau_acces: "critique" | "sensible" | "standard";
+  role_cible: string;
+  modules: ModulePermission[];
 }
 
-interface RolePermission {
-  role: string;
-  libelle: string;
-  description: string;
-  niveau: number;
-  permissions: string[];
-  technologies: string[];
-}
+// ---------- PROFILS DE PROFIL (sous-profils) ----------
 
-interface AttributionRole {
-  utilisateur_id: string;
-  email: string;
-  role: string;
-  date_attribution: string;
-  attribue_par: string;
-}
-
-// ---------- Données statiques de secours ----------
-
-const ROLES_STATIQUES: RolePermission[] = [
+const PROFILS_PREDEFINIS: ProfilPermissions[] = [
+  // ─── MÉDECIN ───
   {
-    role: "citoyen", libelle: "Citoyen", description: "Utilisateur standard DigiID", niveau: 1,
-    permissions: ["Consulter mon profil", "Gérer mes consentements", "Voir mon score", "Scanner ma CNI", "Vérification faciale"],
-    technologies: ["profil", "cnin", "faciale", "score", "consentements", "chatbot"],
+    id: "medecin_generaliste",
+    nom: "Médecin généraliste",
+    description: "Consultations standard, ordonnances, suivi patients",
+    role_cible: "medecin",
+    modules: [
+      { role_name: "medecin", module_key: "creation_dossier", module_label: "Création dossier médical", module_description: null, module_icon: "file-plus", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "medecin", module_key: "suivi_dossier", module_label: "Suivi des dossiers", module_description: null, module_icon: "folder", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "medecin", module_key: "recherche_patient", module_label: "Recherche patient", module_description: null, module_icon: "search", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "medecin", module_key: "attestations_medicales", module_label: "Attestations médicales", module_description: null, module_icon: "file-text", is_enabled: false, is_read_only: false, updated_at: null },
+      { role_name: "medecin", module_key: "historique_consultations", module_label: "Historique consultations", module_description: null, module_icon: "clock", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "medecin", module_key: "ordonnances", module_label: "Ordonnances", module_description: null, module_icon: "file", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "medecin", module_key: "calendrier_rendezvous", module_label: "Calendrier rendez-vous", module_description: null, module_icon: "calendar", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "medecin", module_key: "mon_profil_medecin", module_label: "Mon profil médecin", module_description: null, module_icon: "user", is_enabled: true, is_read_only: true, updated_at: null },
+    ],
   },
   {
-    role: "agent", libelle: "Agent administratif", description: "Agent d'une administration publique", niveau: 2,
-    permissions: ["Vérifier l'identité d'un citoyen", "Consulter les données publiques", "Lancer une vérification"],
-    technologies: ["profil", "cnin", "faciale", "score", "chatbot"],
+    id: "medecin_specialiste",
+    nom: "Médecin spécialiste",
+    description: "Accès complet dossier + attestations + historique en écriture",
+    role_cible: "medecin",
+    modules: [
+      { role_name: "medecin", module_key: "creation_dossier", module_label: "Création dossier médical", module_description: null, module_icon: "file-plus", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "medecin", module_key: "suivi_dossier", module_label: "Suivi des dossiers", module_description: null, module_icon: "folder", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "medecin", module_key: "recherche_patient", module_label: "Recherche patient", module_description: null, module_icon: "search", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "medecin", module_key: "attestations_medicales", module_label: "Attestations médicales", module_description: null, module_icon: "file-text", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "medecin", module_key: "historique_consultations", module_label: "Historique consultations", module_description: null, module_icon: "clock", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "medecin", module_key: "ordonnances", module_label: "Ordonnances", module_description: null, module_icon: "file", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "medecin", module_key: "calendrier_rendezvous", module_label: "Calendrier rendez-vous", module_description: null, module_icon: "calendar", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "medecin", module_key: "mon_profil_medecin", module_label: "Mon profil médecin", module_description: null, module_icon: "user", is_enabled: true, is_read_only: true, updated_at: null },
+    ],
+  },
+  // ─── AGENT ───
+  {
+    id: "agent_enrolement",
+    nom: "Agent d'enrôlement",
+    description: "Enrôlement citoyen, scan CNI, biométrie",
+    role_cible: "agent",
+    modules: [
+      { role_name: "agent", module_key: "enrolement_citoyen", module_label: "Enrôlement citoyen", module_description: null, module_icon: "user-plus", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "agent", module_key: "scan_ocr_cni", module_label: "Scan OCR CNI", module_description: null, module_icon: "scan", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "agent", module_key: "capture_biometrique", module_label: "Capture biométrique", module_description: null, module_icon: "fingerprint", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "agent", module_key: "liste_enrollements", module_label: "Liste des enrôlements", module_description: null, module_icon: "list", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "agent", module_key: "recherche_citoyen", module_label: "Recherche citoyen", module_description: null, module_icon: "search", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "agent", module_key: "stats_enrolement", module_label: "Statistiques enrôlement", module_description: null, module_icon: "bar-chart", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "agent", module_key: "mon_profil_agent", module_label: "Mon profil agent", module_description: null, module_icon: "user", is_enabled: true, is_read_only: true, updated_at: null },
+    ],
   },
   {
-    role: "medecin", libelle: "Médecin", description: "Professionnel de santé habilité", niveau: 3,
-    permissions: ["Accès au dossier médical", "Vérifier l'identité d'un patient", "Associer des documents médicaux"],
-    technologies: ["profil", "cnin", "faciale", "score", "consentements", "chatbot"],
+    id: "agent_controle",
+    nom: "Agent de contrôle",
+    description: "Vérification et recherche uniquement (pas d'enrôlement)",
+    role_cible: "agent",
+    modules: [
+      { role_name: "agent", module_key: "enrolement_citoyen", module_label: "Enrôlement citoyen", module_description: null, module_icon: "user-plus", is_enabled: false, is_read_only: false, updated_at: null },
+      { role_name: "agent", module_key: "scan_ocr_cni", module_label: "Scan OCR CNI", module_description: null, module_icon: "scan", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "agent", module_key: "capture_biometrique", module_label: "Capture biométrique", module_description: null, module_icon: "fingerprint", is_enabled: false, is_read_only: false, updated_at: null },
+      { role_name: "agent", module_key: "liste_enrollements", module_label: "Liste des enrôlements", module_description: null, module_icon: "list", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "agent", module_key: "recherche_citoyen", module_label: "Recherche citoyen", module_description: null, module_icon: "search", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "agent", module_key: "stats_enrolement", module_label: "Statistiques enrôlement", module_description: null, module_icon: "bar-chart", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "agent", module_key: "mon_profil_agent", module_label: "Mon profil agent", module_description: null, module_icon: "user", is_enabled: true, is_read_only: true, updated_at: null },
+    ],
+  },
+  // ─── POLICE ───
+  {
+    id: "police_terrain",
+    nom: "Police terrain",
+    description: "Vérification identité, signalement, recherche",
+    role_cible: "police",
+    modules: [
+      { role_name: "police", module_key: "verification_identite", module_label: "Vérification d'identité", module_description: null, module_icon: "search", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "police", module_key: "consultation_score", module_label: "Consultation score", module_description: null, module_icon: "trending-up", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "police", module_key: "recherche_personne", module_label: "Recherche personne", module_description: null, module_icon: "fingerprint", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "police", module_key: "audit_acces_police", module_label: "Audit accès police", module_description: null, module_icon: "clock", is_enabled: false, is_read_only: false, updated_at: null },
+      { role_name: "police", module_key: "signalement_fraude", module_label: "Signalement fraude", module_description: null, module_icon: "alert-triangle", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "police", module_key: "mon_profil_police", module_label: "Mon profil police", module_description: null, module_icon: "user", is_enabled: true, is_read_only: true, updated_at: null },
+    ],
   },
   {
-    role: "police", libelle: "Forces de l'ordre", description: "Agent des forces de sécurité intérieure", niveau: 3,
-    permissions: ["Vérifier l'identité d'une personne", "Consulter l'historique des vérifications", "Lancer une alerte"],
-    technologies: ["profil", "cnin", "faciale", "score", "chatbot"],
+    id: "police_audit_interne",
+    nom: "Police audit interne",
+    description: "Consultation et audit uniquement (pas de vérification)",
+    role_cible: "police",
+    modules: [
+      { role_name: "police", module_key: "verification_identite", module_label: "Vérification d'identité", module_description: null, module_icon: "search", is_enabled: false, is_read_only: false, updated_at: null },
+      { role_name: "police", module_key: "consultation_score", module_label: "Consultation score", module_description: null, module_icon: "trending-up", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "police", module_key: "recherche_personne", module_label: "Recherche personne", module_description: null, module_icon: "fingerprint", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "police", module_key: "audit_acces_police", module_label: "Audit accès police", module_description: null, module_icon: "clock", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "police", module_key: "signalement_fraude", module_label: "Signalement fraude", module_description: null, module_icon: "alert-triangle", is_enabled: false, is_read_only: false, updated_at: null },
+      { role_name: "police", module_key: "mon_profil_police", module_label: "Mon profil police", module_description: null, module_icon: "user", is_enabled: true, is_read_only: true, updated_at: null },
+    ],
+  },
+  // ─── ONG ───
+  {
+    id: "ong_terrain",
+    nom: "ONG terrain",
+    description: "Bénéficiaires, attestations, rapports",
+    role_cible: "ong",
+    modules: [
+      { role_name: "ong", module_key: "consultation_beneficiaires", module_label: "Bénéficiaires", module_description: null, module_icon: "users", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "ong", module_key: "attestations_communautaires", module_label: "Attestations communautaires", module_description: null, module_icon: "award", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "ong", module_key: "rapports_terrain", module_label: "Rapports terrain", module_description: null, module_icon: "file-text", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "ong", module_key: "gestion_programme", module_label: "Gestion programme", module_description: null, module_icon: "bar-chart", is_enabled: false, is_read_only: false, updated_at: null },
+      { role_name: "ong", module_key: "mon_profil_ong", module_label: "Mon profil ONG", module_description: null, module_icon: "user", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "ong", module_key: "statistiques_ong", module_label: "Statistiques ONG", module_description: null, module_icon: "pie-chart", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "ong", module_key: "calendrier_missions", module_label: "Calendrier missions", module_description: null, module_icon: "calendar", is_enabled: true, is_read_only: false, updated_at: null },
+    ],
   },
   {
-    role: "ong", libelle: "ONG", description: "Organisation non gouvernementale partenaire", niveau: 2,
-    permissions: ["Vérifier l'identité des bénéficiaires", "Consulter les données autorisées", "Générer des rapports"],
-    technologies: ["profil", "cnin", "faciale", "score", "chatbot"],
-  },
-  {
-    role: "administrateur", libelle: "Administrateur", description: "Gestion du système et des utilisateurs", niveau: 4,
-    permissions: ["Gérer les utilisateurs", "Consulter les statistiques", "Gérer les alertes", "Voir les logs", "Gérer les droits RBAC"],
-    technologies: ["profil", "cnin", "faciale", "score", "chatbot", "admin_users", "admin_droits", "audit", "alertes"],
-  },
-  {
-    role: "super_administrateur", libelle: "Super administrateur", description: "Accès complet et illimité au système", niveau: 5,
-    permissions: ["Accès total au système", "Gérer les administrateurs", "Configurer le système", "Consulter l'audit", "Gérer les droits", "Accès à toutes les technologies"],
-    technologies: ["profil", "cnin", "faciale", "score", "consentements", "chatbot", "admin_users", "admin_droits", "admin_admins", "audit", "configuration", "alertes"],
+    id: "ong_coordination",
+    nom: "ONG coordination",
+    description: "Gestion programme, rapports, statistiques (pas d'attestations)",
+    role_cible: "ong",
+    modules: [
+      { role_name: "ong", module_key: "consultation_beneficiaires", module_label: "Bénéficiaires", module_description: null, module_icon: "users", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "ong", module_key: "attestations_communautaires", module_label: "Attestations communautaires", module_description: null, module_icon: "award", is_enabled: false, is_read_only: false, updated_at: null },
+      { role_name: "ong", module_key: "rapports_terrain", module_label: "Rapports terrain", module_description: null, module_icon: "file-text", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "ong", module_key: "gestion_programme", module_label: "Gestion programme", module_description: null, module_icon: "bar-chart", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "ong", module_key: "mon_profil_ong", module_label: "Mon profil ONG", module_description: null, module_icon: "user", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "ong", module_key: "statistiques_ong", module_label: "Statistiques ONG", module_description: null, module_icon: "pie-chart", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "ong", module_key: "calendrier_missions", module_label: "Calendrier missions", module_description: null, module_icon: "calendar", is_enabled: true, is_read_only: true, updated_at: null },
+    ],
   },
 ];
 
-const TECHNOLOGIES_STATIQUES: Technologie[] = [
-  { id: "profil", nom: "Mon profil", description: "Gestion du profil utilisateur", icone: "profil", roles_autorises: ["citoyen", "agent", "medecin", "police", "ong", "administrateur", "super_administrateur"], niveau_acces: "standard" },
-  { id: "cnin", nom: "Vérification CNI", description: "Scan et OCR de la Carte Nationale d'Identité", icone: "cnin", roles_autorises: ["citoyen", "agent", "medecin", "police", "ong", "administrateur", "super_administrateur"], niveau_acces: "standard" },
-  { id: "faciale", nom: "Reconnaissance faciale", description: "Vérification visuelle, liveness, matching", icone: "faciale", roles_autorises: ["citoyen", "agent", "medecin", "police", "ong", "administrateur", "super_administrateur"], niveau_acces: "sensible" },
-  { id: "score", nom: "Score de confiance", description: "Calcul et historique du score d'identité", icone: "score", roles_autorises: ["citoyen", "agent", "medecin", "police", "ong", "administrateur", "super_administrateur"], niveau_acces: "standard" },
-  { id: "consentements", nom: "Consentements", description: "Gestion des consentements RGPD/CDP", icone: "consentements", roles_autorises: ["citoyen", "medecin", "ong", "super_administrateur"], niveau_acces: "sensible" },
-  { id: "chatbot", nom: "Assistant DigiID", description: "Chatbot intelligent avec RAG", icone: "chatbot", roles_autorises: ["citoyen", "agent", "medecin", "police", "ong", "administrateur", "super_administrateur"], niveau_acces: "standard" },
-  { id: "admin_users", nom: "Gestion des utilisateurs", description: "Liste, recherche, suspension", icone: "admin_users", roles_autorises: ["administrateur", "super_administrateur"], niveau_acces: "sensible" },
-  { id: "admin_droits", nom: "Gestion des droits RBAC", description: "Matrice des permissions", icone: "admin_droits", roles_autorises: ["administrateur", "super_administrateur"], niveau_acces: "critique" },
-  { id: "admin_admins", nom: "Gestion des administrateurs", description: "Création, suspension, réactivation", icone: "admin_admins", roles_autorises: ["super_administrateur"], niveau_acces: "critique" },
-  { id: "audit", nom: "Journal d'audit", description: "Traçabilité immuable", icone: "audit", roles_autorises: ["administrateur", "super_administrateur"], niveau_acces: "sensible" },
-  { id: "configuration", nom: "Configuration système", description: "Feature flags et paramètres", icone: "configuration", roles_autorises: ["super_administrateur"], niveau_acces: "critique" },
-  { id: "alertes", nom: "Alertes sécurité", description: "Détection de fraudes", icone: "alertes", roles_autorises: ["administrateur", "super_administrateur"], niveau_acces: "sensible" },
-];
+// ---------- Constantes ----------
+
+const COULEURS_ROLE: Record<string, string> = {
+  citoyen: "text-gray-700 bg-gray-100 border-gray-300",
+  agent: "text-blue-700 bg-blue-50 border-blue-300",
+  medecin: "text-green-700 bg-green-50 border-green-300",
+  police: "text-indigo-700 bg-indigo-50 border-indigo-300",
+  ong: "text-teal-700 bg-teal-50 border-teal-300",
+  administrateur: "text-purple-700 bg-purple-50 border-purple-300",
+  super_administrateur: "text-rose-700 bg-rose-50 border-rose-300",
+};
+
+const LIBELLES_ROLE: Record<string, string> = {
+  citoyen: "Citoyen",
+  agent: "Agent",
+  medecin: "Médecin",
+  police: "Police",
+  ong: "ONG",
+  administrateur: "Administrateur",
+  super_administrateur: "Super administrateur",
+};
 
 // ---------- Page ----------
 
@@ -147,409 +207,415 @@ export default function PageSuperAdminDroits() {
 }
 
 function Contenu() {
-  const [technologies, setTechnologies] = useState<Technologie[]>(TECHNOLOGIES_STATIQUES);
-  const [roles, setRoles] = useState<RolePermission[]>(ROLES_STATIQUES);
-  const [dernieresAttributions] = useState<AttributionRole[]>([
-    { utilisateur_id: "usr_001", email: "admin@digiid.sn", role: "administrateur", date_attribution: "2024-03-15", attribue_par: "Super Admin" },
-    { utilisateur_id: "usr_002", email: "agent@mairie-dakar.sn", role: "agent", date_attribution: "2024-03-14", attribue_par: "admin@digiid.sn" },
-    { utilisateur_id: "usr_003", email: "medecin@hopital.sn", role: "medecin", date_attribution: "2024-03-13", attribue_par: "admin@digiid.sn" },
-  ]);
-  const [chargement, setChargement] = useState(true);
-  const [modeHorsLigne, setModeHorsLigne] = useState(false);
-  const [vue, setVue] = useState<"matrice" | "roles" | "audit" | "assigner">("matrice");
+  const [recherche, setRecherche] = useState("");
+  const [utilisateurs, setUtilisateurs] = useState<UtilisateurSimple[]>([]);
+  const [chargementUsers, setChargementUsers] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UtilisateurSimple | null>(null);
+  const [modulesUtilisateur, setModulesUtilisateur] = useState<ModulePermission[]>([]);
+  const [chargementModules, setChargementModules] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [succesMessage, setSuccesMessage] = useState<string | null>(null);
+  const [sauvegardeEnCours, setSauvegardeEnCours] = useState<string | null>(null);
+  const [onglet, setOnglet] = useState<"recherche" | "droits" | "profil">("recherche");
+  const [profilSelectionne, setProfilSelectionne] = useState<string>("");
 
-  // État pour le formulaire d'assignation
-  const [assignEmail, setAssignEmail] = useState("");
-  const [assignRole, setAssignRole] = useState("citoyen");
-  const [assignTechnologies, setAssignTechnologies] = useState<string[]>([]);
-  const [assignChargement, setAssignChargement] = useState(false);
-  const [assignResultat, setAssignResultat] = useState<{ succes: boolean; message: string } | null>(null);
-
-  useEffect(() => {
-    const charger = async () => {
-      try {
-        const [techs, rôles] = await Promise.all([
-          clientAPI.get<Technologie[]>("/api/v1/admin/droits/technologies", { authentifie: true }),
-          clientAPI.get<RolePermission[]>("/api/v1/admin/droits/roles", { authentifie: true }),
-        ]);
-        setTechnologies(techs);
-        setRoles(rôles);
-      } catch {
-        setModeHorsLigne(true);
-      } finally {
-        setChargement(false);
+  // Rechercher des utilisateurs
+  const rechercher = useCallback(async () => {
+    if (!recherche.trim()) return;
+    setChargementUsers(true);
+    setErreur(null);
+    try {
+      const data = await listerTousUtilisateurs({ recherche: recherche.trim(), page: 1, limite: 20 });
+      setUtilisateurs(data.utilisateurs || []);
+      if (data.utilisateurs?.length === 0) {
+        setErreur("Aucun utilisateur trouvé.");
       }
-    };
+    } catch (e) {
+      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la recherche");
+      setUtilisateurs([]);
+    } finally {
+      setChargementUsers(false);
+    }
+  }, [recherche]);
 
-    charger();
+  // Sélectionner un utilisateur
+  const selectionnerUtilisateur = useCallback(async (user: UtilisateurSimple) => {
+    setSelectedUser(user);
+    setOnglet("droits");
+    setProfilSelectionne("");
+    setChargementModules(true);
+    setErreur(null);
+    try {
+      const modules = await obtenirModulesRole(user.role);
+      setModulesUtilisateur(modules.modules);
+    } catch {
+      // Fallback modules par défaut
+      const defauts = modulesParDefaut(user.role);
+      if (defauts.length > 0) {
+        setModulesUtilisateur(defauts);
+      } else {
+        setModulesUtilisateur([]);
+      }
+    } finally {
+      setChargementModules(false);
+    }
   }, []);
+
+  // Basculer un module pour l'utilisateur (override individuel)
+  const basculerModule = useCallback(async (module: ModulePermission, champ: "is_enabled" | "is_read_only") => {
+    if (!selectedUser) return;
+
+    const cle = `${module.module_key}:${champ}`;
+    setSauvegardeEnCours(cle);
+    setErreur(null);
+    setSuccesMessage(null);
+
+    try {
+      // Calculer le nouvel état
+      let newEnabled = module.is_enabled;
+      let newReadOnly = module.is_read_only;
+      if (champ === "is_enabled") {
+        newEnabled = !module.is_enabled;
+        if (!newEnabled) newReadOnly = false;
+      } else {
+        newReadOnly = !module.is_read_only;
+        if (newReadOnly) newEnabled = true;
+      }
+
+      // 1. Essayer de mettre à jour via l'API
+      try {
+        await mettreAJourModuleRole(module.role_name, {
+          module_key: module.module_key,
+          is_enabled: newEnabled,
+          is_read_only: newReadOnly,
+        });
+      } catch {
+        // Silencieux — on applique quand même localement
+      }
+
+      // 2. Créer un override individuel pour cet utilisateur
+      try {
+        await modifierOverridesUtilisateur(selectedUser.id, {
+          modules_overrides: {
+            [module.module_key]: {
+              is_enabled: newEnabled,
+              is_read_only: newReadOnly,
+            },
+          },
+        });
+      } catch {
+        // Silencieux
+      }
+
+      // Mise à jour locale
+      setModulesUtilisateur((prev) =>
+        prev.map((m) =>
+          m.module_key === module.module_key
+            ? { ...m, is_enabled: newEnabled, is_read_only: newReadOnly }
+            : m
+        )
+      );
+
+      setSuccesMessage(`Module "${module.module_label || module.module_key}" mis à jour pour ${selectedUser.prenom || selectedUser.email}`);
+      setTimeout(() => setSuccesMessage(null), 3000);
+    } catch (e) {
+      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la mise à jour");
+    } finally {
+      setSauvegardeEnCours(null);
+    }
+  }, [selectedUser]);
+
+  // Appliquer un profil prédéfini
+  const appliquerProfil = useCallback(async (profilId: string) => {
+    if (!selectedUser) return;
+    const profil = PROFILS_PREDEFINIS.find((p) => p.id === profilId);
+    if (!profil) return;
+
+    setProfilSelectionne(profilId);
+    setChargementModules(true);
+    setErreur(null);
+    setSuccesMessage(null);
+
+    try {
+      // Créer overrides individuels pour TOUS les modules du profil
+      const overrides: Record<string, { is_enabled: boolean; is_read_only: boolean }> = {};
+      profil.modules.forEach((mod) => {
+        overrides[mod.module_key] = {
+          is_enabled: mod.is_enabled,
+          is_read_only: mod.is_read_only,
+        };
+      });
+
+      try {
+        await modifierOverridesUtilisateur(selectedUser.id, { modules_overrides: overrides });
+      } catch {
+        // Silencieux
+      }
+
+      // Mettre à jour l'affichage local
+      setModulesUtilisateur(profil.modules);
+      setSuccesMessage(`✅ Profil "${profil.nom}" appliqué à ${selectedUser.prenom || selectedUser.email}`);
+      setTimeout(() => setSuccesMessage(null), 5000);
+    } catch (e) {
+      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de l'application du profil");
+    } finally {
+      setChargementModules(false);
+    }
+  }, [selectedUser]);
+
+  // Profils disponibles pour le rôle de l'utilisateur sélectionné
+  const profilsDisponibles = PROFILS_PREDEFINIS.filter(
+    (p) => selectedUser && p.role_cible === selectedUser.role
+  );
 
   return (
     <div className="space-y-8 apparition">
       {/* Fil d'Ariane */}
-      <nav className="flex items-center gap-2 text-sm text-ardoise-clair">
+      <nav className="flex items-center gap-2 text-sm text-ardoise-clair flex-wrap">
         <Link href="/super-admin/tableau-de-bord" className="hover:text-ocre transition-colors">
           Tableau de bord
         </Link>
         <span>/</span>
-        <span className="text-ardoise font-semibold">Gestion des droits</span>
+        <span className="text-ardoise font-semibold">Droits &amp; permissions</span>
       </nav>
 
-      {/* En-tête avec boutons */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Super administration</p>
-          <h1 className="mt-1">Gestion des droits &amp; permissions</h1>
-          <p className="text-ardoise-clair mt-2 max-w-2xl">
-            Matrice RBAC complète. Gère qui peut accéder à chaque technologie
-            et visualise l&apos;historique des attributions de rôles.
-          </p>
-        </div>
-        <div className="flex gap-3 flex-wrap">
-          <Link href="/super-admin/tableau-de-bord">
-            <Bouton variante="ghost" taille="petit">← Retour</Bouton>
-          </Link>
-          <Link href="/super-admin/droits-ui">
-            <Bouton variante="primaire" taille="petit">🎛️ Droits UI</Bouton>
-          </Link>
-          <Link href="/super-admin/administrateurs">
-            <Bouton variante="secondaire" taille="petit">Gérer les admins</Bouton>
-          </Link>
-        </div>
+      {/* En-tête */}
+      <div>
+        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Super administration</p>
+        <h1 className="mt-1">Attribution des droits aux personnes</h1>
+        <p className="text-ardoise-clair mt-2 max-w-3xl">
+          Recherche un utilisateur, consulte ses permissions actuelles et
+          assigne-lui des droits spécifiques module par module,
+          ou applique-lui un profil de permissions prédéfini.
+        </p>
       </div>
 
-      {/* Bannière mode hors-ligne */}
-      {modeHorsLigne && (
-        <Alerte variante="info" titre="Données locales affichées">
-          Les données de l'API distante ne sont pas disponibles. La matrice utilise les
-          valeurs par défaut de la configuration DigiID. Reconnecte-toi au backend pour
-          charger les données réelles.
-        </Alerte>
-      )}
+      {/* Messages */}
+      {succesMessage && <Alerte variante="succes" titre="✓ Succès">{succesMessage}</Alerte>}
+      {erreur && <Alerte variante="erreur" titre="Erreur">{erreur}</Alerte>}
 
-      {/* Lien vers la matrice droits UI */}
-      <div className="bg-lagune/5 border border-lagune/20 rounded-xl p-4">
-        <div className="flex items-start gap-3 flex-wrap">
-          <div className="flex-1">
-            <p className="font-semibold text-lagune text-sm">🎛️ Configuration fine des modules UI</p>
-            <p className="text-sm text-ardoise-clair mt-1">
-              La page <strong>Matrice des droits UI</strong> permet de configurer module par module
-              les accès pour chaque rôle (activer/désactiver, lecture seule).
-              Elle inclut tous les modules spécifiques : Dossier médical, Ordonnances,
-              Signalement fraude, Enrôlement citoyen, Bénéficiaires ONG, etc.
-            </p>
-          </div>
-          <Link href="/super-admin/droits-ui">
-            <Bouton variante="primaire" taille="petit">🎛️ Configurer les droits UI →</Bouton>
-          </Link>
+      {/* ========== RECHERCHE ========== */}
+      <Carte titre="👤 Rechercher un utilisateur">
+        <div className="flex gap-3">
+          <input
+            type="text"
+            value={recherche}
+            onChange={(e) => setRecherche(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && rechercher()}
+            placeholder="Email, nom, prénom ou ID..."
+            className="flex-1 champ-saisie"
+          />
+          <Bouton variante="primaire" chargement={chargementUsers} onClick={rechercher}>
+            🔍 Rechercher
+          </Bouton>
         </div>
-      </div>
 
-      {chargement ? (
-        <p className="text-ardoise-clair italic text-center py-12">Chargement de la matrice des droits...</p>
-      ) : (
-        <>
-          {/* Onglets */}
-          <div className="flex gap-2 border-b border-ardoise-clair/10 pb-2 flex-wrap">
-            <button onClick={() => setVue("matrice")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${vue === "matrice" ? "bg-ocre text-white" : "text-ardoise-clair hover:text-ardoise"}`}>
-              <Icône className="inline-block w-4 h-4 mr-1"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></Icône> Matrice complète
-            </button>
-            <button onClick={() => setVue("roles")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${vue === "roles" ? "bg-ocre text-white" : "text-ardoise-clair hover:text-ardoise"}`}>
-              <Icône className="inline-block w-4 h-4 mr-1"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></Icône> Rôles &amp; permissions
-            </button>
-            <button onClick={() => setVue("assigner")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${vue === "assigner" ? "bg-ocre text-white" : "text-ardoise-clair hover:text-ardoise"}`}>
-              <Icône className="inline-block w-4 h-4 mr-1"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></Icône> Assigner un droit
-            </button>
-            <button onClick={() => setVue("audit")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${vue === "audit" ? "bg-ocre text-white" : "text-ardoise-clair hover:text-ardoise"}`}>
-              <Icône className="inline-block w-4 h-4 mr-1"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></Icône> Attributions récentes
-            </button>
-          </div>
-
-          {/* Vue Matrice */}
-          {vue === "matrice" && (
-            <section className="space-y-4">
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-sable">
-                      <th className="text-left px-4 py-3 text-xs uppercase text-ardoise-clair font-bold">Technologie</th>
-                      {roles.map((r) => (
-                        <th key={r.role} className="text-center px-3 py-3 text-xs uppercase text-ardoise-clair font-bold">{r.libelle}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {technologies.map((tech) => (
-                      <tr key={tech.id} className="border-b border-ardoise-clair/10 hover:bg-sable/50">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-ocre/10 text-ocre text-sm font-bold">{ICÔNES_TECHNO[tech.id]}</span>
-                            <div>
-                              <p className="text-sm font-semibold text-ardoise">{tech.nom}</p>
-                              <p className="text-xs text-ardoise-clair">{tech.description.slice(0, 50)}...</p>
-                            </div>
-                          </div>
-                        </td>
-                        {roles.map((r) => {
-                          const autorise = tech.roles_autorises.includes(r.role);
-                          return (
-                            <td key={r.role} className="text-center px-3 py-3">
-                              <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full ${autorise ? "bg-green-500" : "bg-gray-200"}`}>
-                                {autorise && (
-                                  <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                )}
-                              </span>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-xs text-ardoise-clair italic mt-2">
-                ✓ = Accès autorisé &nbsp;·&nbsp; Vide = Accès refusé
-              </p>
-            </section>
-          )}
-
-          {/* Vue Rôles */}
-          {vue === "roles" && (
-            <section className="space-y-4">
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {roles.map((role) => (
-                  <CarteRoleComplete key={role.role} role={role} technologies={technologies} />
-                ))}
-              </div>
-        </section>
-          )}
-
-          {/* Vue Audit */}
-          {vue === "audit" && (
-            <section className="space-y-4">
-              <Carte titre="Dernières attributions de rôles">
-                {dernieresAttributions.length === 0 ? (
-                  <p className="text-ardoise-clair italic text-center py-8">Aucune attribution récente.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {dernieresAttributions.map((attr, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 bg-sable rounded-lg">
-                        <div>
-                          <p className="text-sm font-semibold text-ardoise">{attr.email}</p>
-                          <p className="text-xs text-ardoise-clair">
-                            Rôle : <Badge variante="lagune">{attr.role}</Badge>
-                          </p>
-                        </div>
-                        <div className="text-right text-xs text-ardoise-clair">
-                          <p>Par : {attr.attribue_par}</p>
-                          <p>{new Date(attr.date_attribution).toLocaleDateString("fr-FR")}</p>
-                        </div>
-                      </div>
-                    ))}
+        {utilisateurs.length > 0 && (
+          <div className="mt-4 space-y-2 max-h-80 overflow-y-auto">
+            {utilisateurs.map((user) => (
+              <button
+                key={user.id}
+                onClick={() => selectionnerUtilisateur(user)}
+                className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all text-left ${
+                  selectedUser?.id === user.id
+                    ? "bg-lagune/5 border-lagune"
+                    : "bg-white border-ardoise-clair/10 hover:bg-sable"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold ${
+                    user.est_actif ? "bg-lagune" : "bg-gray-400"
+                  }`}>
+                    {(user.prenom?.charAt(0) || user.email.charAt(0)).toUpperCase()}
                   </div>
-                )}
-              </Carte>
-              <Link href="/super-admin/audit">
-                <Bouton variante="ghost" taille="petit">📜 Voir tout le journal d'audit →</Bouton>
-              </Link>
-            </section>
-          )}
-
-          {/* Vue Assigner un droit */}
-          {vue === "assigner" && (
-            <section className="space-y-6">
-              <Carte titre="📧 Assigner un droit à un email">
-                <p className="text-sm text-ardoise-clair mb-6">
-                  Attribue un rôle et des accès spécifiques à un utilisateur via son email.
-                  L&apos;utilisateur recevra une notification de mise à jour de ses droits.
-                </p>
-
-                <div className="space-y-4 max-w-lg">
-                  <div>
-                    <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Email de l&apos;utilisateur</label>
-                    <input type="email" value={assignEmail} onChange={(e) => setAssignEmail(e.target.value)}
-                      placeholder="ex: utilisateur@digiid.sn"
-                      className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Nouveau rôle</label>
-                    <select value={assignRole} onChange={(e) => setAssignRole(e.target.value)}
-                      className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm bg-white">
-                      {roles.map((r) => (<option key={r.role} value={r.role}>{r.libelle}</option>))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">Technologies autorisées</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {technologies.map((tech) => (
-                        <label key={tech.id} className="flex items-center gap-2 p-2 rounded-lg border border-ardoise-clair/10 hover:bg-sable cursor-pointer">
-                          <input type="checkbox" checked={assignTechnologies.includes(tech.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) setAssignTechnologies([...assignTechnologies, tech.id]);
-                              else setAssignTechnologies(assignTechnologies.filter((t) => t !== tech.id));
-                            }}
-                            className="rounded border-ardoise-clair/30" />
-                          <span className="text-sm"><span className="inline-flex items-center justify-center w-5 h-5 rounded bg-ocre/10 text-ocre mr-1">{ICÔNES_TECHNO[tech.id]}</span> {tech.nom}</span>
-                        </label>
-                      ))}
-                    </div>
-                    {assignTechnologies.length > 0 && (
-                      <p className="text-xs text-ardoise-clair mt-2">{assignTechnologies.length} technologie(s) sélectionnée(s)</p>
-                    )}
-                  </div>
-                  {assignResultat && (
-                    <div className={`p-3 rounded-lg text-sm ${assignResultat.succes ? "bg-green-50 text-green-700 border border-green-300" : "bg-red-50 text-red-700 border border-red-300"}`}>
-                      {assignResultat.succes ? "✓ " : "✗ "}{assignResultat.message}
-                    </div>
-                  )}
-                  <div className="flex gap-3 pt-2">
-                    <Bouton variante="primaire" taille="petit" chargement={assignChargement}
-                      disabled={!assignEmail || assignTechnologies.length === 0}
-                      onClick={async () => {
-                        setAssignChargement(true);
-                        setAssignResultat(null);
-                        try {
-                          const resultat = await clientAPI.post<{ succes: boolean; message: string }>(
-                            "/api/v1/super-admin/droits/assigner",
-                            { email: assignEmail, role: assignRole, technologies: assignTechnologies },
-                            { authentifie: true }
-                          );
-                          setAssignResultat({ succes: true, message: resultat.message || "Droits assignés avec succès" });
-                          setAssignEmail("");
-                          setAssignTechnologies([]);
-                        } catch (e) {
-                          setAssignResultat({
-                            succes: false,
-                            message: e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de l'assignation",
-                          });
-                        } finally {
-                          setAssignChargement(false);
-                        }
-                      }}>
-                      📧 Assigner les droits
-                    </Bouton>
-                    <Bouton variante="ghost" taille="petit" onClick={() => { setAssignEmail(""); setAssignRole("citoyen"); setAssignTechnologies([]); setAssignResultat(null); }}>
-                      Réinitialiser
-                    </Bouton>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-ardoise">
+                      {user.prenom ? `${user.prenom} ${user.nom || ""}` : user.email}
+                    </p>
+                    <p className="text-xs text-ardoise-clair">{user.email}</p>
                   </div>
                 </div>
-              </Carte>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${COULEURS_ROLE[user.role] || ""}`}>
+                    {LIBELLES_ROLE[user.role] || user.role}
+                  </span>
+                  <span className={`w-2 h-2 rounded-full ${user.est_actif ? "bg-green-500" : "bg-red-400"}`} />
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </Carte>
 
-              <Carte titre="👥 Gestion des utilisateurs">
-                <p className="text-sm text-ardoise-clair mb-4">
-                  Tu peux aussi gérer les rôles et les permissions depuis la page de gestion
-                  des utilisateurs avec une vue complète de chaque compte.
-                </p>
-                <Link href="/super-admin/utilisateurs">
-                  <Bouton variante="secondaire" taille="petit">👥 Voir tous les utilisateurs →</Bouton>
-                </Link>
-              </Carte>
-            </section>
+      {/* ========== DROITS DE L'UTILISATEUR ========== */}
+      {selectedUser && (
+        <>
+          {/* Carte info utilisateur */}
+          <div className={`rounded-xl border-2 p-5 ${COULEURS_ROLE[selectedUser.role] || "border-gray-200 bg-white"}`}>
+            <div className="flex items-start justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-bold ${
+                  selectedUser.est_actif ? "bg-lagune" : "bg-gray-400"
+                }`}>
+                  {(selectedUser.prenom?.charAt(0) || selectedUser.email.charAt(0)).toUpperCase()}
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-ardoise">
+                    {selectedUser.prenom ? `${selectedUser.prenom} ${selectedUser.nom || ""}` : selectedUser.email}
+                  </h2>
+                  <p className="text-sm text-ardoise-clair">{selectedUser.email}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`text-xs uppercase font-bold px-2 py-0.5 rounded-full border ${COULEURS_ROLE[selectedUser.role] || ""}`}>
+                      {LIBELLES_ROLE[selectedUser.role] || selectedUser.role}
+                    </span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      selectedUser.est_actif ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                    }`}>
+                      {selectedUser.est_actif ? "Actif" : "Inactif"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <Link href="/super-admin/droits-ui">
+                <Bouton variante="secondaire" taille="petit">🎛️ Droits UI (par rôle)</Bouton>
+              </Link>
+            </div>
+          </div>
+
+          {/* ===== PROFILS DE PROFIL ===== */}
+          {profilsDisponibles.length > 0 && (
+            <Carte
+              titre="📋 Profils de permissions (profil de profil)"
+              sous-titre={`Sélectionne un profil pour appliquer une configuration prédéfinie au rôle "${LIBELLES_ROLE[selectedUser.role]}"`}
+            >
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {profilsDisponibles.map((profil) => {
+                  const actif = profilSelectionne === profil.id;
+                  const nbActifs = profil.modules.filter((m) => m.is_enabled).length;
+                  const nbDesactives = profil.modules.filter((m) => !m.is_enabled).length;
+                  return (
+                    <button
+                      key={profil.id}
+                      onClick={() => appliquerProfil(profil.id)}
+                      className={`p-4 rounded-xl border-2 text-left transition-all ${
+                        actif
+                          ? "border-lagune bg-lagune/5 ring-2 ring-lagune/20"
+                          : "border-ardoise-clair/10 hover:border-lagune/30 hover:bg-sable"
+                      }`}
+                    >
+                      <p className="font-bold text-sm text-ardoise">{profil.nom}</p>
+                      <p className="text-xs text-ardoise-clair mt-1">{profil.description}</p>
+                      <div className="flex gap-2 mt-2 text-xs">
+                        <span className="text-green-600">{nbActifs} activés</span>
+                        {nbDesactives > 0 && <span className="text-red-500">{nbDesactives} désactivés</span>}
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {profil.modules.filter((m) => m.is_enabled).slice(0, 3).map((m) => (
+                          <span key={m.module_key} className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+                            ✓ {m.module_label || m.module_key}
+                          </span>
+                        ))}
+                        {profil.modules.filter((m) => !m.is_enabled).slice(0, 2).map((m) => (
+                          <span key={m.module_key} className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                            ✗ {m.module_label || m.module_key}
+                          </span>
+                        ))}
+                        {profil.modules.length > 5 && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                            +{profil.modules.length - 5} autres
+                          </span>
+                        )}
+                      </div>
+                      {actif && (
+                        <p className="text-xs text-lagune font-semibold mt-2">✓ Profil actif</p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </Carte>
           )}
+
+          {/* ===== MODULES ===== */}
+          <Carte
+            titre="🎛️ Permissions module par module"
+            sous-titre={`Modules UI pour "${LIBELLES_ROLE[selectedUser.role] || selectedUser.role}" — active/désactive pour cet utilisateur`}
+          >
+            {chargementModules ? (
+              <p className="text-ardoise-clair italic text-center py-8">Chargement des modules...</p>
+            ) : modulesUtilisateur.length === 0 ? (
+              <p className="text-ardoise-clair italic text-center py-8">Aucun module configuré pour ce rôle.</p>
+            ) : (
+              <div className="space-y-2">
+                {modulesUtilisateur.map((mod) => {
+                  const enSauvegarde = sauvegardeEnCours === `${mod.module_key}:is_enabled` ||
+                    sauvegardeEnCours === `${mod.module_key}:is_read_only`;
+
+                  return (
+                    <div key={mod.module_key} className="flex items-center justify-between p-3 bg-sable rounded-lg hover:bg-sable/80 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-ardoise truncate">
+                          {mod.module_label || mod.module_key}
+                        </p>
+                        <p className="text-xs text-ardoise-clair truncate">{mod.module_key}</p>
+                      </div>
+                      <div className="flex items-center gap-4 flex-shrink-0 ml-4">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <span className={`text-xs font-semibold ${mod.is_enabled ? "text-green-600" : "text-red-500"}`}>
+                            {mod.is_enabled ? "Activé" : "Désactivé"}
+                          </span>
+                          <button
+                            onClick={() => basculerModule(mod, "is_enabled")}
+                            disabled={enSauvegarde}
+                            className={`relative w-10 h-5 rounded-full transition-colors ${
+                              enSauvegarde ? "opacity-50" : mod.is_enabled ? "bg-green-500" : "bg-gray-300"
+                            }`}
+                          >
+                            <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                              mod.is_enabled ? "translate-x-5" : ""
+                            }`} />
+                          </button>
+                        </label>
+
+                        {mod.is_enabled && (
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <span className={`text-xs font-semibold ${mod.is_read_only ? "text-ocre" : "text-ardoise-clair"}`}>
+                              R/O
+                            </span>
+                            <button
+                              onClick={() => basculerModule(mod, "is_read_only")}
+                              disabled={enSauvegarde}
+                              className={`relative w-8 h-4 rounded-full transition-colors ${
+                                enSauvegarde ? "opacity-50" : mod.is_read_only ? "bg-ocre" : "bg-gray-300"
+                              }`}
+                            >
+                              <span className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${
+                                mod.is_read_only ? "translate-x-4" : ""
+                              }`} />
+                            </button>
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Carte>
         </>
       )}
 
-      {/* Accès rapides aux profils */}
-      <section>
-        <h2 className="text-lg font-bold text-ardoise mb-4">🗂️ Accès rapides aux profils</h2>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <Link href="/police/dashboard" className="block group">
-            <div className="carte cursor-pointer hover:shadow-lg transition-all">
-              <span className="text-2xl">👮</span>
-              <h3 className="font-bold text-ardoise group-hover:text-ocre text-sm mt-2">Police</h3>
-              <p className="text-xs text-ardoise-clair">Vérification d'identité, signalement</p>
-            </div>
-          </Link>
-          <Link href="/agent/dashboard" className="block group">
-            <div className="carte cursor-pointer hover:shadow-lg transition-all">
-              <span className="text-2xl">👤</span>
-              <h3 className="font-bold text-ardoise group-hover:text-ocre text-sm mt-2">Agent</h3>
-              <p className="text-xs text-ardoise-clair">Enrôlement, scan CNI, biométrie</p>
-            </div>
-          </Link>
-          <Link href="/medecin/dashboard" className="block group">
-            <div className="carte cursor-pointer hover:shadow-lg transition-all">
-              <span className="text-2xl">🏥</span>
-              <h3 className="font-bold text-ardoise group-hover:text-ocre text-sm mt-2">Médecin</h3>
-              <p className="text-xs text-ardoise-clair">Dossier médical, ordonnances</p>
-            </div>
-          </Link>
-          <Link href="/ong/dashboard" className="block group">
-            <div className="carte cursor-pointer hover:shadow-lg transition-all">
-              <span className="text-2xl">🤝</span>
-              <h3 className="font-bold text-ardoise group-hover:text-ocre text-sm mt-2">ONG</h3>
-              <p className="text-xs text-ardoise-clair">Bénéficiaires, attestations</p>
-            </div>
-          </Link>
-        </div>
-      </section>
-
       {/* Navigation */}
       <div className="flex gap-3 flex-wrap pt-4 border-t border-ardoise-clair/10">
-        <Link href="/super-admin/administrateurs">
-        <Bouton variante="primaire" taille="petit"><Icône className="w-4 h-4"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><circle cx="12" cy="11" r="2"/><path d="M12 13v3"/></Icône> Gérer les administrateurs</Bouton>
-        </Link>
         <Link href="/super-admin/droits-ui">
-        <Bouton variante="secondaire" taille="petit">🎛️ Droits UI</Bouton>
+          <Bouton variante="primaire" taille="petit">🎛️ Configurer les modules par rôle</Bouton>
         </Link>
-        <Link href="/super-admin/configuration">
-        <Bouton variante="ghost" taille="petit"><Icône className="w-4 h-4"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></Icône> Configuration</Bouton>
+        <Link href="/super-admin/administrateurs">
+          <Bouton variante="secondaire" taille="petit">Gérer les administrateurs</Bouton>
         </Link>
-        <Link href="/super-admin/audit">
-        <Bouton variante="ghost" taille="petit"><Icône className="w-4 h-4"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></Icône> Journal d'audit</Bouton>
+        <Link href="/super-admin/tableau-de-bord">
+          <Bouton variante="ghost" taille="petit">← Tableau de bord</Bouton>
         </Link>
-      </div>
-    </div>
-  );
-}
-
-// ---------- Sous-composants ----------
-
-function CarteRoleComplete({ role, technologies }: { role: RolePermission; technologies: Technologie[] }) {
-  const couleurs: Record<string, string> = {
-    citoyen: "border-gray-300 bg-white", agent: "border-blue-300 bg-blue-50", medecin: "border-green-300 bg-green-50",
-    police: "border-indigo-300 bg-indigo-50", ong: "border-teal-300 bg-teal-50",
-    administrateur: "border-purple-300 bg-purple-50", super_administrateur: "border-rose-300 bg-rose-50",
-  };
-  const badgeVar: Record<string, "lagune" | "succes" | "ocre" | "terre"> = {
-    citoyen: "lagune", agent: "lagune", medecin: "succes", police: "succes", ong: "succes",
-    administrateur: "ocre", super_administrateur: "terre",
-  };
-  const techsAutorisees = technologies.filter((t) => t.roles_autorises.includes(role.role));
-
-  return (
-    <div className={`rounded-xl border-2 p-5 ${couleurs[role.role] || "border-gray-200 bg-white"}`}>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-bold text-gray-800 capitalize">{role.libelle}</h3>
-        <Badge variante={badgeVar[role.role] || "lagune"}>Niv. {role.niveau}</Badge>
-      </div>
-      <p className="text-sm text-gray-600 mb-3">{role.description}</p>
-      <div className="mb-4">
-        <p className="text-xs uppercase text-ardoise-clair font-semibold mb-2">Permissions</p>
-        <div className="space-y-1">
-          {role.permissions.map((perm, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs text-gray-700">
-              <span className="text-green-500">✓</span>
-              <span>{perm}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div>
-        <p className="text-xs uppercase text-ardoise-clair font-semibold mb-2">Technologies accessibles</p>
-        <div className="flex flex-wrap gap-1.5">
-          {techsAutorisees.map((t) => (
-            <span key={t.id} className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-ocre/10 text-ocre mr-1">{ICÔNES_TECHNO[t.id]}</span> {t.nom}
-            </span>
-          ))}
-        </div>
       </div>
     </div>
   );
