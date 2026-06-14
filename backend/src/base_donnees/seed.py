@@ -191,12 +191,14 @@ async def creer_super_admin_initial():
 
         if super_admin_existant:
             journal.info(f"Un super admin existe déjà : id={super_admin_existant.id}")
-            # ✅ Déverrouiller et réinitialiser le mot de passe au cas où
+            # ✅ Déverrouiller, reset mot de passe et désactiver 2FA
             from src.noyau import hacher_mot_de_passe
             super_admin_existant.est_verrouille = False
             super_admin_existant.date_verrouillage = None
             super_admin_existant.tentatives_connexion_echouees = 0
             super_admin_existant.est_actif = True
+            super_admin_existant.deux_fa_active = False
+            super_admin_existant.secret_2fa_chiffre = None
             
             # Mettre à jour le mot de passe si les variables sont présentes
             mot_de_passe_update = os.getenv("SEED_SUPER_ADMIN_MOT_DE_PASSE", "Admin@DigiID2025!")
@@ -240,9 +242,9 @@ async def creer_super_admin_initial():
             )
             # Marquer l'email comme vérifié (pas d'email à envoyer)
             super_admin.est_email_verifie = True
-            # ✅ CRUCIAL : Activer 2FA pour éviter le blocage à la connexion
-            # (car activer_2fa_obligatoire_admin=True bloque les admins sans 2FA)
-            super_admin.deux_fa_active = True
+            # 2FA : LAISSER À False — l'utilisateur l'active depuis son profil
+            # (via POST /api/v1/utilisateur/profil/2fa/preparation + /activer)
+            super_admin.deux_fa_active = False
             await session.commit()
 
             journal.info(f"Super administrateur créé : id={super_admin.id}")
