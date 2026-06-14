@@ -136,13 +136,13 @@ services:
       - key: PORT
         value: "8000"
 
-      # --- Resend (email) ---
+            # --- Resend (email) ---
       # Ajoute la cle API Resend manuellement sur le dashboard Render
       # (sync: false = Render ne genere pas la valeur automatiquement)
       - key: RESEND_API_KEY
         sync: false
-            - key: EMAIL_EXPEDITEUR
-        value: "DigiID <experience2712@gmail.com>"
+      - key: EMAIL_EXPEDITEUR
+        value: "DigiID <bigdataism2024@gmail.com>"
 
     # --------------------------------------------------------------------------
   # REDIS — Cache (type: keyvalue dans Render)

@@ -96,7 +96,7 @@ class ParametresApplication(BaseSettings):
 
     # --- Email (Resend) ---
     resend_api_key: str = ""
-    email_expediteur: str = "DigiID <experience2712@gmail.com>"
+    email_expediteur: str = "DigiID <bigdataism2024@gmail.com>"
 
     # --- Configuration Pydantic ---
     model_config = SettingsConfigDict(
