@@ -20,7 +20,6 @@ import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspacePr
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Alerte } from "@/composants/commun/Alerte";
-import { Modal } from "@/composants/commun/Modal";
 import { ChampRecherche } from "@/composants/commun/ChampRecherche";
 import { ErreurAPI } from "@/services/client_api";
 import {
@@ -40,16 +39,6 @@ const COULEURS_ROLES: Record<string, string> = {
   ong: "bg-teal-50 text-teal-700 border-teal-300",
   administrateur: "bg-purple-50 text-purple-700 border-purple-300",
   super_administrateur: "bg-rose-50 text-rose-700 border-rose-300",
-};
-
-const BADGE_VARIANTES: Record<string, "lagune" | "succes" | "ocre" | "terre"> = {
-  citoyen: "lagune",
-  agent: "lagune",
-  medecin: "succes",
-  police: "succes",
-  ong: "succes",
-  administrateur: "ocre",
-  super_administrateur: "terre",
 };
 
 // ---------- Page ----------
