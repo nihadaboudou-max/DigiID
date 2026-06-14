@@ -6,7 +6,7 @@
  * sans avoir vérifié son email.
  */
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 
 import { Bouton } from "@/composants/commun/Bouton";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
@@ -175,7 +175,7 @@ export default function PageVerificationEmail() {
                 ⚠️ Copie ce code et colle-le ci-dessous pour vérifier ton email.
               </p>
             </div>
-          )
+          )}
 
           <form onSubmit={gererVerification} className="space-y-6">
             <div className="text-center">
