@@ -94,7 +94,6 @@ const LIENS_SUPER_ADMIN: Lien[] = [
   { href: "/super-admin/utilisateurs",    libelle: "Utilisateurs",     Icone: IconeUtilisateur },
   { href: "/super-admin/administrateurs", libelle: "Administrateurs",  Icone: IconeBouclier },
   { href: "/admin/attestations",          libelle: "Attestations",     Icone: IconeCheck },
-  { href: "/super-admin/droits",          libelle: "Droits",           Icone: IconeCle },
   { href: "/super-admin/droits-ui",       libelle: "Droits UI",        Icone: IconeBouclier },
   { href: "/super-admin/audit",           libelle: "Journal d'audit",  Icone: IconeJournal },
   { href: "/super-admin/configuration",   libelle: "Configuration",    Icone: IconeParametres },
