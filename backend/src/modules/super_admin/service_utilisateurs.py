@@ -29,6 +29,7 @@ from src.modules.super_admin.schemas_utilisateurs import (
     NombreUtilisateurs,
     UtilisateurApercu,
 )
+from src.modules.authentification.service import _hasher_email
 from src.noyau import chiffrer_donnee, dechiffrer_donnee, journal
 from src.noyau.exceptions import ErreurRessourceIntrouvable, ErreurValidation
 from src.noyau.journal import journal_audit
@@ -88,13 +89,17 @@ async def lister_utilisateurs(
 
     # Filtres
     if recherche:
-        # Recherche par email (hash partiel), ville, ou nom
-        requete = requete.where(
-            or_(
-                Utilisateur.email_hash.ilike(f"%{recherche}%"),
-                Utilisateur.ville.ilike(f"%{recherche}%"),
-            )
-        )
+        conditions = [
+            Utilisateur.ville.ilike(f"%{recherche}%"),
+        ]
+        # Si la recherche ressemble à un email complet, hacher et chercher exactement
+        if "@" in recherche and "." in recherche:
+            # Hacher l'email pour chercher exactement dans email_hash
+            hash_email = _hasher_email(recherche.strip().lower())
+            conditions.append(Utilisateur.email_hash == hash_email)
+        else:
+            conditions.append(Utilisateur.email_hash.ilike(f"%{recherche}%"))
+        requete = requete.where(or_(*conditions))
     if role:
         requete = requete.where(Utilisateur.role == role)
     if est_actif is not None:
@@ -115,11 +120,32 @@ async def lister_utilisateurs(
     else:
         requete = requete.order_by(colonne_tri.desc())
 
-    # Comptage total
-    total = await session.scalar(
-        select(func.count()).select_from(Utilisateur).where(*requete.whereclause.clauses)
-        if requete.whereclause else select(func.count(Utilisateur.id))
-    ) or 0
+    # Comptage total — construire une requête de comptage séparée
+    requete_comptage = select(func.count(Utilisateur.id))
+    if recherche:
+        conditions_comptage = [
+            Utilisateur.ville.ilike(f"%{recherche}%"),
+        ]
+        if "@" in recherche and "." in recherche:
+            hash_email = _hasher_email(recherche.strip().lower())
+            conditions_comptage.append(Utilisateur.email_hash == hash_email)
+        else:
+            conditions_comptage.append(Utilisateur.email_hash.ilike(f"%{recherche}%"))
+        requete_comptage = requete_comptage.where(or_(*conditions_comptage))
+    if role:
+        requete_comptage = requete_comptage.where(Utilisateur.role == role)
+    if est_actif is not None:
+        requete_comptage = requete_comptage.where(Utilisateur.est_actif == est_actif)
+    if est_verrouille is not None:
+        requete_comptage = requete_comptage.where(Utilisateur.est_verrouille == est_verrouille)
+    if est_supprime is not None:
+        requete_comptage = requete_comptage.where(Utilisateur.est_supprime == est_supprime)
+    if deux_fa_active is not None:
+        requete_comptage = requete_comptage.where(Utilisateur.deux_fa_active == deux_fa_active)
+    if ville:
+        requete_comptage = requete_comptage.where(Utilisateur.ville.ilike(f"%{ville}%"))
+
+    total = await session.scalar(requete_comptage) or 0
 
     # Pagination
     pages = max(1, (total + limite - 1) // limite)
