@@ -209,8 +209,11 @@ function Contenu() {
           <Link href="/super-admin/tableau-de-bord">
             <Bouton variante="ghost" taille="petit">← Retour</Bouton>
           </Link>
+          <Link href="/super-admin/droits-ui">
+            <Bouton variante="primaire" taille="petit">🎛️ Droits UI</Bouton>
+          </Link>
           <Link href="/super-admin/administrateurs">
-            <Bouton variante="primaire" taille="petit">Gérer les admins</Bouton>
+            <Bouton variante="secondaire" taille="petit">Gérer les admins</Bouton>
           </Link>
         </div>
       </div>
@@ -223,6 +226,24 @@ function Contenu() {
           charger les données réelles.
         </Alerte>
       )}
+
+      {/* Lien vers la matrice droits UI */}
+      <div className="bg-lagune/5 border border-lagune/20 rounded-xl p-4">
+        <div className="flex items-start gap-3 flex-wrap">
+          <div className="flex-1">
+            <p className="font-semibold text-lagune text-sm">🎛️ Configuration fine des modules UI</p>
+            <p className="text-sm text-ardoise-clair mt-1">
+              La page <strong>Matrice des droits UI</strong> permet de configurer module par module
+              les accès pour chaque rôle (activer/désactiver, lecture seule).
+              Elle inclut tous les modules spécifiques : Dossier médical, Ordonnances,
+              Signalement fraude, Enrôlement citoyen, Bénéficiaires ONG, etc.
+            </p>
+          </div>
+          <Link href="/super-admin/droits-ui">
+            <Bouton variante="primaire" taille="petit">🎛️ Configurer les droits UI →</Bouton>
+          </Link>
+        </div>
+      </div>
 
       {chargement ? (
         <p className="text-ardoise-clair italic text-center py-12">Chargement de la matrice des droits...</p>
@@ -434,13 +455,51 @@ function Contenu() {
         </>
       )}
 
+      {/* Accès rapides aux profils */}
+      <section>
+        <h2 className="text-lg font-bold text-ardoise mb-4">🗂️ Accès rapides aux profils</h2>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <Link href="/police/dashboard" className="block group">
+            <div className="carte cursor-pointer hover:shadow-lg transition-all">
+              <span className="text-2xl">👮</span>
+              <h3 className="font-bold text-ardoise group-hover:text-ocre text-sm mt-2">Police</h3>
+              <p className="text-xs text-ardoise-clair">Vérification d'identité, signalement</p>
+            </div>
+          </Link>
+          <Link href="/agent/dashboard" className="block group">
+            <div className="carte cursor-pointer hover:shadow-lg transition-all">
+              <span className="text-2xl">👤</span>
+              <h3 className="font-bold text-ardoise group-hover:text-ocre text-sm mt-2">Agent</h3>
+              <p className="text-xs text-ardoise-clair">Enrôlement, scan CNI, biométrie</p>
+            </div>
+          </Link>
+          <Link href="/medecin/dashboard" className="block group">
+            <div className="carte cursor-pointer hover:shadow-lg transition-all">
+              <span className="text-2xl">🏥</span>
+              <h3 className="font-bold text-ardoise group-hover:text-ocre text-sm mt-2">Médecin</h3>
+              <p className="text-xs text-ardoise-clair">Dossier médical, ordonnances</p>
+            </div>
+          </Link>
+          <Link href="/ong/dashboard" className="block group">
+            <div className="carte cursor-pointer hover:shadow-lg transition-all">
+              <span className="text-2xl">🤝</span>
+              <h3 className="font-bold text-ardoise group-hover:text-ocre text-sm mt-2">ONG</h3>
+              <p className="text-xs text-ardoise-clair">Bénéficiaires, attestations</p>
+            </div>
+          </Link>
+        </div>
+      </section>
+
       {/* Navigation */}
       <div className="flex gap-3 flex-wrap pt-4 border-t border-ardoise-clair/10">
         <Link href="/super-admin/administrateurs">
         <Bouton variante="primaire" taille="petit"><Icône className="w-4 h-4"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><circle cx="12" cy="11" r="2"/><path d="M12 13v3"/></Icône> Gérer les administrateurs</Bouton>
         </Link>
+        <Link href="/super-admin/droits-ui">
+        <Bouton variante="secondaire" taille="petit">🎛️ Droits UI</Bouton>
+        </Link>
         <Link href="/super-admin/configuration">
-        <Bouton variante="secondaire" taille="petit"><Icône className="w-4 h-4"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></Icône> Configuration</Bouton>
+        <Bouton variante="ghost" taille="petit"><Icône className="w-4 h-4"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></Icône> Configuration</Bouton>
         </Link>
         <Link href="/super-admin/audit">
         <Bouton variante="ghost" taille="petit"><Icône className="w-4 h-4"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></Icône> Journal d'audit</Bouton>

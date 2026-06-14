@@ -46,6 +46,15 @@ const CARTES_TECHNOLOGIES: TechnologieCard[] = [
     technologies: ["RBAC", "Permissions", "Rôles"],
   },
   {
+    id: "droits-ui",
+    titre: "Matrice des droits UI",
+    description: "Configuration fine des modules UI accessibles par chaque rôle",
+    icone: "🎛️",
+    href: "/super-admin/droits-ui",
+    statut: "actif",
+    technologies: ["Modules UI", "Toggle", "Overrides"],
+  },
+  {
     id: "statistiques",
     titre: "Statistiques système",
     description: "Métriques détaillées, KPIs, santé du système",
