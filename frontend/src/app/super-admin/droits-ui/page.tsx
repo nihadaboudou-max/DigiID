@@ -238,10 +238,20 @@ function Contenu() {
 
       {chargement ? (
         <p className="text-ardoise-clair italic text-center py-12">Chargement de la matrice des droits UI...</p>
-      ) : erreur ? (
-        <Alerte variante="erreur" titre="Erreur">{erreur}</Alerte>
       ) : (
         <>
+          {erreur && (
+            <Alerte variante="info" titre="Mode hors-ligne">
+              {erreur} — Les données affichées sont les valeurs par défaut.
+              Les modifications seront appliquées dès la reconnexion au serveur.
+              <div className="mt-2">
+                <Bouton variante="ghost" taille="petit" onClick={chargerMatrice}>
+                  ↻ Réessayer
+                </Bouton>
+              </div>
+            </Alerte>
+          )}
+
           {succesMessage && (
             <Alerte variante="succes" titre="✓ Succès">{succesMessage}</Alerte>
           )}

@@ -106,12 +106,44 @@ MODULES_PAR_DEFAUT: dict[str, list[dict]] = {
 ROLES_VALIDES = list(MODULES_PAR_DEFAUT.keys())
 
 
+async def _creer_table_si_necessaire(session: AsyncSession) -> None:
+    """Crée la table ui_module_permissions si elle n'existe pas encore."""
+    from sqlalchemy import text
+    await session.execute(
+        text("""
+            CREATE TABLE IF NOT EXISTS ui_module_permissions (
+                id UUID NOT NULL DEFAULT gen_random_uuid(),
+                role_name VARCHAR(50) NOT NULL,
+                module_key VARCHAR(100) NOT NULL,
+                module_label VARCHAR(200),
+                module_description TEXT,
+                module_icon VARCHAR(50) DEFAULT 'default',
+                is_enabled BOOLEAN DEFAULT true,
+                is_read_only BOOLEAN DEFAULT false,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+                CONSTRAINT pk_ui_module_permissions PRIMARY KEY (id),
+                CONSTRAINT uq_ui_module_role_module UNIQUE (role_name, module_key)
+            );
+        """)
+    )
+    # Créer les index s'ils n'existent pas
+    await session.execute(text("CREATE INDEX IF NOT EXISTS ix_ui_module_role ON ui_module_permissions(role_name);"))
+    await session.execute(text("CREATE INDEX IF NOT EXISTS ix_ui_module_module ON ui_module_permissions(module_key);"))
+    await session.execute(text("CREATE INDEX IF NOT EXISTS ix_ui_module_enabled ON ui_module_permissions(is_enabled);"))
+    # Ajouter les colonnes sur utilisateur si absentes
+    await session.execute(text("ALTER TABLE utilisateur ADD COLUMN IF NOT EXISTS ui_layout VARCHAR(50);"))
+    await session.execute(text("ALTER TABLE utilisateur ADD COLUMN IF NOT EXISTS modules_overrides JSONB DEFAULT '{}'::jsonb;"))
+    await session.commit()
+
+
 async def obtenir_matrice_complete(session: AsyncSession) -> list[ModulePermissionDict]:
     """
     Retourne toute la matrice rôle × module depuis la base de données.
     Si la table est vide, utilise les valeurs par défaut.
     """
     from sqlalchemy import text
+
+    await _creer_table_si_necessaire(session)
 
     resultat = await session.execute(
         text("""
