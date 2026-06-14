@@ -464,21 +464,25 @@ export function BarreLaterale() {
           ))}
         </div>
 
-        {/* Séparateur */}
-        <div className="border-t border-ardoise-clair/10 my-2" />
+        {/* Menu citoyen — Uniquement pour les utilisateurs standard */}
+        {!estSuperAdmin && !estAdmin && (
+          <>
+            <div className="border-t border-ardoise-clair/10 my-2" />
 
-        {/* Menu Score — Suivi et amélioration */}
-        <GroupeScore pathname={pathname} />
-
-        <div className="border-t border-ardoise-clair/10 my-2" />
-
-        {/* Menu Attestations Communautaires — Étape 4 */}
-        <GroupeAttestations pathname={pathname} />
+            {/* Menu Score — Suivi et amélioration */}
+            <GroupeScore pathname={pathname} />
 
         <div className="border-t border-ardoise-clair/10 my-2" />
 
-        {/* Menu Identité (accessible à tous les utilisateurs) */}
-        <GroupeIdentite pathname={pathname} />
+            {/* Menu Attestations Communautaires */}
+            <GroupeAttestations pathname={pathname} />
+
+        <div className="border-t border-ardoise-clair/10 my-2" />
+
+            {/* Menu Identité */}
+            <GroupeIdentite pathname={pathname} />
+          </>
+        )}
       </nav>
 
       {/* Pied — raccourci espace personnel pour admins */}
