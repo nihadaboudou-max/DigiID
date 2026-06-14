@@ -98,7 +98,11 @@ function Contenu() {
 
       {/* Barre de progression objectif */}
       <Carte titre="Progression du jour">
-        <BarreProgression valeur={60} label="12/20 enrôlements" couleur="ocre" />
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-ardoise">12/20 enrôlements</span>
+          <span className="text-sm text-ardoise-clair">60%</span>
+        </div>
+        <BarreProgression valeur={60} couleur="ocre" />
       </Carte>
 
       {/* Liste des enrôlements récents */}
