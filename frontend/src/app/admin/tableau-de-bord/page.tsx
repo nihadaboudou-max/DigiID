@@ -18,6 +18,7 @@ import {
   IconeUtilisateur, IconeBouclier, IconeStatistique,
   IconeAlerte, IconeJournal, IconeParametres,
 } from "@/composants/commun/Icones";
+import { obtenirResumeMonitoring, type ResumeMonitoring } from "@/services/admin";
 
 interface TableauDeBord {
   message: string;
@@ -80,6 +81,7 @@ export default function TableauDeBordAdmin() {
 function Contenu() {
   const [dashboard, setDashboard] = useState<TableauDeBord | null>(null);
   const [stats, setStats] = useState<StatsAdmin | null>(null);
+  const [monitoring, setMonitoring] = useState<ResumeMonitoring | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   const [chargement, setChargement] = useState(true);
 
@@ -87,11 +89,12 @@ function Contenu() {
     let actif = true;
     const charger = async () => {
       try {
-        const [d, s] = await Promise.all([
+        const [d, s, m] = await Promise.all([
           clientAPI.get<TableauDeBord>("/api/v1/admin/tableau-de-bord", { authentifie: true }),
           obtenirStatistiquesAdmin(),
+          obtenirResumeMonitoring(),
         ]);
-        if (actif) { setDashboard(d); setStats(s); }
+        if (actif) { setDashboard(d); setStats(s); setMonitoring(m); }
       } catch (e) {
         if (actif) {
           setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
@@ -157,6 +160,9 @@ function Contenu() {
         )}
         {stats && (
           <CarteKPI libelle="Score moyen" valeur={`${stats.score_moyen}/100`} icone="⭐" couleur="succes" />
+        )}
+        {monitoring && (
+          <CarteKPI libelle="Connectés maintenant" valeur={monitoring.utilisateurs_connectes} icone="🟢" couleur="succes" />
         )}
       </div>
 

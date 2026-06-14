@@ -23,6 +23,7 @@ from src.base_donnees.session import obtenir_session
 from src.config.constantes import PREFIXE_API_ADMIN, RolesUtilisateur
 from src.modeles import Utilisateur, JournalAudit, FraudeIncident, Notification, SessionAuthentification, VerificationVisuelle
 from src.modules.authentification.dependances import admin_courant, obtenir_ip_client
+from src.modules.super_admin import monitoring_temps_reel as service_monitoring
 from src.noyau import dechiffrer_donnee
 from src.noyau.notification import envoyer_email
 
@@ -763,6 +764,138 @@ async def supprimer_utilisateur_admin(
     return ReponseSuppressionUtilisateur(
         succes=True,
         message=f"Compte {email_masque} supprimé avec succès."
-        + (" Une notification a été envoyée aux super admins." if not est_super_admin else ""),
+                + (" Une notification a été envoyée aux super admins." if not est_super_admin else ""),
         utilisateur_id=str(utilisateur_id),
     )
+
+
+# ---------------------------------------------------------------------------
+# MONITORING TEMPS RÉEL POUR ADMIN — Version en lecture seule avec masquage
+# ---------------------------------------------------------------------------
+
+
+class UtilisateurConnecteAdmin(BaseModel):
+    """Utilisateur connecté vu par l'admin (données masquées)."""
+    utilisateur_id: str
+    email_masque: str
+    role: str
+    session_id: str
+    adresse_ip: str
+    ville_estimee: Optional[str] = None
+    derniere_activite: str
+    est_active: bool
+    nb_sessions_actives: int = 1
+
+
+@routeur_admin.get(
+    "/monitoring/resume",
+    response_model=service_monitoring.ResumeTempsReel,
+    summary="Résumé monitoring temps réel (admin)",
+    description="Résumé instantané de l'activité du système pour l'administrateur.",
+)
+async def resume_monitoring_admin(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(admin_courant)],
+):
+    """Résumé temps réel (lecture seule)."""
+    return await service_monitoring.obtenir_resume_temps_reel(session)
+
+
+@routeur_admin.get(
+    "/monitoring/utilisateurs-connectes",
+    response_model=list[UtilisateurConnecteAdmin],
+    summary="Liste des utilisateurs connectés (admin)",
+    description="Liste des utilisateurs connectés avec emails masqués.",
+)
+async def utilisateurs_connectes_admin(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(admin_courant)],
+    limite: int = Query(default=50, ge=1, le=200),
+    filtre_role: str | None = Query(default=None),
+):
+    """
+    Liste les utilisateurs connectés avec données masquées.
+    L'admin voit les emails masqués, pas les données brutes.
+    """
+    utilisateurs = await service_monitoring.obtenir_utilisateurs_connectes(
+        session=session, limite=limite, filtre_role=filtre_role,
+    )
+    resultat = []
+    for u in utilisateurs:
+        email_masque = u.email[:1] + "***" + u.email[u.email.index("@"):] if "@" in u.email else u.email
+        resultat.append(
+            UtilisateurConnecteAdmin(
+                utilisateur_id=u.utilisateur_id,
+                email_masque=email_masque,
+                role=u.role,
+                session_id=u.session_id,
+                adresse_ip=u.adresse_ip,
+                ville_estimee=u.ville_estimee,
+                derniere_activite=u.derniere_activite,
+                est_active=u.est_active,
+                nb_sessions_actives=u.nb_sessions_actives,
+            )
+        )
+    return resultat
+
+
+@routeur_admin.get(
+    "/monitoring/activites",
+    response_model=list[service_monitoring.ActiviteRecente],
+    summary="Activités récentes (admin)",
+    description="Flux des dernières activités du système.",
+)
+async def activites_recentes_admin(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(admin_courant)],
+    limite: int = Query(default=20, ge=1, le=100),
+):
+    """Activités récentes pour l'admin."""
+    return await service_monitoring.obtenir_activites_recentes(
+        session=session, limite=limite,
+    )
+
+
+@routeur_admin.get(
+    "/monitoring/alertes",
+    response_model=list[service_monitoring.AlerteSecuriteItem],
+    summary="Alertes sécurité (admin)",
+    description="Alertes de sécurité actives.",
+)
+async def alertes_monitoring_admin(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(admin_courant)],
+    limite: int = Query(default=20, ge=1, le=100),
+):
+    """Alertes sécurité pour l'admin."""
+    return await service_monitoring.obtenir_alertes_securite(
+        session=session, limite=limite, non_resolues_seulement=True,
+    )
+
+
+@routeur_admin.get(
+    "/monitoring/complet",
+    response_model=service_monitoring.ResumeMonitoring,
+    summary="Monitoring complet (admin)",
+    description="Agrège toutes les données de monitoring en une réponse unique.",
+)
+async def monitoring_complet_admin(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(admin_courant)],
+):
+    """Point d'entrée unique pour le dashboard admin temps réel."""
+    resultat = await service_monitoring.obtenir_monitoring_complet(session)
+    # Masquer les emails pour l'admin
+    for u in resultat.utilisateurs_connectes:
+        if "@" in u.email:
+            u.email = u.email[:1] + "***" + u.email[u.email.index("@"):]
+    for a in resultat.activites_recentes:
+        if a.email and "@" in a.email:
+            a.email = a.email[:1] + "***" + a.email[a.email.index("@"):]
+    for a in resultat.alertes:
+        if a.email and "@" in a.email:
+            a.email = a.email[:1] + "***" + a.email[a.email.index("@"):]
+    return resultat
+
+
+

@@ -56,6 +56,7 @@ from src.modules.super_admin.schemas_utilisateurs import (
     ModifierUtilisateurRequete,
 )
 from src.modules.super_admin import service_utilisateurs as service_utilisateurs
+from src.modules.super_admin import monitoring_temps_reel as service_monitoring
 
 
 # =============================================================================
@@ -1070,3 +1071,118 @@ async def changer_role_utilisateur_patch(
         adresse_ip=obtenir_ip_client(requete),
     )
     return ChangerRoleReponse(**resultat)
+
+
+# =============================================================================
+# MONITORING TEMPS RÉEL — Supervision en direct des utilisateurs
+# =============================================================================
+
+
+@routeur_super_admin.get(
+    "/monitoring/resume",
+    response_model=service_monitoring.ResumeTempsReel,
+    summary="Résumé du monitoring en temps réel",
+    description=(
+        "Retourne un résumé instantané de l'activité du système : "
+        "utilisateurs connectés, sessions actives, connexions aujourd'hui, "
+        "admins connectés, sessions multiples, alertes récentes."
+    ),
+)
+async def resume_monitoring(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(super_admin_courant)],
+):
+    """Résumé temps réel de l'activité du système."""
+    return await service_monitoring.obtenir_resume_temps_reel(session)
+
+
+@routeur_super_admin.get(
+    "/monitoring/utilisateurs-connectes",
+    response_model=list[service_monitoring.UtilisateurConnecte],
+    summary="Liste des utilisateurs connectés en temps réel",
+    description=(
+        "Liste détaillée des utilisateurs actuellement connectés "
+        "(sessions actives avec activité < 30 min)."
+    ),
+)
+async def utilisateurs_connectes(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(super_admin_courant)],
+    limite: int = Query(default=50, ge=1, le=200, description="Nombre max d'utilisateurs"),
+    filtre_role: str | None = Query(default=None, description="Filtrer par rôle"),
+    recherche: str | None = Query(default=None, description="Recherche textuelle"),
+):
+    """Retourne la liste des utilisateurs connectés en temps réel."""
+    return await service_monitoring.obtenir_utilisateurs_connectes(
+        session=session, limite=limite, filtre_role=filtre_role, recherche=recherche,
+    )
+
+
+@routeur_super_admin.post(
+    "/monitoring/utilisateurs/{utilisateur_id}/deconnecter",
+    summary="Forcer la déconnexion immédiate d'un utilisateur",
+    description="Déconnecte immédiatement un utilisateur de toutes ses sessions actives.",
+)
+async def forcer_deconnexion(
+    requete: Request,
+    utilisateur_id: UUID,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    super_admin: Annotated[Utilisateur, Depends(super_admin_courant)],
+    raison: str = Query(default="Déconnexion forcée par super admin"),
+):
+    """Force la déconnexion d'un utilisateur en temps réel."""
+    return await service_monitoring.forcer_deconnexion_utilisateur(
+        session=session, super_admin=super_admin,
+        utilisateur_id=utilisateur_id, raison=raison,
+        adresse_ip=obtenir_ip_client(requete),
+    )
+
+
+@routeur_super_admin.get(
+    "/monitoring/activites-recentes",
+    response_model=list[service_monitoring.ActiviteRecente],
+    summary="Flux des activités récentes",
+    description="Retourne les dernières activités du système.",
+)
+async def activites_recentes(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(super_admin_courant)],
+    limite: int = Query(default=20, ge=1, le=100),
+    type_evenement: str | None = Query(default=None),
+):
+    """Flux des activités récentes (dernières 24h)."""
+    return await service_monitoring.obtenir_activites_recentes(
+        session=session, limite=limite, type_evenement=type_evenement,
+    )
+
+
+@routeur_super_admin.get(
+    "/monitoring/alertes",
+    response_model=list[service_monitoring.AlerteSecuriteItem],
+    summary="Alertes de sécurité en temps réel",
+    description="Retourne les alertes de sécurité actives.",
+)
+async def alertes_monitoring(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(super_admin_courant)],
+    limite: int = Query(default=20, ge=1, le=100),
+    toutes: bool = Query(default=False),
+):
+    """Alertes de sécurité temps réel."""
+    return await service_monitoring.obtenir_alertes_securite(
+        session=session, limite=limite, non_resolues_seulement=not toutes,
+    )
+
+
+@routeur_super_admin.get(
+    "/monitoring/complet",
+    response_model=service_monitoring.ResumeMonitoring,
+    summary="Monitoring complet en une seule requête",
+    description="Agrège toutes les données de monitoring en une réponse unique.",
+)
+async def monitoring_complet(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(super_admin_courant)],
+):
+    """Point d'entrée unique pour le dashboard temps réel."""
+    return await service_monitoring.obtenir_monitoring_complet(session)

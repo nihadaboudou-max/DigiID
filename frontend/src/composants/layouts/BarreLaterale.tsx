@@ -79,6 +79,7 @@ const SOUS_MENUS_IDENTITE: SousMenu[] = [
 
 const LIENS_ADMIN: Lien[] = [
   { href: "/admin/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
+  { href: "/admin/monitoring",      libelle: "Monitoring",       Icone: IconeStatistique },
   { href: "/admin/utilisateurs",    libelle: "Utilisateurs",     Icone: IconeUtilisateur },
   { href: "/admin/attestations",    libelle: "Attestations",     Icone: IconeCheck },
   { href: "/admin/droits",          libelle: "Droits",           Icone: IconeBouclier },
@@ -88,6 +89,7 @@ const LIENS_ADMIN: Lien[] = [
 
 const LIENS_SUPER_ADMIN: Lien[] = [
   { href: "/super-admin/tableau-de-bord", libelle: "Tableau de bord",  Icone: IconeAccueil },
+  { href: "/super-admin/monitoring",      libelle: "Monitoring",       Icone: IconeStatistique },
   { href: "/super-admin/statistiques",    libelle: "Statistiques",     Icone: IconeStatistique },
   { href: "/super-admin/utilisateurs",    libelle: "Utilisateurs",     Icone: IconeUtilisateur },
   { href: "/super-admin/administrateurs", libelle: "Administrateurs",  Icone: IconeBouclier },
