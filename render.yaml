@@ -141,8 +141,8 @@ services:
       # (sync: false = Render ne genere pas la valeur automatiquement)
       - key: RESEND_API_KEY
         sync: false
-      - key: EMAIL_EXPEDITEUR
-        value: "DigiID <bigdataism2024@gmail.com>"
+            - key: EMAIL_EXPEDITEUR
+        value: "DigiID <experience2712@gmail.com>"
 
     # --------------------------------------------------------------------------
   # REDIS — Cache (type: keyvalue dans Render)
