@@ -54,6 +54,10 @@ from src.modules.attestations_communautaires import routeur_attestations
 # --- Admin — Attestations communautaires (modération) ---
 from src.modules.admin import routeur_admin_attestations
 
+# --- Module Permissions UI (configuration des interfaces par rôle) ---
+from src.modules.ui_permissions import routeur_ui_permissions
+from src.modules.ui_permissions.routes import routeur_ui_config
+
 
 # Routeur racine — préfixe et tag globaux gérés au montage
 routeur_v1 = APIRouter()
@@ -99,3 +103,7 @@ routeur_v1.include_router(routeur_attestations)
 
 # Admin — Attestations communautaires (modération réservée aux admins)
 routeur_v1.include_router(routeur_admin_attestations)
+
+# Module Permissions UI — configuration des interfaces par rôle
+routeur_v1.include_router(routeur_ui_permissions)
+routeur_v1.include_router(routeur_ui_config)
