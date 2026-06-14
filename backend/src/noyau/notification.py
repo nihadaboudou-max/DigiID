@@ -2,13 +2,12 @@
 """
 Service de notifications — envoi d'emails, SMS et appels.
 
-Utilise SMTP Gmail (mot de passe d'application Google) pour l'envoi d'emails.
-Fallback sur Resend si SMTP non configure, et fallback console en dev.
+Utilise SMTP Gmail avec mot de passe d'application Google.
 
 Configuration requise :
   1. Activer la 2FA sur le compte Google (bigdataism2024@gmail.com)
   2. Creer un mot de passe d'application : https://myaccount.google.com/apppasswords
-  3. Mettre le mot de passe dans .env : SMTP_MOT_DE_PASSE=xxxx xxxx xxxx xxxx
+  3. Definir SMTP_MOT_DE_PASSE dans les variables d'environnement Render
 """
 import random
 import smtplib
@@ -16,8 +15,6 @@ import string
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
-
-import httpx
 
 from src.config import parametres
 from src.noyau.journal import journal
@@ -33,11 +30,8 @@ def generer_code_verification(longueur: int = 6) -> str:
 
 
 # =============================================================================
-# Envoi d'emails — SMTP Gmail (principal) + Resend (fallback)
+# Envoi d'emails — SMTP Gmail uniquement
 # =============================================================================
-
-RESEND_API_URL = "https://api.resend.com/emails"
-
 
 def envoyer_email(
     destinataire: str,
@@ -46,12 +40,9 @@ def envoyer_email(
     corps_html: Optional[str] = None,
 ) -> bool:
     """
-    Envoie un email.
+    Envoie un email via SMTP Gmail.
 
-    Priorite :
-      1. SMTP Gmail (si mot de passe d'application configure)
-      2. Resend (si cle API Resend configuree)
-      3. Console (mode dev)
+    Si SMTP_MOT_DE_PASSE n'est pas defini, logge dans la console (mode mock).
 
     Args:
         destinataire: Adresse email du destinataire
@@ -62,37 +53,38 @@ def envoyer_email(
     Returns:
         bool: True si l'envoi a reussi (ou simule), False sinon
     """
-    expediteur = parametres.email_expediteur or "DigiID <bigdataism2024@gmail.com>"
-
-    # --- Si pas de config email : mode mock ---
-    if parametres.est_developpement and not parametres.smtp_mot_de_passe and not parametres.resend_api_key:
+    # --- Pas de mot de passe SMTP : mode mock (log console) ---
+    if not parametres.smtp_mot_de_passe:
         journal.info(
             f"[EMAIL][MOCK] A: {destinataire} | Sujet: {sujet}\n"
             f"Corps:\n{corps_texte}"
         )
         return True
 
-    # --- 1. Essayer SMTP Gmail ---
-    if parametres.smtp_mot_de_passe:
-        try:
-            _envoyer_via_smtp(destinataire, sujet, corps_texte, corps_html, expediteur)
-            journal.info(
-                f"[EMAIL][SMTP] OK → {destinataire} | Sujet: {sujet}"
-            )
-            return True
-        except Exception as erreur:
-            journal.error(
-                f"[EMAIL][SMTP] ERREUR → {destinataire} : {erreur}"
-            )
-            # Fallback vers Resend si disponible
-            if not parametres.resend_api_key:
-                return False
-
-    # --- 2. Fallback Resend ---
-    if parametres.resend_api_key:
-        return _envoyer_via_resend(destinataire, sujet, corps_texte, corps_html, expediteur)
-
-    return False
+    # --- Envoi via SMTP Gmail ---
+    try:
+        _envoyer_via_smtp(destinataire, sujet, corps_texte, corps_html)
+        journal.info(f"[EMAIL][SMTP] OK → {destinataire} | Sujet: {sujet}")
+        return True
+    except smtplib.SMTPAuthenticationError:
+        journal.error(
+            f"[EMAIL][SMTP] ERREUR AUTH → {destinataire} : "
+            f"Mot de passe d'application invalide. "
+            f"Regenere-le sur https://myaccount.google.com/apppasswords"
+        )
+        return False
+    except smtplib.SMTPRecipientsRefused:
+        journal.error(f"[EMAIL][SMTP] DESTINATAIRE REFUSE → {destinataire}")
+        return False
+    except smtplib.SMTPServerDisconnected:
+        journal.error(f"[EMAIL][SMTP] CONNEXION PERDUE → {destinataire}")
+        return False
+    except TimeoutError:
+        journal.error(f"[EMAIL][SMTP] TIMEOUT → {destinataire}")
+        return False
+    except Exception as erreur:
+        journal.error(f"[EMAIL][SMTP] ERREUR → {destinataire} : {erreur}")
+        return False
 
 
 def _envoyer_via_smtp(
@@ -100,11 +92,12 @@ def _envoyer_via_smtp(
     sujet: str,
     corps_texte: str,
     corps_html: Optional[str] = None,
-    expediteur: str = "DigiID <bigdataism2024@gmail.com>",
 ) -> None:
     """
     Envoie l'email via SMTP Gmail (mot de passe d'application).
     """
+    expediteur = parametres.email_expediteur or "DigiID <bigdataism2024@gmail.com>"
+
     # Extraire l'adresse email depuis le format "DigiID <email>"
     if "<" in expediteur and ">" in expediteur:
         adresse_expediteur = expediteur.split("<")[1].split(">")[0].strip()
@@ -131,61 +124,6 @@ def _envoyer_via_smtp(
         serveur.starttls()
         serveur.login(parametres.smtp_utilisateur, parametres.smtp_mot_de_passe)
         serveur.sendmail(adresse_expediteur, [destinataire], msg.as_string())
-
-
-def _envoyer_via_resend(
-    destinataire: str,
-    sujet: str,
-    corps_texte: str,
-    corps_html: Optional[str] = None,
-    expediteur: str = "DigiID <bigdataism2024@gmail.com>",
-) -> bool:
-    """
-    Fallback : envoie via Resend (au cas ou SMTP echoue).
-    """
-    api_key = parametres.resend_api_key
-    if not api_key:
-        journal.warning("[EMAIL][RESEND] Pas de cle API Resend configuree.")
-        return False
-
-    if not corps_html:
-        corps_html = corps_texte.replace("\n", "<br>")
-
-    try:
-        with httpx.Client(timeout=15.0) as client:
-            reponse = client.post(
-                RESEND_API_URL,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "from": expediteur,
-                    "to": [destinataire],
-                    "subject": sujet,
-                    "text": corps_texte,
-                    "html": f"<html><body style='font-family: sans-serif; padding: 20px;'>{corps_html}</body></html>",
-                },
-            )
-
-            if reponse.status_code in (200, 201):
-                data = reponse.json()
-                journal.info(
-                    f"[EMAIL][RESEND] OK id={data.get('id', '?')} → {destinataire} | Sujet: {sujet}"
-                )
-                return True
-            else:
-                journal.error(
-                    f"[EMAIL][RESEND] ERREUR {reponse.status_code} → {destinataire} : {reponse.text[:500]}"
-                )
-                return False
-
-    except httpx.TimeoutException:
-        journal.error(f"[EMAIL][RESEND] TIMEOUT → {destinataire}")
-        return False
-    except Exception as erreur:
-        journal.error(f"[EMAIL][RESEND] EXCEPTION → {destinataire} : {erreur}")
-        return False
 
 
 # =============================================================================
@@ -286,17 +224,11 @@ def envoyer_sms(
     telephone: str,
     message: str,
 ) -> bool:
-    """
-    Envoie un SMS au telephone donne.
-
-    En developpement : logge le message dans la console.
-    En production : utilise Twilio / AWS SNS / Orange SMS API.
-    """
+    """Envoie un SMS (simule pour l'instant)."""
     journal.info(
         f"[SMS][MOCK] A: {telephone}\n"
         f"Message: {message}"
     )
-    # TODO: Brancher Twilio en production
     return True
 
 
@@ -307,7 +239,6 @@ def envoyer_sms_verification(
     """Envoie un SMS avec un code de verification."""
     message = f"""
 DigiID — Ton code de verification est : {code}
-
 Ce code expire dans 10 minutes. Ne le partage avec personne.
 """
     return envoyer_sms(telephone, message)
@@ -321,12 +252,7 @@ def passer_appel_verification(
     telephone: str,
     code: str,
 ) -> bool:
-    """
-    Passe un appel vocal vers le telephone pour lire le code de verification.
-
-    En developpement : logge le message dans la console.
-    En production : utilise Twilio Voice / AWS Connect.
-    """
+    """Passe un appel vocal (simule pour l'instant)."""
     message_tts = f"""
 Bonjour, voici votre code de verification DigiID : {code}.
 Je repete : {code}.
@@ -336,5 +262,4 @@ Ce code expire dans 10 minutes.
         f"[APPEL][MOCK] A: {telephone}\n"
         f"Message vocal: {message_tts}"
     )
-    # TODO: Brancher Twilio Voice en production
     return True
