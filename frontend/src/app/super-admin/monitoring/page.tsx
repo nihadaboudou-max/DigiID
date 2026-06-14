@@ -296,7 +296,7 @@ function Contenu() {
                             )}
                           </div>
                           <Bouton
-                            variante="terre"
+                            variante="danger"
                             taille="petit"
                             onClick={() => setDeconnexionModal({ utilisateur: u })}
                           >
@@ -392,7 +392,7 @@ function Contenu() {
                       <div className="flex gap-2 mt-3">
                         {a.utilisateur_id && (
                           <Bouton
-                            variante="terre"
+                            variante="danger"
                             taille="petit"
                             onClick={async () => {
                               try {
@@ -463,8 +463,8 @@ function Contenu() {
               <Bouton variante="ghost" onClick={() => setDeconnexionModal(null)}>
                 Annuler
               </Bouton>
-              <Bouton
-                variante="terre"
+                            <Bouton
+                variante="danger"
                 chargement={actionChargement}
                 onClick={() => forcerDeconnexion(
                   deconnexionModal.utilisateur.utilisateur_id,
