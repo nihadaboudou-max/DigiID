@@ -95,16 +95,17 @@ class ParametresApplication(BaseSettings):
     duree_validite_code_2fa_secondes: int = 300
 
         # --- Email (Resend) ---
-    resend_api_key: str = ""
-    email_expediteur: str = "DigiID <bigdataism2024@gmail.com>"
+        resend_api_key: str = ""
+        email_expediteur: str = "DigiID <bigdataism2024@gmail.com>"
 
-    # --- Email (SMTP Gmail - utilise le mot de passe d'application) ---
-    smtp_serveur: str = "smtp.gmail.com"
-    smtp_port: int = 587
-    smtp_utilisateur: str = "bigdataism2024@gmail.com"
-    smtp_mot_de_passe: str = ""
-    # Mot de passe d'application Google (16 caracteres) genere depuis :
-    # https://myaccount.google.com/apppasswords
+        # --- Email (SMTP Gmail - utilise le mot de passe d'application) ---
+        smtp_serveur: str = "smtp.gmail.com"
+        smtp_port: int = 587
+        smtp_utilisateur: str = "bigdataism2024@gmail.com"
+        smtp_mot_de_passe: str = ""
+
+        # --- Email (SendGrid - API HTTP, fonctionne sur Render) ---
+        sendgrid_api_key: str = ""
 
     # --- Configuration Pydantic ---
     model_config = SettingsConfigDict(
