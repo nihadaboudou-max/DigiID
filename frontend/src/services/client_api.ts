@@ -260,4 +260,11 @@ export const clientAPI = {
 
   delete: <T>(chemin: string, options?: OptionsRequete) =>
     appel_api<T>(chemin, { ...options, method: "DELETE" }),
+
+  put: <T>(chemin: string, donnees?: unknown, options?: OptionsRequete) =>
+    appel_api<T>(chemin, {
+      ...options,
+      method: "PUT",
+      body: donnees ? JSON.stringify(donnees) : undefined,
+    }),
 };

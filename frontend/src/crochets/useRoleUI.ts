@@ -256,7 +256,7 @@ export function useRoleUI(): UseRoleUIReturn {
       if (!mod.is_enabled) continue;
       const canKey = MODULE_TO_CAN_KEY[mod.module_key];
       if (canKey) {
-        (actions as Record<string, unknown>)[canKey] = true;
+        (actions as unknown as Record<string, unknown>)[canKey] = true;
       }
     }
 
