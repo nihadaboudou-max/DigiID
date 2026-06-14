@@ -39,23 +39,29 @@ export default function PageVerificationEmail() {
     envoyerPremierCode();
   }, []);
 
-  async function envoyerPremierCode() {
+  async function envoyerCode(canalChoisi: "email" | "sms" | "appel") {
     try {
-      const reponse = await envoyerCodeVerification(canal);
+      const reponse = await envoyerCodeVerification(canalChoisi);
       setDestinationMasquee(reponse.destination_masquee);
       setMessageErreur(null);
       setCompteurRenvoi(30); // 30 secondes avant de pouvoir renvoyer
-      // En mode développement, le code est renvoyé directement
+      // Si l'envoi a échoué (aucun service email configuré), le code est renvoyé directement
       if (reponse.code_dev) {
         setCodeVisible(reponse.code_dev);
       }
+      return reponse;
     } catch (e) {
       if (e instanceof ErreurAPI) {
         setMessageErreur(e.message_utilisateur);
       } else {
         setMessageErreur("Impossible d'envoyer le code. Réessaie.");
       }
+      return null;
     }
+  }
+
+  async function envoyerPremierCode() {
+    await envoyerCode(canal);
   }
 
   // Compte à rebours pour le renvoi
@@ -68,23 +74,11 @@ export default function PageVerificationEmail() {
   async function gererEnvoiCode() {
     setMessageErreur(null);
     setChargement(true);
-    try {
-      const reponse = await envoyerCodeVerification(canal);
-      setDestinationMasquee(reponse.destination_masquee);
-      setCompteurRenvoi(30);
+    const reponse = await envoyerCode(canal);
+    if (reponse) {
       setMessageSucces("Nouveau code envoyé !");
-      if (reponse.code_dev) {
-        setCodeVisible(reponse.code_dev);
-      }
-    } catch (e) {
-      if (e instanceof ErreurAPI) {
-        setMessageErreur(e.message_utilisateur);
-      } else {
-        setMessageErreur("Échec d'envoi du code. Réessaie.");
-      }
-    } finally {
-      setChargement(false);
     }
+    setChargement(false);
   }
 
   async function gererVerification(evt: React.FormEvent) {
@@ -172,16 +166,16 @@ export default function PageVerificationEmail() {
           {codeVisible && (
             <div className="bg-lagune/10 border-2 border-dashed border-lagune rounded-xl p-4 mb-6 text-center">
               <p className="text-xs text-ardoise-clair mb-1">
-                🔧 Mode développement — code de vérification :
+                ✉️ Code de vérification (affiché car l'envoi automatique n'est pas disponible) :
               </p>
               <p className="text-3xl font-mono font-bold text-lagune tracking-widest">
                 {codeVisible}
               </p>
               <p className="text-xs text-terre mt-2">
-                ⚠️ Ce code ne sera pas affiché en production. Il sera envoyé par email.
+                ⚠️ Copie ce code et colle-le ci-dessous pour vérifier ton email.
               </p>
             </div>
-          )}
+          )
 
           <form onSubmit={gererVerification} className="space-y-6">
             <div className="text-center">
@@ -231,7 +225,7 @@ export default function PageVerificationEmail() {
               <span>Recevoir par :</span>
               <button
                 type="button"
-                onClick={() => { setCanal("email"); envoyerPremierCode(); }}
+                onClick={() => { setCanal("email"); setCodeVisible(null); envoyerPremierCode(); }}
                 className={`${canal === "email" ? "font-medium text-lagune" : "hover:text-ardoise"}`}
               >
                 Email
@@ -240,14 +234,14 @@ export default function PageVerificationEmail() {
                 <>
                   <button
                     type="button"
-                    onClick={() => { setCanal("sms"); envoyerPremierCode(); }}
+                    onClick={() => { setCanal("sms"); setCodeVisible(null); envoyerPremierCode(); }}
                     className={`${canal === "sms" ? "font-medium text-lagune" : "hover:text-ardoise"}`}
                   >
                     SMS
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setCanal("appel"); envoyerPremierCode(); }}
+                    onClick={() => { setCanal("appel"); setCodeVisible(null); envoyerPremierCode(); }}
                     className={`${canal === "appel" ? "font-medium text-lagune" : "hover:text-ardoise"}`}
                   >
                     Appel
