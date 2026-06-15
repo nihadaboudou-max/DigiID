@@ -1,4 +1,4 @@
-"use client";
+"prouse client";
 
 /**
  * Barre latérale de navigation — design épuré aux couleurs DigiID.
@@ -392,6 +392,18 @@ export function BarreLaterale() {
 
   const estSuperAdmin = utilisateur.role === "super_administrateur";
   const estAdmin = utilisateur.role === "administrateur";
+  const estPro = utilisateur.role === "medecin" || utilisateur.role === "agent" || utilisateur.role === "police" || utilisateur.role === "ong";
+
+  const estDansProfilCitoyen =
+    pathname === "/tableau-de-bord" ||
+    pathname === "/profil" ||
+    pathname === "/chatbot" ||
+    pathname === "/parametres" ||
+    pathname.startsWith("/score") ||
+    pathname === "/parrainage" ||
+    pathname.startsWith("/attestations-communautaires") ||
+    pathname.startsWith("/identite") ||
+    pathname === "/verification-visuelle";
 
   let liens: Lien[];
   let titreSection: string;
@@ -413,6 +425,10 @@ export function BarreLaterale() {
       { href: "/medecin/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
       { href: "/medecin/nouveau-dossier", libelle: "Nouveau dossier", Icone: IconeUtilisateur },
       { href: "/medecin/dossiers", libelle: "Dossiers patients", Icone: IconeStatistique },
+      { href: "/medecin/ordonnances", libelle: "Ordonnances", Icone: IconeJournal },
+      { href: "/medecin/attestations", libelle: "Attestations", Icone: IconeCheck },
+      { href: "/medecin/calendrier", libelle: "Calendrier", Icone: IconeParametres },
+      { href: "/medecin/historique", libelle: "Historique", Icone: IconeAlerte },
     ];
     titreSection = "Espace médical";
     couleurLabel = "text-lagune";
@@ -467,18 +483,7 @@ export function BarreLaterale() {
     ? (utilisateur.prenom.charAt(0) + (utilisateur.nom?.charAt(0) || "")).toUpperCase()
     : utilisateur.email?.charAt(0).toUpperCase() || "?";
 
-  const estPro = utilisateur.role === "medecin" || utilisateur.role === "agent" || utilisateur.role === "police" || utilisateur.role === "ong";
 
-  const estDansProfilCitoyen =
-    pathname === "/tableau-de-bord" ||
-    pathname === "/profil" ||
-    pathname === "/chatbot" ||
-    pathname === "/parametres" ||
-    pathname.startsWith("/score") ||
-    pathname === "/parrainage" ||
-    pathname.startsWith("/attestations-communautaires") ||
-    pathname.startsWith("/identite") ||
-    pathname === "/verification-visuelle";
 
   return (
     <aside className="hidden md:flex md:flex-col w-60 h-screen sticky top-0 bg-white border-r border-ardoise-clair/10">
@@ -519,7 +524,7 @@ export function BarreLaterale() {
           ))}
         </div>
 
-        {/* Menu citoyen complet — visible pour TOUS les profils */}
+        {/* Menu citoyen — visible pour TOUS les profils */}
         {(utilisateur.role === "citoyen" || estPro) && (
           <>
             <div className="border-t border-ardoise-clair/10 my-1.5" />
