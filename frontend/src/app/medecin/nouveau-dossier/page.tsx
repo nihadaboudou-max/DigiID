@@ -57,7 +57,7 @@ function Contenu() {
       });
       setEtape("confirmation");
     } catch (e: any) {
-      setErreur(e.message || "Erreur lors de la creation du dossier");
+      setErreur(e.message_utilisateur || e.message || "Erreur lors de la creation du dossier");
     } finally {
       setEnvoi(false);
     }
@@ -87,8 +87,13 @@ function Contenu() {
             <ChampSaisie libelle="DigiID du patient" value={patient_digiid}
               onChange={(e) => setPatientDigiid(e.target.value)}
               placeholder="Ex: DIG-A1B2C3D4E5F6" />
+            {erreur && (
+              <div className="bg-terre/10 border-l-4 border-terre p-3 rounded">
+                <p className="text-sm text-terre font-medium">{erreur}</p>
+              </div>
+            )}
             <Bouton variante="primaire" chargement={verificationEnCours}
-              disabled={patient_nom.length < 3 || patient_digiid.length < 4}
+              disabled={patient_nom.length < 3 || patient_digiid.length < 4 || verificationEnCours}
               onClick={async () => {
                 setVerificationEnCours(true);
                 setErreur("");
@@ -106,7 +111,7 @@ function Contenu() {
                   setVerificationEnCours(false);
                 }
               }}>
-              Vérifier →
+              {verificationEnCours ? "Vérification..." : "Vérifier →"}
             </Bouton>
           </div>
         </Carte>
