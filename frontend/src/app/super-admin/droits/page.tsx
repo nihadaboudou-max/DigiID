@@ -24,7 +24,7 @@ import {
   modulesParDefaut,
 } from "@/services/ui_permissions";
 import type { ModulePermission } from "@/services/ui_permissions";
-import { listerTousUtilisateurs } from "@/services/super_admin_utilisateurs";
+import { listerTousUtilisateurs, changerRoleUtilisateur } from "@/services/super_admin_utilisateurs";
 
 // ---------- Types ----------
 
@@ -218,6 +218,11 @@ function Contenu() {
   const [sauvegardeEnCours, setSauvegardeEnCours] = useState<string | null>(null);
   const [onglet, setOnglet] = useState<"recherche" | "droits" | "profil">("recherche");
   const [profilSelectionne, setProfilSelectionne] = useState<string>("");
+  // État pour le changement de rôle
+  const [montrerChangerRole, setMontrerChangerRole] = useState(false);
+  const [nouveauRole, setNouveauRole] = useState("");
+  const [motifRole, setMotifRole] = useState("");
+  const [chargementRole, setChargementRole] = useState(false);
 
   // Rechercher des utilisateurs
   const rechercher = useCallback(async () => {
@@ -363,6 +368,37 @@ function Contenu() {
     }
   }, [selectedUser]);
 
+  // Changer le rôle de l'utilisateur
+  const gererChangementRole = useCallback(async () => {
+    if (!selectedUser || !nouveauRole) return;
+    setChargementRole(true);
+    setErreur(null);
+    setSuccesMessage(null);
+    try {
+      await changerRoleUtilisateur(selectedUser.id, { role: nouveauRole, motif: motifRole || "Changement via page Droits" });
+      setSuccesMessage(`✅ Rôle de ${selectedUser.prenom || selectedUser.email} changé en "${LIBELLES_ROLE[nouveauRole] || nouveauRole}"`);
+      setMontrerChangerRole(false);
+      setMotifRole("");
+      // Mettre à jour l'utilisateur local
+      setSelectedUser({ ...selectedUser, role: nouveauRole });
+      // Recharger les modules du nouveau rôle
+      setChargementModules(true);
+      try {
+        const modules = await obtenirModulesRole(nouveauRole);
+        setModulesUtilisateur(modules.modules);
+      } catch {
+        const defauts = modulesParDefaut(nouveauRole);
+        setModulesUtilisateur(defauts.length > 0 ? defauts : []);
+      } finally {
+        setChargementModules(false);
+      }
+    } catch (e) {
+      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors du changement de rôle");
+    } finally {
+      setChargementRole(false);
+    }
+  }, [selectedUser, nouveauRole, motifRole]);
+
   // Profils disponibles pour le rôle de l'utilisateur sélectionné
   const profilsDisponibles = PROFILS_PREDEFINIS.filter(
     (p) => selectedUser && p.role_cible === selectedUser.role
@@ -476,11 +512,82 @@ function Contenu() {
                   </div>
                 </div>
               </div>
-              <Link href="/super-admin/droits-ui">
-                <Bouton variante="secondaire" taille="petit">🎛️ Droits UI (par rôle)</Bouton>
-              </Link>
+              <div className="flex gap-2 flex-wrap">
+                <Link href="/super-admin/droits-ui">
+                  <Bouton variante="secondaire" taille="petit">🎛️ Droits UI (par rôle)</Bouton>
+                </Link>
+                <Bouton variante="primaire" taille="petit" onClick={() => setMontrerChangerRole(true)}>
+                  🎭 Changer le rôle
+                </Bouton>
+              </div>
             </div>
           </div>
+
+          {/* ===== CHANGER LE RÔLE ===== */}
+          {montrerChangerRole && (
+            <Carte
+              titre="🎭 Changer le rôle de l'utilisateur"
+              sous-titre={`Rôle actuel : ${LIBELLES_ROLE[selectedUser.role] || selectedUser.role} → Nouveau rôle`}
+            >
+              <div className="space-y-4 max-w-lg">
+                <div>
+                  <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
+                    Nouveau rôle
+                  </label>
+                  <select
+                    value={nouveauRole}
+                    onChange={(e) => setNouveauRole(e.target.value)}
+                    className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm bg-white"
+                  >
+                    <option value="">Sélectionne un rôle...</option>
+                    {Object.entries(LIBELLES_ROLE).map(([cle, libelle]) => (
+                      <option key={cle} value={cle} disabled={cle === selectedUser.role}>
+                        {libelle} {cle === selectedUser.role ? "(actuel)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
+                    Motif du changement
+                  </label>
+                  <textarea
+                    value={motifRole}
+                    onChange={(e) => setMotifRole(e.target.value)}
+                    placeholder="Explique pourquoi ce changement de rôle..."
+                    className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm resize-none"
+                    rows={3}
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <Bouton
+                    variante="primaire"
+                    taille="petit"
+                    chargement={chargementRole}
+                    disabled={!nouveauRole}
+                    onClick={gererChangementRole}
+                  >
+                    🎭 Confirmer le changement
+                  </Bouton>
+                  <Bouton
+                    variante="ghost"
+                    taille="petit"
+                    onClick={() => { setMontrerChangerRole(false); setNouveauRole(""); setMotifRole(""); }}
+                  >
+                    Annuler
+                  </Bouton>
+                </div>
+                <div className="bg-ocre/5 border border-ocre/20 rounded-lg p-3">
+                  <p className="text-xs text-ocre font-semibold">⚠️ Action sensible</p>
+                  <p className="text-xs text-ardoise-clair mt-1">
+                    Changer le rôle d&apos;un utilisateur est une action critique tracée
+                    dans le journal d&apos;audit. Toutes les sessions actives de
+                    l&apos;utilisateur seront révoquées.
+                  </p>
+                </div>
+              </div>
+            </Carte>
+          )}
 
           {/* ===== PROFILS DE PROFIL ===== */}
           {profilsDisponibles.length > 0 && (
