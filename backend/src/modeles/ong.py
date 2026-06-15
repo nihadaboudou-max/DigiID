@@ -1,6 +1,6 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
-ModÃ¨les ONG â€” BÃ©nÃ©ficiaires, programmes, missions terrain.
+Modèles ONG — Bénéficiaires, programmes, missions terrain.
 """
 import uuid
 from datetime import date, datetime
@@ -22,7 +22,7 @@ class BeneficiaireONG(Base):
     programme = Column(String(255), nullable=False)
     zone = Column(String(100), nullable=True)
     date_inscription = Column(DateTime, default=datetime.utcnow, nullable=False)
-    statut = Column(String(20), default="actif")  # actif, en_attente, inactif
+    statut = Column(String(20), default="actif")
     notes = Column(Text, nullable=True)
 
     ong = relationship("Utilisateur", backref="beneficiaires_ong")
@@ -55,7 +55,7 @@ class MissionTerrain(Base):
     date_depart = Column(Date, nullable=False)
     date_retour = Column(Date, nullable=True)
     objectifs = Column(Text, nullable=True)
-    statut = Column(String(20), default="planifiee")  # planifiee, en_cours, terminee
+    statut = Column(String(20), default="planifiee")
 
     ong = relationship("Utilisateur", backref="missions_terrain")
     programme = relationship("ProgrammeONG", backref="missions")

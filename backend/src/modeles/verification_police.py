@@ -1,61 +1,43 @@
 # -*- coding: utf-8 -*-
 """
-Modèles ONG — Bénéficiaires, programmes, missions terrain.
+Modèle Vérification Police — Tracé des vérifications d'identité.
 """
 import uuid
-from datetime import date, datetime
+from datetime import datetime
 
-from sqlalchemy import Column, String, Text, Date, DateTime, ForeignKey, Integer, Float
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from src.base_donnees.base import Base
 
 
-class BeneficiaireONG(Base):
-    __tablename__ = "beneficiaires_ong"
+class VerificationPolice(Base):
+    __tablename__ = "verifications_police"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    ong_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
-    nom = Column(String(255), nullable=False)
-    digiid = Column(String(50), nullable=True, index=True)
-    programme = Column(String(255), nullable=False)
-    zone = Column(String(100), nullable=True)
-    date_inscription = Column(DateTime, default=datetime.utcnow, nullable=False)
-    statut = Column(String(20), default="actif")  # actif, en_attente, inactif
+    officier_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
+    personne_digiid = Column(String(50), nullable=False, index=True)
+    personne_nom = Column(String(255), nullable=True)
+    type_verification = Column(String(50), default="identite")
+    resultat = Column(String(20), nullable=True)
     notes = Column(Text, nullable=True)
+    date_verification = Column(DateTime, default=datetime.utcnow, nullable=False)
+    est_signalement_fraude = Column(Boolean, default=False)
 
-    ong = relationship("Utilisateur", backref="beneficiaires_ong")
+    officier = relationship("Utilisateur", backref="verifications_police")
 
 
-class ProgrammeONG(Base):
-    __tablename__ = "programmes_ong"
+class SignalementFraude(Base):
+    __tablename__ = "signalements_fraude"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    ong_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
-    nom = Column(String(255), nullable=False)
+    officier_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
+    personne_digiid = Column(String(50), nullable=False, index=True)
+    motif = Column(String(500), nullable=False)
     description = Column(Text, nullable=True)
-    zone = Column(String(100), nullable=True)
-    budget = Column(Float, nullable=True)
-    date_debut = Column(Date, nullable=False)
-    date_fin = Column(Date, nullable=True)
-    statut = Column(String(20), default="actif")
+    statut = Column(String(20), default="en_cours")
+    date_signalement = Column(DateTime, default=datetime.utcnow, nullable=False)
+    date_traitement = Column(DateTime, nullable=True)
 
-    ong = relationship("Utilisateur", backref="programmes_ong")
-
-
-class MissionTerrain(Base):
-    __tablename__ = "missions_terrain"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    ong_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
-    programme_id = Column(UUID(as_uuid=True), ForeignKey("programmes_ong.id"), nullable=True)
-    titre = Column(String(255), nullable=False)
-    zone = Column(String(100), nullable=True)
-    date_depart = Column(Date, nullable=False)
-    date_retour = Column(Date, nullable=True)
-    objectifs = Column(Text, nullable=True)
-    statut = Column(String(20), default="planifiee")  # planifiee, en_cours, terminee
-
-    ong = relationship("Utilisateur", backref="missions_terrain")
-    programme = relationship("ProgrammeONG", backref="missions")
+    officier = relationship("Utilisateur", backref="signalements_fraude")

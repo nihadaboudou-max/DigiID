@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 ModÃ¨le Dossier MÃ©dical â€” Consultations, diagnostics, prescriptions.
 RÃ©servÃ© aux mÃ©decins.
