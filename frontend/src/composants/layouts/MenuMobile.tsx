@@ -584,8 +584,6 @@ export function BoutonMenuMobile() {
                         { href: "/medecin/dossiers", libelle: "Dossiers patients", Icone: IconeStatistique },
                         { href: "/medecin/ordonnances", libelle: "Ordonnances", Icone: IconeJournal },
                         { href: "/medecin/attestations", libelle: "Attestations", Icone: IconeCheck },
-                        { href: "/medecin/calendrier", libelle: "Calendrier", Icone: IconeParametres },
-                        { href: "/medecin/historique", libelle: "Historique", Icone: IconeAlerte },
                         ].map(({ href, libelle, Icone }) => {
                         const actif = pathname === href || pathname.startsWith(href);
                         return (
