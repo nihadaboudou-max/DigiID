@@ -65,8 +65,9 @@ export interface ModifierUtilisateurRequete {
 }
 
 export interface ChangerRoleRequete {
-  role: string;
-  motif: string;
+    role: string;
+    motif: string;
+    forcer?: boolean;
 }
 
 export interface AssignerDroitRequete {

@@ -34,6 +34,7 @@ async def changer_role_utilisateur(
     nouveau_role: str,
     raison: str,
     adresse_ip: Optional[str] = None,
+    forcer: bool = False,
 ) -> dict:
     """
     Change le rôle d'un utilisateur. UNIQUEMENT super admin.
@@ -88,14 +89,20 @@ async def changer_role_utilisateur(
     email_clair = dechiffrer_donnee(utilisateur_cible.email_chiffre)
     email_valide, raison_email = valider_email_institutionnel(email_clair, nouveau_role)
     if not email_valide:
-        raise ErreurValidation(
-            f"Email invalide pour le rôle '{nouveau_role}' : {raison_email}",
-            message_utilisateur=(
-                f"Impossible d'attribuer le rôle '{nouveau_role}' : "
-                f"l'email de l'utilisateur n'est pas un email institutionnel valide. "
-                f"{raison_email}"
-            ),
-        )
+        if forcer:
+            journal.warning(
+                f"[SUPER ADMIN] Validation email contournée pour {email_clair} "
+                f"vers rôle '{nouveau_role}' par super_admin {super_admin.id}"
+            )
+        else:
+            raise ErreurValidation(
+                f"Email invalide pour le rôle '{nouveau_role}' : {raison_email}",
+                message_utilisateur=(
+                    f"Impossible d'attribuer le rôle '{nouveau_role}' : "
+                    f"l'email de l'utilisateur n'est pas un email institutionnel valide. "
+                    f"{raison_email}"
+                ),
+            )
 
     # 6. Appliquer le changement de rôle
     maintenant = datetime.now(timezone.utc)
@@ -134,6 +141,7 @@ async def changer_role_utilisateur(
             "sessions_revoquees": len(sessions_actives),
             "email_domaine": email_clair.split("@")[1] if "@" in email_clair else "inconnu",
             "super_admin_id": str(super_admin.id),
+            "validation_email_forcee": forcer,
         },
     )
     session.add(entree_audit)

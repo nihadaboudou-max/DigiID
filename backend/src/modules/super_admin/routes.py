@@ -1040,6 +1040,7 @@ class ChangerRoleRequeteFrontend(BaseModel):
     """Version simplifiée pour compatibilité frontend."""
     role: str
     motif: str
+    forcer: bool = False
 
 
 @routeur_super_admin.patch(
@@ -1069,6 +1070,7 @@ async def changer_role_utilisateur_patch(
         nouveau_role=donnees.role,
         raison=donnees.motif or "Changement via super admin",
         adresse_ip=obtenir_ip_client(requete),
+        forcer=donnees.forcer,
     )
     return ChangerRoleReponse(**resultat)
 
