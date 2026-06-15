@@ -77,15 +77,28 @@ const SOUS_MENUS_IDENTITE: SousMenu[] = [
   },
 ];
 
+const LIENS_ADMIN_ACTIVITES: Lien[] = [
+  { href: "/admin/activites/enrolements", libelle: "Agent terrain", Icone: IconeUtilisateur },
+  { href: "/admin/activites/medical",     libelle: "Médical",      Icone: IconeStatistique },
+  { href: "/admin/activites/police",      libelle: "Police",       Icone: IconeBouclier },
+  { href: "/admin/activites/ong",         libelle: "ONG",          Icone: IconePartage },
+];
+
 const LIENS_ADMIN: Lien[] = [
   { href: "/admin/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
   { href: "/admin/monitoring",      libelle: "Monitoring",       Icone: IconeStatistique },
   { href: "/admin/utilisateurs",    libelle: "Utilisateurs",     Icone: IconeUtilisateur },
-  { href: "/admin/enrolements",     libelle: "Enrôlements",    Icone: IconeUtilisateur },
   { href: "/admin/attestations",    libelle: "Attestations",     Icone: IconeCheck },
   { href: "/admin/droits",          libelle: "Droits",           Icone: IconeBouclier },
   { href: "/admin/alertes",         libelle: "Alertes",          Icone: IconeAlerte },
   { href: "/admin/statistiques",    libelle: "Statistiques",     Icone: IconeStatistique },
+];
+
+const LIENS_SUPER_ADMIN_ACTIVITES: Lien[] = [
+  { href: "/super-admin/activites/enrolements", libelle: "Agent terrain", Icone: IconeUtilisateur },
+  { href: "/super-admin/activites/medical",     libelle: "Médical",      Icone: IconeStatistique },
+  { href: "/super-admin/activites/police",      libelle: "Police",       Icone: IconeBouclier },
+  { href: "/super-admin/activites/ong",         libelle: "ONG",          Icone: IconePartage },
 ];
 
 const LIENS_SUPER_ADMIN: Lien[] = [
@@ -93,7 +106,7 @@ const LIENS_SUPER_ADMIN: Lien[] = [
   { href: "/super-admin/monitoring",      libelle: "Monitoring",       Icone: IconeStatistique },
   { href: "/super-admin/statistiques",    libelle: "Statistiques",     Icone: IconeStatistique },
   { href: "/super-admin/utilisateurs",    libelle: "Utilisateurs",     Icone: IconeUtilisateur },
-  { href: "/super-admin/enrolements",     libelle: "Enrôlements",    Icone: IconeUtilisateur },
+  { href: "/super-admin/activites",       libelle: "Activités",       Icone: IconeStatistique },
   { href: "/super-admin/administrateurs", libelle: "Administrateurs",  Icone: IconeBouclier },
   { href: "/admin/attestations",          libelle: "Attestations",     Icone: IconeCheck },
   { href: "/super-admin/droits-ui",       libelle: "Droits UI",        Icone: IconeBouclier },
@@ -394,6 +407,8 @@ export function BarreLaterale() {
 
   const estSuperAdmin = utilisateur.role === "super_administrateur";
   const estAdmin = utilisateur.role === "administrateur";
+  const estDansActivitesAdmin = pathname.startsWith("/admin/activites");
+  const estDansActivitesSuperAdmin = pathname.startsWith("/super-admin/activites");
   const estPro = utilisateur.role === "medecin" || utilisateur.role === "agent" || utilisateur.role === "police" || utilisateur.role === "ong";
 
   const estDansProfilCitoyen =
@@ -525,6 +540,72 @@ export function BarreLaterale() {
             />
           ))}
         </div>
+
+        {/* Sous-menu Activités pour Admin */}
+        {estAdmin && (
+          <div className="pt-0.5">
+            <GroupePlie
+              estActif={estDansActivitesAdmin}
+              icone={IconeStatistique}
+              titre="Activités"
+              initialOuvert={estDansActivitesAdmin}
+            >
+              <div className="space-y-0.5">
+                {LIENS_ADMIN_ACTIVITES.map((lien) => {
+                  const actif = pathname === lien.href;
+                  return (
+                    <Link
+                      key={lien.href}
+                      href={lien.href}
+                      className={clsx(
+                        "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
+                        actif
+                          ? "bg-sable/60 text-lagune font-medium"
+                          : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
+                      )}
+                    >
+                      <lien.Icone className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span className="truncate">{lien.libelle}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </GroupePlie>
+          </div>
+        )}
+
+        {/* Sous-menu Activités pour Super Admin */}
+        {estSuperAdmin && (
+          <div className="pt-0.5">
+            <GroupePlie
+              estActif={estDansActivitesSuperAdmin}
+              icone={IconeStatistique}
+              titre="Activités"
+              initialOuvert={estDansActivitesSuperAdmin}
+            >
+              <div className="space-y-0.5">
+                {LIENS_SUPER_ADMIN_ACTIVITES.map((lien) => {
+                  const actif = pathname === lien.href;
+                  return (
+                    <Link
+                      key={lien.href}
+                      href={lien.href}
+                      className={clsx(
+                        "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
+                        actif
+                          ? "bg-sable/60 text-lagune font-medium"
+                          : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
+                      )}
+                    >
+                      <lien.Icone className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span className="truncate">{lien.libelle}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </GroupePlie>
+          </div>
+        )}
 
         {/* Menu citoyen — visible pour TOUS les profils */}
         {(utilisateur.role === "citoyen" || estPro) && (

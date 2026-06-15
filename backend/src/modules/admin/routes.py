@@ -863,77 +863,299 @@ class UtilisateurConnecteAdmin(BaseModel):
     nb_sessions_actives: int = 1
 
 
-
 # ---------------------------------------------------------------------------
-# LISTE DES ENROLEMENTS (pour admin et super admin)
+# ACTIVITÉS MÉDICALES (admin) — dossiers médicaux, consultations, ordonnances
 # ---------------------------------------------------------------------------
 
-class EnrolementAdminItem(BaseModel):
-    """Enrolement vu par l'admin (avec nom de l'agent)."""
+
+class AdminDossierMedicalItem(BaseModel):
+    """Dossier médical vu par l'admin."""
     id: str
-    agent_id: str
-    agent_nom: str
-    citoyen_nom: str
-    citoyen_prenom: str
-    citoyen_digiid: str | None
-    citoyen_telephone: str | None
+    medecin_id: str
+    medecin_nom: str = ""
+    patient_nom: str
+    patient_digiid: str | None = None
+    motif: str | None = None
+    diagnostic: str | None = None
     statut: str
-    scan_cni: bool
-    capture_biometrique: bool
-    date_enrolement: str
-    date_validation: str | None
+    consultations_count: int = 0
+    ordonnances_count: int = 0
+    date_creation: str
+    date_modification: str | None = None
 
 
 @routeur_admin.get(
-    "/enrolements",
-    response_model=list[EnrolementAdminItem],
-    summary="Liste de tous les enrolements (admin/super admin)",
-    description="Retourne tous les enrolements avec le nom de l'agent. Accessible aux administrateurs et super admins.",
+    "/medical/dossiers",
+    response_model=list[AdminDossierMedicalItem],
+    summary="Lister tous les dossiers médicaux (admin)",
+    description="Liste complète des dossiers médicaux avec le médecin traitant.",
 )
-async def lister_enrolements_admin(
+async def lister_dossiers_medicaux_admin(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
-    admin: Annotated[Utilisateur, Depends(admin_courant)],
-    statut: str = Query("tous", description="Filtrer par statut"),
-    agent_id: str | None = Query(None, description="Filtrer par agent"),
+    _: Annotated[Utilisateur, Depends(admin_courant)],
+    statut: str = Query("tous"),
+    medecin_id: str | None = Query(None),
     limite: int = Query(50, ge=1, le=200),
 ):
-    query = select(Enrolement).order_by(Enrolement.date_enrolement.desc())
+    from src.modeles.dossier_medical import DossierMedical
+    query = select(DossierMedical).order_by(DossierMedical.date_creation.desc())
     if statut and statut != "tous":
-        query = query.where(Enrolement.statut == statut)
-    if agent_id:
-        query = query.where(Enrolement.agent_id == UUID(agent_id))
+        query = query.where(DossierMedical.statut == statut)
+    if medecin_id:
+        query = query.where(DossierMedical.medecin_id == UUID(medecin_id))
     query = query.limit(limite)
-    enrolements = (await session.scalars(query)).all()
+    dossiers = (await session.scalars(query)).all()
 
-    # Charger les agents pour avoir leurs noms
-    agent_ids = list(set(str(e.agent_id) for e in enrolements))
-    agents = {}
-    if agent_ids:
+    # Charger les medecins
+    med_ids = list(set(str(d.medecin_id) for d in dossiers))
+    medecins = {}
+    if med_ids:
         result = await session.execute(
-            select(Utilisateur).where(Utilisateur.id.in_([UUID(a) for a in agent_ids]))
+            select(Utilisateur).where(Utilisateur.id.in_([UUID(m) for m in med_ids]))
         )
-        for agent in result.scalars().all():
-            prenom = dechiffrer_donnee(agent.prenom_chiffre) if agent.prenom_chiffre else ""
-            nom = dechiffrer_donnee(agent.nom_chiffre) if agent.nom_chiffre else ""
-            agents[str(agent.id)] = f"{prenom} {nom}".strip() or agent.digiid_public or "Agent"
+        for m in result.scalars().all():
+            prenom = dechiffrer_donnee(m.prenom_chiffre) if m.prenom_chiffre else ""
+            nom = dechiffrer_donnee(m.nom_chiffre) if m.nom_chiffre else ""
+            medecins[str(m.id)] = f"{prenom} {nom}".strip() or "Medecin"
 
     resultat = []
-    for e in enrolements:
-        resultat.append(EnrolementAdminItem(
-            id=str(e.id),
-            agent_id=str(e.agent_id),
-            agent_nom=agents.get(str(e.agent_id), "Agent"),
-            citoyen_nom=e.citoyen_nom,
-            citoyen_prenom=e.citoyen_prenom,
-            citoyen_digiid=e.citoyen_digiid,
-            citoyen_telephone=e.citoyen_telephone,
-            statut=e.statut,
-            scan_cni=e.scan_cni,
-            capture_biometrique=e.capture_biometrique,
-            date_enrolement=e.date_enrolement.strftime("%Y-%m-%dT%H:%M:%S") if e.date_enrolement else "",
-            date_validation=e.date_validation.strftime("%Y-%m-%dT%H:%M:%S") if e.date_validation else None,
+    for d in dossiers:
+        resultat.append(AdminDossierMedicalItem(
+            id=str(d.id),
+            medecin_id=str(d.medecin_id),
+            medecin_nom=medecins.get(str(d.medecin_id), ""),
+            patient_nom=d.patient_nom,
+            patient_digiid=d.patient_digiid,
+            motif=d.motif,
+            diagnostic=d.diagnostic,
+            statut=d.statut,
+            consultations_count=getattr(d, 'consultations_count', 0) or 0,
+            ordonnances_count=getattr(d, 'ordonnances_count', 0) or 0,
+            date_creation=d.date_creation.strftime("%Y-%m-%dT%H:%M:%S") if d.date_creation else "",
+            date_modification=d.date_modification.strftime("%Y-%m-%dT%H:%M:%S") if d.date_modification else None,
         ))
     return resultat
+
+
+# ---------------------------------------------------------------------------
+# ACTIVITÉS POLICE (admin) — vérifications et signalements
+# ---------------------------------------------------------------------------
+
+
+class AdminVerificationPoliceItem(BaseModel):
+    """Vérification police vue par l'admin."""
+    id: str
+    officier_id: str
+    officier_nom: str = ""
+    personne_digiid: str | None = None
+    personne_nom: str | None = None
+    type_verification: str
+    resultat: str
+    notes: str | None = None
+    est_signalement_fraude: bool = False
+    date_verification: str
+
+
+@routeur_admin.get(
+    "/police/verifications",
+    response_model=list[AdminVerificationPoliceItem],
+    summary="Lister toutes les vérifications police (admin)",
+)
+async def lister_verifications_police_admin(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(admin_courant)],
+    limite: int = Query(50, ge=1, le=200),
+):
+    from src.modeles.verification_police import VerificationPolice
+    query = select(VerificationPolice).order_by(VerificationPolice.date_verification.desc()).limit(limite)
+    verifications = (await session.scalars(query)).all()
+
+    off_ids = list(set(str(v.officier_id) for v in verifications))
+    officiers = {}
+    if off_ids:
+        result = await session.execute(
+            select(Utilisateur).where(Utilisateur.id.in_([UUID(o) for o in off_ids]))
+        )
+        for o in result.scalars().all():
+            prenom = dechiffrer_donnee(o.prenom_chiffre) if o.prenom_chiffre else ""
+            nom = dechiffrer_donnee(o.nom_chiffre) if o.nom_chiffre else ""
+            officiers[str(o.id)] = f"{prenom} {nom}".strip() or "Officier"
+
+    return [AdminVerificationPoliceItem(
+        id=str(v.id), officier_id=str(v.officier_id),
+        officier_nom=officiers.get(str(v.officier_id), ""),
+        personne_digiid=v.personne_digiid, personne_nom=v.personne_nom,
+        type_verification=v.type_verification, resultat=v.resultat,
+        notes=v.notes, est_signalement_fraude=v.est_signalement_fraude,
+        date_verification=v.date_verification.strftime("%Y-%m-%dT%H:%M:%S") if v.date_verification else "",
+    ) for v in verifications]
+
+
+class AdminSignalementItem(BaseModel):
+    """Signalement de fraude vu par l'admin."""
+    id: str
+    officier_id: str
+    officier_nom: str = ""
+    personne_digiid: str | None = None
+    motif: str
+    description: str | None = None
+    statut: str
+    date_signalement: str
+    date_traitement: str | None = None
+
+
+@routeur_admin.get(
+    "/police/signalements",
+    response_model=list[AdminSignalementItem],
+    summary="Lister tous les signalements police (admin)",
+)
+async def lister_signalements_police_admin(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(admin_courant)],
+    limite: int = Query(50, ge=1, le=200),
+):
+    from src.modeles.signalement_fraude import SignalementFraude
+    query = select(SignalementFraude).order_by(SignalementFraude.date_signalement.desc()).limit(limite)
+    signalements = (await session.scalars(query)).all()
+
+    off_ids = list(set(str(s.officier_id) for s in signalements))
+    officiers = {}
+    if off_ids:
+        result = await session.execute(
+            select(Utilisateur).where(Utilisateur.id.in_([UUID(o) for o in off_ids]))
+        )
+        for o in result.scalars().all():
+            prenom = dechiffrer_donnee(o.prenom_chiffre) if o.prenom_chiffre else ""
+            nom = dechiffrer_donnee(o.nom_chiffre) if o.nom_chiffre else ""
+            officiers[str(o.id)] = f"{prenom} {nom}".strip() or "Officier"
+
+    return [AdminSignalementItem(
+        id=str(s.id), officier_id=str(s.officier_id),
+        officier_nom=officiers.get(str(s.officier_id), ""),
+        personne_digiid=s.personne_digiid, motif=s.motif,
+        description=s.description, statut=s.statut,
+        date_signalement=s.date_signalement.strftime("%Y-%m-%dT%H:%M:%S") if s.date_signalement else "",
+        date_traitement=s.date_traitement.strftime("%Y-%m-%dT%H:%M:%S") if s.date_traitement else None,
+    ) for s in signalements]
+
+
+# ---------------------------------------------------------------------------
+# ACTIVITÉS ONG (admin) — bénéficiaires, programmes, missions
+# ---------------------------------------------------------------------------
+
+
+class AdminBeneficiaireItem(BaseModel):
+    """Bénéficiaire ONG vu par l'admin."""
+    id: str
+    ong_id: str
+    ong_nom: str = ""
+    nom: str
+    digiid: str | None = None
+    programme: str | None = None
+    zone: str | None = None
+    statut: str
+    date_inscription: str
+
+
+@routeur_admin.get(
+    "/ong/beneficiaires",
+    response_model=list[AdminBeneficiaireItem],
+    summary="Lister tous les bénéficiaires ONG (admin)",
+)
+async def lister_beneficiaires_ong_admin(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(admin_courant)],
+    limite: int = Query(50, ge=1, le=200),
+):
+    from src.modeles.beneficiaire_ong import BeneficiaireONG
+    query = select(BeneficiaireONG).order_by(BeneficiaireONG.date_inscription.desc()).limit(limite)
+    beneficiaires = (await session.scalars(query)).all()
+
+    ong_ids = list(set(str(b.ong_id) for b in beneficiaires))
+    ongs = {}
+    if ong_ids:
+        result = await session.execute(
+            select(Utilisateur).where(Utilisateur.id.in_([UUID(o) for o in ong_ids]))
+        )
+        for o in result.scalars().all():
+            prenom = dechiffrer_donnee(o.prenom_chiffre) if o.prenom_chiffre else ""
+            nom = dechiffrer_donnee(o.nom_chiffre) if o.nom_chiffre else ""
+            ongs[str(o.id)] = f"{prenom} {nom}".strip() or "ONG"
+
+    return [AdminBeneficiaireItem(
+        id=str(b.id), ong_id=str(b.ong_id),
+        ong_nom=ongs.get(str(b.ong_id), ""),
+        nom=b.nom, digiid=b.digiid,
+        programme=b.programme, zone=b.zone,
+        statut=b.statut,
+        date_inscription=b.date_inscription.strftime("%Y-%m-%dT%H:%M:%S") if b.date_inscription else "",
+    ) for b in beneficiaires]
+
+
+@routeur_admin.get(
+    "/ong/programmes",
+    response_model=list,
+    summary="Lister tous les programmes ONG (admin)",
+)
+async def lister_programmes_ong_admin(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(admin_courant)],
+    limite: int = Query(50, ge=1, le=200),
+):
+    from src.modeles.programme_ong import ProgrammeONG
+    query = select(ProgrammeONG).order_by(ProgrammeONG.date_debut.desc()).limit(limite)
+    programmes = (await session.scalars(query)).all()
+
+    ong_ids = list(set(str(p.ong_id) for p in programmes))
+    ongs = {}
+    if ong_ids:
+        result = await session.execute(
+            select(Utilisateur).where(Utilisateur.id.in_([UUID(o) for o in ong_ids]))
+        )
+        for o in result.scalars().all():
+            prenom = dechiffrer_donnee(o.prenom_chiffre) if o.prenom_chiffre else ""
+            nom = dechiffrer_donnee(o.nom_chiffre) if o.nom_chiffre else ""
+            ongs[str(o.id)] = f"{prenom} {nom}".strip() or "ONG"
+
+    return [{
+        "id": str(p.id), "ong_id": str(p.ong_id),
+        "ong_nom": ongs.get(str(p.ong_id), ""),
+        "nom": p.nom, "zone": p.zone, "statut": p.statut,
+        "date_debut": p.date_debut.strftime("%Y-%m-%d") if p.date_debut else "",
+    } for p in programmes]
+
+
+@routeur_admin.get(
+    "/ong/missions",
+    response_model=list,
+    summary="Lister toutes les missions ONG (admin)",
+)
+async def lister_missions_ong_admin(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(admin_courant)],
+    limite: int = Query(50, ge=1, le=200),
+):
+    from src.modeles.mission_ong import MissionONG
+    query = select(MissionONG).order_by(MissionONG.date_depart.desc()).limit(limite)
+    missions = (await session.scalars(query)).all()
+
+    ong_ids = list(set(str(m.ong_id) for m in missions))
+    ongs = {}
+    if ong_ids:
+        result = await session.execute(
+            select(Utilisateur).where(Utilisateur.id.in_([UUID(o) for o in ong_ids]))
+        )
+        for o in result.scalars().all():
+            prenom = dechiffrer_donnee(o.prenom_chiffre) if o.prenom_chiffre else ""
+            nom = dechiffrer_donnee(o.nom_chiffre) if o.nom_chiffre else ""
+            ongs[str(o.id)] = f"{prenom} {nom}".strip() or "ONG"
+
+    return [{
+        "id": str(m.id), "ong_id": str(m.ong_id),
+        "ong_nom": ongs.get(str(m.ong_id), ""),
+        "titre": m.titre, "zone": m.zone, "statut": m.statut,
+        "date_depart": m.date_depart.strftime("%Y-%m-%d") if m.date_depart else "",
+    } for m in missions]
 
 
 @routeur_admin.get(
