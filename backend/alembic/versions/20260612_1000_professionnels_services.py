@@ -1,4 +1,4 @@
-"""Migration: tables pour les services professionnels (medical, enrolement, police, ONG).
+﻿"""Migration: tables pour les services professionnels (medical, enrolement, police, ONG).
 
 Generated automatically based on model definitions.
 """
@@ -19,7 +19,7 @@ def upgrade() -> None:
     op.create_table(
         "dossiers_medicaux",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("medecin_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateurs.id"), nullable=False, index=True),
+        sa.Column("medecin_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateur.id"), nullable=False, index=True),
         sa.Column("patient_nom", sa.String(255), nullable=False),
         sa.Column("patient_digiid", sa.String(50), nullable=False, index=True),
         sa.Column("patient_date_naissance", sa.Date(), nullable=True),
@@ -34,7 +34,7 @@ def upgrade() -> None:
         "consultations",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("dossier_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("dossiers_medicaux.id"), nullable=False, index=True),
-        sa.Column("medecin_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateurs.id"), nullable=False),
+        sa.Column("medecin_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateur.id"), nullable=False),
         sa.Column("motif", sa.String(500), nullable=False),
         sa.Column("observations", sa.Text(), nullable=True),
         sa.Column("diagnostic", sa.Text(), nullable=True),
@@ -45,7 +45,7 @@ def upgrade() -> None:
         "ordonnances",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("dossier_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("dossiers_medicaux.id"), nullable=False, index=True),
-        sa.Column("medecin_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateurs.id"), nullable=False),
+        sa.Column("medecin_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateur.id"), nullable=False),
         sa.Column("medicaments", sa.Text(), nullable=False),
         sa.Column("instructions", sa.Text(), nullable=True),
         sa.Column("date_prescription", sa.DateTime(), nullable=False, server_default=sa.text("now()")),
@@ -56,7 +56,7 @@ def upgrade() -> None:
     op.create_table(
         "enrolements",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("agent_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateurs.id"), nullable=False, index=True),
+        sa.Column("agent_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateur.id"), nullable=False, index=True),
         sa.Column("citoyen_nom", sa.String(255), nullable=False),
         sa.Column("citoyen_prenom", sa.String(255), nullable=False),
         sa.Column("citoyen_digiid", sa.String(50), nullable=True, index=True),
@@ -74,7 +74,7 @@ def upgrade() -> None:
     op.create_table(
         "verifications_police",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("officier_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateurs.id"), nullable=False, index=True),
+        sa.Column("officier_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateur.id"), nullable=False, index=True),
         sa.Column("personne_digiid", sa.String(50), nullable=False, index=True),
         sa.Column("personne_nom", sa.String(255), nullable=True),
         sa.Column("type_verification", sa.String(50), nullable=False, server_default="identite"),
@@ -87,7 +87,7 @@ def upgrade() -> None:
     op.create_table(
         "signalements_fraude",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("officier_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateurs.id"), nullable=False, index=True),
+        sa.Column("officier_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateur.id"), nullable=False, index=True),
         sa.Column("personne_digiid", sa.String(50), nullable=False, index=True),
         sa.Column("motif", sa.String(500), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
@@ -100,7 +100,7 @@ def upgrade() -> None:
     op.create_table(
         "beneficiaires_ong",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("ong_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateurs.id"), nullable=False, index=True),
+        sa.Column("ong_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateur.id"), nullable=False, index=True),
         sa.Column("nom", sa.String(255), nullable=False),
         sa.Column("digiid", sa.String(50), nullable=True, index=True),
         sa.Column("programme", sa.String(255), nullable=False),
@@ -113,7 +113,7 @@ def upgrade() -> None:
     op.create_table(
         "programmes_ong",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("ong_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateurs.id"), nullable=False, index=True),
+        sa.Column("ong_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateur.id"), nullable=False, index=True),
         sa.Column("nom", sa.String(255), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("zone", sa.String(100), nullable=True),
@@ -126,7 +126,7 @@ def upgrade() -> None:
     op.create_table(
         "missions_terrain",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("ong_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateurs.id"), nullable=False, index=True),
+        sa.Column("ong_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("utilisateur.id"), nullable=False, index=True),
         sa.Column("programme_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("programmes_ong.id"), nullable=True),
         sa.Column("titre", sa.String(255), nullable=False),
         sa.Column("zone", sa.String(100), nullable=True),

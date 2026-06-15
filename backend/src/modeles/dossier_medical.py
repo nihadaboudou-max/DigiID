@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
-Modèle Dossier Médical — Consultations, diagnostics, prescriptions.
-Réservé aux médecins.
+ModÃ¨le Dossier MÃ©dical â€” Consultations, diagnostics, prescriptions.
+RÃ©servÃ© aux mÃ©decins.
 """
 import uuid
 from datetime import date, datetime
@@ -17,7 +17,7 @@ class DossierMedical(Base):
     __tablename__ = "dossiers_medicaux"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    medecin_id = Column(UUID(as_uuid=True), ForeignKey("utilisateurs.id"), nullable=False, index=True)
+    medecin_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
     patient_nom = Column(String(255), nullable=False)
     patient_digiid = Column(String(50), nullable=False, index=True)
     patient_date_naissance = Column(Date, nullable=True)
@@ -37,7 +37,7 @@ class Consultation(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     dossier_id = Column(UUID(as_uuid=True), ForeignKey("dossiers_medicaux.id"), nullable=False, index=True)
-    medecin_id = Column(UUID(as_uuid=True), ForeignKey("utilisateurs.id"), nullable=False)
+    medecin_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False)
     motif = Column(String(500), nullable=False)
     observations = Column(Text, nullable=True)
     diagnostic = Column(Text, nullable=True)
@@ -49,7 +49,7 @@ class Ordonnance(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     dossier_id = Column(UUID(as_uuid=True), ForeignKey("dossiers_medicaux.id"), nullable=False, index=True)
-    medecin_id = Column(UUID(as_uuid=True), ForeignKey("utilisateurs.id"), nullable=False)
+    medecin_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False)
     medicaments = Column(Text, nullable=False)  # JSON list
     instructions = Column(Text, nullable=True)
     date_prescription = Column(DateTime, default=datetime.utcnow, nullable=False)
