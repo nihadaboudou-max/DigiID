@@ -30,6 +30,21 @@ const CODES_SANS_RAFRAICHISSEMENT = new Set([
   "AUTH_008",
 ]);
 
+/**
+ * Événement personnalisé déclenché quand l'authentification expire
+ * de façon irrécupérable (token invalide, rôle modifié, etc.).
+ * Le contexte d'authentification écoute cet événement pour
+ * déconnecter l'utilisateur proprement.
+ */
+export const EVENEMENT_AUTH_EXPIRE = "digiid:auth-expired";
+
+export function declencherEvenementAuthExpire() {
+  if (typeof window !== "undefined") {
+    effacerJetons();
+    window.dispatchEvent(new CustomEvent(EVENEMENT_AUTH_EXPIRE));
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Gestion du token
 // -----------------------------------------------------------------------------
@@ -212,9 +227,10 @@ async function appel_api<T>(
         return appel_api<T>(chemin, { ...options, _retry: true });
       }
     }
-    // Rafraîchissement impossible → lancer l'erreur pour que le contexte
-    // (ou l'appelant) gère la déconnexion proprement
-    // (Ne pas rediriger ici — le contexte d'authentification gère ça)
+    // 🔑 Rafraîchissement impossible (rôle modifié, token invalide, etc.)
+    // → Déclencher l'événement pour que le contexte d'authentification
+    //   déconnecte l'utilisateur et le redirige vers la connexion
+    declencherEvenementAuthExpire();
     throw new ErreurAPI(
       "AUTH_TOKEN_EXPIRE",
       "Session expirée. Veuillez vous reconnecter.",

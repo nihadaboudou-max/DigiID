@@ -19,7 +19,12 @@ import {
   seConnecter as seConnecterAPI,
   seDeconnecter as seDeconnecterAPI,
 } from "@/services/authentification";
-import { obtenirTokenAcces, obtenirTokenRafraichissement, effacerJetons } from "@/services/client_api";
+import {
+  obtenirTokenAcces,
+  obtenirTokenRafraichissement,
+  effacerJetons,
+  EVENEMENT_AUTH_EXPIRE,
+} from "@/services/client_api";
 
 import type { DonneesConnexion, Utilisateur } from "@/types/api";
 
@@ -84,6 +89,15 @@ export function FournisseurAuthentification({
 
     initialiser();
 
+    // 🔑 Écouter l'événement d'expiration d'authentification
+    // Déclenché par client_api.ts quand le token n'est plus valide
+    // (ex: rôle modifié par un super admin → déconnexion forcée)
+    function gererExpirationAuth() {
+      setUtilisateur(null);
+      effacerJetons();
+    }
+    window.addEventListener(EVENEMENT_AUTH_EXPIRE, gererExpirationAuth);
+
     // Détecte le retour arrière du navigateur (BFCache)
     // Quand l'utilisateur revient en arrière après déconnexion, le token
     // est déjà effacé mais la page est restaurée sans re-exécuter le JS.
@@ -97,7 +111,10 @@ export function FournisseurAuthentification({
       }
     }
     window.addEventListener("pageshow", gererPageshow);
-    return () => window.removeEventListener("pageshow", gererPageshow);
+    return () => {
+      window.removeEventListener("pageshow", gererPageshow);
+      window.removeEventListener(EVENEMENT_AUTH_EXPIRE, gererExpirationAuth);
+    };
   }, []);
 
   async function seConnecter(donnees: DonneesConnexion) {
