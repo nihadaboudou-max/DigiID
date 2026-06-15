@@ -18,6 +18,10 @@ from src.modeles.configuration_systeme import ConfigurationSysteme
 from src.modeles.code_verification import CodeVerification
 from src.modeles.verification_cni import VerificationCNI
 from src.modeles.attestation_communautaire import AttestationCommunautaire
+from src.modeles.dossier_medical import DossierMedical, Consultation, Ordonnance
+from src.modeles.enrolement import Enrolement
+from src.modeles.verification_police import VerificationPolice, SignalementFraude
+from src.modeles.ong import BeneficiaireONG, ProgrammeONG, MissionTerrain
 
 __all__ = [
     "Utilisateur",
@@ -39,4 +43,13 @@ __all__ = [
     "CodeVerification",
     "VerificationCNI",
     "AttestationCommunautaire",
+    "DossierMedical",
+    "Consultation",
+    "Ordonnance",
+    "Enrolement",
+    "VerificationPolice",
+    "SignalementFraude",
+    "BeneficiaireONG",
+    "ProgrammeONG",
+    "MissionTerrain",
 ]

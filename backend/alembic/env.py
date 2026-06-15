@@ -23,6 +23,10 @@ from src.modeles import (  # noqa: F401
     configuration_systeme,
     verification_cni,
     attestation_communautaire,
+    dossier_medical,
+    enrolement,
+    verification_police,
+    ong,
 )
 from src.config import parametres
 

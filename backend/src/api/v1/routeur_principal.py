@@ -58,6 +58,12 @@ from src.modules.admin import routeur_admin_attestations
 from src.modules.ui_permissions import routeur_ui_permissions
 from src.modules.ui_permissions.routes import routeur_ui_config
 
+# --- Modules métier par rôle professionnel ---
+from src.modules.medical import routeur_medical
+from src.modules.enrolement import routeur_enrolement
+from src.modules.police import routeur_police
+from src.modules.ong import routeur_ong
+
 
 # Routeur racine — préfixe et tag globaux gérés au montage
 routeur_v1 = APIRouter()
@@ -107,3 +113,9 @@ routeur_v1.include_router(routeur_admin_attestations)
 # Module Permissions UI — configuration des interfaces par rôle
 routeur_v1.include_router(routeur_ui_permissions)
 routeur_v1.include_router(routeur_ui_config)
+
+# Modules métier par rôle professionnel
+routeur_v1.include_router(routeur_medical)
+routeur_v1.include_router(routeur_enrolement)
+routeur_v1.include_router(routeur_police)
+routeur_v1.include_router(routeur_ong)
