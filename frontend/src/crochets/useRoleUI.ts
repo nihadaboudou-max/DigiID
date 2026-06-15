@@ -159,16 +159,12 @@ export function useRoleUI(): UseRoleUIReturn {
   const [layout, setLayout] = useState<string>("default");
   const [chargement, setChargement] = useState<boolean>(true);
   const [erreur, setErreur] = useState<string | null>(null);
-  const dernierTokenRef = useRef<string | null>(null);
+  // Indique si un chargement a déjà été tenté (évite les boucles)
+  const chargementEffectueRef = useRef(false);
 
   // Récupère la config UI de l'utilisateur
   const chargerConfig = useCallback(async () => {
-    if (!estConnecte || !utilisateur) {
-      setModules([]);
-      setLayout("default");
-      setChargement(false);
-      return;
-    }
+    if (!estConnecte || !utilisateur) return;
 
     setChargement(true);
     setErreur(null);
@@ -185,17 +181,23 @@ export function useRoleUI(): UseRoleUIReturn {
       setErreur("Mode hors-ligne : configuration UI non disponible");
     } finally {
       setChargement(false);
+      chargementEffectueRef.current = true;
     }
   }, [estConnecte, utilisateur]);
 
-  // Re-fetcher si le token change
+  // Charger la config dès que l'utilisateur est connecté
   useEffect(() => {
-    const token = localStorage.getItem("token_acces");
-    if (token !== dernierTokenRef.current) {
-      dernierTokenRef.current = token;
+    if (estConnecte && utilisateur && !chargementEffectueRef.current) {
       chargerConfig();
     }
-  }, [chargerConfig]);
+    // Réinitialiser quand l'utilisateur change (déconnexion/reconnexion)
+    if (!estConnecte || !utilisateur) {
+      chargementEffectueRef.current = false;
+      setModules([]);
+      setLayout("default");
+      setChargement(false);
+    }
+  }, [estConnecte, utilisateur, chargerConfig]);
 
   // Construire l'objet can
   const can = useMemo<CanActions>(() => {
