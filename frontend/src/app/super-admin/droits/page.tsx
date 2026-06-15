@@ -369,15 +369,13 @@ function Contenu() {
   }, [selectedUser]);
 
   // Changer le rôle de l'utilisateur
-  const [forcerRole, setForcerRole] = useState(false);
-
   const gererChangementRole = useCallback(async () => {
     if (!selectedUser || !nouveauRole) return;
     setChargementRole(true);
     setErreur(null);
     setSuccesMessage(null);
     try {
-      await changerRoleUtilisateur(selectedUser.id, { role: nouveauRole, motif: motifRole || "Changement via page Droits", forcer: forcerRole });
+      await changerRoleUtilisateur(selectedUser.id, { role: nouveauRole, motif: motifRole || "Changement via page Droits" });
       setSuccesMessage(`✅ Rôle de ${selectedUser.prenom || selectedUser.email} changé en "${LIBELLES_ROLE[nouveauRole] || nouveauRole}"`);
       setMontrerChangerRole(false);
       setMotifRole("");
@@ -561,18 +559,7 @@ function Contenu() {
                     rows={3}
                   />
                 </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="forcer-role"
-                    checked={forcerRole}
-                    onChange={(e) => setForcerRole(e.target.checked)}
-                    className="w-4 h-4 accent-ocre"
-                  />
-                  <label htmlFor="forcer-role" className="text-xs text-ardoise-clair cursor-pointer">
-                    Forcer (ignorer la validation email)
-                  </label>
-                </div>
+
                 <div className="flex gap-3">
                   <Bouton
                     variante="primaire"
@@ -586,7 +573,7 @@ function Contenu() {
                   <Bouton
                     variante="ghost"
                     taille="petit"
-                    onClick={() => { setMontrerChangerRole(false); setNouveauRole(""); setMotifRole(""); setForcerRole(false); }}
+                    onClick={() => { setMontrerChangerRole(false); setNouveauRole(""); setMotifRole(""); }}
                   >
                     Annuler
                   </Bouton>

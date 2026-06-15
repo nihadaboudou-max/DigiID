@@ -85,24 +85,14 @@ async def changer_role_utilisateur(
             message_utilisateur=f"Cet utilisateur possède déjà le rôle '{nouveau_role}'.",
         )
 
-    # 5. Validation email institutionnel pour les rôles sensibles
+    # 5. Validation email institutionnel — simple avertissement pour le super admin
     email_clair = dechiffrer_donnee(utilisateur_cible.email_chiffre)
     email_valide, raison_email = valider_email_institutionnel(email_clair, nouveau_role)
     if not email_valide:
-        if forcer:
-            journal.warning(
-                f"[SUPER ADMIN] Validation email contournée pour {email_clair} "
-                f"vers rôle '{nouveau_role}' par super_admin {super_admin.id}"
-            )
-        else:
-            raise ErreurValidation(
-                f"Email invalide pour le rôle '{nouveau_role}' : {raison_email}",
-                message_utilisateur=(
-                    f"Impossible d'attribuer le rôle '{nouveau_role}' : "
-                    f"l'email de l'utilisateur n'est pas un email institutionnel valide. "
-                    f"{raison_email}"
-                ),
-            )
+        journal.warning(
+            f"[SUPER ADMIN] Changement de rôle vers '{nouveau_role}' pour {email_clair} "
+            f"malgré le domaine non autorisé ({raison_email})"
+        )
 
     # 6. Appliquer le changement de rôle
     maintenant = datetime.now(timezone.utc)
