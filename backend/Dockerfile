@@ -60,5 +60,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/sante || exit 1
 
-# Lancement de l'application (uvicorn pour le dev, gunicorn pour la prod)
-CMD ["uvicorn", "src.main:application", "--host", "0.0.0.0", "--port", "8000"]
+# Lancement de l'application — utilise $PORT de Render (ou 8000 par défaut)
+CMD uvicorn src.main:application --host 0.0.0.0 --port ${PORT:-8000}

@@ -29,10 +29,26 @@ from src.modules.super_admin.schemas_utilisateurs import (
     NombreUtilisateurs,
     UtilisateurApercu,
 )
-from src.modules.authentification.service import _hasher_email
 from src.noyau import chiffrer_donnee, dechiffrer_donnee, journal
+
+
+# =============================================================================
+# Utilitaire de hash email (SHA-256) — copié localement pour éviter les imports
+# circulaires entre modules super_admin et authentification
+# =============================================================================
+
 from src.noyau.exceptions import ErreurRessourceIntrouvable, ErreurValidation
 from src.noyau.journal import journal_audit
+
+
+# =============================================================================
+# Utilitaire de hash email (SHA-256)
+# =============================================================================
+
+def _hasher_email(email: str) -> str:
+    """Hash SHA-256 de l'email — permet la recherche en base sans déchiffrer."""
+    import hashlib
+    return hashlib.sha256(email.strip().lower().encode()).hexdigest()
 
 
 def _utilisateur_vers_apercu(u: Utilisateur) -> UtilisateurApercu:
