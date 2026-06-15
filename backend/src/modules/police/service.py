@@ -46,16 +46,20 @@ async def obtenir_signalements(session: AsyncSession, officier_id: UUID) -> list
 async def rechercher_personne(session: AsyncSession, digiid: str) -> dict | None:
     """Recherche une personne par DigiID dans la base utilisateurs."""
     from src.modeles import Utilisateur
+    from src.noyau import dechiffrer_donnee
     result = await session.execute(
         select(Utilisateur).where(Utilisateur.digiid_public == digiid)
     )
     utilisateur = result.scalar_one_or_none()
     if not utilisateur:
         return None
+    prenom = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else ""
+    nom = dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else ""
+    email = dechiffrer_donnee(utilisateur.email_chiffre)
     return {
         "digiid": utilisateur.digiid_public,
-        "nom": f"{utilisateur.prenom or ''} {utilisateur.nom or ''}".strip(),
-        "email": utilisateur.email,
+        "nom": f"{prenom} {nom}".strip(),
+        "email": email,
         "score": utilisateur.score_actuel,
         "est_actif": utilisateur.est_actif,
     }

@@ -10,6 +10,7 @@ from src.base_donnees.session import obtenir_session
 from src.config.constantes import PREFIXE_API_UTILISATEUR
 from src.modeles import Utilisateur
 from src.modules.authentification.dependances import utilisateur_courant
+from src.noyau import dechiffrer_donnee
 from src.modules.medical.schemas import (
     ConsultationCreate,
     ConsultationResponse,
@@ -34,12 +35,15 @@ async def verifier_patient(
     """Vérifie qu'un DigiID correspond à un citoyen existant."""
     utilisateur = await medical_service.verifier_digiid(session, digiid)
     if utilisateur:
+        nom = dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else None
+        prenom = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else None
+        email = dechiffrer_donnee(utilisateur.email_chiffre)
         return VerificationDigiIDResponse(
             trouvé=True,
             digiid=utilisateur.digiid_public,
-            nom=utilisateur.nom,
-            prenom=utilisateur.prenom,
-            email=utilisateur.email,
+            nom=nom,
+            prenom=prenom,
+            email=email,
         )
     return VerificationDigiIDResponse(trouvé=False, digiid=digiid, nom=None, prenom=None, email=None)
 
