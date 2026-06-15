@@ -527,30 +527,49 @@ export function BarreLaterale() {
         )}
       </nav>
 
-      {/* Pied — raccourci espace personnel pour admins */}
-      {(estSuperAdmin || estAdmin) && (
-        <div className="px-3 py-3 border-t border-ardoise-clir/10 mt-auto bg-sable/30">
+      {/* Pied — raccourci espace personnel */}
+      {(estSuperAdmin || estAdmin || utilisateur.role === "medecin" || utilisateur.role === "agent" || utilisateur.role === "police" || utilisateur.role === "ong") && (
+        <div className="px-3 py-3 border-t border-ardoise-clair/10 mt-auto bg-sable/30">
           <p className="text-[10px] uppercase text-ardoise-clair/40 font-semibold tracking-wider px-3 mb-1.5">
-            Espace personnel
+            Mon espace personnel
           </p>
           <Link
             href="/tableau-de-bord"
             className={clsx(
               "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200",
-              pathname === "/tableau-de-bord" || (!pathname.startsWith("/super-admin") && !pathname.startsWith("/admin"))
+              pathname === "/tableau-de-bord" || pathname === "/profil" || pathname === "/score"
                 ? "bg-sable text-lagune font-semibold"
                 : "text-ardoise-clair/60 hover:text-ardoise hover:bg-sable/60",
             )}
           >
             <div className={clsx(
               "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-              pathname === "/tableau-de-bord" || (!pathname.startsWith("/super-admin") && !pathname.startsWith("/admin"))
+              pathname === "/tableau-de-bord" || pathname === "/profil" || pathname === "/score"
                 ? "bg-lagune text-white"
                 : "bg-sable-clair text-ardoise-clair"
             )}>
               <IconeAccueil className="w-4 h-4" />
             </div>
-            <span>Vue utilisateur</span>
+            <span>Mon profil citoyen</span>
+          </Link>
+          <Link
+            href="/profil"
+            className={clsx(
+              "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 mt-1",
+              pathname === "/profil"
+                ? "bg-sable text-lagune font-semibold"
+                : "text-ardoise-clair/60 hover:text-ardoise hover:bg-sable/60",
+            )}
+          >
+            <div className={clsx(
+              "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
+              pathname === "/profil"
+                ? "bg-lagune text-white"
+                : "bg-sable-clair text-ardoise-clair"
+            )}>
+              <IconeUtilisateur className="w-4 h-4" />
+            </div>
+            <span>Paramètres du compte</span>
           </Link>
         </div>
       )}

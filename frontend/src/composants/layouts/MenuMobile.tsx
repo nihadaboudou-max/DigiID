@@ -571,168 +571,368 @@ export function BoutonMenuMobile() {
 
               {/* Rôles professionnels : Médecin */}
               {estMedecin && (
-                <SectionPlieMobile
-                  titre="Espace médical"
-                  couleur="text-lagune"
-                  initialOuvert={true}
-                >
-                  <div className="pl-2">
-                    {[
-                      { href: "/medecin/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
-                      { href: "/medecin/nouveau-dossier", libelle: "Nouveau dossier", Icone: IconeUtilisateur },
-                      { href: "/medecin/dossiers", libelle: "Dossiers patients", Icone: IconeStatistique },
-                      { href: "/medecin/ordonnances", libelle: "Ordonnances", Icone: IconeJournal },
-                      { href: "/medecin/attestations", libelle: "Attestations", Icone: IconeCheck },
-                    ].map(({ href, libelle, Icone }) => {
-                      const actif = pathname === href || pathname.startsWith(href);
-                      return (
+                <>
+                  <SectionPlieMobile
+                    titre="Espace médical"
+                    couleur="text-lagune"
+                    initialOuvert={true}
+                  >
+                    <div className="pl-2">
+                      {[
+                        { href: "/medecin/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+                        { href: "/medecin/nouveau-dossier", libelle: "Nouveau dossier", Icone: IconeUtilisateur },
+                        { href: "/medecin/dossiers", libelle: "Dossiers patients", Icone: IconeStatistique },
+                        { href: "/medecin/ordonnances", libelle: "Ordonnances", Icone: IconeJournal },
+                        { href: "/medecin/attestations", libelle: "Attestations", Icone: IconeCheck },
+                      ].map(({ href, libelle, Icone }) => {
+                        const actif = pathname === href || pathname.startsWith(href);
+                        return (
+                          <Link
+                            key={href}
+                            href={href}
+                            onClick={() => setOuvert(false)}
+                            className={clsx(
+                              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                              actif
+                                ? "bg-sable text-lagune font-semibold"
+                                : "text-ardoise hover:bg-sable/60",
+                            )}
+                          >
+                            <div className={clsx(
+                              "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                            )}>
+                              <Icone className="w-3.5 h-3.5" />
+                            </div>
+                            <span>{libelle}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </SectionPlieMobile>
+
+                  {/* Mon espace personnel */}
+                  <div className="mt-4 pt-3 border-t border-ardoise-clair/10">
+                    <SectionPlieMobile
+                      titre="Mon espace personnel"
+                      couleur="text-ardoise-clair/50"
+                      initialOuvert={pathname === "/tableau-de-bord" || pathname === "/profil"}
+                    >
+                      <div className="pl-2">
                         <Link
-                          key={href}
-                          href={href}
+                          href="/tableau-de-bord"
                           onClick={() => setOuvert(false)}
                           className={clsx(
                             "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
-                            actif
+                            pathname === "/tableau-de-bord"
                               ? "bg-sable text-lagune font-semibold"
-                              : "text-ardoise hover:bg-sable/60",
+                              : "text-ardoise-clair hover:text-ardoise hover:bg-sable/60",
                           )}
                         >
                           <div className={clsx(
                             "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
-                            actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                            pathname === "/tableau-de-bord" ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
                           )}>
-                            <Icone className="w-3.5 h-3.5" />
+                            <IconeAccueil className="w-3.5 h-3.5" />
                           </div>
-                          <span>{libelle}</span>
+                          <span>Mon profil citoyen</span>
                         </Link>
-                      );
-                    })}
+                        <Link
+                          href="/profil"
+                          onClick={() => setOuvert(false)}
+                          className={clsx(
+                            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                            pathname === "/profil"
+                              ? "bg-sable text-lagune font-semibold"
+                              : "text-ardoise-clair hover:text-ardoise hover:bg-sable/60",
+                          )}
+                        >
+                          <div className={clsx(
+                            "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                            pathname === "/profil" ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                          )}>
+                            <IconeUtilisateur className="w-3.5 h-3.5" />
+                          </div>
+                          <span>Paramètres du compte</span>
+                        </Link>
+                      </div>
+                    </SectionPlieMobile>
                   </div>
-                </SectionPlieMobile>
+                </>
               )}
 
               {/* Rôles professionnels : Agent */}
               {estAgent && (
-                <SectionPlieMobile
-                  titre="Agent terrain"
-                  couleur="text-lagune"
-                  initialOuvert={true}
-                >
-                  <div className="pl-2">
-                    {[
-                      { href: "/agent/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
-                      { href: "/agent/enrolement", libelle: "Enrôlement", Icone: IconeUtilisateur },
-                      { href: "/agent/scan", libelle: "Scan CNI", Icone: IconeScan },
-                    ].map(({ href, libelle, Icone }) => {
-                      const actif = pathname === href || pathname.startsWith(href);
-                      return (
+                <>
+                  <SectionPlieMobile
+                    titre="Agent terrain"
+                    couleur="text-lagune"
+                    initialOuvert={true}
+                  >
+                    <div className="pl-2">
+                      {[
+                        { href: "/agent/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+                        { href: "/agent/enrolement", libelle: "Enrôlement", Icone: IconeUtilisateur },
+                        { href: "/agent/scan", libelle: "Scan CNI", Icone: IconeScan },
+                      ].map(({ href, libelle, Icone }) => {
+                        const actif = pathname === href || pathname.startsWith(href);
+                        return (
+                          <Link
+                            key={href}
+                            href={href}
+                            onClick={() => setOuvert(false)}
+                            className={clsx(
+                              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                              actif
+                                ? "bg-sable text-lagune font-semibold"
+                                : "text-ardoise hover:bg-sable/60",
+                            )}
+                          >
+                            <div className={clsx(
+                              "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                            )}>
+                              <Icone className="w-3.5 h-3.5" />
+                            </div>
+                            <span>{libelle}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </SectionPlieMobile>
+
+                  {/* Mon espace personnel */}
+                  <div className="mt-4 pt-3 border-t border-ardoise-clair/10">
+                    <SectionPlieMobile
+                      titre="Mon espace personnel"
+                      couleur="text-ardoise-clair/50"
+                      initialOuvert={pathname === "/tableau-de-bord" || pathname === "/profil"}
+                    >
+                      <div className="pl-2">
                         <Link
-                          key={href}
-                          href={href}
+                          href="/tableau-de-bord"
                           onClick={() => setOuvert(false)}
                           className={clsx(
                             "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
-                            actif
+                            pathname === "/tableau-de-bord"
                               ? "bg-sable text-lagune font-semibold"
-                              : "text-ardoise hover:bg-sable/60",
+                              : "text-ardoise-clair hover:text-ardoise hover:bg-sable/60",
                           )}
                         >
                           <div className={clsx(
                             "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
-                            actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                            pathname === "/tableau-de-bord" ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
                           )}>
-                            <Icone className="w-3.5 h-3.5" />
+                            <IconeAccueil className="w-3.5 h-3.5" />
                           </div>
-                          <span>{libelle}</span>
+                          <span>Mon profil citoyen</span>
                         </Link>
-                      );
-                    })}
+                        <Link
+                          href="/profil"
+                          onClick={() => setOuvert(false)}
+                          className={clsx(
+                            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                            pathname === "/profil"
+                              ? "bg-sable text-lagune font-semibold"
+                              : "text-ardoise-clair hover:text-ardoise hover:bg-sable/60",
+                          )}
+                        >
+                          <div className={clsx(
+                            "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                            pathname === "/profil" ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                          )}>
+                            <IconeUtilisateur className="w-3.5 h-3.5" />
+                          </div>
+                          <span>Paramètres du compte</span>
+                        </Link>
+                      </div>
+                    </SectionPlieMobile>
                   </div>
-                </SectionPlieMobile>
+                </>
               )}
 
               {/* Rôles professionnels : Police */}
               {estPolice && (
-                <SectionPlieMobile
-                  titre="Forces de l'ordre"
-                  couleur="text-terre"
-                  initialOuvert={true}
-                >
-                  <div className="pl-2">
-                    {[
-                      { href: "/police/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
-                      { href: "/police/verification", libelle: "Vérification", Icone: IconeBouclier },
-                      { href: "/police/recherche", libelle: "Recherche", Icone: IconeScan },
-                      { href: "/police/signalement", libelle: "Signalements", Icone: IconeAlerte },
-                      { href: "/police/audit", libelle: "Audit", Icone: IconeJournal },
-                    ].map(({ href, libelle, Icone }) => {
-                      const actif = pathname === href || pathname.startsWith(href);
-                      return (
+                <>
+                  <SectionPlieMobile
+                    titre="Forces de l'ordre"
+                    couleur="text-terre"
+                    initialOuvert={true}
+                  >
+                    <div className="pl-2">
+                      {[
+                        { href: "/police/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+                        { href: "/police/verification", libelle: "Vérification", Icone: IconeBouclier },
+                        { href: "/police/recherche", libelle: "Recherche", Icone: IconeScan },
+                        { href: "/police/signalement", libelle: "Signalements", Icone: IconeAlerte },
+                        { href: "/police/audit", libelle: "Audit", Icone: IconeJournal },
+                      ].map(({ href, libelle, Icone }) => {
+                        const actif = pathname === href || pathname.startsWith(href);
+                        return (
+                          <Link
+                            key={href}
+                            href={href}
+                            onClick={() => setOuvert(false)}
+                            className={clsx(
+                              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                              actif
+                                ? "bg-sable text-lagune font-semibold"
+                                : "text-ardoise hover:bg-sable/60",
+                            )}
+                          >
+                            <div className={clsx(
+                              "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                            )}>
+                              <Icone className="w-3.5 h-3.5" />
+                            </div>
+                            <span>{libelle}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </SectionPlieMobile>
+
+                  {/* Mon espace personnel */}
+                  <div className="mt-4 pt-3 border-t border-ardoise-clair/10">
+                    <SectionPlieMobile
+                      titre="Mon espace personnel"
+                      couleur="text-ardoise-clair/50"
+                      initialOuvert={pathname === "/tableau-de-bord" || pathname === "/profil"}
+                    >
+                      <div className="pl-2">
                         <Link
-                          key={href}
-                          href={href}
+                          href="/tableau-de-bord"
                           onClick={() => setOuvert(false)}
                           className={clsx(
                             "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
-                            actif
+                            pathname === "/tableau-de-bord"
                               ? "bg-sable text-lagune font-semibold"
-                              : "text-ardoise hover:bg-sable/60",
+                              : "text-ardoise-clair hover:text-ardoise hover:bg-sable/60",
                           )}
                         >
                           <div className={clsx(
                             "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
-                            actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                            pathname === "/tableau-de-bord" ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
                           )}>
-                            <Icone className="w-3.5 h-3.5" />
+                            <IconeAccueil className="w-3.5 h-3.5" />
                           </div>
-                          <span>{libelle}</span>
+                          <span>Mon profil citoyen</span>
                         </Link>
-                      );
-                    })}
+                        <Link
+                          href="/profil"
+                          onClick={() => setOuvert(false)}
+                          className={clsx(
+                            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                            pathname === "/profil"
+                              ? "bg-sable text-lagune font-semibold"
+                              : "text-ardoise-clair hover:text-ardoise hover:bg-sable/60",
+                          )}
+                        >
+                          <div className={clsx(
+                            "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                            pathname === "/profil" ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                          )}>
+                            <IconeUtilisateur className="w-3.5 h-3.5" />
+                          </div>
+                          <span>Paramètres du compte</span>
+                        </Link>
+                      </div>
+                    </SectionPlieMobile>
                   </div>
-                </SectionPlieMobile>
+                </>
               )}
 
               {/* Rôles professionnels : ONG */}
               {estOng && (
-                <SectionPlieMobile
-                  titre="ONG Partenaire"
-                  couleur="text-ocre"
-                  initialOuvert={true}
-                >
-                  <div className="pl-2">
-                    {[
-                      { href: "/ong/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
-                      { href: "/ong/beneficiaires", libelle: "Bénéficiaires", Icone: IconeUtilisateur },
-                      { href: "/ong/programme", libelle: "Programmes", Icone: IconeStatistique },
-                      { href: "/ong/missions", libelle: "Missions terrain", Icone: IconeEnvoyer },
-                      { href: "/ong/attestations", libelle: "Attestations", Icone: IconeCheck },
-                    ].map(({ href, libelle, Icone }) => {
-                      const actif = pathname === href || pathname.startsWith(href);
-                      return (
+                <>
+                  <SectionPlieMobile
+                    titre="ONG Partenaire"
+                    couleur="text-ocre"
+                    initialOuvert={true}
+                  >
+                    <div className="pl-2">
+                      {[
+                        { href: "/ong/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+                        { href: "/ong/beneficiaires", libelle: "Bénéficiaires", Icone: IconeUtilisateur },
+                        { href: "/ong/programme", libelle: "Programmes", Icone: IconeStatistique },
+                        { href: "/ong/missions", libelle: "Missions terrain", Icone: IconeEnvoyer },
+                        { href: "/ong/attestations", libelle: "Attestations", Icone: IconeCheck },
+                      ].map(({ href, libelle, Icone }) => {
+                        const actif = pathname === href || pathname.startsWith(href);
+                        return (
+                          <Link
+                            key={href}
+                            href={href}
+                            onClick={() => setOuvert(false)}
+                            className={clsx(
+                              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                              actif
+                                ? "bg-sable text-lagune font-semibold"
+                                : "text-ardoise hover:bg-sable/60",
+                            )}
+                          >
+                            <div className={clsx(
+                              "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                            )}>
+                              <Icone className="w-3.5 h-3.5" />
+                            </div>
+                            <span>{libelle}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </SectionPlieMobile>
+
+                  {/* Mon espace personnel */}
+                  <div className="mt-4 pt-3 border-t border-ardoise-clair/10">
+                    <SectionPlieMobile
+                      titre="Mon espace personnel"
+                      couleur="text-ardoise-clair/50"
+                      initialOuvert={pathname === "/tableau-de-bord" || pathname === "/profil"}
+                    >
+                      <div className="pl-2">
                         <Link
-                          key={href}
-                          href={href}
+                          href="/tableau-de-bord"
                           onClick={() => setOuvert(false)}
                           className={clsx(
                             "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
-                            actif
+                            pathname === "/tableau-de-bord"
                               ? "bg-sable text-lagune font-semibold"
-                              : "text-ardoise hover:bg-sable/60",
+                              : "text-ardoise-clair hover:text-ardoise hover:bg-sable/60",
                           )}
                         >
                           <div className={clsx(
                             "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
-                            actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                            pathname === "/tableau-de-bord" ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
                           )}>
-                            <Icone className="w-3.5 h-3.5" />
+                            <IconeAccueil className="w-3.5 h-3.5" />
                           </div>
-                          <span>{libelle}</span>
+                          <span>Mon profil citoyen</span>
                         </Link>
-                      );
-                    })}
+                        <Link
+                          href="/profil"
+                          onClick={() => setOuvert(false)}
+                          className={clsx(
+                            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                            pathname === "/profil"
+                              ? "bg-sable text-lagune font-semibold"
+                              : "text-ardoise-clair hover:text-ardoise hover:bg-sable/60",
+                          )}
+                        >
+                          <div className={clsx(
+                            "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                            pathname === "/profil" ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                          )}>
+                            <IconeUtilisateur className="w-3.5 h-3.5" />
+                          </div>
+                          <span>Paramètres du compte</span>
+                        </Link>
+                      </div>
+                    </SectionPlieMobile>
                   </div>
-                </SectionPlieMobile>
+                </>
               )}
 
               {/* Citoyen — utilisateur normal */}
