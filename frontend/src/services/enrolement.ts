@@ -29,7 +29,7 @@ export async function listerEnrolements(statut?: string): Promise<Enrolement[]> 
 export async function creerEnrolement(data: {
   citoyen_nom: string;
   citoyen_prenom: string;
-  citoyen_telephone?: string;
+  citoyen_telephone: string;
   citoyen_email?: string;
   notes?: string;
 }): Promise<Enrolement> {

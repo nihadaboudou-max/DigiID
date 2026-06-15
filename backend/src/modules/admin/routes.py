@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.base_donnees.session import obtenir_session
 from src.config.constantes import PREFIXE_API_ADMIN, RolesUtilisateur
 from src.modeles import Utilisateur, JournalAudit, FraudeIncident, Notification, SessionAuthentification, VerificationVisuelle
+from src.modeles.enrolement import Enrolement
 from src.modules.authentification.dependances import admin_courant, obtenir_ip_client
 from src.modules.super_admin import monitoring_temps_reel as service_monitoring
 from src.noyau import dechiffrer_donnee
@@ -770,6 +771,81 @@ async def supprimer_utilisateur_admin(
 
 
 # ---------------------------------------------------------------------------
+# ENRÔLEMENTS — Liste de tous les enrôlements (admin + super admin)
+# ---------------------------------------------------------------------------
+
+
+class AdminEnrolementItem(BaseModel):
+    """Enrôlement vu par l'admin."""
+    id: str
+    agent_id: str
+    agent_nom: str = ""
+    citoyen_nom: str
+    citoyen_prenom: str
+    citoyen_digiid: str | None = None
+    citoyen_telephone: str | None = None
+    citoyen_email: str | None = None
+    statut: str
+    notes: str | None = None
+    scan_cni: bool = False
+    capture_biometrique: bool = False
+    date_enrolement: str
+    date_validation: str | None = None
+
+
+@routeur_admin.get(
+    "/enrolements",
+    response_model=list[AdminEnrolementItem],
+    summary="Lister tous les enrôlements (admin)",
+    description=(
+        "Liste complète des enrôlements avec le nom de l'agent "
+        "qui a effectué l'enrôlement."
+    ),
+)
+async def lister_enrolements_admin(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(admin_courant)],
+    statut: str = Query("tous", description="Filtrer par statut"),
+    agent_id: str | None = Query(None, description="Filtrer par agent"),
+    limite: int = Query(50, ge=1, le=500),
+):
+    query = select(Enrolement)
+    if statut and statut != "tous":
+        query = query.where(Enrolement.statut == statut)
+    if agent_id:
+        query = query.where(Enrolement.agent_id == UUID(agent_id))
+    query = query.order_by(Enrolement.date_enrolement.desc()).limit(limite)
+    enrolements = (await session.scalars(query)).all()
+
+    resultats = []
+    for e in enrolements:
+        agent_nom = ""
+        agent = await session.get(Utilisateur, e.agent_id)
+        if agent:
+            prenom = dechiffrer_donnee(agent.prenom_chiffre) if agent.prenom_chiffre else ""
+            nom = dechiffrer_donnee(agent.nom_chiffre) if agent.nom_chiffre else ""
+            agent_nom = f"{prenom} {nom}".strip()
+
+        resultats.append(AdminEnrolementItem(
+            id=str(e.id),
+            agent_id=str(e.agent_id),
+            agent_nom=agent_nom,
+            citoyen_nom=e.citoyen_nom,
+            citoyen_prenom=e.citoyen_prenom,
+            citoyen_digiid=e.citoyen_digiid,
+            citoyen_telephone=e.citoyen_telephone,
+            citoyen_email=e.citoyen_email,
+            statut=e.statut,
+            notes=e.notes,
+            scan_cni=e.scan_cni,
+            capture_biometrique=e.capture_biometrique,
+            date_enrolement=e.date_enrolement.strftime("%Y-%m-%dT%H:%M:%S"),
+            date_validation=e.date_validation.strftime("%Y-%m-%dT%H:%M:%S") if e.date_validation else None,
+        ))
+    return resultats
+
+
+# ---------------------------------------------------------------------------
 # MONITORING TEMPS RÉEL POUR ADMIN — Version en lecture seule avec masquage
 # ---------------------------------------------------------------------------
 
@@ -785,6 +861,79 @@ class UtilisateurConnecteAdmin(BaseModel):
     derniere_activite: str
     est_active: bool
     nb_sessions_actives: int = 1
+
+
+
+# ---------------------------------------------------------------------------
+# LISTE DES ENROLEMENTS (pour admin et super admin)
+# ---------------------------------------------------------------------------
+
+class EnrolementAdminItem(BaseModel):
+    """Enrolement vu par l'admin (avec nom de l'agent)."""
+    id: str
+    agent_id: str
+    agent_nom: str
+    citoyen_nom: str
+    citoyen_prenom: str
+    citoyen_digiid: str | None
+    citoyen_telephone: str | None
+    statut: str
+    scan_cni: bool
+    capture_biometrique: bool
+    date_enrolement: str
+    date_validation: str | None
+
+
+@routeur_admin.get(
+    "/enrolements",
+    response_model=list[EnrolementAdminItem],
+    summary="Liste de tous les enrolements (admin/super admin)",
+    description="Retourne tous les enrolements avec le nom de l'agent. Accessible aux administrateurs et super admins.",
+)
+async def lister_enrolements_admin(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    admin: Annotated[Utilisateur, Depends(admin_courant)],
+    statut: str = Query("tous", description="Filtrer par statut"),
+    agent_id: str | None = Query(None, description="Filtrer par agent"),
+    limite: int = Query(50, ge=1, le=200),
+):
+    query = select(Enrolement).order_by(Enrolement.date_enrolement.desc())
+    if statut and statut != "tous":
+        query = query.where(Enrolement.statut == statut)
+    if agent_id:
+        query = query.where(Enrolement.agent_id == UUID(agent_id))
+    query = query.limit(limite)
+    enrolements = (await session.scalars(query)).all()
+
+    # Charger les agents pour avoir leurs noms
+    agent_ids = list(set(str(e.agent_id) for e in enrolements))
+    agents = {}
+    if agent_ids:
+        result = await session.execute(
+            select(Utilisateur).where(Utilisateur.id.in_([UUID(a) for a in agent_ids]))
+        )
+        for agent in result.scalars().all():
+            prenom = dechiffrer_donnee(agent.prenom_chiffre) if agent.prenom_chiffre else ""
+            nom = dechiffrer_donnee(agent.nom_chiffre) if agent.nom_chiffre else ""
+            agents[str(agent.id)] = f"{prenom} {nom}".strip() or agent.digiid_public or "Agent"
+
+    resultat = []
+    for e in enrolements:
+        resultat.append(EnrolementAdminItem(
+            id=str(e.id),
+            agent_id=str(e.agent_id),
+            agent_nom=agents.get(str(e.agent_id), "Agent"),
+            citoyen_nom=e.citoyen_nom,
+            citoyen_prenom=e.citoyen_prenom,
+            citoyen_digiid=e.citoyen_digiid,
+            citoyen_telephone=e.citoyen_telephone,
+            statut=e.statut,
+            scan_cni=e.scan_cni,
+            capture_biometrique=e.capture_biometrique,
+            date_enrolement=e.date_enrolement.strftime("%Y-%m-%dT%H:%M:%S") if e.date_enrolement else "",
+            date_validation=e.date_validation.strftime("%Y-%m-%dT%H:%M:%S") if e.date_validation else None,
+        ))
+    return resultat
 
 
 @routeur_admin.get(

@@ -125,14 +125,20 @@ function Contenu() {
           ) : (
             <>
               <div className="space-y-2">
-                {enrolements.slice(0, 5).map((enr) => (
-                  <div key={enr.id} className="flex items-center justify-between p-3 bg-sable rounded-lg group hover:shadow-sm transition-all">
+                                {enrolements.slice(0, 5).map((enr) => (
+                  <Link
+                    key={enr.id}
+                    href={`/agent/enrolement/${enr.id}`}
+                    className="flex items-center justify-between p-3 bg-sable rounded-lg group hover:shadow-sm hover:bg-sable/80 transition-all"
+                  >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div className="w-10 h-10 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold flex-shrink-0">
-                        {enr.citoyen_nom.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                        {enr.citoyen_prenom.charAt(0)}{enr.citoyen_nom.charAt(0)}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-ardoise truncate">{enr.citoyen_nom} {enr.citoyen_prenom}</p>
+                        <p className="text-sm font-semibold text-ardoise truncate group-hover:text-lagune transition-colors">
+                          {enr.citoyen_prenom} {enr.citoyen_nom}
+                        </p>
                         <p className="text-xs text-ardoise-clair">
                           {new Date(enr.date_enrolement).toLocaleDateString("fr-FR", {
                             day: "numeric", month: "short", year: "numeric",
@@ -147,8 +153,9 @@ function Contenu() {
                       </Badge>
                       {enr.scan_cni && <span className="text-xs" title="CNI scannée">🪪</span>}
                       {enr.capture_biometrique && <span className="text-xs" title="Biometrie capturee">🔐</span>}
+                      <span className="text-xs text-ardoise-clair/40 group-hover:text-lagune group-hover:translate-x-0.5 transition-all">→</span>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
               {enrolements.length > 5 && (

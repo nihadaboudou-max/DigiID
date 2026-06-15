@@ -29,11 +29,11 @@ function Contenu() {
   const [erreur, setErreur] = useState("");
 
   async function handleSubmit() {
-    if (!nom || !prenom) return;
+    if (!nom || !prenom || !telephone) return;
     setEnvoi(true);
     setErreur("");
     try {
-      await creerEnrolement({ citoyen_nom: nom, citoyen_prenom: prenom, citoyen_telephone: telephone || undefined, citoyen_email: email || undefined, notes: notes || undefined });
+      await creerEnrolement({ citoyen_nom: nom, citoyen_prenom: prenom, citoyen_telephone: telephone, citoyen_email: email || undefined, notes: notes || undefined });
       setSucces(true);
     } catch (e: any) {
       setErreur(e.message || "Erreur lors de l enrolement");
@@ -62,7 +62,7 @@ function Contenu() {
           <p className="text-sm text-ardoise-clair mb-4">{prenom} {nom} a ete enrole avec succes.</p>
           <div className="bg-sable p-4 rounded-lg space-y-2 mb-4">
             <p className="text-sm"><strong>Nom :</strong> {prenom} {nom}</p>
-            {telephone && <p className="text-sm"><strong>Telephone :</strong> {telephone}</p>}
+            <p className="text-sm"><strong>Telephone :</strong> {telephone}</p>
             {email && <p className="text-sm"><strong>Email :</strong> {email}</p>}
           </div>
           <div className="flex gap-3">
@@ -94,7 +94,7 @@ function Contenu() {
         <div className="max-w-md space-y-4">
           <ChampSaisie libelle="Nom" value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Ex: Diallo" />
           <ChampSaisie libelle="Prenom" value={prenom} onChange={(e) => setPrenom(e.target.value)} placeholder="Ex: Fatou" />
-          <ChampSaisie libelle="Telephone (optionnel)" value={telephone} onChange={(e) => setTelephone(e.target.value)} placeholder="Ex: +221 77 123 45 67" />
+          <ChampSaisie libelle="Telephone *" type="tel" value={telephone} onChange={(e) => setTelephone(e.target.value)} placeholder="Ex: +221 77 123 45 67" aide="Numero obligatoire pour la creation du compte DigiID" required />
           <ChampSaisie libelle="Email (optionnel)" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Ex: fatou@email.com" />
           <div>
             <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Notes (optionnel)</label>
@@ -102,7 +102,7 @@ function Contenu() {
               className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm resize-none" placeholder="Observations..." />
           </div>
           {erreur && <p className="text-red-600 text-sm">{erreur}</p>}
-          <Bouton variante="primaire" disabled={!nom || !prenom || envoi} onClick={handleSubmit}>
+          <Bouton variante="primaire" disabled={!nom || !prenom || !telephone || envoi} onClick={handleSubmit}>
             {envoi ? "Enrolement..." : "Enrolemeter le citoyen"}
           </Bouton>
         </div>

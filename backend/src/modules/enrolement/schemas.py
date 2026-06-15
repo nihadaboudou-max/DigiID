@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 class EnrolementCreate(BaseModel):
     citoyen_nom: str
     citoyen_prenom: str
-    citoyen_telephone: Optional[str] = None
+    citoyen_telephone: str = Field(..., description="Numéro de téléphone obligatoire")
     citoyen_email: Optional[str] = None
     notes: Optional[str] = None
 

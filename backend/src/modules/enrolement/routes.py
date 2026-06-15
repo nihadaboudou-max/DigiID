@@ -52,6 +52,26 @@ async def creer_enrolement(
     )
 
 
+@routeur_enrolement.get("/{enrolement_id}", response_model=EnrolementResponse)
+async def obtenir_enrolement(
+    enrolement_id: UUID,
+    agent: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    e = await service.obtenir_enrolement(session, enrolement_id)
+    if not e:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Enrolement introuvable")
+    return EnrolementResponse(
+        id=e.id, agent_id=e.agent_id, citoyen_nom=e.citoyen_nom,
+        citoyen_prenom=e.citoyen_prenom, citoyen_digiid=e.citoyen_digiid,
+        citoyen_telephone=e.citoyen_telephone, citoyen_email=e.citoyen_email,
+        statut=e.statut, notes=e.notes,
+        scan_cni=e.scan_cni, capture_biometrique=e.capture_biometrique,
+        date_enrolement=e.date_enrolement, date_validation=e.date_validation,
+    )
+
+
 @routeur_enrolement.patch("/{enrolement_id}", response_model=EnrolementResponse)
 async def modifier_enrolement(
     enrolement_id: UUID,
