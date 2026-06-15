@@ -223,6 +223,7 @@ function Contenu() {
   const [nouveauRole, setNouveauRole] = useState("");
   const [motifRole, setMotifRole] = useState("");
   const [chargementRole, setChargementRole] = useState(false);
+  const [profilChoisi, setProfilChoisi] = useState<string>("");
 
   // Rechercher des utilisateurs
   const rechercher = useCallback(async () => {
@@ -368,24 +369,57 @@ function Contenu() {
     }
   }, [selectedUser]);
 
-  // Changer le rôle de l'utilisateur
+  // Profils disponibles pour le rôle sélectionné dans le form
+  const profilsPourNouveauRole = PROFILS_PREDEFINIS.filter(
+    (p) => nouveauRole && p.role_cible === nouveauRole
+  );
+
+  // Changer le rôle de l'utilisateur (avec profil optionnel)
   const gererChangementRole = useCallback(async () => {
     if (!selectedUser || !nouveauRole) return;
     setChargementRole(true);
     setErreur(null);
     setSuccesMessage(null);
     try {
+      // 1. Changer le rôle
       await changerRoleUtilisateur(selectedUser.id, { role: nouveauRole, motif: motifRole || "Changement via page Droits" });
-      setSuccesMessage(`✅ Rôle de ${selectedUser.prenom || selectedUser.email} changé en "${LIBELLES_ROLE[nouveauRole] || nouveauRole}"`);
+
+      // 2. Si un profil a été choisi, appliquer ses overrides
+      const profil = PROFILS_PREDEFINIS.find((p) => p.id === profilChoisi);
+      if (profil) {
+        const overrides: Record<string, { is_enabled: boolean; is_read_only: boolean }> = {};
+        profil.modules.forEach((mod) => {
+          overrides[mod.module_key] = {
+            is_enabled: mod.is_enabled,
+            is_read_only: mod.is_read_only,
+          };
+        });
+        try {
+          await modifierOverridesUtilisateur(selectedUser.id, { modules_overrides: overrides });
+        } catch {
+          // Silencieux
+        }
+      }
+
+      const libelleRole = LIBELLES_ROLE[nouveauRole] || nouveauRole;
+      const libelleProfil = profil ? ` (${profil.nom})` : "";
+      setSuccesMessage(`✅ Rôle changé en "${libelleRole}"${libelleProfil} pour ${selectedUser.prenom || selectedUser.email}`);
       setMontrerChangerRole(false);
       setMotifRole("");
+      setProfilChoisi("");
+
       // Mettre à jour l'utilisateur local
       setSelectedUser({ ...selectedUser, role: nouveauRole });
-      // Recharger les modules du nouveau rôle
+
+      // Recharger les modules (avec overrides)
       setChargementModules(true);
       try {
-        const modules = await obtenirModulesRole(nouveauRole);
-        setModulesUtilisateur(modules.modules);
+        if (profil) {
+          setModulesUtilisateur(profil.modules);
+        } else {
+          const resultatModules = await obtenirModulesRole(nouveauRole);
+          setModulesUtilisateur(resultatModules.modules);
+        }
       } catch {
         const defauts = modulesParDefaut(nouveauRole);
         setModulesUtilisateur(defauts.length > 0 ? defauts : []);
@@ -397,7 +431,7 @@ function Contenu() {
     } finally {
       setChargementRole(false);
     }
-  }, [selectedUser, nouveauRole, motifRole]);
+  }, [selectedUser, nouveauRole, motifRole, profilChoisi]);
 
   // Profils disponibles pour le rôle de l'utilisateur sélectionné
   const profilsDisponibles = PROFILS_PREDEFINIS.filter(
@@ -559,6 +593,44 @@ function Contenu() {
                     rows={3}
                   />
                 </div>
+
+                {/* Profil spécifique (si le rôle choisi en a) */}
+                {profilsPourNouveauRole.length > 0 && (
+                  <div>
+                    <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
+                      Profil spécifique
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {profilsPourNouveauRole.map((profil) => (
+                        <button
+                          key={profil.id}
+                          type="button"
+                          onClick={() => setProfilChoisi(profilChoisi === profil.id ? "" : profil.id)}
+                          className={`p-3 rounded-xl border-2 text-left transition-all ${
+                            profilChoisi === profil.id
+                              ? "border-lagune bg-lagune/5 ring-2 ring-lagune/20"
+                              : "border-ardoise-clair/10 hover:border-lagune/30"
+                          }`}
+                        >
+                          <p className="font-bold text-sm text-ardoise">{profil.nom}</p>
+                          <p className="text-xs text-ardoise-clair mt-1">{profil.description}</p>
+                          <div className="flex gap-1 mt-2 flex-wrap">
+                            {profil.modules.filter((m) => m.is_enabled).slice(0, 3).map((m) => (
+                              <span key={m.module_key} className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+                                ✓ {m.module_label || m.module_key}
+                              </span>
+                            ))}
+                            {profil.modules.filter((m) => !m.is_enabled).slice(0, 2).map((m) => (
+                              <span key={m.module_key} className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                                ✗ {m.module_label || m.module_key}
+                              </span>
+                            ))}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex gap-3">
                   <Bouton
