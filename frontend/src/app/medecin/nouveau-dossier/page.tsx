@@ -1,17 +1,14 @@
-"use client";
+﻿"use client";
 
-/**
- * Création d'un nouveau dossier médical.
- * Réservé aux médecins avec le module 'creation_dossier' activé.
- */
 import { useState } from "react";
 import Link from "next/link";
-
+import { useRouter } from "next/navigation";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { useRoleUI } from "@/crochets/useRoleUI";
+import { creerDossier } from "@/services/medical";
 
 export default function NouveauDossier() {
   return (
@@ -23,31 +20,48 @@ export default function NouveauDossier() {
 
 function Contenu() {
   const { can } = useRoleUI();
-  const [digiid, setDigiid] = useState("");
+  const router = useRouter();
+  const [patient_nom, setPatientNom] = useState("");
+  const [patient_digiid, setPatientDigiid] = useState("");
   const [motif, setMotif] = useState("");
   const [diagnostic, setDiagnostic] = useState("");
   const [etape, setEtape] = useState<"recherche" | "formulaire" | "confirmation">("recherche");
+  const [envoi, setEnvoi] = useState(false);
+  const [erreur, setErreur] = useState("");
 
   if (!can.createMedicalRecord) {
     return (
       <div className="space-y-8 apparition">
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Espace médical</p>
-        <h1>Création de dossier</h1>
+        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Espace medical</p>
+        <h1>Creation de dossier</h1>
         <div className="bg-terre/10 border-l-4 border-terre p-4 rounded">
-          <p className="text-sm text-terre">
-            Module désactivé. Contacte le super administrateur.
-          </p>
+          <p className="text-sm text-terre">Module desactive. Contacte le super administrateur.</p>
         </div>
-        <Link href="/medecin/dashboard">
-          <Bouton variante="ghost">← Retour au tableau de bord</Bouton>
-        </Link>
+        <Link href="/medecin/dashboard"><Bouton variante="ghost">← Retour</Bouton></Link>
       </div>
     );
   }
 
+  async function handleCreer() {
+    setEnvoi(true);
+    setErreur("");
+    try {
+      const dossier = await creerDossier({
+        patient_nom,
+        patient_digiid,
+        motif,
+        diagnostic: diagnostic || undefined,
+      });
+      setEtape("confirmation");
+    } catch (e: any) {
+      setErreur(e.message || "Erreur lors de la creation du dossier");
+    } finally {
+      setEnvoi(false);
+    }
+  }
+
   return (
     <div className="space-y-8 apparition">
-      {/* Fil d'Ariane */}
       <nav className="flex items-center gap-2 text-sm text-ardoise-clair">
         <Link href="/medecin/dashboard" className="hover:text-ocre transition-colors">Tableau de bord</Link>
         <span>/</span>
@@ -55,33 +69,24 @@ function Contenu() {
       </nav>
 
       <div>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Espace médical</p>
-        <h1 className="mt-1">Nouveau dossier médical</h1>
-        <p className="text-ardoise-clair mt-2">
-          Crée un dossier médical pour un patient identifié par son DigiID.
-        </p>
+        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Espace medical</p>
+        <h1 className="mt-1">Nouveau dossier medical</h1>
+        <p className="text-ardoise-clair mt-2">Cree un dossier medical pour un patient identifie par son DigiID.</p>
       </div>
 
       {etape === "recherche" && (
-        <Carte titre="🔍 Rechercher le patient">
-          <p className="text-sm text-ardoise-clair mb-4">
-            Saisis l'identifiant numérique DigiID du citoyen pour créer son dossier.
-          </p>
+        <Carte titre="Identification du patient">
+          <p className="text-sm text-ardoise-clair mb-4">Saisis le nom complet et le DigiID du citoyen.</p>
           <div className="max-w-md space-y-4">
-            <ChampSaisie
-              libelle="DigiID du patient"
-              value={digiid}
-              onChange={(e) => setDigiid(e.target.value)}
-              placeholder="Ex: DIG-A1B2C3D4E5F6"
-            />
-            <Bouton
-              variante="primaire"
-              disabled={digiid.length < 4}
-              onClick={() => {
-                setEtape("formulaire");
-              }}
-            >
-              Rechercher
+            <ChampSaisie libelle="Nom complet du patient" value={patient_nom}
+              onChange={(e) => setPatientNom(e.target.value)}
+              placeholder="Ex: Fatou Diallo" />
+            <ChampSaisie libelle="DigiID du patient" value={patient_digiid}
+              onChange={(e) => setPatientDigiid(e.target.value)}
+              placeholder="Ex: DIG-A1B2C3D4E5F6" />
+            <Bouton variante="primaire" disabled={patient_nom.length < 3 || patient_digiid.length < 4}
+              onClick={() => setEtape("formulaire")}>
+              Suivant →
             </Bouton>
           </div>
         </Carte>
@@ -89,105 +94,66 @@ function Contenu() {
 
       {etape === "formulaire" && (
         <>
-          {/* Infos patient (lecture seule) */}
-          <Carte titre="👤 Identité du patient">
+          <Carte titre="Informations patient">
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <p className="text-xs uppercase text-ardoise-clair font-semibold">DigiID</p>
-                <p className="text-sm font-medium">{digiid || "DIG-A1B2C3D4E5F6"}</p>
+                <p className="text-sm font-medium">{patient_digiid}</p>
               </div>
               <div>
                 <p className="text-xs uppercase text-ardoise-clair font-semibold">Nom complet</p>
-                <p className="text-sm font-medium">Fatou Diallo</p>
-              </div>
-              <div>
-                <p className="text-xs uppercase text-ardoise-clair font-semibold">Date naissance</p>
-                <p className="text-sm font-medium">15/03/1990</p>
-              </div>
-              <div>
-                <p className="text-xs uppercase text-ardoise-clair font-semibold">Score</p>
-                <p className="text-sm font-medium">78/100</p>
+                <p className="text-sm font-medium">{patient_nom}</p>
               </div>
             </div>
           </Carte>
 
-          {/* Formulaire dossier médical */}
-          <Carte titre="📋 Dossier médical">
+          <Carte titre="Dossier medical">
             <div className="space-y-4 max-w-lg">
-              <ChampSaisie
-                libelle="Motif de la consultation"
-                value={motif}
+              <ChampSaisie libelle="Motif de la consultation" value={motif}
                 onChange={(e) => setMotif(e.target.value)}
-                placeholder="Ex: Consultation de routine"
-              />
+                placeholder="Ex: Consultation de routine" />
               <div>
                 <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
                   Diagnostic / Observations
                 </label>
-                <textarea
-                  value={diagnostic}
-                  onChange={(e) => setDiagnostic(e.target.value)}
-                  rows={5}
-                  className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm resize-none"
-                  placeholder="Description détaillée du diagnostic..."
-                />
+                <textarea value={diagnostic} onChange={(e) => setDiagnostic(e.target.value)}
+                  rows={5} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm resize-none"
+                  placeholder="Description detaillee du diagnostic..." />
               </div>
-              <div>
-                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
-                  Pièces jointes
-                </label>
-                <div className="border-2 border-dashed border-ardoise-clair/20 rounded-lg p-6 text-center">
-                  <p className="text-sm text-ardoise-clair">
-                    Glisse des fichiers ici ou{" "}
-                    <button className="text-ocre hover:underline">parcours</button>
-                  </p>
-                  <p className="text-xs text-ardoise-clair mt-1">
-                    PDF, images (max 10 Mo)
-                  </p>
-                </div>
-              </div>
+              {erreur && <p className="text-red-600 text-sm">{erreur}</p>}
             </div>
           </Carte>
 
-          {/* Actions */}
           <div className="flex gap-3">
-            <Bouton
-              variante="primaire"
-              disabled={!motif || !diagnostic}
-              onClick={() => setEtape("confirmation")}
-            >
-              Créer le dossier
+            <Bouton variante="primaire" disabled={!motif || envoi} onClick={handleCreer}>
+              {envoi ? "Creation en cours..." : "Creer le dossier"}
             </Bouton>
-            <Bouton variante="ghost" onClick={() => setEtape("recherche")}>
-              Annuler
-            </Bouton>
+            <Bouton variante="ghost" onClick={() => setEtape("recherche")}>Annuler</Bouton>
           </div>
         </>
       )}
 
       {etape === "confirmation" && (
-        <Carte titre="✅ Dossier créé avec succès">
+        <Carte titre="Dossier cree avec succes !">
           <p className="text-sm text-ardoise-clair mb-4">
-            Le dossier médical a été créé et lié au patient {digiid || "DIG-A1B2C3D4E5F6"}.
+            Le dossier medical de <strong>{patient_nom}</strong> ({patient_digiid}) a ete cree.
           </p>
           <div className="bg-sable p-4 rounded-lg space-y-2 mb-4">
             <p className="text-sm"><strong>Motif :</strong> {motif}</p>
-            <p className="text-sm"><strong>Diagnostic :</strong> {diagnostic}</p>
+            {diagnostic && <p className="text-sm"><strong>Diagnostic :</strong> {diagnostic}</p>}
           </div>
           <div className="flex gap-3">
-            <Link href="/medecin/dossiers">
-              <Bouton variante="primaire">Voir les dossiers</Bouton>
-            </Link>
-            <Bouton variante="ghost" onClick={() => { setEtape("recherche"); setMotif(""); setDiagnostic(""); }}>
+            <Link href="/medecin/dossiers"><Bouton variante="primaire">Voir les dossiers</Bouton></Link>
+            <Bouton variante="ghost" onClick={() => {
+              setEtape("recherche"); setMotif(""); setDiagnostic(""); setPatientNom(""); setPatientDigiid("");
+            }}>
               Nouveau dossier
             </Bouton>
           </div>
         </Carte>
       )}
 
-      <Link href="/medecin/dashboard">
-        <Bouton variante="ghost">← Retour au tableau de bord</Bouton>
-      </Link>
+      <Link href="/medecin/dashboard"><Bouton variante="ghost">← Retour</Bouton></Link>
     </div>
   );
 }

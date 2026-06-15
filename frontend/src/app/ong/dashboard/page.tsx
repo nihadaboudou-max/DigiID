@@ -1,24 +1,14 @@
-"use client";
+﻿"use client";
 
-/**
- * Tableau de bord ONG — Gestion des bénéficiaires et programmes.
- * 
- * Modules accessibles :
- *   - consultation_beneficiaires     → /ong/beneficiaires
- *   - attestations_communautaires    → /ong/attestations
- *   - rapports_terrain               → /ong/rapports
- *   - gestion_programme              → /ong/programme
- *   - statistiques_ong               → /ong/statistiques
- *   - calendrier_missions            → /ong/missions
- */
+import { useEffect, useState } from "react";
 import Link from "next/link";
-
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
-import { BarreProgression } from "@/composants/commun/BarreProgression";
 import { useRoleUI } from "@/crochets/useRoleUI";
+import { obtenirStats, listerBeneficiaires, listerMissions } from "@/services/ong";
+import type { StatsONG, BeneficiaireONG, MissionTerrain } from "@/services/ong";
 
 export default function OngDashboard() {
   return (
@@ -28,21 +18,31 @@ export default function OngDashboard() {
   );
 }
 
-const BENEFICIAIRES_RECENTS = [
-  { id: "BEN-001", nom: "Aïssatou Ndiaye", programme: "Nutrition infantile", date: "10/06/2026", statut: "actif" as const },
-  { id: "BEN-002", nom: "Moussa Diop", programme: "Aide scolaire", date: "09/06/2026", statut: "actif" as const },
-  { id: "BEN-003", nom: "Khady Fall", programme: "Santé maternelle", date: "08/06/2026", statut: "en_attente" as const },
-  { id: "BEN-004", nom: "Ibrahima Sow", programme: "Nutrition infantile", date: "07/06/2026", statut: "actif" as const },
-];
-
 function Contenu() {
   const { can, chargement } = useRoleUI();
+  const [stats, setStats] = useState<StatsONG | null>(null);
+  const [beneficiaires, setBeneficiaires] = useState<BeneficiaireONG[]>([]);
+  const [missions, setMissions] = useState<MissionTerrain[]>([]);
+  const [chargementStats, setChargementStats] = useState(true);
+
+  useEffect(() => { toutCharger(); }, []);
+
+  async function toutCharger() {
+    setChargementStats(true);
+    try {
+      const [s, b, m] = await Promise.all([
+        obtenirStats(), listerBeneficiaires(), listerMissions()
+      ]);
+      setStats(s); setBeneficiaires(b); setMissions(m);
+    } catch {}
+    finally { setChargementStats(false); }
+  }
 
   if (chargement) {
     return (
       <div className="space-y-8 apparition">
         <p className="text-ocre font-semibold text-sm uppercase tracking-wider">ONG Partenaire</p>
-        <h1>Programme DigiID</h1>
+        <h1>Tableau de bord</h1>
         <p className="text-ardoise-clair italic py-12">Chargement...</p>
       </div>
     );
@@ -53,129 +53,86 @@ function Contenu() {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-ocre font-semibold text-sm uppercase tracking-wider">ONG Partenaire</p>
-          <h1 className="mt-1">Programme DigiID</h1>
-          <p className="text-ardoise-clair mt-2">
-            Gère tes bénéficiaires, émets des attestations communautaires et suis tes programmes terrain.
-          </p>
+          <h1 className="mt-1">Gestion des beneficiaires</h1>
+          <p className="text-ardoise-clair mt-2">Suis les programmes d aide humanitaire et les beneficiaires.</p>
         </div>
         <div className="flex gap-3">
-          {can.manageCommunityAttestations && (
-            <Link href="/ong/attestations">
-              <Bouton variante="primaire">+ Nouvelle attestation</Bouton>
-            </Link>
-          )}
-          {can.viewFieldReports && (
-            <Link href="/ong/rapports">
-              <Bouton variante="ghost">Exporter rapport</Bouton>
-            </Link>
-          )}
+          <Link href="/ong/beneficiaires"><Bouton variante="primaire">+ Nouveau beneficiaire</Bouton></Link>
+          <Link href="/ong/programme"><Bouton variante="secondaire" taille="petit">Nouveau programme</Bouton></Link>
         </div>
       </div>
 
-      {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="carte text-center">
-          <p className="text-3xl font-bold text-lagune">156</p>
-          <p className="text-xs uppercase text-ardoise-clair font-semibold">Bénéficiaires actifs</p>
+          <p className="text-3xl font-bold text-lagune">{chargementStats ? "..." : stats?.nb_beneficiaires || 0}</p>
+          <p className="text-xs uppercase text-ardoise-clair font-semibold">Beneficiaires</p>
         </div>
         <div className="carte text-center">
-          <p className="text-3xl font-bold text-succes">89%</p>
-          <p className="text-xs uppercase text-ardoise-clair font-semibold">Taux de couverture</p>
+          <p className="text-3xl font-bold text-ocre">{chargementStats ? "..." : stats?.nb_programmes || 0}</p>
+          <p className="text-xs uppercase text-ardoise-clair font-semibold">Programmes</p>
         </div>
         <div className="carte text-center">
-          <p className="text-3xl font-bold text-ocre">3</p>
-          <p className="text-xs uppercase text-ardoise-clair font-semibold">Programmes actifs</p>
+          <p className="text-3xl font-bold text-succes">{chargementStats ? "..." : stats?.nb_missions || 0}</p>
+          <p className="text-xs uppercase text-ardoise-clair font-semibold">Missions</p>
         </div>
         <div className="carte text-center">
-          <p className="text-3xl font-bold text-terre">12</p>
-          <p className="text-xs uppercase text-ardoise-clair font-semibold">Missions terrain</p>
+          <p className="text-3xl font-bold text-terre">{stats?.zones?.length || 0}</p>
+          <p className="text-xs uppercase text-ardoise-clair font-semibold">Zones actives</p>
         </div>
       </div>
 
-      {/* Couverture géographique */}
-      <div className="grid sm:grid-cols-2 gap-4">
-        <Carte titre="Couverture par zone">
+      {can.viewBeneficiaries && beneficiaires.length > 0 && (
+        <Carte titre="Derniers beneficiaires inscrits">
           <div className="space-y-2">
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span>Dakar</span><span>45%</span>
-              </div>
-              <BarreProgression valeur={45} couleur="lagune" />
-            </div>
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span>Thiès</span><span>25%</span>
-              </div>
-              <BarreProgression valeur={25} couleur="ocre" />
-            </div>
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span>Saint-Louis</span><span>19%</span>
-              </div>
-              <BarreProgression valeur={19} couleur="succes" />
-            </div>
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span>Autres</span><span>11%</span>
-              </div>
-              <BarreProgression valeur={11} couleur="terre" />
-            </div>
-          </div>
-        </Carte>
-
-        {/* Bénéficiaires récents */}
-        {can.viewBeneficiaries && (
-          <Carte titre="Bénéficiaires récents">
-            <div className="space-y-2">
-              {BENEFICIAIRES_RECENTS.map((b) => (
-                <div key={b.id} className="flex items-center justify-between p-2 bg-sable rounded-lg">
+            {beneficiaires.slice(0, 5).map((b) => (
+              <div key={b.id} className="flex items-center justify-between p-3 bg-sable rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-teal-500/10 flex items-center justify-center text-teal-600 font-bold">
+                    {b.nom.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                  </div>
                   <div>
                     <p className="text-sm font-semibold text-ardoise">{b.nom}</p>
-                    <p className="text-xs text-ardoise-clair">{b.programme}</p>
+                    <p className="text-xs text-ardoise-clair">{b.programme} · {b.zone || "Zone non specifiee"}</p>
                   </div>
-                  <Badge variante={b.statut === "actif" ? "succes" : "ocre"}>
-                    {b.statut === "actif" ? "Actif" : "En attente"}
-                  </Badge>
                 </div>
-              ))}
-            </div>
-            <Link href="/ong/beneficiaires" className="text-xs text-ocre hover:underline mt-2 inline-block">
-              Voir tous les bénéficiaires →
-            </Link>
-          </Carte>
-        )}
-      </div>
+                <Badge variante={b.statut === "actif" ? "succes" : "lagune"}>
+                  {b.statut === "actif" ? "Actif" : "Inactif"}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </Carte>
+      )}
 
-      {/* Accès rapide */}
+      {can.manageMissions && missions.length > 0 && (
+        <Carte titre="Missions en cours">
+          <div className="space-y-2">
+            {missions.filter(m => m.statut === "en_cours" || m.statut === "planifiee").slice(0, 3).map((m) => (
+              <div key={m.id} className="flex items-center justify-between p-3 bg-sable rounded-lg">
+                <div>
+                  <p className="text-sm font-semibold text-ardoise">{m.titre}</p>
+                  <p className="text-xs text-ardoise-clair">{m.zone} · {new Date(m.date_depart).toLocaleDateString("fr-FR")}</p>
+                </div>
+                <Badge variante={m.statut === "en_cours" ? "succes" : "ocre"}>
+                  {m.statut === "en_cours" ? "En cours" : "Planifiee"}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </Carte>
+      )}
+
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {can.viewBeneficiaries && (
-          <CarteAction titre="Bénéficiaires" description="Liste et recherche" href="/ong/beneficiaires" icone="👥" />
-        )}
-        {can.manageCommunityAttestations && (
-          <CarteAction titre="Attestations" description="Émettre des attestations" href="/ong/attestations" icone="📜" />
-        )}
-        {can.viewFieldReports && (
-          <CarteAction titre="Rapports terrain" description="Export CSV et analyse" href="/ong/rapports" icone="📊" />
-        )}
-        {can.manageProgram && (
-          <CarteAction titre="Programme" description="Indicateurs et suivi" href="/ong/programme" icone="📋" />
-        )}
-        {can.viewONGStats && (
-          <CarteAction titre="Statistiques" description="Indicateurs de couverture" href="/ong/statistiques" icone="📈" />
-        )}
-        {can.manageMissions && (
-          <CarteAction titre="Missions terrain" description="Calendrier des missions" href="/ong/missions" icone="📅" />
-        )}
+        {can.viewBeneficiaries && <CarteAction titre="Beneficiaires" description="Gerer les inscrits" href="/ong/beneficiaires" icone="👥" />}
+        {can.manageProgram && <CarteAction titre="Programmes" description="Gerer les programmes" href="/ong/programme" icone="📋" />}
+        {can.manageMissions && <CarteAction titre="Missions terrain" description="Planifier et suivre" href="/ong/missions" icone="🌍" />}
       </div>
 
-      {/* Note de conformité */}
-      <div className="bg-lagune/5 border border-lagune/20 p-4 rounded">
-        <p className="text-xs text-ardoise-clair">
-          <strong>🌍 Conformité :</strong> Les données des bénéficiaires sont protégées conformément
-          au code numérique du Bénin (2017-20) et à la loi sénégalaise 2008-12.
-          L'hébergement est situé dans la zone CEDEAO.
-        </p>
-      </div>
+      {beneficiaires.length === 0 && !chargementStats && (
+        <div className="bg-teal-500/10 border-l-4 border-teal-500 p-4 rounded">
+          <p className="text-sm text-teal-700">Bienvenue ! Commencez par ajouter vos premiers beneficiaires et programmes.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -191,8 +148,9 @@ function CarteAction({ titre, description, href, icone }: { titre: string; descr
             <p className="text-sm text-ardoise-clair mt-1">{description}</p>
           </div>
         </div>
-        <p className="text-xs text-ocre font-semibold mt-3 group-hover:translate-x-1 transition-transform">Accéder →</p>
+        <p className="text-xs text-ocre font-semibold mt-3 group-hover:translate-x-1 transition-transform">Acceder →</p>
       </div>
     </Link>
   );
 }
+
