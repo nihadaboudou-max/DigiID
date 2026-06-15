@@ -8,7 +8,8 @@ import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { useRoleUI } from "@/crochets/useRoleUI";
-import { creerDossier } from "@/services/medical";
+import { creerDossier, verifierPatient } from "@/services/medical";
+import type { VerificationPatient } from "@/services/medical";
 
 export default function NouveauDossier() {
   return (
@@ -25,9 +26,11 @@ function Contenu() {
   const [patient_digiid, setPatientDigiid] = useState("");
   const [motif, setMotif] = useState("");
   const [diagnostic, setDiagnostic] = useState("");
-  const [etape, setEtape] = useState<"recherche" | "formulaire" | "confirmation">("recherche");
+  const [etape, setEtape] = useState<"recherche" | "verification" | "formulaire" | "confirmation">("recherche");
   const [envoi, setEnvoi] = useState(false);
   const [erreur, setErreur] = useState("");
+  const [patientVerifie, setPatientVerifie] = useState<VerificationPatient | null>(null);
+  const [verificationEnCours, setVerificationEnCours] = useState(false);
 
   if (!can.createMedicalRecord) {
     return (
@@ -84,17 +87,40 @@ function Contenu() {
             <ChampSaisie libelle="DigiID du patient" value={patient_digiid}
               onChange={(e) => setPatientDigiid(e.target.value)}
               placeholder="Ex: DIG-A1B2C3D4E5F6" />
-            <Bouton variante="primaire" disabled={patient_nom.length < 3 || patient_digiid.length < 4}
-              onClick={() => setEtape("formulaire")}>
-              Suivant →
+            <Bouton variante="primaire" chargement={verificationEnCours}
+              disabled={patient_nom.length < 3 || patient_digiid.length < 4}
+              onClick={async () => {
+                setVerificationEnCours(true);
+                setErreur("");
+                try {
+                  const resultat = await verifierPatient(patient_digiid);
+                  if (resultat.trouvé) {
+                    setPatientVerifie(resultat);
+                    setEtape("formulaire");
+                  } else {
+                    setErreur(`Aucun citoyen trouvé avec le DigiID "${patient_digiid}". Vérifie l'identifiant.`);
+                  }
+                } catch (e: any) {
+                  setErreur(e.message_utilisateur || "Erreur lors de la vérification du DigiID");
+                } finally {
+                  setVerificationEnCours(false);
+                }
+              }}>
+              Vérifier →
             </Bouton>
           </div>
         </Carte>
       )}
 
+      {etape === "verification" && (
+        <Carte titre="Vérification en cours...">
+          <p className="text-sm text-ardoise-clair">Vérification du DigiID...</p>
+        </Carte>
+      )}
+
       {etape === "formulaire" && (
         <>
-          <Carte titre="Informations patient">
+          <Carte titre="Informations patient vérifié">
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <p className="text-xs uppercase text-ardoise-clair font-semibold">DigiID</p>
@@ -104,6 +130,23 @@ function Contenu() {
                 <p className="text-xs uppercase text-ardoise-clair font-semibold">Nom complet</p>
                 <p className="text-sm font-medium">{patient_nom}</p>
               </div>
+              {patientVerifie?.prenom && (
+                <div>
+                  <p className="text-xs uppercase text-ardoise-clair font-semibold">Prénom</p>
+                  <p className="text-sm font-medium">{patientVerifie.prenom}</p>
+                </div>
+              )}
+              {patientVerifie?.email && (
+                <div>
+                  <p className="text-xs uppercase text-ardoise-clair font-semibold">Email</p>
+                  <p className="text-sm font-medium">{patientVerifie.email}</p>
+                </div>
+              )}
+            </div>
+            <div className="mt-3">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-vert/10 text-vert text-xs rounded-full font-medium">
+                ✓ Citoyen vérifié
+              </span>
             </div>
           </Carte>
 

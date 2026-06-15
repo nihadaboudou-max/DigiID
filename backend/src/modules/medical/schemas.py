@@ -76,6 +76,14 @@ class OrdonnanceResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class VerificationDigiIDResponse(BaseModel):
+    trouvé: bool = Field(..., description="True si le DigiID correspond à un citoyen existant")
+    digiid: str = Field(..., description="Le DigiID recherché")
+    nom: Optional[str] = Field(None, description="Nom du citoyen")
+    prenom: Optional[str] = Field(None, description="Prénom du citoyen")
+    email: Optional[str] = Field(None, description="Email du citoyen")
+
+
 class PatientSearchResponse(BaseModel):
     digiid: str
     nom: str

@@ -38,6 +38,27 @@ export interface Ordonnance {
   date_expiration: string | null;
 }
 
+export interface VerificationPatient {
+  trouvé: boolean;
+  digiid: string;
+  nom: string | null;
+  prenom: string | null;
+  email: string | null;
+}
+
+/**
+ * Vérifie qu'un DigiID correspond à un citoyen existant dans le système.
+ */
+export async function verifierPatient(
+  digiid: string,
+): Promise<VerificationPatient> {
+  return clientAPI.get<VerificationPatient>(
+    `/api/v1/utilisateur/medical/verifier-patient/${encodeURIComponent(digiid)}`,
+    { authentifie: true },
+  );
+}
+
+
 export async function listerDossiers(
   statut?: string,
   recherche?: string,

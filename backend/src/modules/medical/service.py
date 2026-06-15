@@ -6,7 +6,30 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles.dossier_medical import DossierMedical, Consultation, Ordonnance
-from src.noyau.exceptions import ErreurRessourceIntrouvable
+from src.modeles import Utilisateur
+from src.noyau.exceptions import ErreurRessourceIntrouvable, ErreurValidation
+
+
+async def verifier_digiid(session: AsyncSession, digiid: str) -> Utilisateur | None:
+    """Recherche un utilisateur par son DigiID public."""
+    result = await session.execute(
+        select(Utilisateur).where(
+            Utilisateur.digiid_public == digiid,
+            Utilisateur.est_supprime == False,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def _verifier_digiid_existe(session: AsyncSession, digiid: str) -> Utilisateur:
+    """Vérifie qu'un DigiID public correspond à un utilisateur existant."""
+    utilisateur = await verifier_digiid(session, digiid)
+    if not utilisateur:
+        raise ErreurValidation(
+            f"DigiID '{digiid}' introuvable",
+            message_utilisateur=f"Aucun citoyen trouvé avec le DigiID '{digiid}'. Vérifie l'identifiant.",
+        )
+    return utilisateur
 
 
 async def creer_dossier(
@@ -14,6 +37,9 @@ async def creer_dossier(
     medecin_id: UUID,
     data: dict,
 ) -> DossierMedical:
+    # Vérifier que le DigiID du patient existe dans le système
+    await _verifier_digiid_existe(session, data["patient_digiid"])
+
     dossier = DossierMedical(medecin_id=medecin_id, **data)
     session.add(dossier)
     await session.commit()

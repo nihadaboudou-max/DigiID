@@ -18,10 +18,30 @@ from src.modules.medical.schemas import (
     DossierMedicalUpdate,
     OrdonnanceCreate,
     OrdonnanceResponse,
+    VerificationDigiIDResponse,
 )
 from src.modules.medical import service as medical_service
 
 routeur_medical = APIRouter(prefix=f"{PREFIXE_API_UTILISATEUR}/medical", tags=["Médical"])
+
+
+@routeur_medical.get("/verifier-patient/{digiid}", response_model=VerificationDigiIDResponse)
+async def verifier_patient(
+    digiid: str,
+    medecin: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Vérifie qu'un DigiID correspond à un citoyen existant."""
+    utilisateur = await medical_service.verifier_digiid(session, digiid)
+    if utilisateur:
+        return VerificationDigiIDResponse(
+            trouvé=True,
+            digiid=utilisateur.digiid_public,
+            nom=utilisateur.nom,
+            prenom=utilisateur.prenom,
+            email=utilisateur.email,
+        )
+    return VerificationDigiIDResponse(trouvé=False, digiid=digiid, nom=None, prenom=None, email=None)
 
 
 @routeur_medical.get("/dossiers", response_model=list[DossierMedicalResponse])

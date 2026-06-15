@@ -169,8 +169,12 @@ async def obtenir_modules_role(
 ) -> list[ModulePermissionDict]:
     """
     Retourne tous les modules d'un rôle spécifique.
+    Crée la table si nécessaire (premier appel).
     """
     from sqlalchemy import text
+
+    # S'assurer que la table existe (peut ne pas être le cas en prod)
+    await _creer_table_si_necessaire(session)
 
     resultat = await session.execute(
         text("""
@@ -305,8 +309,9 @@ async def obtenir_config_ui_utilisateur(
     # 1. Modules de base pour le rôle
     modules_role = await obtenir_modules_role(session, role)
 
-    # 2. Overrides individuels
-    overrides = utilisateur.modules_overrides or {}
+    # 2. Overrides individuels (les colonnes peuvent ne pas exister en base)
+    overrides = getattr(utilisateur, 'modules_overrides', None) or {}
+    layout = getattr(utilisateur, 'ui_layout', None) or "default"
 
     # Appliquer les overrides
     modules_final = []
@@ -323,7 +328,7 @@ async def obtenir_config_ui_utilisateur(
 
     return {
         "role": role,
-        "layout": utilisateur.ui_layout or "default",
+        "layout": layout,
         "modules": modules_final,
     }
 
