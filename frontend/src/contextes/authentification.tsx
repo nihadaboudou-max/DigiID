@@ -98,6 +98,41 @@ export function FournisseurAuthentification({
     }
     window.addEventListener(EVENEMENT_AUTH_EXPIRE, gererExpirationAuth);
 
+    // 🔄 Vérification périodique du profil (toutes les 30 secondes)
+    // Détecte les changements de rôle même sans action utilisateur
+    // Ex: super admin change le rôle dans un autre onglet
+    const INTERVALLE_VERIFICATION_MS = 30_000;
+    const idIntervalle = setInterval(async () => {
+      const token = obtenirTokenAcces();
+      if (!token) return; // Pas connecté, rien à vérifier
+
+      try {
+        // Appelle GET /api/v1/auth/moi → déclenche la vérification
+        // du rôle côté backend (JWT.role vs DB.role)
+        // Si le rôle a changé → 401 AUTH_001 → declencherEvenementAuthExpire()
+        await obtenirMonProfil();
+      } catch {
+        // Si erreur (rôle modifié, token expiré...),
+        // le client_api.ts aura déjà appelé declencherEvenementAuthExpire()
+        // et l'événement digiid:auth-expired aura déjà été traité
+      }
+    }, INTERVALLE_VERIFICATION_MS);
+
+    // 🔄 Vérification au retour sur l'onglet (visibility change)
+    // Quand l'utilisateur revient sur l'onglet après être allé
+    // voir la page super admin qui a changé son rôle
+    function gererVisibilite() {
+      if (document.visibilityState === "visible") {
+        const token = obtenirTokenAcces();
+        if (!token) return;
+
+        obtenirMonProfil().catch(() => {
+          // L'erreur est déjà gérée par client_api.ts → declencherEvenementAuthExpire()
+        });
+      }
+    }
+    document.addEventListener("visibilitychange", gererVisibilite);
+
     // Détecte le retour arrière du navigateur (BFCache)
     // Quand l'utilisateur revient en arrière après déconnexion, le token
     // est déjà effacé mais la page est restaurée sans re-exécuter le JS.
@@ -112,6 +147,8 @@ export function FournisseurAuthentification({
     }
     window.addEventListener("pageshow", gererPageshow);
     return () => {
+      clearInterval(idIntervalle);
+      document.removeEventListener("visibilitychange", gererVisibilite);
       window.removeEventListener("pageshow", gererPageshow);
       window.removeEventListener(EVENEMENT_AUTH_EXPIRE, gererExpirationAuth);
     };
