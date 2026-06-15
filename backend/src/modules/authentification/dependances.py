@@ -77,8 +77,13 @@ async def utilisateur_courant(
             message_utilisateur="Session invalide.",
         )
 
-    # 🔒 Vérification de révocation de token après changement de rôle
-    # (La colonne date_dernier_changement_role sera ajoutée via migration Alembic)
+    # 🔒 Vérification : si le rôle dans le JWT diffère du rôle en base,
+    #     le token a été émis AVANT un changement de rôle → invalidation
+    if contenu.role != utilisateur.role:
+        raise ErreurAuthentification(
+            f"Rôle modifié depuis l'émission du token : JWT={contenu.role}, DB={utilisateur.role}",
+            message_utilisateur="Votre rôle a été modifié. Veuillez vous reconnecter.",
+        )
 
     return utilisateur
 
