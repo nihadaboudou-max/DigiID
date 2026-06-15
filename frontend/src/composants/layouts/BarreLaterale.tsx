@@ -467,8 +467,21 @@ export function BarreLaterale() {
     ? (utilisateur.prenom.charAt(0) + (utilisateur.nom?.charAt(0) || "")).toUpperCase()
     : utilisateur.email?.charAt(0).toUpperCase() || "?";
 
+  const estPro = utilisateur.role === "medecin" || utilisateur.role === "agent" || utilisateur.role === "police" || utilisateur.role === "ong";
+
+  const estDansProfilCitoyen =
+    pathname === "/tableau-de-bord" ||
+    pathname === "/profil" ||
+    pathname === "/chatbot" ||
+    pathname === "/parametres" ||
+    pathname.startsWith("/score") ||
+    pathname === "/parrainage" ||
+    pathname.startsWith("/attestations-communautaires") ||
+    pathname.startsWith("/identite") ||
+    pathname === "/verification-visuelle";
+
   return (
-    <aside className="hidden md:flex md:flex-col w-60 bg-white border-r border-ardoise-clair/10">
+    <aside className="hidden md:flex md:flex-col w-60 h-screen sticky top-0 bg-white border-r border-ardoise-clair/10">
       {/* En-tête section — profil utilisateur */}
       <div className="px-4 pt-5 pb-4 border-b border-ardoise-clair/10">
         <div className="flex items-center gap-3">
@@ -491,10 +504,10 @@ export function BarreLaterale() {
         </div>
       </div>
 
-      {/* Barre de navigation */}
-      <nav className="flex-1 overflow-y-auto px-2.5 py-4 space-y-3">
-        {/* Liens principaux */}
-        <div className="space-y-1">
+      {/* Barre de navigation — scrollable */}
+      <nav className="flex-1 overflow-y-auto px-2.5 py-3 space-y-1">
+        {/* Liens principaux du rôle */}
+        <div className="space-y-0.5">
           {liens.map((lien) => (
             <LienNav
               key={lien.href}
@@ -506,73 +519,67 @@ export function BarreLaterale() {
           ))}
         </div>
 
-        {/* Menu citoyen — Uniquement pour les citoyens */}
-        {utilisateur.role === "citoyen" && (
+        {/* Menu citoyen complet — visible pour TOUS les profils */}
+        {(utilisateur.role === "citoyen" || estPro) && (
           <>
-            <div className="border-t border-ardoise-clair/10 my-2" />
+            <div className="border-t border-ardoise-clair/10 my-1.5" />
 
-            {/* Menu Score — Suivi et amélioration */}
-            <GroupeScore pathname={pathname} />
+            {/* Si pro : groupe pliable 'Mon espace personnel' */}
+            {estPro ? (
+              <GroupePlie
+                estActif={estDansProfilCitoyen}
+                icone={IconeAccueil}
+                titre="Mon espace personnel"
+                initialOuvert={estDansProfilCitoyen}
+              >
+                {/* Liens citoyens de base */}
+                <div className="space-y-0.5">
+                  <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
+                    Navigation
+                  </p>
+                  {[
+                    { href: "/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
+                    { href: "/profil",          libelle: "Mon profil",      Icone: IconeUtilisateur },
+                    { href: "/chatbot",         libelle: "Assistant",       Icone: IconeChat },
+                    { href: "/parametres",      libelle: "Paramètres",      Icone: IconeParametres },
+                  ].map((lien) => {
+                    const actif = pathname === lien.href;
+                    return (
+                      <Link
+                        key={lien.href}
+                        href={lien.href}
+                        className={clsx(
+                          "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
+                          actif
+                            ? "bg-sable/60 text-lagune font-medium"
+                            : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
+                        )}
+                      >
+                        <lien.Icone className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="truncate">{lien.libelle}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
 
-        <div className="border-t border-ardoise-clair/10 my-2" />
-
-            {/* Menu Attestations Communautaires */}
-            <GroupeAttestations pathname={pathname} />
-
-        <div className="border-t border-ardoise-clair/10 my-2" />
-
-            {/* Menu Identité */}
-            <GroupeIdentite pathname={pathname} />
+                <div className="mt-1" />
+                <GroupeScore pathname={pathname} />
+                <GroupeAttestations pathname={pathname} />
+                <GroupeIdentite pathname={pathname} />
+              </GroupePlie>
+            ) : (
+              /* Citoyen : tout affiché directement */
+              <>
+                <GroupeScore pathname={pathname} />
+                <div className="border-t border-ardoise-clair/10 my-1.5" />
+                <GroupeAttestations pathname={pathname} />
+                <div className="border-t border-ardoise-clair/10 my-1.5" />
+                <GroupeIdentite pathname={pathname} />
+              </>
+            )}
           </>
         )}
       </nav>
-
-      {/* Pied — raccourci espace personnel */}
-      {(estSuperAdmin || estAdmin || utilisateur.role === "medecin" || utilisateur.role === "agent" || utilisateur.role === "police" || utilisateur.role === "ong") && (
-        <div className="px-3 py-3 border-t border-ardoise-clair/10 mt-auto bg-sable/30">
-          <p className="text-[10px] uppercase text-ardoise-clair/40 font-semibold tracking-wider px-3 mb-1.5">
-            Mon espace personnel
-          </p>
-          <Link
-            href="/tableau-de-bord"
-            className={clsx(
-              "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200",
-              pathname === "/tableau-de-bord" || pathname === "/profil" || pathname === "/score"
-                ? "bg-sable text-lagune font-semibold"
-                : "text-ardoise-clair/60 hover:text-ardoise hover:bg-sable/60",
-            )}
-          >
-            <div className={clsx(
-              "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-              pathname === "/tableau-de-bord" || pathname === "/profil" || pathname === "/score"
-                ? "bg-lagune text-white"
-                : "bg-sable-clair text-ardoise-clair"
-            )}>
-              <IconeAccueil className="w-4 h-4" />
-            </div>
-            <span>Mon profil citoyen</span>
-          </Link>
-          <Link
-            href="/profil"
-            className={clsx(
-              "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 mt-1",
-              pathname === "/profil"
-                ? "bg-sable text-lagune font-semibold"
-                : "text-ardoise-clair/60 hover:text-ardoise hover:bg-sable/60",
-            )}
-          >
-            <div className={clsx(
-              "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-              pathname === "/profil"
-                ? "bg-lagune text-white"
-                : "bg-sable-clair text-ardoise-clair"
-            )}>
-              <IconeUtilisateur className="w-4 h-4" />
-            </div>
-            <span>Paramètres du compte</span>
-          </Link>
-        </div>
-      )}
     </aside>
   );
 }
