@@ -407,8 +407,9 @@ function Contenu() {
       setMontrerChangerRole(false);
       setMotifRole("");
       setProfilChoisi("");
+      setProfilSelectionne("");
 
-      // Mettre à jour l'utilisateur local
+      // Mettre à jour l'utilisateur local avec le nouveau rôle
       setSelectedUser({ ...selectedUser, role: nouveauRole });
 
       // Recharger les modules (avec overrides)
