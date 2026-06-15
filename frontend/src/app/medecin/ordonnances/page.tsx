@@ -33,8 +33,12 @@ function Contenu() {
   async function charger() {
     setChargement(true);
     try {
-      const [d, o] = await Promise.all([listerDossiers(), ...[]]);
-      setDossiers(await listerDossiers());
+      const [dossiersData, ordonnancesData] = await Promise.all([
+        listerDossiers(),
+        Promise.resolve([] as Ordonnance[]),
+      ]);
+      setDossiers(dossiersData);
+      setOrdonnances(ordonnancesData);
     } catch {}
     finally { setChargement(false); }
   }

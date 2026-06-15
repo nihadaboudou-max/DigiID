@@ -87,7 +87,7 @@ function Contenu() {
             {beneficiaires.slice(0, 5).map((b) => (
               <div key={b.id} className="flex items-center justify-between p-3 bg-sable rounded-lg">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-teal-500/10 flex items-center justify-center text-teal-600 font-bold">
+                  <div className="w-10 h-10 rounded-full bg-ocre/10 flex items-center justify-center text-ocre font-bold">
                     {b.nom.split(" ").map((n) => n[0]).join("").slice(0, 2)}
                   </div>
                   <div>
@@ -129,8 +129,8 @@ function Contenu() {
       </div>
 
       {beneficiaires.length === 0 && !chargementStats && (
-        <div className="bg-teal-500/10 border-l-4 border-teal-500 p-4 rounded">
-          <p className="text-sm text-teal-700">Bienvenue ! Commencez par ajouter vos premiers beneficiaires et programmes.</p>
+        <div className="bg-ocre/10 border-l-4 border-ocre p-4 rounded">
+          <p className="text-sm text-ocre-fonce">Bienvenue ! Commencez par ajouter vos premiers beneficiaires et programmes.</p>
         </div>
       )}
     </div>

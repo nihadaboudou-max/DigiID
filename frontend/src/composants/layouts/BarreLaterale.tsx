@@ -431,19 +431,23 @@ export function BarreLaterale() {
       { href: "/police/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
       { href: "/police/verification", libelle: "Vérification", Icone: IconeBouclier },
       { href: "/police/recherche", libelle: "Recherche", Icone: IconeScan },
+      { href: "/police/signalement", libelle: "Signalements", Icone: IconeAlerte },
+      { href: "/police/audit", libelle: "Audit", Icone: IconeJournal },
     ];
     titreSection = "Forces de l'ordre";
-    couleurLabel = "text-indigo-600";
-    accentColor = "bg-indigo-500";
+    couleurLabel = "text-terre";
+    accentColor = "bg-terre";
   } else if (utilisateur.role === "ong") {
     liens = [
       { href: "/ong/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
       { href: "/ong/beneficiaires", libelle: "Bénéficiaires", Icone: IconeUtilisateur },
+      { href: "/ong/programme", libelle: "Programmes", Icone: IconeStatistique },
+      { href: "/ong/missions", libelle: "Missions terrain", Icone: IconeEnvoyer },
       { href: "/ong/attestations", libelle: "Attestations", Icone: IconeCheck },
     ];
     titreSection = "ONG Partenaire";
-    couleurLabel = "text-teal-600";
-    accentColor = "bg-teal-500";
+    couleurLabel = "text-ocre";
+    accentColor = "bg-ocre";
   } else {
     liens = LIENS_UTILISATEUR;
     titreSection = "Navigation";

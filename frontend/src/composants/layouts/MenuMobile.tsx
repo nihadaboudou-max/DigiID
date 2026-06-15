@@ -107,13 +107,45 @@ export function BoutonMenuMobile() {
 
   const estSuperAdminRole = utilisateur.role === "super_administrateur";
   const estAdminRole = utilisateur.role === "administrateur";
+  const estMedecin = utilisateur.role === "medecin";
+  const estAgent = utilisateur.role === "agent";
+  const estPolice = utilisateur.role === "police";
+  const estOng = utilisateur.role === "ong";
+  const estProfessionnel = estMedecin || estAgent || estPolice || estOng;
 
   const initiales = utilisateur.prenom
     ? (utilisateur.prenom.charAt(0) + (utilisateur.nom?.charAt(0) || "")).toUpperCase()
     : utilisateur.email?.charAt(0).toUpperCase() || "?";
 
-  const couleurSection = estSuperAdminRole ? "text-ocre" : estAdminRole ? "text-terre" : "text-lagune";
-  const bgCercle = estSuperAdminRole ? "bg-ocre" : estAdminRole ? "bg-terre" : "bg-lagune";
+  let couleurSection = "text-lagune";
+  let bgCercle = "bg-lagune";
+  let titreSection = "Menu";
+
+  if (estSuperAdminRole) {
+    couleurSection = "text-ocre";
+    bgCercle = "bg-ocre";
+    titreSection = "Super admin";
+  } else if (estAdminRole) {
+    couleurSection = "text-terre";
+    bgCercle = "bg-terre";
+    titreSection = "Admin";
+  } else if (estMedecin) {
+    couleurSection = "text-lagune";
+    bgCercle = "bg-lagune";
+    titreSection = "Espace médical";
+  } else if (estAgent) {
+    couleurSection = "text-lagune";
+    bgCercle = "bg-lagune";
+    titreSection = "Agent terrain";
+  } else if (estPolice) {
+    couleurSection = "text-terre";
+    bgCercle = "bg-terre";
+    titreSection = "Forces de l'ordre";
+  } else if (estOng) {
+    couleurSection = "text-ocre";
+    bgCercle = "bg-ocre";
+    titreSection = "ONG Partenaire";
+  }
 
   return (
     <>
@@ -151,7 +183,7 @@ export function BoutonMenuMobile() {
                   </div>
                   <div>
                     <p className={clsx("text-xs uppercase tracking-wider font-bold", couleurSection)}>
-                      {estSuperAdminRole ? "Super admin" : estAdminRole ? "Admin" : "Menu"}
+                      {titreSection}
                     </p>
                     <p className="text-sm text-ardoise truncate max-w-[140px]">
                       {utilisateur.prenom || utilisateur.email}
@@ -537,8 +569,174 @@ export function BoutonMenuMobile() {
                 </div>
               )}
 
-              {/* Utilisateur normal */}
-              {!estSuperAdminRole && !estAdminRole && (
+              {/* Rôles professionnels : Médecin */}
+              {estMedecin && (
+                <SectionPlieMobile
+                  titre="Espace médical"
+                  couleur="text-lagune"
+                  initialOuvert={true}
+                >
+                  <div className="pl-2">
+                    {[
+                      { href: "/medecin/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+                      { href: "/medecin/nouveau-dossier", libelle: "Nouveau dossier", Icone: IconeUtilisateur },
+                      { href: "/medecin/dossiers", libelle: "Dossiers patients", Icone: IconeStatistique },
+                      { href: "/medecin/ordonnances", libelle: "Ordonnances", Icone: IconeJournal },
+                      { href: "/medecin/attestations", libelle: "Attestations", Icone: IconeCheck },
+                    ].map(({ href, libelle, Icone }) => {
+                      const actif = pathname === href || pathname.startsWith(href);
+                      return (
+                        <Link
+                          key={href}
+                          href={href}
+                          onClick={() => setOuvert(false)}
+                          className={clsx(
+                            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                            actif
+                              ? "bg-sable text-lagune font-semibold"
+                              : "text-ardoise hover:bg-sable/60",
+                          )}
+                        >
+                          <div className={clsx(
+                            "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                            actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                          )}>
+                            <Icone className="w-3.5 h-3.5" />
+                          </div>
+                          <span>{libelle}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </SectionPlieMobile>
+              )}
+
+              {/* Rôles professionnels : Agent */}
+              {estAgent && (
+                <SectionPlieMobile
+                  titre="Agent terrain"
+                  couleur="text-lagune"
+                  initialOuvert={true}
+                >
+                  <div className="pl-2">
+                    {[
+                      { href: "/agent/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+                      { href: "/agent/enrolement", libelle: "Enrôlement", Icone: IconeUtilisateur },
+                      { href: "/agent/scan", libelle: "Scan CNI", Icone: IconeScan },
+                    ].map(({ href, libelle, Icone }) => {
+                      const actif = pathname === href || pathname.startsWith(href);
+                      return (
+                        <Link
+                          key={href}
+                          href={href}
+                          onClick={() => setOuvert(false)}
+                          className={clsx(
+                            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                            actif
+                              ? "bg-sable text-lagune font-semibold"
+                              : "text-ardoise hover:bg-sable/60",
+                          )}
+                        >
+                          <div className={clsx(
+                            "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                            actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                          )}>
+                            <Icone className="w-3.5 h-3.5" />
+                          </div>
+                          <span>{libelle}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </SectionPlieMobile>
+              )}
+
+              {/* Rôles professionnels : Police */}
+              {estPolice && (
+                <SectionPlieMobile
+                  titre="Forces de l'ordre"
+                  couleur="text-terre"
+                  initialOuvert={true}
+                >
+                  <div className="pl-2">
+                    {[
+                      { href: "/police/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+                      { href: "/police/verification", libelle: "Vérification", Icone: IconeBouclier },
+                      { href: "/police/recherche", libelle: "Recherche", Icone: IconeScan },
+                      { href: "/police/signalement", libelle: "Signalements", Icone: IconeAlerte },
+                      { href: "/police/audit", libelle: "Audit", Icone: IconeJournal },
+                    ].map(({ href, libelle, Icone }) => {
+                      const actif = pathname === href || pathname.startsWith(href);
+                      return (
+                        <Link
+                          key={href}
+                          href={href}
+                          onClick={() => setOuvert(false)}
+                          className={clsx(
+                            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                            actif
+                              ? "bg-sable text-lagune font-semibold"
+                              : "text-ardoise hover:bg-sable/60",
+                          )}
+                        >
+                          <div className={clsx(
+                            "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                            actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                          )}>
+                            <Icone className="w-3.5 h-3.5" />
+                          </div>
+                          <span>{libelle}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </SectionPlieMobile>
+              )}
+
+              {/* Rôles professionnels : ONG */}
+              {estOng && (
+                <SectionPlieMobile
+                  titre="ONG Partenaire"
+                  couleur="text-ocre"
+                  initialOuvert={true}
+                >
+                  <div className="pl-2">
+                    {[
+                      { href: "/ong/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+                      { href: "/ong/beneficiaires", libelle: "Bénéficiaires", Icone: IconeUtilisateur },
+                      { href: "/ong/programme", libelle: "Programmes", Icone: IconeStatistique },
+                      { href: "/ong/missions", libelle: "Missions terrain", Icone: IconeEnvoyer },
+                      { href: "/ong/attestations", libelle: "Attestations", Icone: IconeCheck },
+                    ].map(({ href, libelle, Icone }) => {
+                      const actif = pathname === href || pathname.startsWith(href);
+                      return (
+                        <Link
+                          key={href}
+                          href={href}
+                          onClick={() => setOuvert(false)}
+                          className={clsx(
+                            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                            actif
+                              ? "bg-sable text-lagune font-semibold"
+                              : "text-ardoise hover:bg-sable/60",
+                          )}
+                        >
+                          <div className={clsx(
+                            "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                            actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                          )}>
+                            <Icone className="w-3.5 h-3.5" />
+                          </div>
+                          <span>{libelle}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </SectionPlieMobile>
+              )}
+
+              {/* Citoyen — utilisateur normal */}
+              {!estSuperAdminRole && !estAdminRole && !estProfessionnel && (
                 <div>
                   <SectionPlieMobile
                     titre="Navigation"
