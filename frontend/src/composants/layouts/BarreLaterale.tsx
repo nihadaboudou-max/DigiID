@@ -408,6 +408,42 @@ export function BarreLaterale() {
     titreSection = "Administration";
     couleurLabel = "text-terre";
     accentColor = "bg-terre";
+  } else if (utilisateur.role === "medecin") {
+    liens = [
+      { href: "/medecin/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/medecin/nouveau-dossier", libelle: "Nouveau dossier", Icone: IconeUtilisateur },
+      { href: "/medecin/dossiers", libelle: "Dossiers patients", Icone: IconeStatistique },
+    ];
+    titreSection = "Espace médical";
+    couleurLabel = "text-lagune";
+    accentColor = "bg-lagune";
+  } else if (utilisateur.role === "agent") {
+    liens = [
+      { href: "/agent/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/agent/enrolement", libelle: "Enrôlement", Icone: IconeUtilisateur },
+      { href: "/agent/scan", libelle: "Scan CNI", Icone: IconeScan },
+    ];
+    titreSection = "Agent terrain";
+    couleurLabel = "text-lagune";
+    accentColor = "bg-lagune";
+  } else if (utilisateur.role === "police") {
+    liens = [
+      { href: "/police/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/police/verification", libelle: "Vérification", Icone: IconeBouclier },
+      { href: "/police/recherche", libelle: "Recherche", Icone: IconeScan },
+    ];
+    titreSection = "Forces de l'ordre";
+    couleurLabel = "text-indigo-600";
+    accentColor = "bg-indigo-500";
+  } else if (utilisateur.role === "ong") {
+    liens = [
+      { href: "/ong/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/ong/beneficiaires", libelle: "Bénéficiaires", Icone: IconeUtilisateur },
+      { href: "/ong/attestations", libelle: "Attestations", Icone: IconeCheck },
+    ];
+    titreSection = "ONG Partenaire";
+    couleurLabel = "text-teal-600";
+    accentColor = "bg-teal-500";
   } else {
     liens = LIENS_UTILISATEUR;
     titreSection = "Navigation";
@@ -466,8 +502,8 @@ export function BarreLaterale() {
           ))}
         </div>
 
-        {/* Menu citoyen — Uniquement pour les utilisateurs standard */}
-        {!estSuperAdmin && !estAdmin && (
+        {/* Menu citoyen — Uniquement pour les citoyens */}
+        {utilisateur.role === "citoyen" && (
           <>
             <div className="border-t border-ardoise-clair/10 my-2" />
 

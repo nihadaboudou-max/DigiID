@@ -30,9 +30,22 @@ export const ROLES_INSTITUTIONNELS: RoleUtilisateur[] = [
  * Retourne le chemin du tableau de bord selon le rôle.
  */
 export function cheminTableauDeBord(role: RoleUtilisateur): string {
-  if (role === "super_administrateur") return "/super-admin/tableau-de-bord";
-  if (role === "administrateur") return "/admin/tableau-de-bord";
-  return "/tableau-de-bord";
+  switch (role) {
+    case "super_administrateur":
+      return "/super-admin/tableau-de-bord";
+    case "administrateur":
+      return "/admin/tableau-de-bord";
+    case "medecin":
+      return "/medecin/dashboard";
+    case "agent":
+      return "/agent/dashboard";
+    case "police":
+      return "/police/dashboard";
+    case "ong":
+      return "/ong/dashboard";
+    default:
+      return "/tableau-de-bord";
+  }
 }
 
 export interface Utilisateur {
