@@ -29,6 +29,68 @@ from src.noyau.journal import configurer_journal
 
 
 # -----------------------------------------------------------------------------
+# État global de l'initialisation
+# -----------------------------------------------------------------------------
+
+# Flag indiquant si l'initialisation de la base est terminée
+initialisation_terminee: bool = False
+
+
+async def _initialiser_base_en_arriere_plan():
+    """
+    Initialise la base de données en arrière-plan.
+
+    Cette fonction est lancée comme tâche asynchrone après que l'app
+    commence à accepter les requêtes. Cela permet de passer rapidement
+    le health check de Render (timeout 5s) pendant que l'init lourde
+    (création des tables, seed) se termine en arrière-plan.
+    """
+    global initialisation_terminee
+
+    try:
+        # Vérifier que la base répond
+        async with moteur_async.begin() as connexion:
+            from sqlalchemy import text
+            await connexion.execute(text("SELECT 1"))
+        journal.info("Connexion base de données : OK")
+
+        # Créer les tables si elles n'existent pas
+        from src.base_donnees.base import Base
+        async with moteur_async.begin() as connexion:
+            await connexion.run_sync(Base.metadata.create_all, checkfirst=True)
+        journal.info("Tables vérifiées/créées avec succès")
+
+        # Initialiser les feature flags
+        try:
+            from src.modules.super_admin.service_phase6 import initialiser_feature_flags_defaut
+            async with FabriqueSession() as session:
+                nb_flags = await initialiser_feature_flags_defaut(session)
+                if nb_flags > 0:
+                    journal.info(f"Feature flags initialisés : {nb_flags} flags créés")
+                else:
+                    journal.info("Feature flags déjà présents — aucune initialisation nécessaire")
+        except Exception as erreur:
+            journal.warning(f"Initialisation feature flags ignorée : {erreur}")
+
+        # Seed automatique
+        import os
+        try:
+            from src.base_donnees.seed import semer_roles, creer_super_admin_initial
+            journal.info("=== Tentative de seed automatique ===")
+            await semer_roles()
+            await creer_super_admin_initial()
+            journal.info("✅ Seed automatique effectué avec succès")
+        except Exception as erreur:
+            journal.error(f"❌ Seed automatique échoué : {erreur}", exc_info=True)
+
+        initialisation_terminee = True
+        journal.info("=== Initialisation terminée ===")
+    except Exception as erreur:
+        journal.error(f"Initialisation base échouée : {erreur}", exc_info=True)
+        initialisation_terminee = False
+
+
+# -----------------------------------------------------------------------------
 # Cycle de vie de l'application
 # -----------------------------------------------------------------------------
 
@@ -36,69 +98,31 @@ from src.noyau.journal import configurer_journal
 async def cycle_de_vie(application: FastAPI):
     """
     Code exécuté au démarrage et à l'arrêt de l'application.
+
+    L'initialisation lourde (DB, tables, seed) est lancée en arrière-plan
+    pour que l'app réponde immédiatement aux health checks de Render (5s timeout).
     """
     # === DÉMARRAGE ===
     configurer_journal()
     journal.info(f"=== Démarrage de {parametres.nom_application} ===")
     journal.info(f"Environnement : {parametres.environnement}")
     journal.info(f"Version API : {parametres.version_api}")
-    journal.info(f"Fournisseur LLM : {parametres.fournisseur_llm}")
 
-    # Vérifier que la base répond
-    try:
-        async with moteur_async.begin() as connexion:
-            from sqlalchemy import text
-            await connexion.execute(text("SELECT 1"))
-        journal.info("Connexion base de données : OK")
-    except Exception as erreur:
-        journal.error(f"Connexion base de données : ÉCHEC -- {erreur}")
-        raise
-
-    # Créer les tables si elles n'existent pas (indépendant de l'environnement)
-    # En production, Render ne crée pas les tables automatiquement.
-    try:
-        from src.base_donnees.base import Base
-        async with moteur_async.begin() as connexion:
-            await connexion.run_sync(Base.metadata.create_all, checkfirst=True)
-        journal.info("Tables vérifiées/créées avec succès")
-    except Exception as erreur:
-        journal.error(f"Impossible de créer/vérifier les tables : {erreur}")
-        raise
-
-    # Initialiser les feature flags par défaut si nécessaire
-    try:
-        from src.modules.super_admin.service_phase6 import initialiser_feature_flags_defaut
-        async with FabriqueSession() as session:
-            nb_flags = await initialiser_feature_flags_defaut(session)
-            if nb_flags > 0:
-                journal.info(f"Feature flags initialisés : {nb_flags} flags créés")
-            else:
-                journal.info("Feature flags déjà présents — aucune initialisation nécessaire")
-    except Exception as erreur:
-        journal.warning(f"Initialisation feature flags ignorée : {erreur}")
-
-    # Seed automatique (roles RBAC + super admin) en production si les variables sont définies
-    import os
-    seed_email = os.getenv("SEED_SUPER_ADMIN_EMAIL")
-    seed_password = os.getenv("SEED_SUPER_ADMIN_MOT_DE_PASSE")
+    # Lancer l'initialisation en arrière-plan
+    import asyncio
     
-    # Toujours tenter le seed, même sans variables (fallback défini dans seed.py)
-    try:
-        from src.base_donnees.seed import semer_roles, creer_super_admin_initial
-        journal.info("=== Tentative de seed automatique ===")
-        if seed_email and seed_password:
-            journal.info(f"Seed avec email={seed_email} depuis variables d'environnement")
-        else:
-            journal.warning("Variables SEED_SUPER_ADMIN absentes — utilisation des identifiants par défaut")
-        await semer_roles()
-        await creer_super_admin_initial()
-        journal.info("✅ Seed automatique effectué avec succès")
-    except Exception as erreur:
-        journal.error(f"❌ Seed automatique échoué : {erreur}", exc_info=True)
-        # Ne pas bloquer le démarrage de l'API — le seed peut être relancé
-        # via l'endpoint d'urgence POST /api/v1/auth/initialiser
+    # Stocker l'état d'initialisation sur l'application (accessible via request.app.state)
+    application.state.initialisation_terminee = False
+    
+    async def _mettre_a_jour_statut():
+        """Met à jour le statut d'initialisation sur l'app quand la tâche se termine."""
+        global initialisation_terminee
+        await _initialiser_base_en_arriere_plan()
+        application.state.initialisation_terminee = initialisation_terminee
+    
+    asyncio.create_task(_mettre_a_jour_statut())
 
-    yield  # === Application en service ===
+    yield  # === Application en service (accepte les requêtes immédiatement) ===
 
     # === ARRÊT ===
     journal.info("=== Arrêt de l'application ===")

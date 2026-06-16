@@ -11,7 +11,7 @@ sont effectivement opérationnels.
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,14 +30,18 @@ routeur_monitoring = APIRouter(
     summary="Vérification de santé légère (sans DB)",
     status_code=status.HTTP_200_OK,
 )
-async def sante_leger():
+async def sante_leger(requete: Request):
     """
     Health check léger : répond immédiatement sans dépendance externe.
     Utilisé par Docker HEALTHCHECK et Render pour vérifier
     que le processus est vivant, avant que la DB ne soit prête.
+
+    Retourne aussi l'état d'initialisation de l'application.
     """
+    init_terminee = getattr(requete.app.state, "initialisation_terminee", False)
     return {
         "statut": "ok",
+        "initialisation": "terminee" if init_terminee else "en_cours",
         "application": parametres.nom_application,
         "version": parametres.version_api,
         "environnement": parametres.environnement,
