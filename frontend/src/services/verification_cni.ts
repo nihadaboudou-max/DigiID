@@ -112,9 +112,20 @@ export async function uploaderCNI(
 
   const token = obtenirTokenAcces();
 
+  // Déterminer l'URL du backend : soit via le proxy Next.js (dev), soit direct (prod)
+  let urlUpload: string;
+  if (process.env.NODE_ENV === "production") {
+    // En production sur Render, on appelle le backend DIRECTEMENT
+    // car le proxy Next.js cause des ECONNRESET entre services Render
+    urlUpload = "https://digiid-backend.onrender.com/api/v1/utilisateur/verification-cni/upload";
+  } else {
+    // En dev, on passe par le proxy Next.js
+    urlUpload = "/api/backend/api/v1/utilisateur/verification-cni/upload";
+  }
+
   let reponse: Response;
   try {
-    reponse = await fetch("/api/backend/api/v1/utilisateur/verification-cni/upload", {
+    reponse = await fetch(urlUpload, {
       method: "POST",
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       body: formData,
