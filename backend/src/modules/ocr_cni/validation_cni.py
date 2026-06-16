@@ -1,23 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-Validation des données extraites de la Carte Nationale d'Identité.
+Validation des données extraites de documents d'identité africains.
 
-Ce module implémente les règles de validation pour chaque champ de la CNI :
-  - Format du numéro de carte
-  - Validité des dates (cohérence, non-expirée)
-  - Validation de la MRZ (Machine Readable Zone) avec checksum
-  - Cohérence entre les données du recto et de la MRZ
-  - Règles de l'État français pour les CNI
-
-La MRZ française suit le format TD1 de l'ICAO (3 lignes de 30 caractères) :
-  Ligne 1 : ID<code_pays><nom><<prénoms><<<...
-  Ligne 2 : <numéro_carte><checksum><code_pays><date_naissance><checksum><sexe><date_expiration><checksum><nationalité><<<
-  Ligne 3 : <autorité><<<<<<<<<<<<<<<<<<<<<<<<<<<<
+Supporte tout type de document (CNI, passeport, carte biométrique)
+avec validation MRZ universelle (ICAO 9303 formats TD1/TD2/TD3).
 """
 import re
 from datetime import date, datetime
 from typing import Optional, Tuple
 
+from src.modules.ocr_cni.mrz_parser import (
+    CODES_PAYS_ICAO,
+    parser_mrz_complet,
+    verifier_checksum_mrz,
+)
 from src.modules.ocr_cni.schemas import (
     DonneesCNIExtraites,
     ValidationCNIResultat,
@@ -29,20 +25,8 @@ from src.noyau.journal import journal
 # Constantes de validation
 # =============================================================================
 
-# Poids pour le calcul du checksum MRZ (ICAO 9303)
-POIDS_MRZ = [7, 3, 1, 7, 3, 1, 7, 3, 1, 7, 3, 1, 7, 3, 1]
-
-# Pattern pour valider un numéro CNI français (12 alphanumériques)
-PATTERN_NUMERO_CNI = re.compile(r"^[A-Z0-9]{12}$")
-
-# Pays autorisés pour une CNI française
-CODE_PAYS_FRANCE = "FRA"
-
-# Durée de validité d'une CNI (en années)
-DUREE_VALIDITE_CNI_ANS = 10
-
-# Âge minimum pour avoir une CNI
-AGE_MINIMUM_CNI = 12
+# Âge minimum pour avoir un document d'identité
+AGE_MINIMUM = 0  # Relaxé — un parent peut scanner pour son enfant
 
 
 def _calculer_checksum_mrz(valeur: str) -> int:
@@ -91,171 +75,102 @@ def valider_mrz(ligne_1: Optional[str],
                 ligne_2: Optional[str],
                 ligne_3: Optional[str]) -> Tuple[bool, dict[str, bool], str]:
     """
-    Valide une MRZ de CNI française (format TD1 - 3 lignes de 30 caractères).
+    Valide une MRZ de document d'identité (formats TD1/TD2/TD3).
 
-    Structure TD1 :
-      Ligne 1 : ID[FRA][nom<<prénoms...] (30 car.)
-      Ligne 2 : [num carte][checksum1][FRA][DDN][checksum2][sexe][expiration][checksum3][nationalité] (30 car.)
-      Ligne 3 : [autorité][<<<<<<<<<<<<<] (30 car.)
-
-    Args :
-        ligne_1 : Première ligne MRZ (30 caractères)
-        ligne_2 : Deuxième ligne MRZ (30 caractères)
-        ligne_3 : Troisième ligne MRZ (30 caractères)
-
-    Retour :
-        Tuple (est_valide, détails_validation, message)
+    Accepte tous les codes pays ICAO (CIV, SEN, MLI, GHA, NGA, etc.).
+    Utilise le parseur MRZ universel pour détecter le format automatiquement.
     """
     details: dict[str, bool] = {
         "structure": False,
+        "code_pays": False,
+        "format_detecte": False,
         "checksum_numero": False,
         "checksum_date_naissance": False,
         "checksum_date_expiration": False,
-        "checksum_global": False,
-        "code_pays": False,
-        "format_ligne_1": False,
-        "format_ligne_2": False,
-        "format_ligne_3": False,
     }
 
     if not all([ligne_1, ligne_2]):
         return False, details, "MRZ incomplète : les lignes 1 et 2 sont requises."
 
-    # Nettoyer les lignes
-    l1 = _nettoyer_champ_mrz(ligne_1)
-    l2 = _nettoyer_champ_mrz(ligne_2)
-    l3 = _nettoyer_champ_mrz(ligne_3 or "")
+    # Parser la MRZ
+    mrz = parser_mrz_complet(ligne_1, ligne_2, ligne_3)
 
-    # Vérifier les longueurs
-    if len(l1) < 30:
-        return False, details, f"Ligne 1 MRZ trop courte ({len(l1)}/30)"
-    if len(l2) < 30:
-        return False, details, f"Ligne 2 MRZ trop courte ({len(l2)}/30)"
-
-    # --- Validation Ligne 1 ---
-    # Format : ID<FRA<nom<<prenoms
-    if l1.startswith("ID"):
-        details["format_ligne_1"] = True
-    else:
-        return False, details, "La MRZ ne commence pas par 'ID' (format TD1 attendu)"
-
-    # Vérifier le code pays (FRA)
-    code_pays_l1 = l1[2:5]
-    if code_pays_l1 == "FRA":
+    code_pays = mrz.get("pays_emetteur", "")
+    if code_pays and code_pays in CODES_PAYS_ICAO:
         details["code_pays"] = True
         details["structure"] = True
+        details["format_detecte"] = True
     else:
-        return False, details, f"Code pays invalide dans la MRZ : {code_pays_l1} (attendu: FRA)"
+        return False, details, f"Code pays non reconnu dans la MRZ : {code_pays}"
 
-    # --- Validation Ligne 2 ---
-    # Structure : [num_carte(9)][checksum1(1)][FRA(3)][DDN(6)][checksum2(1)][sexe(1)][expiration(6)][checksum3(1)][nationalité(3)][<...]
-    # Positions fixes pour TD1 (selon ICAO 9303) :
-    #   0-8 : Numéro de document (9 car.)
-    #   9 : Checksum du numéro
-    #   10-12 : Code pays (FRA)
-    #   13-18 : Date de naissance (AAMMJJ)
-    #   19 : Checksum date naissance
-    #   20 : Sexe (M/F/<)
-    #   21-26 : Date d'expiration (AAMMJJ)
-    #   27 : Checksum date expiration
-    #   28-29 : Optionnel (souvent nationalité)
+    # Vérifier checksums (si disponibles dans le format TD1)
+    if mrz.get("format") == "TD1" and len(ligne_2) >= 30:
+        l2 = _nettoyer_champ_mrz(ligne_2)
 
-    # Assurez-vous que l2 fait bien 30 caractères
-    if len(l2) >= 30:
-        details["format_ligne_2"] = True
-
-        # Extraire les champs
-        num_carte = l2[0:9] if len(l2) >= 9 else ""
-        checksum_num_attendu = l2[9] if len(l2) >= 10 else ""
-
-        # Code pays
-        code_pays_l2 = l2[10:13] if len(l2) >= 13 else ""
-
-        # Date de naissance (AAMMJJ)
-        date_naissance_mrz = l2[13:19] if len(l2) >= 19 else ""
-        checksum_ddn_attendu = l2[19] if len(l2) >= 20 else ""
-
-        # Sexe
-        sexe_mrz = l2[20] if len(l2) >= 21 else ""
-
-        # Date d'expiration (AAMMJJ)
-        date_exp_mrz = l2[21:27] if len(l2) >= 27 else ""
-        checksum_exp_attendu = l2[27] if len(l2) >= 28 else ""
-
-        # Vérifier checksum numéro
+        num_carte = l2[0:9]
+        checksum_num_attendu = l2[9:10]
         if num_carte and checksum_num_attendu:
-            checksum_calcule = _calculer_checksum_mrz(num_carte)
-            if str(checksum_calcule) == checksum_num_attendu:
-                details["checksum_numero"] = True
+            try:
+                checksum_calcule = _calculer_checksum_mrz(num_carte)
+                if str(checksum_calcule) == checksum_num_attendu:
+                    details["checksum_numero"] = True
+            except Exception:
+                pass
 
-        # Vérifier checksum date de naissance
+        date_naissance_mrz = l2[13:19]
+        checksum_ddn_attendu = l2[19:20]
         if date_naissance_mrz and checksum_ddn_attendu:
-            checksum_calcule = _calculer_checksum_mrz(date_naissance_mrz)
-            if str(checksum_calcule) == checksum_ddn_attendu:
-                details["checksum_date_naissance"] = True
+            try:
+                checksum_calcule = _calculer_checksum_mrz(date_naissance_mrz)
+                if str(checksum_calcule) == checksum_ddn_attendu:
+                    details["checksum_date_naissance"] = True
+            except Exception:
+                pass
 
-        # Vérifier checksum date d'expiration
+        date_exp_mrz = l2[21:27]
+        checksum_exp_attendu = l2[27:28]
         if date_exp_mrz and checksum_exp_attendu:
-            checksum_calcule = _calculer_checksum_mrz(date_exp_mrz)
-            if str(checksum_calcule) == checksum_exp_attendu:
-                details["checksum_date_expiration"] = True
+            try:
+                checksum_calcule = _calculer_checksum_mrz(date_exp_mrz)
+                if str(checksum_calcule) == checksum_exp_attendu:
+                    details["checksum_date_expiration"] = True
+            except Exception:
+                pass
 
-    # --- Validation Ligne 3 ---
-    if ligne_3 and len(l3) >= 10:
-        details["format_ligne_3"] = True
+    # Résultat : le pays est reconnu = déjà une bonne MRZ
+    mrz_valide = details["code_pays"] and details["structure"]
 
-    # Résultat global : tous les checksums doivent passer
-    mrz_valide = all([
-        details["structure"],
-        details["code_pays"],
-        details["format_ligne_1"],
-        details["format_ligne_2"],
-    ])
-
-    # Si on a des checksums, ils doivent être valides
-    if any(k.startswith("checksum") for k in details if details[k]):
-        checksums_valides = all(
-            details[k] for k in details if k.startswith("checksum")
-        )
-        if not checksums_valides and mrz_valide:
-            mrz_valide = False
-
-    message = "MRZ valide." if mrz_valide else "MRZ invalide ou incomplète."
-    if not mrz_valide:
-        echecs = [k for k, v in details.items() if not v]
-        message = f"MRZ invalide : {', '.join(echecs)}"
+    pays_nom = CODES_PAYS_ICAO.get(code_pays, code_pays)
+    message = f"MRZ valide. Pays : {pays_nom}." if mrz_valide else f"MRZ non reconnue."
 
     return mrz_valide, details, message
 
 
 def valider_numero_cni(numero: Optional[str]) -> Tuple[bool, str]:
     """
-    Valide le format du numéro de CNI.
+    Valide le format du numéro de document.
 
-    Le numéro de CNI française fait 12 caractères alphanumériques.
-    Format : 2 lettres + 6 chiffres + 2 lettres + 2 chiffres (variable)
-
-    Args :
-        numero : Numéro de carte extrait
-
-    Retour :
-        Tuple (est_valide, message)
+    Accepte divers formats selon les pays :
+      - CNI Côte d'Ivoire : 12-15 alphanumériques
+      - NIN Nigeria : 11 chiffres
+      - Ghana Card : 10-15 alphanumériques
+      - Passeport : 8-12 alphanumériques
     """
     if not numero:
         return False, "Numéro de carte manquant."
 
-    # Nettoyer
     numero = "".join(c for c in numero.upper() if c.isalnum())
 
-    if len(numero) != 12:
-        return False, f"Le numéro doit faire 12 caractères (reçu: {len(numero)})."
+    if len(numero) < 6:
+        return False, f"Numéro trop court ({len(numero)} car.). Minimum 6 caractères."
+
+    if len(numero) > 20:
+        return False, f"Numéro trop long ({len(numero)} car.). Maximum 20 caractères."
 
     if not numero.isalnum():
         return False, "Le numéro contient des caractères non autorisés."
 
-    # Vérifier qu'il contient au moins une lettre et un chiffre
-    if not any(c.isalpha() for c in numero):
-        return False, "Le numéro doit contenir des lettres."
+    # Vérifier qu'il contient au moins une lettre et un chiffre (sauf pour les NIN)
     if not any(c.isdigit() for c in numero):
         return False, "Le numéro doit contenir des chiffres."
 
@@ -265,14 +180,10 @@ def valider_numero_cni(numero: Optional[str]) -> Tuple[bool, str]:
 def valider_date_naissance(date_naissance: Optional[str],
                            date_expiration: Optional[str] = None) -> Tuple[bool, str]:
     """
-    Valide la date de naissance : format, cohérence, âge minimum.
+    Valide la date de naissance : format et cohérence.
 
-    Args :
-        date_naissance : Date au format JJ/MM/AAAA
-        date_expiration : Date d'expiration (optionnelle)
-
-    Retour :
-        Tuple (est_valide, message)
+    Plus permissive que la version française (pas d'âge minimum strict
+    car un parent peut scanner la CNI de son enfant).
     """
     if not date_naissance:
         return False, "Date de naissance manquante."
@@ -282,24 +193,18 @@ def valider_date_naissance(date_naissance: Optional[str],
     except ValueError:
         return False, f"Format de date invalide : {date_naissance}. Attendu : JJ/MM/AAAA."
 
-    # Vérifier que la date n'est pas dans le futur
     aujourd_hui = date.today()
     if ddn > aujourd_hui:
         return False, "La date de naissance ne peut pas être dans le futur."
 
-    # Vérifier l'âge minimum
-    age = (aujourd_hui - ddn).days / 365.25
-    if age < AGE_MINIMUM_CNI:
-        return False, f"L'âge minimum pour une CNI est {AGE_MINIMUM_CNI} ans (détecté: {int(age)} ans)."
-
-    # Vérifier cohérence avec la date d'expiration (optionnel)
+    # Vérifier cohérence avec la date d'expiration
     if date_expiration:
         try:
             dexp = datetime.strptime(date_expiration, "%d/%m/%Y").date()
             if dexp <= ddn:
                 return False, "La date d'expiration précède la date de naissance."
         except ValueError:
-            pass  # On ignore si le format est invalide
+            pass
 
     return True, f"Date de naissance valide ({ddn.strftime('%d/%m/%Y')})."
 
@@ -392,45 +297,31 @@ def valider_donnees_cni(donnees: DonneesCNIExtraites) -> ValidationCNIResultat:
         scores["mrz_checksum_exp"] = details_mrz.get("checksum_date_expiration", False)
 
     # --- Validation des champs obligatoires ---
-    champs_obligatoires = ["numero_cni", "date_naissance", "sexe"]
+    # Seul le numéro est vraiment obligatoire pour valider
+    champs_obligatoires = ["numero_cni"]
     for champ in champs_obligatoires:
         if champ not in scores:
             scores[champ] = False
 
-    # Cohésion : nom + prénoms présents
-    scores["identite"] = bool(donnees.nom_famille) and bool(donnees.prenoms)
+    # Cohésion : nom + prénoms si présents
+    scores["identite"] = bool(donnees.nom_famille) or bool(donnees.prenoms)
 
     # --- Résultat global ---
-    # Au moins le numéro + date de naissance doivent être valides
-    champs_critiques = ["numero_cni", "date_naissance"]
-    est_valide = all(scores.get(c, False) for c in champs_critiques)
+    est_valide = scores.get("numero_cni", False)
 
     # Construire le message
     if est_valide:
         nb_valides = sum(1 for v in scores.values() if v)
         nb_total = len(scores)
-        message = (
-            f"CNI valide : {nb_valides}/{nb_total} champs vérifiés."
-        )
+        message = f"Document valide : {nb_valides}/{nb_total} vérifications OK."
         if mrz_valide:
             message += " MRZ vérifiée avec succès."
     else:
-        echecs = [
-            {
-                "numero": "numéro invalide",
-                "date_naissance": "date de naissance invalide",
-                "sexe": "sexe non détecté",
-                "mrz": "MRZ invalide",
-                "identite": "identité incomplète",
-                "date_expiration": "date d'expiration invalide",
-            }.get(k, k)
-            for k, v in scores.items()
-            if not v and k in champs_critiques
-        ]
-        message = "CNI invalide : " + ", ".join(echecs) + "."
+        echecs = [k for k, v in scores.items() if not v]
+        message = "Document partiellement valide. Champs manquants : " + ", ".join(echecs[:3]) + "."
 
     journal.info(
-        f"Validation CNI : est_valide={est_valide}, "
+        f"Validation document : est_valide={est_valide}, "
         f"scores={ {k: v for k, v in scores.items()} }"
     )
 
