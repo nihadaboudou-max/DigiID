@@ -34,32 +34,52 @@ function Contenu() {
   const [erreur, setErreur] = useState("");
   const [succes, setSucces] = useState("");
 
-  // Nettoyage camera au demontage
+  // Nettoyage camera au demontage (complement du useEffect mode)
   useEffect(() => {
     return () => {
       if (videoRef.current?.srcObject) {
         (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+        videoRef.current.srcObject = null;
       }
     };
   }, []);
 
-  // Demarrage de la camera
-  const demarrerCamera = useCallback(async () => {
-    try {
-      setErreur("");
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setCameraActive(true);
-      setMode("camera");
-    } catch {
-      setErreur("Impossible d acceder a la camera. Verifie les permissions.");
-    }
+  // Passe en mode camera (le useEffect demarrera le flux automatiquement)
+  const demarrerCamera = useCallback(() => {
+    setErreur("");
+    setMode("camera");
   }, []);
+
+  // Demarre/arrete le flux camera quand le mode change
+  useEffect(() => {
+    if (mode !== "camera") return;
+
+    let stream: MediaStream | null = null;
+
+    (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+        });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+        setCameraActive(true);
+      } catch {
+        setErreur("Impossible d acceder a la camera. Verifie les permissions.");
+        setMode("choix");
+      }
+    })();
+
+    // Nettoyage : arreter la camera en quittant le mode
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+      }
+      setCameraActive(false);
+    };
+  }, [mode]);
 
   // Arret de la camera
   const arreterCamera = useCallback(() => {
@@ -211,27 +231,31 @@ function Contenu() {
 
         {/* ---------- MODE CAMERA ---------- */}
         {mode === "camera" && (
-          <div className="space-y-4">
-            <div className="relative rounded-xl overflow-hidden bg-black/5 border border-ardoise-clair/10">
+          <div className="space-y-4 apparition">
+            <div className="relative rounded-xl overflow-hidden bg-black border border-ardoise-clair/10">
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
-                className="w-full max-h-80 object-contain"
+                muted
+                className="w-full h-80 object-cover"
               />
-              <div className="absolute inset-0 border-4 border-ocre/40 rounded-xl pointer-events-none" />
+              {/* Cadre guide */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-64 h-40 border-2 border-ocre/60 rounded-lg" />
+              </div>
+              <p className="absolute bottom-3 left-0 right-0 text-center text-xs text-white/70 drop-shadow-md">
+                Place la CNI dans le cadre
+              </p>
             </div>
             <div className="flex items-center justify-center gap-4">
               <Bouton variante="primaire" onClick={capturerPhoto}>
-                📸 Capturer la photo
+                📸 Capturer
               </Bouton>
               <Bouton variante="ghost" onClick={reinitialiser}>
                 Annuler
               </Bouton>
             </div>
-            <p className="text-xs text-ardoise-clair text-center">
-              Place la CNI dans le cadre et assure-toi que la lumiere est bonne.
-            </p>
           </div>
         )}
 
