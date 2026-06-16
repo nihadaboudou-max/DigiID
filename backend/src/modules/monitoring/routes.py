@@ -8,14 +8,13 @@ L'endpoint /sante est public (utilisé par Docker, load balancers, etc.).
 Il vérifie en profondeur que tous les services dont dépend l'API
 sont effectivement opérationnels.
 """
+import asyncio
 from datetime import datetime, timezone
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Request, status
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.base_donnees.session import obtenir_session_optionnelle
+from src.base_donnees.session import moteur_async
 from src.config import parametres
 
 
@@ -54,16 +53,15 @@ async def sante_leger(requete: Request):
     summary="Vérification de santé complète",
     status_code=status.HTTP_200_OK,
 )
-async def sante(
-    requete: Request,
-    session: Annotated[AsyncSession | None, Depends(obtenir_session_optionnelle)],
-):
+async def sante(requete: Request):
     """
-    Health check complet : vérifie la DB si disponible,
-    sinon retourne un statut dégradé.
+    Health check complet : vérifie la DB avec timeout,
+    retourne un statut dégradé si la DB n'est pas prête.
 
     S'adapte au cas où la DB n'est pas encore prête
     (initialisation en arrière-plan sur Render Free).
+    Ne dépend d'aucune session FastAPI pour éviter les
+    blocages liés au pool de connexions.
     """
     init_terminee = getattr(requete.app.state, "initialisation_terminee", False)
     statut_global = "ok"
@@ -71,17 +69,19 @@ async def sante(
         "initialisation": "terminee" if init_terminee else "en_cours",
     }
 
-    # Vérification base de données (optionnelle)
-    if session is not None:
-        try:
-            resultat = await session.execute(text("SELECT 1"))
-            resultat.scalar()
-            details["base_donnees"] = "ok"
-        except Exception as erreur:
-            details["base_donnees"] = f"erreur : {erreur}"
-            statut_global = "degrade"
-    else:
-        details["base_donnees"] = "non_verifiee"
+    # Vérification base de données avec timeout court
+    try:
+        async def _verifier_db():
+            async with moteur_async.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+        await asyncio.wait_for(_verifier_db(), timeout=2.0)
+        details["base_donnees"] = "ok"
+    except asyncio.TimeoutError:
+        details["base_donnees"] = "timeout"
+        statut_global = "degrade"
+    except Exception as erreur:
+        details["base_donnees"] = f"erreur : {erreur}"
+        statut_global = "degrade"
 
     return {
         "statut": statut_global,

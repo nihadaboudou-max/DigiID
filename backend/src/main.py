@@ -96,31 +96,32 @@ async def cycle_de_vie(application: FastAPI):
     journal.info(f"Environnement : {parametres.environnement}")
     journal.info(f"Version API : {parametres.version_api}")
 
-    # Créer les tables IMMÉDIATEMENT (avant yield) pour que les endpoints
-    # qui dépendent de la DB (upload CNI, auth, etc.) fonctionnent dès le
-    # premier health check. create_all avec checkfirst=True est rapide
-    # (sub-seconde) quand les tables existent déjà.
-    try:
-        from src.base_donnees.base import Base
-        async with moteur_async.begin() as connexion:
-            from sqlalchemy import text
-            await connexion.execute(text("SELECT 1"))
-            await connexion.run_sync(Base.metadata.create_all, checkfirst=True)
-        journal.info("Tables vérifiées/créées avec succès")
-    except Exception as erreur:
-        journal.error(f"Échec création tables : {erreur}")
-        raise  # Ne pas démarrer si les tables ne peuvent pas être créées
-
-    # Lancer le seed (lourd) en arrière-plan
+    # Lancer l'initialisation complète en arrière-plan
+    # Render Free PostgreSQL peut être lent au démarrage d'une nouvelle instance.
+    # Au lieu de bloquer le yield (ce qui cause 'connection reset by peer'
+    # quand Render sonde le health check avant que l'app ne soit prête),
+    # on laisse l'app démarrer immédiatement et on initialise la DB en tâche
+    # de fond. Les endpoints vérifient l'état via request.app.state.init.
     application.state.initialisation_terminee = False
     
-    async def _mettre_a_jour_statut():
-        """Met à jour le statut d'initialisation sur l'app quand la tâche se termine."""
+    async def demarrer():
+        """Initialisation complète en arrière-plan."""
         global initialisation_terminee
+        try:
+            from src.base_donnees.base import Base
+            async with moteur_async.begin() as connexion:
+                from sqlalchemy import text
+                await connexion.execute(text("SELECT 1"))
+                await connexion.run_sync(Base.metadata.create_all, checkfirst=True)
+            journal.info("Tables vérifiées/créées avec succès")
+        except Exception as erreur:
+            journal.error(f"Tables non créées (mode dégradé) : {erreur}")
+        
+        # Seed et feature flags (enchaînés)
         await _initialiser_base_en_arriere_plan()
         application.state.initialisation_terminee = initialisation_terminee
     
-    asyncio.create_task(_mettre_a_jour_statut())
+    asyncio.create_task(demarrer())
 
     yield  # === Application en service (accepte les requêtes immédiatement) ===
 
