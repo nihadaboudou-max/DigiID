@@ -59,7 +59,11 @@ Thumbs.db
 .cache/
 .parcel-cache/
 
+# --- Dossier DigiID imbrique (copie accidentelle du projet) ---
+/DigiID/
+
 # --- Fichiers temporaires ---
 *.tmp
 *.bak
 *.backup
+tmp/
