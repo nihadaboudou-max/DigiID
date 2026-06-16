@@ -111,11 +111,21 @@ export async function uploaderCNI(
   formData.append("face", face);
 
   const token = obtenirTokenAcces();
-  const reponse = await fetch("/api/backend/api/v1/utilisateur/verification-cni/upload", {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: formData,
-  });
+
+  let reponse: Response;
+  try {
+    reponse = await fetch("/api/backend/api/v1/utilisateur/verification-cni/upload", {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: formData,
+    });
+  } catch (erreur: unknown) {
+    // Erreur réseau : backend injoignable (crash, timeout, DNS...)
+    const message = erreur instanceof TypeError
+      ? "Le serveur backend est inaccessible. Vérifie qu'il est bien lancé sur Render."
+      : (erreur as Error)?.message || "Erreur réseau lors de l'upload";
+    throw new ErreurAPI("RESEAU", message, 0);
+  }
 
   if (!reponse.ok) {
     let erreur: any = {};
