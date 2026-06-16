@@ -101,7 +101,7 @@ def _compter_champs_extraits(donnees: DonneesCNIExtraites) -> int:
 
 async def _enregistrer_verification(
     session: AsyncSession,
-    utilisateur_id: UUID,
+    utilisateur: Utilisateur,
     face: str,
     nom_fichier: str,
     type_mime: str,
@@ -112,7 +112,7 @@ async def _enregistrer_verification(
 ) -> VerificationCNI:
     """Enregistre une vérification CNI en base de données."""
     verification = VerificationCNI(
-        utilisateur_id=utilisateur_id,
+        utilisateur_id=utilisateur.id,
         face=face,
         nom_fichier=nom_fichier,
         type_mime=type_mime,
@@ -219,7 +219,7 @@ async def traiter_upload_cni(
     # 6. Enregistrer en base
     verification = await _enregistrer_verification(
         session=session,
-        utilisateur_id=utilisateur.id,
+        utilisateur=utilisateur,
         face=face,
         nom_fichier=nom_fichier,
         type_mime=fichier.content_type or "image/jpeg",
