@@ -58,21 +58,48 @@ function Contenu() {
 
     (async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
-        });
+        // Meilleure qualite possible : utiliser la camera arriere avec
+        // contrainte exacte pour eviter les resolutions interpolees
+        const contraintes: MediaStreamConstraints = {
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { min: 1280, ideal: 2560 },
+            height: { min: 720, ideal: 1440 },
+            aspectRatio: { ideal: 1.7777777778 },
+          },
+        };
+
+        stream = await navigator.mediaDevices.getUserMedia(contraintes);
+
+        // Appliquer la meilleure resolution disponible
+        const piste = stream.getVideoTracks()[0];
+        if (piste && piste.applyConstraints) {
+          try {
+            const capacites: any = piste.getCapabilities?.();
+            if (capacites?.focusMode?.includes?.("continuous")) {
+              await piste.applyConstraints({ advanced: [{ focusMode: "continuous" }] } as any);
+            }
+          } catch {
+            // Optimisation non supportee — pas grave
+          }
+        }
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
         }
         setCameraActive(true);
-      } catch {
-        setErreur("Impossible d acceder a la camera. Verifie les permissions.");
+      } catch (err: any) {
+        const msg = err?.name === "NotAllowedError"
+          ? "Permission camera refusee. Autorise l acces dans les parametres du navigateur."
+          : err?.name === "NotFoundError"
+          ? "Aucune camera trouvee sur cet appareil."
+          : "Impossible d acceder a la camera. Verifie les permissions.";
+        setErreur(msg);
         setMode("choix");
       }
     })();
 
-    // Nettoyage : arreter la camera en quittant le mode
     return () => {
       if (stream) {
         stream.getTracks().forEach(t => t.stop());
@@ -90,24 +117,35 @@ function Contenu() {
     setCameraActive(false);
   }, []);
 
-  // Capture photo depuis la camera
+  // Capture photo depuis la camera avec meilleure qualite
   const capturerPhoto = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+
+    // Utiliser la resolution native de la video (max 4K)
+    const maxW = Math.min(video.videoWidth, 3840);
+    const maxH = Math.min(video.videoHeight, 2160);
+    canvas.width = maxW;
+    canvas.height = maxH;
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+
+    // Desactiver lissage pour maximiser la nettete du texte OCR
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(video, 0, 0, maxW, maxH);
+
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.98);
     setPreview(dataUrl);
-    // Convertir dataUrl en File
+
+    // Convertir en File (qualite max pour OCR)
     canvas.toBlob((blob) => {
       if (blob) {
         setFichier(new File([blob], "capture_cni.jpg", { type: "image/jpeg" }));
       }
-    }, "image/jpeg", 0.92);
+    }, "image/jpeg", 0.95);
+
     arreterCamera();
     setMode("apercu");
   }, [arreterCamera]);
@@ -134,17 +172,32 @@ function Contenu() {
     setSucces("");
     setResultat(null);
     try {
+      console.log(`📤 Upload CNI : ${fichier.name} (${(fichier.size / 1024).toFixed(0)} Ko)`);
       const r = await uploaderCNI(fichier, "recto");
+      console.log(`📥 Reponse : ${r.statut} — ${r.message}`);
       setResultat(r);
+
       if (r.statut === "approuve") {
         setSucces("✅ CNI analysee avec succes !");
       } else if (r.resultat_ocr?.succes) {
         setSucces("✅ OCR reussi — verification en cours");
       } else {
-        setErreur("L OCR n a pas pu extraire les donnees. Essaie une autre photo.");
+        const nbChamps = r.resultat_ocr?.champs_extraits ?? 0;
+        const erreurs = r.resultat_ocr?.erreurs ?? [];
+        const detail = erreurs.length > 0
+          ? ` ${erreurs.slice(0, 2).join(", ")}`
+          : ` Seulement ${nbChamps} champ(s) extrait(s).`;
+        setErreur(`L OCR n a pas pu extraire les donnees.${detail} Essaie une photo mieux cadree et mieux eclairee.`);
       }
     } catch (e: any) {
-      setErreur(e?.message || "Erreur lors du scan");
+      console.error("❌ Erreur upload:", e);
+      if (e?.name === "ErreurAPI" && e?.code_http === 413) {
+        setErreur("La photo est trop volumineuse. Redimensionne-la ou utilise une resolution plus basse.");
+      } else if (e?.code_erreur === "RESEAU") {
+        setErreur("Le serveur backend est inaccessible. Verifie qu il est bien lance.");
+      } else {
+        setErreur(e?.message || "Erreur inconnue lors de l upload");
+      }
     } finally {
       setChargement(false);
     }
@@ -240,11 +293,17 @@ function Contenu() {
                 muted
                 className="w-full h-80 object-cover"
               />
-              {/* Cadre guide */}
+              {/* Surbrillance sombre avec cadre lumineux */}
+              <div className="absolute inset-0 bg-black/10 pointer-events-none" />
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-64 h-40 border-2 border-ocre/60 rounded-lg" />
+                <div className="w-64 h-40 border-2 border-ocre/70 rounded-lg shadow-[0_0_0_999px_rgba(0,0,0,0.3)]" />
               </div>
-              <p className="absolute bottom-3 left-0 right-0 text-center text-xs text-white/70 drop-shadow-md">
+              <div className="absolute top-3 left-3 right-3 flex justify-between pointer-events-none">
+                <span className="text-[10px] bg-black/50 text-white px-2 py-1 rounded">🧹 Bien a plat</span>
+                <span className="text-[10px] bg-black/50 text-white px-2 py-1 rounded">☀️ Bon eclairage</span>
+                <span className="text-[10px] bg-black/50 text-white px-2 py-1 rounded">📐 Cadree</span>
+              </div>
+              <p className="absolute bottom-3 left-0 right-0 text-center text-sm text-white font-semibold drop-shadow-lg">
                 Place la CNI dans le cadre
               </p>
             </div>
@@ -255,6 +314,12 @@ function Contenu() {
               <Bouton variante="ghost" onClick={reinitialiser}>
                 Annuler
               </Bouton>
+            </div>
+            <div className="bg-ocre/5 border border-ocre/20 p-3 rounded-lg">
+              <p className="text-xs text-ardoise-clair text-center">
+                💡 <strong>Conseils :</strong> pose la CNI sur un fond sombre et uni,
+                evite les reflets, assure-toi que le texte est bien lisible.
+              </p>
             </div>
           </div>
         )}
