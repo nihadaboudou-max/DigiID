@@ -39,28 +39,15 @@ initialisation_terminee: bool = False
 
 async def _initialiser_base_en_arriere_plan():
     """
-    Initialise la base de données en arrière-plan.
+    Initialisation lourde en arrière-plan (seed, feature flags).
 
-    Cette fonction est lancée comme tâche asynchrone après que l'app
-    commence à accepter les requêtes. Cela permet de passer rapidement
-    le health check de Render (timeout 5s) pendant que l'init lourde
-    (création des tables, seed) se termine en arrière-plan.
+    La création des tables est déjà faite dans cycle_de_vie avant yield.
+    Cette fonction ne fait que le seed (rôles, super admin) et les
+    feature flags, qui peuvent prendre du temps.
     """
     global initialisation_terminee
 
     try:
-        # Vérifier que la base répond
-        async with moteur_async.begin() as connexion:
-            from sqlalchemy import text
-            await connexion.execute(text("SELECT 1"))
-        journal.info("Connexion base de données : OK")
-
-        # Créer les tables si elles n'existent pas
-        from src.base_donnees.base import Base
-        async with moteur_async.begin() as connexion:
-            await connexion.run_sync(Base.metadata.create_all, checkfirst=True)
-        journal.info("Tables vérifiées/créées avec succès")
-
         # Initialiser les feature flags
         try:
             from src.modules.super_admin.service_phase6 import initialiser_feature_flags_defaut
@@ -109,9 +96,22 @@ async def cycle_de_vie(application: FastAPI):
     journal.info(f"Environnement : {parametres.environnement}")
     journal.info(f"Version API : {parametres.version_api}")
 
-    # Lancer l'initialisation en arrière-plan
-    
-    # Stocker l'état d'initialisation sur l'application (accessible via request.app.state)
+    # Créer les tables IMMÉDIATEMENT (avant yield) pour que les endpoints
+    # qui dépendent de la DB (upload CNI, auth, etc.) fonctionnent dès le
+    # premier health check. create_all avec checkfirst=True est rapide
+    # (sub-seconde) quand les tables existent déjà.
+    try:
+        from src.base_donnees.base import Base
+        async with moteur_async.begin() as connexion:
+            from sqlalchemy import text
+            await connexion.execute(text("SELECT 1"))
+            await connexion.run_sync(Base.metadata.create_all, checkfirst=True)
+        journal.info("Tables vérifiées/créées avec succès")
+    except Exception as erreur:
+        journal.error(f"Échec création tables : {erreur}")
+        raise  # Ne pas démarrer si les tables ne peuvent pas être créées
+
+    # Lancer le seed (lourd) en arrière-plan
     application.state.initialisation_terminee = False
     
     async def _mettre_a_jour_statut():
