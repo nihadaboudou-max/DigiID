@@ -175,15 +175,15 @@ class ParametresApplication(BaseSettings):
         mot_de_passe = f":{self.redis_mot_de_passe}@" if self.redis_mot_de_passe else ""
         return f"redis://{mot_de_passe}{self.redis_host}:{self.redis_port}/0"
 
-        @property
+    @property
     def liste_origines_autorisees(self) -> List[str]:
         """
         Convertit la chaîne CSV en liste pour FastAPI CORS.
-        En production, ajoute automatiquement l'URL du frontend Render.
+        Inclut toujours le frontend Render pour que l'upload direct fonctionne.
         """
         origines = [o.strip() for o in self.origines_autorisees.split(",") if o.strip()]
-        if self.est_production:
-            # Ajouter le frontend Render pour que l upload direct fonctionne
+        # Toujours ajouter le frontend Render (meme si ENVIRONNEMENT != production)
+        if "https://digiid-frontend.onrender.com" not in origines:
             origines.append("https://digiid-frontend.onrender.com")
         return origines
 
