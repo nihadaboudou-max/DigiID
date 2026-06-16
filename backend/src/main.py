@@ -10,6 +10,7 @@ Assemblage final :
   - Routeur principal v1
   - Documentation OpenAPI auto-générée
 """
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -109,7 +110,6 @@ async def cycle_de_vie(application: FastAPI):
     journal.info(f"Version API : {parametres.version_api}")
 
     # Lancer l'initialisation en arrière-plan
-    import asyncio
     
     # Stocker l'état d'initialisation sur l'application (accessible via request.app.state)
     application.state.initialisation_terminee = False
@@ -212,8 +212,6 @@ async def racine():
         "documentation": "/docs" if not parametres.est_production else "désactivée en production",
         "sante": "/api/v1/sante",
     }
-
-
 
 
 # -----------------------------------------------------------------------------

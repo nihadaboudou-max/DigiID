@@ -6,7 +6,7 @@ Une session est créée par requête HTTP (dépendance FastAPI),
 puis fermée automatiquement à la fin. Les transactions sont
 gérées explicitement par les services métier.
 """
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -57,6 +57,26 @@ async def obtenir_session() -> AsyncGenerator[AsyncSession, None]:
             raise
         finally:
             await session.close()
+
+
+async def obtenir_session_optionnelle() -> AsyncGenerator[Optional[AsyncSession], None]:
+    """
+    Dépendance optionnelle qui retourne None si la DB n'est pas disponible.
+    Utilisée par le health check pour ne pas planter si la DB est en cours
+    d'initialisation (Render Free).
+    """
+    try:
+        async with FabriqueSession() as session:
+            try:
+                yield session
+            except Exception:
+                await session.rollback()
+                raise
+            finally:
+                await session.close()
+    except Exception as erreur:
+        journal.warning(f"Session DB indisponible (health check) : {erreur}")
+        yield None
 
 
 async def initialiser_base_donnees() -> None:

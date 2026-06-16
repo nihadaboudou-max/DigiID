@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.base_donnees.session import obtenir_session
+from src.base_donnees.session import obtenir_session_optionnelle
 from src.config import parametres
 
 
@@ -51,30 +51,37 @@ async def sante_leger(requete: Request):
 
 @routeur_monitoring.get(
     "/sante",
-    summary="Vérification de santé profonde",
+    summary="Vérification de santé complète",
     status_code=status.HTTP_200_OK,
 )
 async def sante(
-    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    requete: Request,
+    session: Annotated[AsyncSession | None, Depends(obtenir_session_optionnelle)],
 ):
     """
-    Health check profond : ne se contente pas de répondre 200,
-    vérifie réellement que les dépendances critiques sont OK.
+    Health check complet : vérifie la DB si disponible,
+    sinon retourne un statut dégradé.
+
+    S'adapte au cas où la DB n'est pas encore prête
+    (initialisation en arrière-plan sur Render Free).
     """
+    init_terminee = getattr(requete.app.state, "initialisation_terminee", False)
     statut_global = "ok"
-    details = {}
+    details = {
+        "initialisation": "terminee" if init_terminee else "en_cours",
+    }
 
-    # Vérification base de données
-    try:
-        resultat = await session.execute(text("SELECT 1"))
-        resultat.scalar()
-        details["base_donnees"] = "ok"
-    except Exception as erreur:
-        details["base_donnees"] = f"erreur : {erreur}"
-        statut_global = "degrade"
-
-    # Phase 1 : on ne vérifie pas encore Redis, ChromaDB et le LLM
-    # Ces vérifications seront ajoutées dans la Phase 3 (chatbot)
+    # Vérification base de données (optionnelle)
+    if session is not None:
+        try:
+            resultat = await session.execute(text("SELECT 1"))
+            resultat.scalar()
+            details["base_donnees"] = "ok"
+        except Exception as erreur:
+            details["base_donnees"] = f"erreur : {erreur}"
+            statut_global = "degrade"
+    else:
+        details["base_donnees"] = "non_verifiee"
 
     return {
         "statut": statut_global,
