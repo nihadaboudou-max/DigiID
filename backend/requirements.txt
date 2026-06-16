@@ -65,7 +65,7 @@ opencv-python-headless==4.9.0.80
 pillow==10.2.0
 
 # --- OCR (CNI, documents, cartes d'identité) ---
-# pytesseract==0.3.10  # Désactivé pour Render Free (nécessite Tesseract système)
+pytesseract==0.3.10  # OCR Tesseract (nécessite tesseract-ocr système)
 
 # --- Utilitaires ---
 python-dateutil==2.8.2

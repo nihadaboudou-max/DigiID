@@ -39,6 +39,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
     curl \
+    tesseract-ocr \
+    tesseract-ocr-fra \
+    tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash digiid
 
