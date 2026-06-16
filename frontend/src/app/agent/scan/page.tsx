@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
@@ -21,15 +21,93 @@ export default function ScanPage() {
 
 function Contenu() {
   const { can } = useRoleUI();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const [mode, setMode] = useState<"choix" | "camera" | "apercu">("choix");
   const [fichier, setFichier] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [cameraActive, setCameraActive] = useState(false);
   const [chargement, setChargement] = useState(false);
   const [resultat, setResultat] = useState<ReponseUploadCNI | null>(null);
   const [erreur, setErreur] = useState("");
   const [succes, setSucces] = useState("");
 
-  async function handleScan() {
+  // Nettoyage camera au demontage
+  useEffect(() => {
+    return () => {
+      if (videoRef.current?.srcObject) {
+        (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+      }
+    };
+  }, []);
+
+  // Demarrage de la camera
+  const demarrerCamera = useCallback(async () => {
+    try {
+      setErreur("");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraActive(true);
+      setMode("camera");
+    } catch {
+      setErreur("Impossible d acceder a la camera. Verifie les permissions.");
+    }
+  }, []);
+
+  // Arret de la camera
+  const arreterCamera = useCallback(() => {
+    if (videoRef.current?.srcObject) {
+      (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+      videoRef.current.srcObject = null;
+    }
+    setCameraActive(false);
+  }, []);
+
+  // Capture photo depuis la camera
+  const capturerPhoto = useCallback(() => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    setPreview(dataUrl);
+    // Convertir dataUrl en File
+    canvas.toBlob((blob) => {
+      if (blob) {
+        setFichier(new File([blob], "capture_cni.jpg", { type: "image/jpeg" }));
+      }
+    }, "image/jpeg", 0.92);
+    arreterCamera();
+    setMode("apercu");
+  }, [arreterCamera]);
+
+  // Upload fichier depuis le disque
+  const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFichier(f);
+    setErreur("");
+    setResultat(null);
+    setSucces("");
+    const reader = new FileReader();
+    reader.onload = (ev) => setPreview(ev.target?.result as string);
+    reader.readAsDataURL(f);
+    setMode("apercu");
+  }, []);
+
+  // Lancer le scan OCR
+  const handleScan = useCallback(async () => {
     if (!fichier) return;
     setChargement(true);
     setErreur("");
@@ -50,19 +128,18 @@ function Contenu() {
     } finally {
       setChargement(false);
     }
-  }
+  }, [fichier]);
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setFichier(f);
-    setErreur("");
+  // Reinitialiser
+  const reinitialiser = useCallback(() => {
+    setFichier(null);
+    setPreview(null);
     setResultat(null);
+    setErreur("");
     setSucces("");
-    const reader = new FileReader();
-    reader.onload = (ev) => setPreview(ev.target?.result as string);
-    reader.readAsDataURL(f);
-  }
+    setMode("choix");
+    arreterCamera();
+  }, [arreterCamera]);
 
   if (!can.scanCNI) {
     return (
@@ -90,37 +167,76 @@ function Contenu() {
       <div>
         <p className="text-ocre text-sm uppercase font-semibold tracking-wider">Agent terrain</p>
         <h1 className="mt-1">Scan de carte d identite</h1>
-        <p className="text-ardoise-clair mt-2">Utilise le module OCR pour extraire les donnees de la CNI.</p>
+        <p className="text-ardoise-clair mt-2">Prends une photo ou selectionne un fichier pour extraire les donnees de la CNI par OCR.</p>
       </div>
 
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
       {succes && <Alerte variante="succes">{succes}</Alerte>}
 
-      {/* Upload photo */}
       <Carte titre="Scanner une CNI">
-        <p className="text-sm text-ardoise-clair mb-4">
-          Prends en photo le <strong>recto</strong> de la carte d identite ou selectionne un fichier.
-        </p>
-
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          capture="environment"
-          onChange={handleFile}
-          className="hidden"
-        />
-
-        {!preview ? (
-          <div
-            onClick={() => inputRef.current?.click()}
-            className="border-2 border-dashed border-ardoise-clair/30 rounded-xl p-12 text-center bg-sable/50 cursor-pointer hover:border-ocre/40 hover:bg-ocre/5 transition-all"
-          >
-            <p className="text-4xl mb-2">📸</p>
-            <p className="text-sm text-ardoise font-semibold">Clique pour choisir une photo</p>
-            <p className="text-xs text-ardoise-clair mt-1">JPG, PNG, WEBP — ou utilise l appareil photo</p>
+        {/* ---------- MODE CHOIX ---------- */}
+        {mode === "choix" && (
+          <div className="flex flex-col items-center gap-4 py-6">
+            <p className="text-sm text-ardoise-clair mb-2">Choisis une methode :</p>
+            <div className="flex flex-wrap gap-4 justify-center">
+              <button
+                onClick={demarrerCamera}
+                className="flex flex-col items-center gap-3 p-8 rounded-xl border-2 border-ardoise-clair/10 hover:border-ocre/40 hover:bg-ocre/5 transition-all w-48"
+                type="button"
+              >
+                <span className="text-5xl">📷</span>
+                <span className="text-sm font-semibold text-ardoise">Prendre une photo</span>
+                <span className="text-xs text-ardoise-clair">Utilise l appareil photo</span>
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex flex-col items-center gap-3 p-8 rounded-xl border-2 border-ardoise-clair/10 hover:border-ocre/40 hover:bg-ocre/5 transition-all w-48"
+                type="button"
+              >
+                <span className="text-5xl">📁</span>
+                <span className="text-sm font-semibold text-ardoise">Choisir un fichier</span>
+                <span className="text-xs text-ardoise-clair">JPG, PNG, WEBP</span>
+              </button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              capture="environment"
+              onChange={handleFile}
+              className="hidden"
+            />
           </div>
-        ) : (
+        )}
+
+        {/* ---------- MODE CAMERA ---------- */}
+        {mode === "camera" && (
+          <div className="space-y-4">
+            <div className="relative rounded-xl overflow-hidden bg-black/5 border border-ardoise-clair/10">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                className="w-full max-h-80 object-contain"
+              />
+              <div className="absolute inset-0 border-4 border-ocre/40 rounded-xl pointer-events-none" />
+            </div>
+            <div className="flex items-center justify-center gap-4">
+              <Bouton variante="primaire" onClick={capturerPhoto}>
+                📸 Capturer la photo
+              </Bouton>
+              <Bouton variante="ghost" onClick={reinitialiser}>
+                Annuler
+              </Bouton>
+            </div>
+            <p className="text-xs text-ardoise-clair text-center">
+              Place la CNI dans le cadre et assure-toi que la lumiere est bonne.
+            </p>
+          </div>
+        )}
+
+        {/* ---------- MODE APERCU ---------- */}
+        {mode === "apercu" && preview && (
           <div className="space-y-4">
             <div className="relative">
               <img
@@ -129,25 +245,31 @@ function Contenu() {
                 className="max-h-72 mx-auto rounded-xl border border-ardoise-clair/10 shadow-sm"
               />
               <button
-                onClick={() => { setFichier(null); setPreview(null); setResultat(null); setSucces(""); setErreur(""); }}
+                onClick={reinitialiser}
                 className="absolute top-2 right-2 bg-terre text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-terre/80 transition-colors"
                 type="button"
               >
                 ✕
               </button>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 justify-center">
               <Bouton variante="primaire" chargement={chargement} onClick={handleScan}>
                 Lancer le scan OCR
               </Bouton>
-              <button
-                onClick={() => inputRef.current?.click()}
-                className="text-xs text-ocre hover:text-ocre/80 underline"
-                type="button"
-              >
-                Changer la photo
-              </button>
+              <Bouton variante="secondaire" onClick={demarrerCamera}>
+                Reprendre une photo
+              </Bouton>
+              <Bouton variante="ghost" onClick={() => fileInputRef.current?.click()}>
+                Changer le fichier
+              </Bouton>
             </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleFile}
+              className="hidden"
+            />
           </div>
         )}
       </Carte>
@@ -211,6 +333,9 @@ function Contenu() {
       </div>
 
       <Link href="/agent/dashboard"><Bouton variante="ghost">Retour</Bouton></Link>
+
+      {/* Canvas cache pour capture */}
+      <canvas ref={canvasRef} className="hidden" />
     </div>
   );
 }
