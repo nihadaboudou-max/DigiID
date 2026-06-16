@@ -213,10 +213,7 @@ async def racine():
         "sante": "/api/v1/sante",
     }
 
-@application.get("/api/v1/sante", tags=["Racine"])
-async def sante_racine():
-    """Redirection vers le health check complet."""
-    return {"message": "Utilisez /api/v1/sante pour le health check complet"}
+
 
 
 # -----------------------------------------------------------------------------
