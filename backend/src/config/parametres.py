@@ -78,7 +78,7 @@ class ParametresApplication(BaseSettings):
     activer_metriques_prometheus: bool = True
 
     # --- CORS ---
-        origines_autorisees: str = "http://localhost:3000,https://digiid-frontend.onrender.com"
+    origines_autorisees: str = "http://localhost:3000,https://digiid-frontend.onrender.com"
     url_frontend: str = "https://digiid-frontend.onrender.com"
 
     # --- Limitations de débit ---
