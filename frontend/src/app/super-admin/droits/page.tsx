@@ -288,30 +288,22 @@ function Contenu() {
         if (newReadOnly) newEnabled = true;
       }
 
-      // 1. Essayer de mettre à jour via l'API
-      try {
-        await mettreAJourModuleRole(module.role_name, {
-          module_key: module.module_key,
-          is_enabled: newEnabled,
-          is_read_only: newReadOnly,
-        });
-      } catch {
-        // Silencieux — on applique quand même localement
-      }
+      // 1. Mettre à jour via l'API
+      await mettreAJourModuleRole(module.role_name, {
+        module_key: module.module_key,
+        is_enabled: newEnabled,
+        is_read_only: newReadOnly,
+      });
 
       // 2. Créer un override individuel pour cet utilisateur
-      try {
-        await modifierOverridesUtilisateur(selectedUser.id, {
-          modules_overrides: {
-            [module.module_key]: {
-              is_enabled: newEnabled,
-              is_read_only: newReadOnly,
-            },
+      await modifierOverridesUtilisateur(selectedUser.id, {
+        modules_overrides: {
+          [module.module_key]: {
+            is_enabled: newEnabled,
+            is_read_only: newReadOnly,
           },
-        });
-      } catch {
-        // Silencieux
-      }
+        },
+      });
 
       // Mise à jour locale
       setModulesUtilisateur((prev) =>
@@ -352,11 +344,7 @@ function Contenu() {
         };
       });
 
-      try {
-        await modifierOverridesUtilisateur(selectedUser.id, { modules_overrides: overrides });
-      } catch {
-        // Silencieux
-      }
+      await modifierOverridesUtilisateur(selectedUser.id, { modules_overrides: overrides });
 
       // Mettre à jour l'affichage local
       setModulesUtilisateur(profil.modules);
