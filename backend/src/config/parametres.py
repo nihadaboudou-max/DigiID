@@ -78,8 +78,8 @@ class ParametresApplication(BaseSettings):
     activer_metriques_prometheus: bool = True
 
     # --- CORS ---
-    origines_autorisees: str = "http://localhost:3000,https://digiid-frontend.onrender.com"
-    url_frontend: str = "https://digiid-frontend.onrender.com"
+        origines_autorisees: str = "http://localhost:3000"
+        url_frontend: str = "http://localhost:3000"
 
     # --- Limitations de débit ---
     limite_requetes_par_minute_anonyme: int = 20
@@ -175,10 +175,17 @@ class ParametresApplication(BaseSettings):
         mot_de_passe = f":{self.redis_mot_de_passe}@" if self.redis_mot_de_passe else ""
         return f"redis://{mot_de_passe}{self.redis_host}:{self.redis_port}/0"
 
-    @property
+        @property
     def liste_origines_autorisees(self) -> List[str]:
-        """Convertit la chaîne CSV en liste pour FastAPI CORS."""
-        return [origine.strip() for origine in self.origines_autorisees.split(",") if origine.strip()]
+        """
+        Convertit la chaîne CSV en liste pour FastAPI CORS.
+        En production, ajoute automatiquement l'URL du frontend Render.
+        """
+        origines = [o.strip() for o in self.origines_autorisees.split(",") if o.strip()]
+        if self.est_production:
+            # Ajouter le frontend Render pour que l upload direct fonctionne
+            origines.append("https://digiid-frontend.onrender.com")
+        return origines
 
     @property
     def est_production(self) -> bool:
