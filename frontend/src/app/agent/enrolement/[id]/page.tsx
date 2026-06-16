@@ -184,7 +184,7 @@ function Contenu() {
               variante="primaire"
               chargement={envoi && message === ""}
               disabled={envoi}
-              onClick={() => mettreAJour({ statut: "valide", scan_cni: false, capture_biometrique: false })}
+              onClick={() => mettreAJour({ statut: "valide" })}
             >
               Valider l'enrolement
             </Bouton>

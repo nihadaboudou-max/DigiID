@@ -140,6 +140,9 @@ function Contenu() {
     setPreview(dataUrl);
 
     // Convertir en File (qualite max pour OCR)
+    setResultat(null);  // <-- reset du resultat precedent
+    setSucces("");      // <-- reset du message succes
+    setErreur("");      // <-- reset du message erreur
     canvas.toBlob((blob) => {
       if (blob) {
         setFichier(new File([blob], "capture_cni.jpg", { type: "image/jpeg" }));
@@ -148,12 +151,14 @@ function Contenu() {
 
     arreterCamera();
     setMode("apercu");
-  }, [arreterCamera]);
+  }, [arreterCamera, setPreview, setFichier, setResultat, setSucces, setErreur, setMode]);
 
   // Upload fichier depuis le disque
   const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
+    // Reset de la valeur pour permettre de re-sélectionner le même fichier
+    e.target.value = "";
     setFichier(f);
     setErreur("");
     setResultat(null);
@@ -246,6 +251,17 @@ function Contenu() {
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
       {succes && <Alerte variante="succes">{succes}</Alerte>}
 
+      {/* Input file UNIQUE et TOUJOURS present (hors flux conditionnel) */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        capture="environment"
+        onChange={handleFile}
+        className="hidden"
+        key="input-fichier-cni"
+      />
+
       <Carte titre="Scanner une CNI">
         {/* ---------- MODE CHOIX ---------- */}
         {mode === "choix" && (
@@ -271,14 +287,6 @@ function Contenu() {
                 <span className="text-xs text-ardoise-clair">JPG, PNG, WEBP</span>
               </button>
             </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              capture="environment"
-              onChange={handleFile}
-              className="hidden"
-            />
           </div>
         )}
 
@@ -352,13 +360,6 @@ function Contenu() {
                 Changer le fichier
               </Bouton>
             </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={handleFile}
-              className="hidden"
-            />
           </div>
         )}
       </Carte>

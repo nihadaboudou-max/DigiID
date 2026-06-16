@@ -103,7 +103,7 @@ function Contenu() {
           </div>
           {erreur && <p className="text-red-600 text-sm">{erreur}</p>}
           <Bouton variante="primaire" disabled={!nom || !prenom || !telephone || envoi} onClick={handleSubmit}>
-            {envoi ? "Enrolement..." : "Enrolemeter le citoyen"}
+            {envoi ? "Enrôlement..." : "Enrôler le citoyen"}
           </Bouton>
         </div>
       </Carte>

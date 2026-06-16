@@ -56,8 +56,8 @@ function Contenu() {
             <p className="text-xs text-ardoise-clair/60">(Integration camera a developper)</p>
           </div>
           <div className="mt-4 flex gap-2">
-            <Bouton variante="primaire" disabled>Prendre la photo</Bouton>
-            <Bouton variante="ghost" disabled>Importer</Bouton>
+            <Bouton variante="primaire" onClick={() => alert("📷 Intégration webcam en cours de déploiement")}>Prendre la photo</Bouton>
+            <Bouton variante="ghost" onClick={() => alert("📁 Sélection de fichier en cours de déploiement")}>Importer</Bouton>
           </div>
         </Carte>
 
@@ -68,7 +68,7 @@ function Contenu() {
             <p className="text-xs text-ardoise-clair/60">(Integration lecteur d empreinte a developper)</p>
           </div>
           <div className="mt-4">
-            <Bouton variante="primaire" disabled>Lancer le scan</Bouton>
+            <Bouton variante="primaire" onClick={() => alert("👆 Intégration lecteur d'empreinte en cours de déploiement")}>Lancer le scan</Bouton>
           </div>
         </Carte>
       </div>

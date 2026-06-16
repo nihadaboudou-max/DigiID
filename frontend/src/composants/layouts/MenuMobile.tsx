@@ -35,7 +35,7 @@ const LIENS_UTILISATEUR: Lien[] = [
 const LIENS_ADMIN: Lien[] = [
   { href: "/admin/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
   { href: "/admin/utilisateurs",    libelle: "Utilisateurs",     Icone: IconeUtilisateur },
-  { href: "/admin/attestations",    libelle: "Attestations",     Icone: IconeCheck },
+  { href: "/attestations-communautaires",    libelle: "Attestations",     Icone: IconeCheck },
   { href: "/admin/droits",          libelle: "Droits",           Icone: IconeBouclier },
   { href: "/admin/alertes",         libelle: "Alertes",          Icone: IconeAlerte },
   { href: "/admin/statistiques",    libelle: "Statistiques",     Icone: IconeStatistique },
@@ -47,7 +47,7 @@ const LIENS_SUPER_ADMIN: Lien[] = [
   { href: "/super-admin/statistiques",    libelle: "Statistiques",     Icone: IconeStatistique },
   { href: "/super-admin/utilisateurs",    libelle: "Utilisateurs",     Icone: IconeUtilisateur },
   { href: "/super-admin/administrateurs", libelle: "Administrateurs",  Icone: IconeBouclier },
-  { href: "/admin/attestations",          libelle: "Attestations",     Icone: IconeCheck },
+  { href: "/attestations-communautaires",          libelle: "Attestations",     Icone: IconeCheck },
   { href: "/super-admin/droits-ui",       libelle: "Droits UI",        Icone: IconeBouclier },
   { href: "/super-admin/droits",          libelle: "Droits",           Icone: IconeCle },
   { href: "/super-admin/audit",           libelle: "Journal d'audit",  Icone: IconeJournal },
@@ -764,6 +764,7 @@ export function BoutonMenuMobile() {
                         { href: "/agent/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
                         { href: "/agent/enrolement", libelle: "Enrôlement", Icone: IconeUtilisateur },
                         { href: "/agent/scan", libelle: "Scan CNI", Icone: IconeScan },
+                        { href: "/agent/capture", libelle: "Capture biométrique", Icone: IconeIdentite },
                       ].map(({ href, libelle, Icone }) => {
                         const actif = pathname === href || pathname.startsWith(href);
                         return (
