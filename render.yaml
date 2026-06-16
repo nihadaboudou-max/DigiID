@@ -19,7 +19,7 @@ services:
     dockerfilePath: backend/Dockerfile
     plan: free
     region: frankfurt
-    healthCheckPath: /api/v1/sante
+    healthCheckPath: /api/v1/sante-leger
     envVars:
       # --- Application ---
       - key: ENVIRONNEMENT

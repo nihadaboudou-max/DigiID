@@ -25,6 +25,10 @@ from src.noyau.journal import journal
 # Constantes de validation
 # =============================================================================
 
+# Poids pour le calcul du checksum MRZ (ICAO 9303)
+# Cycle de poids [7, 3, 1, 7, 3, 1, ...] pour la somme de contrôle
+POIDS_MRZ = [7, 3, 1, 7, 3, 1, 7, 3, 1, 7, 3, 1, 7, 3, 1]
+
 # Âge minimum pour avoir un document d'identité
 AGE_MINIMUM = 0  # Relaxé — un parent peut scanner pour son enfant
 

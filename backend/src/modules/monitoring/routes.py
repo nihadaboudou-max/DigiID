@@ -26,6 +26,26 @@ routeur_monitoring = APIRouter(
 
 
 @routeur_monitoring.get(
+    "/sante-leger",
+    summary="Vérification de santé légère (sans DB)",
+    status_code=status.HTTP_200_OK,
+)
+async def sante_leger():
+    """
+    Health check léger : répond immédiatement sans dépendance externe.
+    Utilisé par Docker HEALTHCHECK et Render pour vérifier
+    que le processus est vivant, avant que la DB ne soit prête.
+    """
+    return {
+        "statut": "ok",
+        "application": parametres.nom_application,
+        "version": parametres.version_api,
+        "environnement": parametres.environnement,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@routeur_monitoring.get(
     "/sante",
     summary="Vérification de santé profonde",
     status_code=status.HTTP_200_OK,
