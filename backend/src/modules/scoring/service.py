@@ -31,6 +31,7 @@ from src.modules.scoring.generateur_donnees import (
 )
 from src.modules.scoring.schemas import (
     FacteurScore, ScoreDetail, HistoriqueScore, ListeHistoriqueScore,
+    ResultatEvaluationContextuelle,
 )
 from src.noyau import journal
 from src.noyau.journal import journal_audit
