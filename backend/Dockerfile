@@ -63,5 +63,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/sante-leger || exit 1
 
-# Lancement de l'application — utilise $PORT de Render (ou 8000 par défaut)
-CMD uvicorn src.main:application --host 0.0.0.0 --port ${PORT:-8000}
+# Lancement de l'application — applique les migrations puis demarre le serveur
+# Les migrations doivent etre appliquees a chaque deploiement car Render
+# ne persiste pas les migrations entre les builds Docker.
+CMD alembic upgrade head && uvicorn src.main:application --host 0.0.0.0 --port ${PORT:-8000}
