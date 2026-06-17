@@ -43,6 +43,17 @@ export const obtenirMonProfilDetail = () =>
 export const modifierMonProfil = (donnees: ProfilModification) =>
   clientAPI.patch<ProfilDetail>(PREFIXE, donnees, { authentifie: true });
 
+export interface ActiviteUtilisateur {
+  id: string;
+  type: string;
+  description: string;
+  date: string;
+  adresse_ip: string | null;
+}
+
+export const obtenirMonActivite = (limite: number = 20) =>
+  clientAPI.get<ActiviteUtilisateur[]>(`${PREFIXE}/activite?limite=${limite}`, { authentifie: true });
+
 export const exporterMesDonnees = () =>
   clientAPI.get<ExportDonnees>(`${PREFIXE}/export`, { authentifie: true });
 

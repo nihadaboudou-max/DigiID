@@ -9,6 +9,8 @@ from src.base_donnees.session import obtenir_session
 from src.modeles import Utilisateur
 from src.modules.authentification.dependances import utilisateur_courant, obtenir_ip_client, obtenir_agent_utilisateur
 from src.modules.verification_visuelle import service
+from src.modules.scoring import declencher_recalcul_score
+from src.noyau import journal as journal_module
 from src.modules.verification_visuelle.schemas import (
     ListeVerificationVisuelle,
     SuppressionVerification,
@@ -43,6 +45,16 @@ async def uploader_photo(
         adresse_ip=adresse_ip,
         user_agent=user_agent,
         )
+    # Upload photo = signal positif → recalcul score
+    try:
+        await declencher_recalcul_score(
+            session=session,
+            utilisateur=utilisateur,
+            raison="upload_photo_visage",
+            adresse_ip=adresse_ip,
+        )
+    except Exception as e:
+        journal_module.warning(f"Recalcul score ignoré (upload_photo) : {e}")
     return VerificationVisuelleDetail(
         id=verification.id,
         statut=verification.statut,
@@ -59,14 +71,22 @@ async def uploader_photo(
 
 @routeur_verification.get(
     "/statut",
-    response_model=VerificationVisuelleDetail,
+    response_model=VerificationVisuelleDetail | None,
     summary="Obtenir le statut de la dernière vérification visuelle",
 )
 async def statut_verification(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
 ):
-    return await service.obtenir_statut_verification(session=session, utilisateur=utilisateur)
+    """
+    Retourne le statut de la dernière vérification visuelle.
+    Retourne 204 No Content si aucune vérification n'existe encore.
+    """
+    from fastapi import Response
+    resultat = await service.obtenir_statut_verification(session=session, utilisateur=utilisateur)
+    if resultat is None:
+        return Response(status_code=204)
+    return resultat
 
 
 @routeur_verification.get(

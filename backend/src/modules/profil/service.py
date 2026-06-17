@@ -472,6 +472,43 @@ async def desactiver_2fa(
     )
 
 
+async def obtenir_activite_recente(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    limite: int = 20,
+    adresse_ip: Optional[str] = None,
+) -> list[dict]:
+    """
+    Récupère les dernières activités de l'utilisateur depuis le journal d'audit.
+    """
+    resultat = await session.execute(
+        select(JournalAudit)
+        .where(JournalAudit.utilisateur_id == utilisateur.id)
+        .order_by(JournalAudit.date_evenement.desc())
+        .limit(limite)
+    )
+    activites = []
+    for e in resultat.scalars().all():
+        activites.append({
+            "id": str(e.id),
+            "type": e.type_evenement,
+            "description": e.description,
+            "date": e.date_evenement.isoformat(),
+            "adresse_ip": e.adresse_ip,
+        })
+    
+    await _enregistrer_audit(
+        session,
+        utilisateur_id=utilisateur.id,
+        role_acteur=utilisateur.role,
+        type_evenement=TypesEvenementAudit.CONSULTATION_PROFIL.value,
+        description="Consultation de l'historique d'activité",
+        adresse_ip=adresse_ip,
+    )
+    await session.commit()
+    return activites
+
+
 async def _enregistrer_audit(
     session: AsyncSession,
     type_evenement: str,

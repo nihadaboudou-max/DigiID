@@ -2,40 +2,61 @@
 
 /**
  * Page Historique — journal d'activité personnel de l'utilisateur.
+ * Données provenant du journal d'audit backend (JournalAudit).
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Badge } from "@/composants/commun/Badge";
 import { ChampRecherche } from "@/composants/commun/ChampRecherche";
+import { Alerte } from "@/composants/commun/Alerte";
+import {
+  obtenirMonActivite,
+  type ActiviteUtilisateur,
+} from "@/services/profil";
+import { ErreurAPI } from "@/services/client_api";
 
-interface Activite {
-  id: string;
-  type: "connexion" | "modification" | "consentement" | "partage" | "score";
-  description: string;
-  date: string;
-  ip?: string;
-  appareil?: string;
+const MAP_TYPE: Record<string, { libelle: string; variante: "lagune" | "ocre" | "succes" | "terre" | "neutre" }> = {
+  connexion: { libelle: "Connexion", variante: "lagune" },
+  inscription: { libelle: "Inscription", variante: "succes" },
+  deconnexion: { libelle: "Déconnexion", variante: "neutre" },
+  modification_profil: { libelle: "Modification", variante: "ocre" },
+  modification_mot_de_passe: { libelle: "Mot de passe", variante: "ocre" },
+  consentement_accorde: { libelle: "Consentement", variante: "succes" },
+  consentement_retire: { libelle: "Consentement retiré", variante: "terre" },
+  activation_2fa: { libelle: "2FA activée", variante: "succes" },
+  desactivation_2fa: { libelle: "2FA désactivée", variante: "ocre" },
+  calcul_score: { libelle: "Score", variante: "ocre" },
+  consultation_profil: { libelle: "Consultation", variante: "lagune" },
+  export_donnees: { libelle: "Export", variante: "lagune" },
+  suppression_profil: { libelle: "Suppression", variante: "terre" },
+  upload_photo: { libelle: "Photo uploadée", variante: "succes" },
+  verification_visuelle: { libelle: "Vérif. faciale", variante: "lagune" },
+  verification_cni: { libelle: "Vérif. CNI", variante: "lagune" },
+  verification_email: { libelle: "Email vérifié", variante: "succes" },
+  verification_2fa_echouee: { libelle: "Échec 2FA", variante: "terre" },
+  partage_qr: { libelle: "Partage QR", variante: "lagune" },
+};
+
+function formaterType(type: string): { libelle: string; variante: "lagune" | "ocre" | "succes" | "terre" | "neutre" } {
+  const key = type.toLowerCase().replace(/\s+/g, "_");
+  return MAP_TYPE[key] || { libelle: type, variante: "neutre" };
 }
 
-const ACTIVITES_DEMO: Activite[] = [
-  { id: "a-001", type: "connexion",   description: "Connexion réussie", date: "2026-05-29 14:23", ip: "41.82.183.45", appareil: "Chrome / Windows" },
-  { id: "a-002", type: "consentement", description: "Consentement accordé : Accès aux données mobile money", date: "2026-05-28 10:15" },
-  { id: "a-003", type: "partage",     description: "DigiID partagé via QR code", date: "2026-05-27 09:42" },
-  { id: "a-004", type: "score",       description: "Score recalculé : 71 → 76", date: "2026-05-26 03:00" },
-  { id: "a-005", type: "connexion",   description: "Connexion réussie", date: "2026-05-25 18:11", ip: "196.207.149.10", appareil: "App mobile" },
-  { id: "a-006", type: "modification", description: "Profil modifié : ville changée", date: "2026-05-22 11:30" },
-  { id: "a-007", type: "connexion",   description: "Connexion réussie", date: "2026-05-20 08:45", ip: "41.82.183.45", appareil: "Chrome / Windows" },
-];
-
-const STYLES_TYPE = {
-  connexion: { libelle: "Connexion", variante: "lagune" as const },
-  modification: { libelle: "Modification", variante: "ocre" as const },
-  consentement: { libelle: "Consentement", variante: "lagune" as const },
-  partage: { libelle: "Partage", variante: "lagune" as const },
-  score: { libelle: "Score", variante: "ocre" as const },
-};
+function formaterDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("fr-FR", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
 
 export default function PageHistorique() {
   return (
@@ -46,81 +67,114 @@ export default function PageHistorique() {
 }
 
 function Contenu() {
+  const [activites, setActivites] = useState<ActiviteUtilisateur[]>([]);
+  const [chargement, setChargement] = useState(true);
+  const [erreur, setErreur] = useState<string | null>(null);
   const [recherche, setRecherche] = useState("");
-  const [filtre, setFiltre] = useState<"toutes" | Activite["type"]>("toutes");
 
-  const activitesFiltrees = ACTIVITES_DEMO.filter((a) => {
-    const matchFiltre = filtre === "toutes" || a.type === filtre;
-    const matchRecherche =
-      !recherche ||
-      a.description.toLowerCase().includes(recherche.toLowerCase()) ||
-      a.ip?.toLowerCase().includes(recherche.toLowerCase()) ||
-      a.appareil?.toLowerCase().includes(recherche.toLowerCase());
-    return matchFiltre && matchRecherche;
+  useEffect(() => {
+    obtenirMonActivite(50)
+      .then(setActivites)
+      .catch((e) => {
+        setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
+      })
+      .finally(() => setChargement(false));
+  }, []);
+
+  const activitesFiltrees = activites.filter((a) => {
+    if (!recherche) return true;
+    const q = recherche.toLowerCase();
+    return (
+      a.description.toLowerCase().includes(q) ||
+      (a.adresse_ip && a.adresse_ip.toLowerCase().includes(q)) ||
+      a.type.toLowerCase().includes(q)
+    );
   });
+
+  if (chargement) {
+    return (
+      <div className="space-y-6 apparition">
+        <header>
+          <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Mon activité</p>
+          <h1 className="mt-1">Historique</h1>
+        </header>
+        <p className="text-ardoise-clair italic py-12 text-center">Chargement de ton historique...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 apparition">
       <header>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
-          Mon activité
-        </p>
+        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Mon activité</p>
         <h1 className="mt-1">Historique</h1>
         <p className="text-ardoise-clair mt-2 max-w-2xl">
-          Toutes les actions effectuées sur ton compte. Si quelque chose te paraît bizarre,
-          déconnecte-toi et change ton mot de passe.
+          Toutes les actions effectuées sur ton compte, tracées dans le journal d&apos;audit.
+          Si quelque chose te paraît bizarre, déconnecte-toi et change ton mot de passe.
         </p>
       </header>
 
-      {/* Filtres */}
-      <div className="flex flex-wrap gap-2">
-        {(["toutes", "connexion", "modification", "consentement", "partage", "score"] as const).map((f) => (
+      {erreur && (
+        <Alerte variante="erreur" titre="Erreur de chargement">
+          {erreur}
           <button
-            key={f}
             type="button"
-            onClick={() => setFiltre(f)}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors capitalize ${
-              filtre === f
-                ? "bg-lagune text-white"
-                : "bg-white border border-ardoise-clair/20 text-ardoise hover:bg-sable"
-            }`}
+            onClick={() => {
+              setErreur(null);
+              setChargement(true);
+              obtenirMonActivite(50)
+                .then(setActivites)
+                .catch((e) => setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur"))
+                .finally(() => setChargement(false));
+            }}
+            className="ml-4 underline text-sm"
           >
-            {f === "toutes" ? "Tout" : f}
+            Réessayer
           </button>
-        ))}
-      </div>
+        </Alerte>
+      )}
 
       {/* Recherche */}
-      <ChampRecherche
-        placeholder="Rechercher dans l'historique..."
-        value={recherche}
-        onChange={(e) => setRecherche(e.target.value)}
-      />
+      {activites.length > 0 && (
+        <ChampRecherche
+          placeholder="Rechercher dans l'historique..."
+          value={recherche}
+          onChange={(e) => setRecherche(e.target.value)}
+        />
+      )}
 
       {/* Timeline */}
-      {activitesFiltrees.length === 0 ? (
+      {!erreur && activitesFiltrees.length === 0 && (
         <Carte>
-          <p className="text-center text-ardoise-clair italic py-8">
-            Aucune activité ne correspond à ces critères.
-          </p>
+          {activites.length === 0 ? (
+            <p className="text-center text-ardoise-clair italic py-8">
+              Aucune activité enregistrée pour le moment. Les actions que tu effectues sur
+              DigiID apparaîtront ici.
+            </p>
+          ) : (
+            <p className="text-center text-ardoise-clair italic py-8">
+              Aucune activité ne correspond à ces critères.
+            </p>
+          )}
         </Carte>
-      ) : (
+      )}
+
+      {activitesFiltrees.length > 0 && (
         <div className="space-y-3">
           {activitesFiltrees.map((a) => {
-            const style = STYLES_TYPE[a.type];
+            const style = formaterType(a.type);
             return (
               <Carte key={a.id} className="!py-4">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
-                  <div className="flex-grow">
+                  <div className="flex-grow min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <Badge variante={style.variante}>{style.libelle}</Badge>
-                      <span className="text-xs text-ardoise-clair">{a.date}</span>
+                      <Badge variante={style.variante} taille="petit">{style.libelle}</Badge>
+                      <span className="text-xs text-ardoise-clair">{formaterDate(a.date)}</span>
                     </div>
                     <p className="text-sm text-ardoise">{a.description}</p>
-                    {(a.ip || a.appareil) && (
-                      <div className="flex gap-4 mt-2 text-xs text-ardoise-clair">
-                        {a.ip && <span><strong>IP :</strong> <code className="font-mono">{a.ip}</code></span>}
-                        {a.appareil && <span><strong>Appareil :</strong> {a.appareil}</span>}
+                    {a.adresse_ip && (
+                      <div className="mt-2 text-xs text-ardoise-clair">
+                        <span><strong>IP :</strong> <code className="font-mono">{a.adresse_ip}</code></span>
                       </div>
                     )}
                   </div>
@@ -132,8 +186,7 @@ function Contenu() {
       )}
 
       <p className="text-xs text-ardoise-clair italic text-center pt-4">
-        En Phase 2, cet historique sera tiré en temps réel du journal d'audit backend
-        (table <code>journal_audit</code>).
+        {activites.length} événement{activites.length > 1 ? "s" : ""} affiché{activites.length > 1 ? "s" : ""} sur les 50 plus récents
       </p>
     </div>
   );

@@ -20,6 +20,8 @@ from src.base_donnees.session import obtenir_session
 from src.modeles import Utilisateur
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.ocr_cni import service
+from src.modules.scoring import declencher_recalcul_score
+from src.noyau import journal as journal_module
 from src.modules.ocr_cni.schemas import (
     ListeVerificationsCNI,
     ReponseUploadCNI,
@@ -66,6 +68,16 @@ async def uploader_cni(
         fichier=fichier,
         face=face,
     )
+
+    # Upload CNI réussi = vérification forte → recalcul score
+    try:
+        await declencher_recalcul_score(
+            session=session,
+            utilisateur=utilisateur,
+            raison=f"upload_cni_{face}",
+        )
+    except Exception as e:
+        journal_module.warning(f"Recalcul score ignoré (upload_cni) : {e}")
 
     return ReponseUploadCNI(
         id=resultat["id"],

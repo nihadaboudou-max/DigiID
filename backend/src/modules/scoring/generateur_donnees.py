@@ -37,7 +37,7 @@ class SignauxUtilisateur:
     Note importante : ces signaux ne donnent pas un boost immédiat.
     Ils augmentent le POTENTIEL de score, qui se concrétise au fil du temps.
     """
-    # Combien de champs du profil sont remplis (sur 5)
+    # Combien de champs du profil sont remplis (sur 7)
     nombre_champs_profil_remplis: int = 0
     # Combien de consentements facultatifs sont accordés (sur 5)
     nombre_consentements_facultatifs_accordes: int = 0
@@ -69,6 +69,12 @@ class DonneesComportementales:
     taille_repertoire: int
     contacts_anciens: int
     contacts_communs_digiid: int
+    anciennete_telephone_mois: int  # Proxy anti-circularité DigiID
+
+    # --- Famille attestations communautaires (Nouveau facteur correcteur) ---
+    attestations_approuvees_recues: int   # Nombre d'attestations approuvées
+    poids_total_attestations: float       # Somme des poids des attestations
+    attestants_uniques: int               # Nombre d'attestants distincts
 
 
 def _seed_depuis_uuid(utilisateur_id: UUID) -> int:
@@ -154,7 +160,7 @@ def generer_donnees_pour_utilisateur(
 
     # --- Bonus d'engagement (0 à 1) selon les actions de l'utilisateur ---
     # Sans aucune action, bonus = 0. Avec tout activé, bonus = 1.
-    bonus_profil = signaux.nombre_champs_profil_remplis / 5  # 0 à 1
+    bonus_profil = signaux.nombre_champs_profil_remplis / 7  # 0 à 1
     bonus_consentements = signaux.nombre_consentements_facultatifs_accordes / 5  # 0 à 1
     bonus_securite = (
         (0.5 if signaux.deux_fa_active else 0.0)
@@ -227,6 +233,18 @@ def generer_donnees_pour_utilisateur(
     contacts_anciens = int(taille_repertoire * facteur_global * (0.4 + rng() * 0.4))
     # Contacts communs DigiID : très faible au début
     contacts_communs = int(facteur_global * rng() * 25)
+    # Proxy anti-circularité : ancienneté du numéro de téléphone
+    # Permet de scorer sur le réseau même quand DigiID n'a pas assez d'utilisateurs
+    anciennete_tel_mois = max(0, age_compte_jours // 30) + int(rng() * 48)
+
+    # --- Attestations communautaires (correcteur d'exclusion) ---
+    # Au début : 0 (personne n'atteste un nouveau venu)
+    # Avec le temps : quelques attestations apparaissent
+    # Ce module est en simulation ; en prod, les vraies données viendront
+    # de la table AttestationCommunautaire
+    nb_attestations = int(facteur_global * rng() * 4)  # 0 à ~4
+    poids_attest = nb_attestations * (3 + rng() * 5)  # poids moyen 3-8 pts chacune
+    attestants_uniq = max(0, nb_attestations - int(rng() * 1.5))  # certains doublons
 
     return DonneesComportementales(
         anciennete_sim_mois=anciennete_sim_mois,
@@ -241,4 +259,8 @@ def generer_donnees_pour_utilisateur(
         taille_repertoire=taille_repertoire,
         contacts_anciens=contacts_anciens,
         contacts_communs_digiid=contacts_communs,
+        anciennete_telephone_mois=anciennete_tel_mois,
+        attestations_approuvees_recues=nb_attestations,
+        poids_total_attestations=round(poids_attest, 1),
+        attestants_uniques=attestants_uniq,
     )

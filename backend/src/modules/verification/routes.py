@@ -21,8 +21,10 @@ from src.config import parametres
 from src.modeles import Utilisateur
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.verification import service
+from src.modules.scoring import declencher_recalcul_score
 from src.noyau.exceptions import ErreurValidation
 from src.noyau import dechiffrer_donnee
+from src.noyau import journal as journal_module
 
 
 routeur_verification = APIRouter(
@@ -165,5 +167,14 @@ async def verifier_code(
         type_verification=donnees.type_verification,
     )
     if succes:
+        # Vérification réussie → recalcul du score (email ou téléphone vérifié)
+        try:
+            await declencher_recalcul_score(
+                session=session,
+                utilisateur=utilisateur,
+                raison=f"verification_{donnees.type_verification}",
+            )
+        except Exception as e:
+            journal_module.warning(f"Recalcul score ignoré (verification) : {e}")
         return ReponseVerification(succes=True, message="Code valide ! Identite confirmee.")
     return ReponseVerification(succes=False, message="Code invalide ou expire. Demande un nouveau code.")

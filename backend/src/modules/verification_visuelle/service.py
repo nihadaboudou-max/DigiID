@@ -136,7 +136,7 @@ async def traiter_upload_photo(
 async def obtenir_statut_verification(
     session: AsyncSession,
     utilisateur: Utilisateur,
-) -> VerificationVisuelleDetail:
+) -> VerificationVisuelleDetail | None:
     resultat = await session.execute(
         select(VerificationVisuelle)
         .where(VerificationVisuelle.utilisateur_id == utilisateur.id)
@@ -145,10 +145,7 @@ async def obtenir_statut_verification(
     )
     verification = resultat.scalar_one_or_none()
     if verification is None:
-        raise ErreurValidation(
-            "Aucun upload de vérification visuelle trouvé.",
-            message_utilisateur="Tu n'as pas encore uploadé de photo pour vérification."
-        )
+        return None
 
     return VerificationVisuelleDetail(
         id=verification.id,

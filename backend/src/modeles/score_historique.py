@@ -49,6 +49,10 @@ class ScoreHistorique(Base):
     facteur_mobile_money: Mapped[float] = mapped_column(Float, nullable=False)
     facteur_geographie: Mapped[float] = mapped_column(Float, nullable=False)
     facteur_reseau_contacts: Mapped[float] = mapped_column(Float, nullable=False)
+    facteur_attestations: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0,
+        doc="Sous-score attestations communautaires (correcteur d'exclusion, max 15)"
+    )
 
     # --- Métadonnées ---
     date_calcul: Mapped[datetime] = mapped_column(

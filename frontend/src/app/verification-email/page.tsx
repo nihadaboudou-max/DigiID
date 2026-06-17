@@ -5,6 +5,7 @@
  * Apparaît après l'inscription ou si l'utilisateur tente de se connecter
  * sans avoir vérifié son email.
  */
+import { useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -33,9 +34,12 @@ export default function PageVerificationEmail() {
   const [verifie, setVerifie] = useState(false);
   const [compteurRenvoi, setCompteurRenvoi] = useState(0);
   const [codeVisible, setCodeVisible] = useState<string | null>(null);
+  const codeEnvoyeRef = useRef(false);
 
-  // Envoie le premier code au chargement
+  // Envoie le premier code au chargement (une seule fois, même en StrictMode)
   useEffect(() => {
+    if (codeEnvoyeRef.current) return;
+    codeEnvoyeRef.current = true;
     envoyerPremierCode();
   }, []);
 

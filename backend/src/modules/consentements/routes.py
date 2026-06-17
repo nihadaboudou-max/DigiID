@@ -19,6 +19,8 @@ from src.modules.consentements.schemas import (
     ConsentementBascule, ConsentementDetail, ConsentementTexteLegalDetail,
     ListeConsentements,
 )
+from src.modules.scoring import declencher_recalcul_score
+from src.noyau import journal as journal_module
 
 
 routeur_consentements = APIRouter(
@@ -67,10 +69,22 @@ async def basculer_mon_consentement(
     utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
 ):
     """Bascule l'état d'un consentement. Les obligatoires ne peuvent pas être retirés."""
-    return await service.basculer_consentement(
+    resultat = await service.basculer_consentement(
         session=session,
         utilisateur=utilisateur,
         categorie=categorie,
         accorder=donnees.accorder,
         adresse_ip=obtenir_ip_client(requete),
     )
+    # Chaque consentement facultatif accordé/retiré impacte le score
+    action = "consentement_accorde" if donnees.accorder else "consentement_retire"
+    try:
+        await declencher_recalcul_score(
+            session=session,
+            utilisateur=utilisateur,
+            raison=action,
+            adresse_ip=obtenir_ip_client(requete),
+        )
+    except Exception as e:
+        journal_module.warning(f"Recalcul score ignoré ({action}) : {e}")
+    return resultat

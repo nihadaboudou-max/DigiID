@@ -4,6 +4,7 @@
  * Page de verification d'identite.
  * Apres inscription, l'utilisateur doit confirmer son email et telephone.
  */
+import { useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -37,10 +38,18 @@ export default function PageVerification() {
   const [destinationMasquee, setDestinationMasquee] = useState("");
   const [codeVisible, setCodeVisible] = useState<string | null>(null);
   const [compteur, setCompteur] = useState(0);
+  const codeEnvoyeRef = useRef(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Envoyer le code email au montage
+  // Envoyer le code email au montage (une seule fois, même en StrictMode)
   useEffect(() => {
+    if (codeEnvoyeRef.current) return;
+    codeEnvoyeRef.current = true;
     envoyerCodeEmail();
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, []);
 
   async function envoyerCodeEmail() {
@@ -94,10 +103,12 @@ export default function PageVerification() {
 
   function lancerCompteur() {
     setCompteur(60);
-    const interval = setInterval(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => {
       setCompteur((prev) => {
         if (prev <= 1) {
-          clearInterval(interval);
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          intervalRef.current = null;
           return 0;
         }
         return prev - 1;
