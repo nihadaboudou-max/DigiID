@@ -63,8 +63,15 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/sante-leger || exit 1
 
-# Lancement de l'application — applique les migrations puis demarre le serveur
-# Les migrations sont gérées par env.py qui auto-stamp la base si les tables
-# existent déjà (créées par un précédent create_all) sans alembic_version.
-# Cela évite les DuplicateTableError sur chaque migration.
-CMD alembic upgrade head && uvicorn src.main:application --host 0.0.0.0 --port ${PORT:-8000}
+# Lancement de l'application — applique les migrations puis demarre le serveur.
+#
+# On utilise scripts/migrer.py (connexion SYNC) qui :
+#   1. Vérifie l'état de la base (tables existantes ? alembic_version ?)
+#   2. Si tables existent SANS alembic_version ou avec VARCHAR(32) :
+#      → DROP + RECREATE alembic_version avec version_num en TEXT
+#      → INSERT la révision HEAD (supporte les IDs longs >32 chars)
+#   3. Puis appelle alembic upgrade head (qui voit HEAD déjà présent = no-op)
+#
+# Cela évite à la fois les DuplicateTableError (tables créées par create_all)
+# ET les InFailedSQLTransactionError / DeadlockDetectedError (conflits d'engine).
+CMD python scripts/migrer.py && uvicorn src.main:application --host 0.0.0.0 --port ${PORT:-8000}

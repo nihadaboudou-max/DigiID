@@ -36,32 +36,18 @@ logging.basicConfig(
 logger = logging.getLogger("migrer")
 
 
-def _verifier_etat_base(engine) -> str:
+def _determiner_etat_base(engine) -> str:
     """
-    Vérifie l'état de la base de données.
+    Vérifie si les tables principales existent dans la base.
     
     Retourne :
       - "VIERGE" : aucune table
-      - "ALEMBIC_OK" : alembic_version présente et pleine
-      - "ALEMBIC_VIDE" : alembic_version existe mais vide
-      - "TABLES_EXIST" : tables principales existent mais alembic_version absente
+      - "TABLES_EXIST" : au moins les tables principales existent
     """
     with engine.connect() as conn:
         tables = set(inspect(conn).get_table_names())
-
-        if "alembic_version" in tables:
-            result = conn.execute(sa_text("SELECT COUNT(*) FROM alembic_version"))
-            count = result.scalar()
-            if count > 0:
-                return "ALEMBIC_OK"
-            else:
-                return "ALEMBIC_VIDE"
-
-        # Vérifier si les tables principales existent
-        tables_principales = {"role", "utilisateur", "consentement"}
-        if tables_principales.issubset(tables):
+        if {"role", "utilisateur", "consentement"}.issubset(tables):
             return "TABLES_EXIST"
-
         return "VIERGE"
 
 
@@ -79,27 +65,19 @@ def _obtenir_revision_head() -> str:
 
 def _stamp_sync(url_sync: str, revision: str):
     """
-    Stamp la base avec la révision donnée en utilisant une connexion synchrone.
-    
-    On évite d'utiliser alembic_command.stamp() car il passe par env.py
-    (moteur async) et peut causer des conflits de transaction.
+    Stamp alembic_version avec HEAD.
+    La table existe déjà en TEXT (recréée par _recreer_alembic_version_texte).
+    On se contente de DELETE + INSERT.
     """
     engine = create_engine(url_sync)
     try:
         with engine.begin() as conn:
-            # Créer alembic_version si absente
-            conn.execute(sa_text(
-                "CREATE TABLE IF NOT EXISTS alembic_version "
-                "(version_num VARCHAR(32) NOT NULL)"
-            ))
-            # Vider les entrées existantes
             conn.execute(sa_text("DELETE FROM alembic_version"))
-            # Insérer la révision HEAD
             conn.execute(
                 sa_text("INSERT INTO alembic_version (version_num) VALUES (:v)"),
                 {"v": revision},
             )
-            logger.info("✅ Base stampée avec %s", revision)
+        logger.info("✅ Base stampée avec %s", revision)
     finally:
         engine.dispose()
 
@@ -109,6 +87,50 @@ def _upgrade_alembic():
     alembic_cfg_path = Path(__file__).resolve().parent.parent / "alembic.ini"
     config = AlembicConfig(str(alembic_cfg_path))
     alembic_command.upgrade(config, "head")
+
+
+def _recreer_alembic_version_texte(url_sync: str) -> str | None:
+    """
+    RECRÉE TOUJOURS alembic_version avec version_num en TEXT.
+    
+    Même si la base est vierge, on pré-crée la table pour
+    empêcher Alembic d'utiliser VARCHAR(32) par défaut.
+    
+    Retourne la version actuelle (si existait), None sinon.
+    """
+    engine = create_engine(url_sync)
+    try:
+        # Lire l'ancienne version si elle existe
+        version_actuelle = None
+        with engine.connect() as conn:
+            tables = set(inspect(conn).get_table_names())
+            if "alembic_version" in tables:
+                result = conn.execute(sa_text(
+                    "SELECT version_num FROM alembic_version LIMIT 1"
+                ))
+                row = result.fetchone()
+                version_actuelle = row[0] if row else None
+
+        # DROP + CREATE atomique
+        with engine.begin() as conn:
+            conn.execute(sa_text("DROP TABLE IF EXISTS alembic_version"))
+            conn.execute(sa_text(
+                "CREATE TABLE alembic_version (version_num TEXT NOT NULL)"
+            ))
+            if version_actuelle:
+                conn.execute(
+                    sa_text("INSERT INTO alembic_version (version_num) VALUES (:v)"),
+                    {"v": version_actuelle},
+                )
+                logger.info("↻ alembic_version recréée (TEXT), version %s conservée",
+                           version_actuelle)
+            else:
+                logger.info("✓ alembic_version créée (TEXT, vide)")
+
+        return version_actuelle
+
+    finally:
+        engine.dispose()
 
 
 def executer_migrations():
@@ -121,36 +143,28 @@ def executer_migrations():
                 parametres.postgres_nom_base)
 
     try:
-        engine = create_engine(url_sync)
+        # Étape 1 : état de la base
+        moteur = create_engine(url_sync)
         try:
-            etat = _verifier_etat_base(engine)
+            etat = _determiner_etat_base(moteur)
         finally:
-            engine.dispose()
+            moteur.dispose()
 
         logger.info("État de la base : %s", etat)
 
+        # Étape 2 : TOUJOURS recréer alembic_version avec TEXT
+        # Évite StringDataRightTruncation pour révisions >32 chars.
+        _recreer_alembic_version_texte(url_sync)
+
+        # Étape 3 : décision
         if etat == "VIERGE":
-            logger.info("Base vierge → alembic upgrade head crée toutes les tables")
+            # Base vierge → upgrade crée les tables (alembic_version en TEXT)
+            logger.info("Base vierge → upgrade crée les tables...")
             _upgrade_alembic()
-
-        elif etat == "ALEMBIC_OK":
-            logger.info("alembic_version présent → upgrade normal")
-            _upgrade_alembic()
-
-        elif etat == "ALEMBIC_VIDE":
+        else:
+            # Tables existent → stamp HEAD puis upgrade (no-op)
             revision = _obtenir_revision_head()
-            logger.info("alembic_version vide → stamp %s puis upgrade", revision)
-            _stamp_sync(url_sync, revision)
-            _upgrade_alembic()
-
-        elif etat == "TABLES_EXIST":
-            revision = _obtenir_revision_head()
-            logger.warning(
-                "Tables principales détectées SANS alembic_version !\n"
-                "  → Stamp %s pour éviter les DuplicateTableError\n"
-                "  → Puis upgrade (no-op car base déjà à jour)",
-                revision,
-            )
+            logger.info("Tables existantes → stamp %s puis upgrade...", revision)
             _stamp_sync(url_sync, revision)
             _upgrade_alembic()
 
