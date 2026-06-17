@@ -107,15 +107,16 @@ async def cycle_de_vie(application: FastAPI):
     async def demarrer():
         """Initialisation complète en arrière-plan."""
         global initialisation_terminee
+        # Note : les tables sont créées par Alembic (alembic upgrade head)
+        # dans le Dockerfile CMD avant le démarrage d'uvicorn.
+        # Vérification rapide que la base répond.
         try:
-            from src.base_donnees.base import Base
+            from sqlalchemy import text
             async with moteur_async.begin() as connexion:
-                from sqlalchemy import text
                 await connexion.execute(text("SELECT 1"))
-                await connexion.run_sync(Base.metadata.create_all, checkfirst=True)
-            journal.info("Tables vérifiées/créées avec succès")
+            journal.info("Base de données accessible — tables gérées par Alembic")
         except Exception as erreur:
-            journal.error(f"Tables non créées (mode dégradé) : {erreur}")
+            journal.error(f"Base de données inaccessible (mode dégradé) : {erreur}")
         
         # Seed et feature flags (enchaînés)
         await _initialiser_base_en_arriere_plan()
