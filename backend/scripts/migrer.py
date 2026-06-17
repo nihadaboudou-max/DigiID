@@ -89,6 +89,52 @@ def _upgrade_alembic():
     alembic_command.upgrade(config, "head")
 
 
+# ===========================================================================
+# Correcteur de colonnes manquantes
+# ===========================================================================
+# Problème : les tables ont été créées par l'ancien create_all() à un instant T.
+# Les colonnes ajoutées AUX MODÈLES PYTHON après cette date n'existent PAS en base.
+# Exemple : score_historique.facteur_attestations ajoutée après la suppression de
+# create_all(). Les migrations Alembic ne sont jamais appliquées car mon script
+# stamp HEAD, ce qui fait qu'Alembic ne les exécute pas.
+#
+# Solution : AVANT de stamp HEAD, inspecter le schéma réel et ajouter les colonnes
+# manquantes via ALTER TABLE ADD COLUMN IF NOT EXISTS.
+# ===========================================================================
+
+COLONNES_A_VERIFIER = [
+    # (table, colonne, type_sql)
+    # Ajoutées par les migrations après la suppression de create_all :
+    ("score_historique", "facteur_attestations", "FLOAT NOT NULL DEFAULT 0.0"),
+]
+
+
+def _corriger_colonnes_manquantes(engine):
+    """
+    Ajoute les colonnes manquantes dans les tables existantes.
+    Utilise ALTER TABLE ADD COLUMN IF NOT EXISTS (PostgreSQL 9.6+).
+    """
+    with engine.connect() as conn:
+        tables_presentes = set(inspect(conn).get_table_names())
+
+    for table, colonne, type_sql in COLONNES_A_VERIFIER:
+        if table not in tables_presentes:
+            continue
+
+        # Vérifier si la colonne existe déjà
+        with engine.connect() as conn:
+            col_infos = [c["name"] for c in inspect(conn).get_columns(table)]
+
+        if colonne in col_infos:
+            continue
+
+        # Ajouter la colonne manquante
+        sql = f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {colonne} {type_sql}"
+        with engine.begin() as conn:
+            conn.execute(sa_text(sql))
+        logger.warning("⚠️  Colonne manquante ajoutée : %s.%s (%s)", table, colonne, type_sql)
+
+
 def _recreer_alembic_version_texte(url_sync: str) -> str | None:
     """
     RECRÉE TOUJOURS alembic_version avec version_num en TEXT.
@@ -134,7 +180,18 @@ def _recreer_alembic_version_texte(url_sync: str) -> str | None:
 
 
 def executer_migrations():
-    """Exécute les migrations selon l'état de la base."""
+    """
+    Exécute les migrations selon l'état de la base.
+    
+    Algorithme :
+      1. Vérifier si les tables principales existent (ou base vierge)
+      2. TOUJOURS recréer alembic_version avec TEXT (pour révisions longues)
+      3. Si tables existent :
+         a. CORRIGER les colonnes manquantes (ajoutées aux modèles après create_all)
+         b. Stamp HEAD dans alembic_version
+         c. Alembic upgrade head (no-op car HEAD déjà présent)
+      4. Si vierge : upgrade simple (alembic crée tout)
+    """
     url_sync = parametres.url_base_donnees_sync
     logger.info("Connexion à %s@%s:%s/%s",
                 parametres.postgres_utilisateur,
@@ -143,7 +200,7 @@ def executer_migrations():
                 parametres.postgres_nom_base)
 
     try:
-        # Étape 1 : état de la base
+        # --- Étape 1 : état de la base ---
         moteur = create_engine(url_sync)
         try:
             etat = _determiner_etat_base(moteur)
@@ -152,20 +209,27 @@ def executer_migrations():
 
         logger.info("État de la base : %s", etat)
 
-        # Étape 2 : TOUJOURS recréer alembic_version avec TEXT
-        # Évite StringDataRightTruncation pour révisions >32 chars.
+        # --- Étape 2 : recréer alembic_version en TEXT ---
         _recreer_alembic_version_texte(url_sync)
 
-        # Étape 3 : décision
+        # --- Étape 3 : décision ---
         if etat == "VIERGE":
-            # Base vierge → upgrade crée les tables (alembic_version en TEXT)
             logger.info("Base vierge → upgrade crée les tables...")
             _upgrade_alembic()
         else:
-            # Tables existent → stamp HEAD puis upgrade (no-op)
+            # 3a. Ajouter les colonnes manquantes (avant le stamp)
+            moteur = create_engine(url_sync)
+            try:
+                _corriger_colonnes_manquantes(moteur)
+            finally:
+                moteur.dispose()
+
+            # 3b. Stamp HEAD
             revision = _obtenir_revision_head()
             logger.info("Tables existantes → stamp %s puis upgrade...", revision)
             _stamp_sync(url_sync, revision)
+
+            # 3c. Upgrade (no-op)
             _upgrade_alembic()
 
         logger.info("✅ Migration terminée avec succès")
