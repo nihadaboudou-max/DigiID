@@ -19,6 +19,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import AttestationCommunautaire, Utilisateur
+from src.noyau.chiffrement import dechiffrer_donnee
 from src.modules.attestations_communautaires.repository import (
     AttestationRepository,
 )
@@ -667,12 +668,12 @@ class ServiceAttestations:
         return AttestationDetail(
             id=att.id,
             attestant_id=att.attestant_id,
-            attestant_nom=attestant.nom or "",
-            attestant_prenom=attestant.prenom or "",
+            attestant_nom=dechiffrer_donnee(attestant.nom_chiffre) if attestant.nom_chiffre else "",
+            attestant_prenom=dechiffrer_donnee(attestant.prenom_chiffre) if attestant.prenom_chiffre else "",
             attestant_digiid=attestant.digiid_public or "",
             atteste_id=att.atteste_id,
-            atteste_nom=atteste.nom or "",
-            atteste_prenom=atteste.prenom or "",
+            atteste_nom=dechiffrer_donnee(atteste.nom_chiffre) if atteste.nom_chiffre else "",
+            atteste_prenom=dechiffrer_donnee(atteste.prenom_chiffre) if atteste.prenom_chiffre else "",
             atteste_digiid=atteste.digiid_public or "",
             type_attestation=att.type_attestation,
             titre=att.titre,
@@ -700,11 +701,13 @@ class ServiceAttestations:
         return AttestationResume(
             id=att.id,
             attestant_nom_complet=(
-                f"{attestant.prenom or ''} {attestant.nom or ''}".strip()
+                f"{dechiffrer_donnee(attestant.prenom_chiffre) if attestant.prenom_chiffre else ''} "
+                f"{dechiffrer_donnee(attestant.nom_chiffre) if attestant.nom_chiffre else ''}".strip()
                 or attestant.digiid_public or "Inconnu"
             ),
             atteste_nom_complet=(
-                f"{atteste.prenom or ''} {atteste.nom or ''}".strip()
+                f"{dechiffrer_donnee(atteste.prenom_chiffre) if atteste.prenom_chiffre else ''} "
+                f"{dechiffrer_donnee(atteste.nom_chiffre) if atteste.nom_chiffre else ''}".strip()
                 or atteste.digiid_public or "Inconnu"
             ),
             type_attestation=att.type_attestation,
