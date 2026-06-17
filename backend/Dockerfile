@@ -64,11 +64,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/sante-leger || exit 1
 
 # Lancement de l'application — applique les migrations puis demarre le serveur
-# Les migrations doivent etre appliquees a chaque deploiement car Render
-# ne persiste pas les migrations entre les builds Docker.
-#
-# On utilise le script migrer.py qui gère 3 cas :
-#   1. Base vierge        → alembic upgrade head crée tout
-#   2. Base à jour         → upgrade normal (no-op)
-#   3. Tables sans version → stamp HEAD puis upgrade (évite DuplicateTableError)
-CMD python scripts/migrer.py && uvicorn src.main:application --host 0.0.0.0 --port ${PORT:-8000}
+# Les migrations sont gérées par env.py qui auto-stamp la base si les tables
+# existent déjà (créées par un précédent create_all) sans alembic_version.
+# Cela évite les DuplicateTableError sur chaque migration.
+CMD alembic upgrade head && uvicorn src.main:application --host 0.0.0.0 --port ${PORT:-8000}
