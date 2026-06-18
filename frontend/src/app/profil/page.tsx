@@ -15,6 +15,8 @@ import { Alerte } from "@/composants/commun/Alerte";
 import { Gestion2FA } from "@/composants/commun/Gestion2FA";
 import { useAuthentification } from "@/contextes/authentification";
 import { clientAPI, ErreurAPI } from "@/services/client_api";
+import { exporterMesDonnees } from "@/services/profil";
+import { ModalConfirmation } from "@/composants/commun/ModalConfirmation";
 
 export default function PageProfil() {
   return (
@@ -33,6 +35,9 @@ function Contenu() {
   const [chargement, setChargement] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [exportEnCours, setExportEnCours] = useState(false);
+  const [suppressionEnCours, setSuppressionEnCours] = useState(false);
+  const [montrerConfirmationSuppression, setMontrerConfirmationSuppression] = useState(false);
 
   useEffect(() => {
     if (utilisateur) {
@@ -42,6 +47,42 @@ function Contenu() {
   }, [utilisateur]);
 
   if (!utilisateur) return null;
+
+  async function handleExporterDonnees() {
+    setExportEnCours(true);
+    setMessage(null);
+    setErreur(null);
+    try {
+      const donnees = await exporterMesDonnees();
+      const blob = new Blob([JSON.stringify(donnees, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `digiid-export-${new Date().toISOString().split("T")[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setMessage("Données exportées avec succès !");
+    } catch (e) {
+      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de l'export.");
+    } finally {
+      setExportEnCours(false);
+    }
+  }
+
+  async function handleSupprimerCompte() {
+    setSuppressionEnCours(true);
+    setErreur(null);
+    try {
+      await clientAPI.delete("/api/v1/utilisateur/compte", { authentifie: true });
+      // Déconnecter l'utilisateur
+      window.location.href = "/";
+    } catch (e) {
+      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la suppression.");
+    } finally {
+      setSuppressionEnCours(false);
+      setMontrerConfirmationSuppression(false);
+    }
+  }
 
   async function sauvegarder() {
     setChargement(true);
@@ -213,17 +254,34 @@ function Contenu() {
           <Bouton variante="ghost" onClick={() => setModeEdition(true)}>
             Modifier mon profil
           </Bouton>
-          <Bouton variante="ghost" disabled>
+          <Bouton variante="ghost" chargement={exportEnCours} onClick={handleExporterDonnees}>
             Exporter mes données
           </Bouton>
-          <Bouton variante="ghost" disabled>
-            Gérer mes consentements
-          </Bouton>
-          <Bouton variante="ghost" disabled className="!border-terre !text-terre hover:!bg-terre hover:!text-white">
+          <Link href="/consentements">
+            <Bouton variante="ghost">
+              Gérer mes consentements
+            </Bouton>
+          </Link>
+          <Bouton variante="ghost" onClick={() => setMontrerConfirmationSuppression(true)} className="!border-terre !text-terre hover:!bg-terre hover:!text-white">
             Supprimer mon compte
           </Bouton>
         </div>
       </Carte>
+
+      {/* Modale de confirmation pour la suppression du compte */}
+      <ModalConfirmation
+        ouvert={montrerConfirmationSuppression}
+        titre="Supprimer mon compte"
+        description="Cette action est irréversible. Toutes tes données personnelles seront définitivement effacées."
+        messageAlerte="Tu es sur le point de supprimer définitivement ton compte DigiID. Cette action est irréversible et sera tracée dans le journal d'audit."
+        varianteAlerte="erreur"
+        texteBoutonConfirmer="Supprimer mon compte"
+        varianteBoutonConfirmer="ghost"
+        couleurBoutonConfirmer="terre"
+        chargement={suppressionEnCours}
+        surAnnulation={() => setMontrerConfirmationSuppression(false)}
+        surConfirmation={handleSupprimerCompte}
+      />
     </div>
   );
 }
