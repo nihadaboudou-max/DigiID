@@ -73,7 +73,7 @@ from src.modules.super_admin.schemas_phase6 import (
     # Admin modif
     ModifierAdminRequete, DonneesAdminExport,
 )
-from src.noyau import chiffrer_donnee, hacher_mot_de_passe, journal
+from src.noyau import chiffrer_donnee, dechiffrer_donnee, hacher_mot_de_passe, journal
 from src.noyau.exceptions import ErreurRessourceIntrouvable, ErreurValidation
 from src.noyau.journal import journal_audit
 from src.modules.super_admin.service import _utilisateur_vers_apercu
@@ -362,9 +362,42 @@ async def lister_audit(
     resultat = await session.execute(requete)
     evenements = resultat.scalars().all()
 
+    # Étape 5bis : Collecter les noms des utilisateurs concernés
+    # On regroupe les IDs utilisateur uniques pour éviter N+1 queries
+    ids_utilisateurs = {
+        e.utilisateur_id for e in evenements
+        if e.utilisateur_id is not None
+    }
+    noms_utilisateurs: dict[UUID, str] = {}
+    if ids_utilisateurs:
+        resultat_users = await session.execute(
+            select(Utilisateur).where(Utilisateur.id.in_(ids_utilisateurs))
+        )
+        for user in resultat_users.scalars().all():
+            prenom = dechiffrer_donnee(user.prenom_chiffre) if user.prenom_chiffre else ""
+            nom = dechiffrer_donnee(user.nom_chiffre) if user.nom_chiffre else ""
+            nom_complet = f"{prenom} {nom}".strip()
+            if nom_complet:
+                noms_utilisateurs[user.id] = nom_complet
+
     # Étape 6 : Construction de la réponse
     return ListeAuditPaginee(
-        donnees=[EvenementAuditItem.model_validate(e) for e in evenements],
+        donnees=[
+            EvenementAuditItem(
+                id=e.id,
+                date_evenement=e.date_evenement,
+                type_evenement=e.type_evenement,
+                description=e.description,
+                utilisateur_id=e.utilisateur_id,
+                nom_utilisateur=noms_utilisateurs.get(e.utilisateur_id) if e.utilisateur_id else None,
+                role_acteur=e.role_acteur,
+                adresse_ip=e.adresse_ip,
+                agent_utilisateur=e.agent_utilisateur,
+                donnees_supplementaires=e.donnees_supplementaires,
+                score_risque=e.score_risque,
+            )
+            for e in evenements
+        ],
         total=total,
         page=filtres.page,
         pages=pages,

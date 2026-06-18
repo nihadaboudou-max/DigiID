@@ -20,7 +20,12 @@ interface EvenementAudit {
   type_evenement: string;
   description: string;
   utilisateur_id: string | null;
+  nom_utilisateur: string | null;
+  role_acteur: string | null;
   adresse_ip: string | null;
+  agent_utilisateur: string | null;
+  donnees_supplementaires: Record<string, unknown> | null;
+  score_risque: number | null;
 }
 
 interface DonneesSuperAdmin {
@@ -104,6 +109,7 @@ function Contenu() {
         (e) =>
           e.type_evenement.toLowerCase().includes(r) ||
           e.description.toLowerCase().includes(r) ||
+          (e.nom_utilisateur && e.nom_utilisateur.toLowerCase().includes(r)) ||
           (e.utilisateur_id && e.utilisateur_id.toLowerCase().includes(r)) ||
           (e.adresse_ip && e.adresse_ip.toLowerCase().includes(r))
       );
@@ -156,14 +162,16 @@ function Contenu() {
     const donneesAExporter = evenementsFiltres;
     
     // En-têtes CSV
-    const enTetes = ["ID", "Date", "Type", "Description", "Utilisateur", "IP"];
+    const enTetes = ["ID", "Date", "Type", "Description", "Utilisateur", "Nom", "IP", "Rôle"];
     const lignes = donneesAExporter.map((e) => [
       e.id,
       e.date_evenement,
       e.type_evenement,
       `"${e.description.replace(/"/g, '""')}"`,
       e.utilisateur_id || "",
+      e.nom_utilisateur || "",
       e.adresse_ip || "",
+      e.role_acteur || "",
     ]);
 
     const csv = [
@@ -379,6 +387,8 @@ function Contenu() {
 }
 
 function LigneEvenement({ evenement }: { evenement: EvenementAudit }) {
+  const [deplie, setDeplie] = useState(false);
+
   const typeNet = evenement.type_evenement.replace(/_/g, " ");
   const variant: "lagune" | "ocre" | "terre" | "succes" =
     typeNet.toLowerCase().includes("echouee") ||
@@ -402,8 +412,18 @@ function LigneEvenement({ evenement }: { evenement: EvenementAudit }) {
     second: "2-digit",
   });
 
+  const aDetails =
+    evenement.agent_utilisateur ||
+    evenement.donnees_supplementaires ||
+    evenement.role_acteur;
+
   return (
-    <div className="border-l-4 border-ocre bg-sable-clair rounded-r-md pl-4 pr-3 py-3 hover:bg-sable transition-colors">
+    <div
+      className={`border-l-4 border-ocre rounded-r-md pl-4 pr-3 py-3 transition-colors cursor-pointer ${
+        deplie ? "bg-sable" : "bg-sable-clair hover:bg-sable"
+      }`}
+      onClick={() => setDeplie(!deplie)}
+    >
       <div className="flex justify-between gap-4 items-start mb-2 flex-wrap">
         <div className="flex items-center gap-3 flex-wrap">
           <Badge variante={variant} taille="petit">
@@ -412,20 +432,29 @@ function LigneEvenement({ evenement }: { evenement: EvenementAudit }) {
           <span className="text-xs text-ardoise-clair font-mono bg-blanc px-2 py-1 rounded border border-ardoise-clair/20">
             {evenement.id.substring(0, 8)}
           </span>
+          {evenement.score_risque !== null && evenement.score_risque !== undefined && evenement.score_risque > 50 && (
+            <span className="text-xs font-semibold text-terre bg-terre/10 px-2 py-1 rounded">
+              Risque {evenement.score_risque}/100
+            </span>
+          )}
         </div>
         <time className="text-xs text-ardoise-clair whitespace-nowrap font-mono">
           {dateFormatee}
         </time>
       </div>
 
-      <p className="text-sm text-ardoise mb-3 leading-relaxed">
+      <p className="text-sm text-ardoise mb-2 leading-relaxed">
         {evenement.description}
       </p>
 
       <div className="flex flex-wrap gap-2 text-xs">
         {evenement.utilisateur_id && (
-          <span className="font-mono bg-blanc border border-ardoise-clair/20 px-2 py-1 rounded text-ardoise-clair">
-            <strong>User :</strong> {evenement.utilisateur_id.substring(0, 12)}...
+          <span className="font-mono bg-blanc border border-ardoise-clair/20 px-2 py-1 rounded text-ardoise-clair flex items-center gap-1">
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            <span className="font-medium text-ardoise">{evenement.nom_utilisateur || "Inconnu"}</span>
+            <span className="text-ardoise-clair ml-1">({evenement.utilisateur_id.substring(0, 8)}...)</span>
           </span>
         )}
         {evenement.adresse_ip && (
@@ -433,7 +462,44 @@ function LigneEvenement({ evenement }: { evenement: EvenementAudit }) {
             <strong>IP :</strong> {evenement.adresse_ip}
           </span>
         )}
+        {evenement.role_acteur && (
+          <span className="bg-blanc border border-ardoise-clair/20 px-2 py-1 rounded text-ardoise-clair">
+            <strong>Rôle :</strong> {evenement.role_acteur}
+          </span>
+        )}
+        {aDetails && (
+          <span className="text-ocre text-xs ml-auto">
+            {deplie ? "▲ Réduire" : "▼ Détails"}
+          </span>
+        )}
       </div>
+
+      {/* Section dépliée : détails complets */}
+      {deplie && aDetails && (
+        <div className="mt-3 pt-3 border-t border-ardoise-clair/10 space-y-3">
+          {evenement.agent_utilisateur && (
+            <div className="text-xs">
+              <span className="font-semibold text-ardoise-clair">User-Agent :</span>
+              <p className="font-mono mt-1 text-ardoise-clair bg-blanc/50 p-2 rounded text-[11px] break-all">
+                {evenement.agent_utilisateur}
+              </p>
+            </div>
+          )}
+
+          {evenement.donnees_supplementaires && (
+            <div className="text-xs">
+              <span className="font-semibold text-ardoise-clair">Données contextuelles :</span>
+              <pre className="font-mono mt-1 text-ardoise-clair bg-blanc/50 p-2 rounded text-[11px] overflow-x-auto">
+                {JSON.stringify(evenement.donnees_supplementaires, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          <div className="text-xs text-ardoise-clair pt-1">
+            <strong>ID événement :</strong> <span className="font-mono">{evenement.id}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

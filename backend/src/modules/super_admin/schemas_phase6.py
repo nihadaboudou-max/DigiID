@@ -99,6 +99,8 @@ class EvenementAuditItem(BaseModel):
     description: str
     #: ID de l'utilisateur concerné (None pour actions anonymes)
     utilisateur_id: Optional[UUID] = None
+    #: Nom complet de l'utilisateur concerné (déchiffré)
+    nom_utilisateur: Optional[str] = None
     #: Rôle de l'acteur au moment de l'action
     role_acteur: Optional[str] = None
     #: Adresse IP d'origine
