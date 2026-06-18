@@ -5,7 +5,6 @@
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
