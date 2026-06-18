@@ -354,7 +354,7 @@ async def _collecter_attestations(
     Collecte les donnees reelles d'attestations communautaires depuis la base.
     Remplace les valeurs simulees par les vraies donnees.
     """
-        resultat = await session.execute(
+    resultat = await session.execute(
         select(
             func.count(AttestationCommunautaire.id).label("total"),
             func.sum(AttestationCommunautaire.poids_score).label("poids_total"),
