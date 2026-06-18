@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import AttestationCommunautaire, Utilisateur
 from src.noyau.chiffrement import dechiffrer_donnee
-from src.modules.scoring.service import declencher_recalcul_score
+from src.modules.scoring.service import calculer_et_enregistrer_score
 from src.modules.attestations_communautaires.repository import (
     AttestationRepository,
 )
@@ -661,32 +661,32 @@ class ServiceAttestations:
         """
         Déclenche un recalcul complet du score via le moteur de scoring.
 
-        Remplace l'ancienne methode _mettre_a_jour_score_atteste qui faisait
-        une simple addition (score += poids) sans passer par le pipeline
-        de scoring complet (ML, facteurs, historique, badges).
+        Appelle directement calculer_et_enregistrer_score (SANS cooldown)
+        pour garantir que le score est mis à jour immédiatement après
+        l'approbation d'une attestation.
 
-        Le recalcul temps réel est protégé par un cooldown de 5 minutes
-        (implémenté dans declencher_recalcul_score).
+        Le recalcul force l'injection des vraies données d'attestations
+        (collectées via _collecter_attestations) qui remplacent les
+        valeurs simulées du generateur de donnees.
         """
         atteste = attestation.atteste
         if not atteste:
             return None
 
         try:
-            resultat = await declencher_recalcul_score(
+            resultat = await calculer_et_enregistrer_score(
                 session=self.session,
                 utilisateur=atteste,
-                raison="attestation_approuvee",
+                forcer_recalcul=True,
             )
-            if resultat is not None:
-                journal.info(
-                    "Score recalculé après approbation d'attestation | "
-                    "utilisateur=%s nouveau_score=%s",
-                    atteste.id,
-                    resultat.score_total,
-                )
-                return float(resultat.score_total)
-            return atteste.score_actuel
+            journal.info(
+                "Score recalculé après approbation d'attestation | "
+                "utilisateur=%s nouveau_score=%s attestations=%s",
+                atteste.id,
+                resultat.score_total,
+                resultat.facteurs[-1].valeur if resultat.facteurs else "?",
+            )
+            return float(resultat.score_total)
         except Exception as e:
             journal.warning(
                 "Échec du recalcul score après attestation | "
@@ -694,13 +694,6 @@ class ServiceAttestations:
                 atteste.id,
                 str(e),
             )
-            # Fallback: addition simple si le recalcul échoue
-            if atteste.score_actuel is not None:
-                nouveau_score = min(100.0, atteste.score_actuel + attestation.poids_score)
-                atteste.score_actuel = nouveau_score
-                self.session.add(atteste)
-                await self.session.commit()
-                return nouveau_score
             return None
 
     # ========================================================================
