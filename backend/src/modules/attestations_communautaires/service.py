@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+ç# -*- coding: utf-8 -*-
 """
 Service — Logique métier des attestations communautaires.
 
@@ -144,8 +144,33 @@ class ServiceAttestations:
 
         return ResultatCreation(
             message="Attestation créée avec succès. En attente de l'approbation de la personne attestée.",
-            attestation=self._vers_detail(attestation_creee),
+            attestation=self._vers_detail(
+                await self._enregistrer_et_retourner(attestation_creee)
+            ),
         )
+
+    async def _enregistrer_et_retourner(
+        self,
+        attestation: AttestationCommunautaire,
+    ) -> AttestationCommunautaire:
+        """
+        Sauvegarde les modifications et recharge les relations.
+        Appelée après chaque opération d'écriture.
+        """
+        await self.session.commit()
+        await self.session.refresh(attestation)
+        # Recharger les relations
+        from sqlalchemy import select
+        from sqlalchemy.orm import joinedload
+        resultat = await self.session.execute(
+            select(AttestationCommunautaire)
+            .options(
+                joinedload(AttestationCommunautaire.attestant),
+                joinedload(AttestationCommunautaire.atteste),
+            )
+            .where(AttestationCommunautaire.id == attestation.id)
+        )
+        return resultat.unique().scalar_one()
 
     # ========================================================================
     # Modération admin
@@ -260,7 +285,7 @@ class ServiceAttestations:
 
         # Approuver l'attestation
         attestation.approuver()
-        attestation_maj = await self.repository.mettre_a_jour(self.session, attestation)
+        attestation_maj = await self._enregistrer_et_retourner(attestation)
 
         # Mettre à jour le score de l'utilisateur attesté
         nouveau_score = await self._mettre_a_jour_score_atteste(attestation)
@@ -313,7 +338,7 @@ class ServiceAttestations:
 
         # Refuser avec motif
         attestation.refuser(decision.motif_refus or "Motif non spécifié")
-        attestation_maj = await self.repository.mettre_a_jour(self.session, attestation)
+        attestation_maj = await self._enregistrer_et_retourner(attestation)
 
         journal.info(
             "Attestation refusée | id=%s | attestant=%s | attesté=%s | motif=%s",
@@ -472,7 +497,7 @@ class ServiceAttestations:
         if donnees.est_visible_public is not None:
             attestation.est_visible_public = donnees.est_visible_public
 
-        attestation_maj = await self.repository.mettre_a_jour(self.session, attestation)
+        attestation_maj = await self._enregistrer_et_retourner(attestation)
 
         return self._vers_detail(attestation_maj)
 
@@ -517,6 +542,7 @@ class ServiceAttestations:
             )
 
         await self.repository.supprimer(self.session, attestation_id)
+        await self.session.commit()
 
         journal.info(
             "Attestation supprimée | id=%s | par=%s",
@@ -650,7 +676,7 @@ class ServiceAttestations:
             )
             atteste.score_actuel = nouveau_score
             self.session.add(atteste)
-            await self.session.flush()
+            await self.session.commit()
             return nouveau_score
         return None
 
