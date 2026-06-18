@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import AttestationCommunautaire, Utilisateur
 from src.noyau.chiffrement import dechiffrer_donnee
+from src.modules.scoring.service import declencher_recalcul_score
 from src.modules.attestations_communautaires.repository import (
     AttestationRepository,
 )
@@ -287,8 +288,8 @@ class ServiceAttestations:
         attestation.approuver()
         attestation_maj = await self._enregistrer_et_retourner(attestation)
 
-        # Mettre à jour le score de l'utilisateur attesté
-        nouveau_score = await self._mettre_a_jour_score_atteste(attestation)
+        # Mettre à jour le score de l'utilisateur attesté (recalcul complet via le moteur de scoring)
+        nouveau_score = await self._reinitialiser_score_atteste(attestation)
 
         journal.info(
             "Attestation approuvée | id=%s | attestant=%s | attesté=%s | poids=%s",
@@ -653,32 +654,54 @@ class ServiceAttestations:
                 f"Réessayez demain."
             )
 
-    async def _mettre_a_jour_score_atteste(
+    async def _reinitialiser_score_atteste(
         self,
         attestation: AttestationCommunautaire,
     ) -> Optional[float]:
         """
-        Met à jour le score de l'utilisateur attesté.
+        Déclenche un recalcul complet du score via le moteur de scoring.
 
-        Ajoute le poids de l'attestation au score actuel.
+        Remplace l'ancienne methode _mettre_a_jour_score_atteste qui faisait
+        une simple addition (score += poids) sans passer par le pipeline
+        de scoring complet (ML, facteurs, historique, badges).
 
-        Args:
-            attestation: Attestation approuvée
-
-        Returns:
-            Nouveau score ou None si non applicable
+        Le recalcul temps réel est protégé par un cooldown de 5 minutes
+        (implémenté dans declencher_recalcul_score).
         """
         atteste = attestation.atteste
-        if atteste and atteste.score_actuel is not None:
-            nouveau_score = min(
-                100.0,
-                atteste.score_actuel + attestation.poids_score,
+        if not atteste:
+            return None
+
+        try:
+            resultat = await declencher_recalcul_score(
+                session=self.session,
+                utilisateur=atteste,
+                raison="attestation_approuvee",
             )
-            atteste.score_actuel = nouveau_score
-            self.session.add(atteste)
-            await self.session.commit()
-            return nouveau_score
-        return None
+            if resultat is not None:
+                journal.info(
+                    "Score recalculé après approbation d'attestation | "
+                    "utilisateur=%s nouveau_score=%s",
+                    atteste.id,
+                    resultat.score_total,
+                )
+                return float(resultat.score_total)
+            return atteste.score_actuel
+        except Exception as e:
+            journal.warning(
+                "Échec du recalcul score après attestation | "
+                "utilisateur=%s erreur=%s",
+                atteste.id,
+                str(e),
+            )
+            # Fallback: addition simple si le recalcul échoue
+            if atteste.score_actuel is not None:
+                nouveau_score = min(100.0, atteste.score_actuel + attestation.poids_score)
+                atteste.score_actuel = nouveau_score
+                self.session.add(atteste)
+                await self.session.commit()
+                return nouveau_score
+            return None
 
     # ========================================================================
     # Convertisseurs (modèle → schéma)
