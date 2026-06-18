@@ -1,4 +1,4 @@
-ç# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 Service — Logique métier des attestations communautaires.
 
