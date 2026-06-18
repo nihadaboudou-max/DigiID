@@ -36,6 +36,8 @@ interface SousMenu {
 const LIENS_UTILISATEUR: Lien[] = [
   { href: "/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
   { href: "/profil",          libelle: "Mon profil",      Icone: IconeUtilisateur },
+  { href: "/documents",       libelle: "Mes documents",    Icone: IconeJournal },
+  { href: "/historique",      libelle: "Historique d'accès", Icone: IconeAlerte },
   { href: "/chatbot",         libelle: "Assistant",       Icone: IconeChat },
   { href: "/parametres",      libelle: "Paramètres",      Icone: IconeParametres },
 ];
@@ -414,6 +416,8 @@ export function BarreLaterale() {
   const estDansProfilCitoyen =
     pathname === "/tableau-de-bord" ||
     pathname === "/profil" ||
+    pathname === "/documents" ||
+    pathname === "/historique" ||
     pathname === "/chatbot" ||
     pathname === "/parametres" ||
     pathname.startsWith("/score") ||
@@ -629,6 +633,8 @@ export function BarreLaterale() {
                   {[
                     { href: "/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
                     { href: "/profil",          libelle: "Mon profil",      Icone: IconeUtilisateur },
+                    { href: "/documents",       libelle: "Mes documents",    Icone: IconeJournal },
+                    { href: "/historique",      libelle: "Historique d'accès", Icone: IconeAlerte },
                     { href: "/chatbot",         libelle: "Assistant",       Icone: IconeChat },
                     { href: "/parametres",      libelle: "Paramètres",      Icone: IconeParametres },
                   ].map((lien) => {
