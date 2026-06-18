@@ -354,7 +354,7 @@ async def _collecter_attestations(
     Collecte les donnees reelles d'attestations communautaires depuis la base.
     Remplace les valeurs simulees par les vraies donnees.
     """
-    resultat = await session.execute(
+        resultat = await session.execute(
         select(
             func.count(AttestationCommunautaire.id).label("total"),
             func.sum(AttestationCommunautaire.poids_score).label("poids_total"),
@@ -367,11 +367,21 @@ async def _collecter_attestations(
     )
     ligne = resultat.one()
 
-    return {
+    stats = {
         "approuvees_recues": ligne.total or 0,
         "poids_total": float(ligne.poids_total or 0),
         "attestants_uniques": ligne.attestants or 0,
     }
+
+    journal.debug(
+        "_collecter_attestations | utilisateur=%s | recues=%s | poids=%s | uniques=%s",
+        utilisateur.id,
+        stats["approuvees_recues"],
+        stats["poids_total"],
+        stats["attestants_uniques"],
+    )
+
+    return stats
 
 
 def _construire_detail(

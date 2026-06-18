@@ -674,18 +674,27 @@ class ServiceAttestations:
             return None
 
         try:
+            score_avant = atteste.score_actuel
+
             resultat = await calculer_et_enregistrer_score(
                 session=self.session,
                 utilisateur=atteste,
                 forcer_recalcul=True,
             )
+
             journal.info(
-                "Score recalculé après approbation d'attestation | "
-                "utilisateur=%s nouveau_score=%s attestations=%s",
+                "_reinitialiser_score_atteste | utilisateur=%s | "
+                "score_avant=%s | score_apres=%s | "
+                "facteur_attestations=%s | donnees_brutes=%s",
                 atteste.id,
+                score_avant,
                 resultat.score_total,
                 resultat.facteurs[-1].valeur if resultat.facteurs else "?",
+                {k: v for k, v in resultat.facteurs[-1].model_dump().items()}
+                if hasattr(resultat.facteurs[-1], "model_dump")
+                else "?",
             )
+
             return float(resultat.score_total)
         except Exception as e:
             journal.warning(
