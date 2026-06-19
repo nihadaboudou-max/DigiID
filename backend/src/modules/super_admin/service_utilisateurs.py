@@ -52,6 +52,22 @@ def _hasher_email(email: str) -> str:
     return hashlib.sha256(email.strip().lower().encode()).hexdigest()
 
 
+def _generer_digiid_suffixe(longueur: int = 9) -> str:
+    """
+    Génère un suffixe alphanumérique pour digiid_public.
+    
+    Utilise des caractères alphanumériques (A-Z, 0-9) pour rester
+    exactement dans la longueur demandée (contrairement à token_urlsafe
+    dont l'encodage base64 est imprévisible).
+    
+    DIGIID- (7) + 9 caractères = 16 caractères (VARCHAR(16))
+    """
+    import secrets
+    import string
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(longueur))
+
+
 def _utilisateur_vers_apercu(u: Utilisateur) -> UtilisateurApercu:
     """Convertit une instance Utilisateur ORM en schéma de réponse."""
     return UtilisateurApercu(
@@ -548,7 +564,8 @@ async def creer_utilisateur(
 
     # 2. Créer l'utilisateur
     mot_de_passe_hash = hacher_mot_de_passe(donnees.mot_de_passe)
-    digiid = f"DIGIID-{generer_token_aleatoire(9)}"
+    # DIGIID- (7) + 9 caractères = 16 exactement (VARCHAR(16))
+    digiid = f"DIGIID-{_generer_digiid_suffixe()}"
 
     utilisateur = Utilisateur(
         email_hash=email_hash,
