@@ -82,7 +82,7 @@ export default function PageCreationProfil() {
     try {
       const donnees: CreerProfilRequete = { email, mot_de_passe: motDePasse, prenom, nom, role, ville };
       const profil = await creerProfilUtilisateur(donnees);
-      setSucces({ email: profil.email, prenom: profil.prenom, nom: profil.nom });
+      setSucces({ email: profil.email, prenom: profil.prenom ?? "", nom: profil.nom ?? "" });
       notifier(`Profil ${role} créé : ${profil.email}`, "succes");
     } catch (e) {
       const msg = e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la création";
