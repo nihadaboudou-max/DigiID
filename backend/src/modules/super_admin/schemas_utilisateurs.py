@@ -4,7 +4,68 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+from src.config.constantes import RolesUtilisateur
+
+
+class CreerProfilRequete(BaseModel):
+    """
+    Données pour créer un compte avec un rôle spécifique (hors citoyen).
+    Le super administrateur peut créer des profils pour :
+      - ong, medecin, agent, police
+      - administrateur, super_administrateur
+    """
+    email: str = Field(
+        ...,
+        min_length=5, max_length=255,
+        description="Email du futur utilisateur",
+    )
+    mot_de_passe: str = Field(
+        ...,
+        min_length=12, max_length=128,
+        description="12+ caractères, majuscule, minuscule, chiffre, caractère spécial",
+    )
+    prenom: str = Field(..., min_length=2, max_length=50, description="Prénom") 
+    nom: str = Field(..., min_length=2, max_length=50, description="Nom")
+    role: str = Field(
+        ...,
+        description="Rôle à attribuer (ong, medecin, agent, police, administrateur, super_administrateur)",
+    )
+    ville: Optional[str] = Field(default=None, max_length=100, description="Ville (optionnelle)")
+
+    @field_validator("role")
+    @classmethod
+    def valider_role_creation(cls, v: str) -> str:
+        """Vérifie que le rôle est autorisé à la création (pas citoyen)."""
+        roles_autorises = [
+            RolesUtilisateur.ONG.value,
+            RolesUtilisateur.MEDECIN.value,
+            RolesUtilisateur.AGENT.value,
+            RolesUtilisateur.POLICE.value,
+            RolesUtilisateur.ADMINISTRATEUR.value,
+            RolesUtilisateur.SUPER_ADMINISTRATEUR.value,
+        ]
+        if v not in roles_autorises:
+            raise ValueError(
+                f"Rôle '{v}' non autorisé. Rôles disponibles : {', '.join(roles_autorises)}"
+            )
+        return v
+
+    @field_validator("mot_de_passe")
+    @classmethod
+    def valider_complexite(cls, v: str) -> str:
+        """Vérifie la complexité minimale du mot de passe."""
+        if not any(c.islower() for c in v):
+            raise ValueError("Le mot de passe doit contenir au moins une minuscule")
+        if not any(c.isupper() for c in v):
+            raise ValueError("Le mot de passe doit contenir au moins une majuscule")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Le mot de passe doit contenir au moins un chiffre")
+        if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?/~`" for c in v):
+            raise ValueError("Le mot de passe doit contenir au moins un caractère spécial")
+        return v
 
 
 class UtilisateurApercu(BaseModel):

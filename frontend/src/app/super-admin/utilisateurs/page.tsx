@@ -28,12 +28,14 @@ import {
   supprimerDefinitivementUtilisateur,
   changerRoleUtilisateur,
   compterUtilisateurs,
+  creerProfilUtilisateur,
   type UtilisateurComplet,
   type ListeUtilisateurs,
   type FiltresUtilisateurs,
   type NombreUtilisateurs,
   type ModifierUtilisateurRequete,
   type ChangerRoleRequete,
+  type CreerProfilRequete,
 } from "@/services/super_admin_utilisateurs";
 import { ErreurAPI } from "@/services/client_api";
 
@@ -76,6 +78,7 @@ function Contenu() {
   // Modals
   const [modalUtilisateur, setModalUtilisateur] = useState<UtilisateurComplet | null>(null);
   const [modalEdition, setModalEdition] = useState<UtilisateurComplet | null>(null);
+  const [modalCreation, setModalCreation] = useState(false);
   const [modalSuspension, setModalSuspension] = useState<UtilisateurComplet | null>(null);
   const [modalSuppression, setModalSuppression] = useState<UtilisateurComplet | null>(null);
   const [modalRole, setModalRole] = useState<UtilisateurComplet | null>(null);
@@ -186,6 +189,20 @@ function Contenu() {
       charger(page);
     } catch (e) {
       notifier(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la modification", "erreur");
+    } finally {
+      setActionChargement(false);
+    }
+  };
+
+  const gererCreation = async (donnees: CreerProfilRequete) => {
+    setActionChargement(true);
+    try {
+      const profil = await creerProfilUtilisateur(donnees);
+      notifier(`Profil ${donnees.role} créé : ${profil.prenom} ${profil.nom} (${profil.email})`, "succes");
+      setModalCreation(false);
+      charger(page);
+    } catch (e) {
+      notifier(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la création", "erreur");
     } finally {
       setActionChargement(false);
     }
@@ -326,6 +343,9 @@ function Contenu() {
           <Link href="/super-admin/tableau-de-bord">
             <Bouton variante="ghost" taille="petit">← Retour</Bouton>
           </Link>
+          <Bouton variante="primaire" taille="petit" onClick={() => setModalCreation(true)}>
+            + Créer un profil
+          </Bouton>
           <Link href="/super-admin/droits">
             <Bouton variante="secondaire" taille="petit">🛡️ Gestion des droits</Bouton>
           </Link>
@@ -505,6 +525,15 @@ function Contenu() {
           chargement={actionChargement}
           onChangerRole={(role, motif) => gererChangementRole(modalRole, role, motif)}
           onFermer={() => setModalRole(null)}
+        />
+      )}
+
+      {/* MODAL CRÉATION DE PROFIL */}
+      {modalCreation && (
+        <CreationModal
+          chargement={actionChargement}
+          onCreer={(d) => gererCreation(d)}
+          onFermer={() => setModalCreation(false)}
         />
       )}
     </div>
@@ -820,6 +849,152 @@ function RoleModal({
           </Bouton>
         </div>
       </div>
+    </Modal>
+  );
+}
+
+// ---- CRÉATION DE PROFIL ----
+function CreationModal({
+  chargement, onCreer, onFermer,
+}: {
+  chargement: boolean;
+  onCreer: (d: CreerProfilRequete) => void;
+  onFermer: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [motDePasse, setMotDePasse] = useState("");
+  const [prenom, setPrenom] = useState("");
+  const [nom, setNom] = useState("");
+  const [role, setRole] = useState("agent");
+  const [ville, setVille] = useState("Dakar");
+  const [erreur, setErreur] = useState<string | null>(null);
+
+  const ROLES_CREATION = [
+    { role: "agent", libelle: "Agent administratif", icone: "🏛️" },
+    { role: "medecin", libelle: "Médecin", icone: "🏥" },
+    { role: "police", libelle: "Forces de l'ordre", icone: "👮" },
+    { role: "ong", libelle: "ONG / Association", icone: "🤝" },
+    { role: "administrateur", libelle: "Administrateur", icone: "⚙️" },
+    { role: "super_administrateur", libelle: "Super administrateur", icone: "👑" },
+  ];
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErreur(null);
+
+    // Validation simple côté client
+    if (!email || !motDePasse || !prenom || !nom) {
+      setErreur("Tous les champs obligatoires doivent être remplis.");
+      return;
+    }
+    if (motDePasse.length < 12) {
+      setErreur("Le mot de passe doit faire au moins 12 caractères.");
+      return;
+    }
+    if (prenom.length < 2 || nom.length < 2) {
+      setErreur("Prénom et nom doivent faire au moins 2 caractères.");
+      return;
+    }
+
+    onCreer({ email, mot_de_passe: motDePasse, prenom, nom, role, ville });
+  };
+
+  return (
+    <Modal ouvert={true} surFermeture={onFermer} titre="Créer un profil" taille="grand">
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
+
+        <div>
+          <label className="text-xs uppercase text-ardoise-clair font-semibold mb-2 block">Rôle du profil</label>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {ROLES_CREATION.map((r) => (
+              <button
+                key={r.role}
+                type="button"
+                onClick={() => setRole(r.role)}
+                className={`px-3 py-2.5 rounded-lg text-xs font-medium border transition-all ${
+                  role === r.role
+                    ? "bg-ocre text-white border-ocre shadow-sm"
+                    : "bg-white text-ardoise border-ardoise-clair/20 hover:border-ocre hover:text-ocre"
+                }`}
+              >
+                <span className="block text-base mb-1">{r.icone}</span>
+                {r.libelle}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs uppercase text-ardoise-clair font-semibold">Prénom</label>
+            <input
+              type="text"
+              value={prenom}
+              onChange={(e) => setPrenom(e.target.value)}
+              required
+              minLength={2}
+              className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-xs uppercase text-ardoise-clair font-semibold">Nom</label>
+            <input
+              type="text"
+              value={nom}
+              onChange={(e) => setNom(e.target.value)}
+              required
+              minLength={2}
+              className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs uppercase text-ardoise-clair font-semibold">Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+            placeholder="exemple@domaine.sn"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs uppercase text-ardoise-clair font-semibold">Mot de passe</label>
+          <input
+            type="password"
+            value={motDePasse}
+            onChange={(e) => setMotDePasse(e.target.value)}
+            required
+            minLength={12}
+            className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+          />
+          <p className="text-xs text-ardoise-clair mt-1">
+            12+ caractères avec majuscule, minuscule, chiffre et caractère spécial.
+          </p>
+        </div>
+
+        <div>
+          <label className="text-xs uppercase text-ardoise-clair font-semibold">Ville</label>
+          <input
+            type="text"
+            value={ville}
+            onChange={(e) => setVille(e.target.value)}
+            className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+            placeholder="Dakar"
+          />
+        </div>
+
+        <div className="flex justify-end gap-3 pt-4 border-t border-ardoise-clair/10">
+          <Bouton type="button" variante="ghost" onClick={onFermer}>Annuler</Bouton>
+          <Bouton type="submit" variante="primaire" chargement={chargement}>
+            Créer le profil
+          </Bouton>
+        </div>
+      </form>
     </Modal>
   );
 }

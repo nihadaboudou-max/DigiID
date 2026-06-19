@@ -64,6 +64,15 @@ export interface ModifierUtilisateurRequete {
   ville?: string;
 }
 
+export interface CreerProfilRequete {
+  email: string;
+  mot_de_passe: string;
+  prenom: string;
+  nom: string;
+  role: string;
+  ville?: string;
+}
+
 export interface ChangerRoleRequete {
     role: string;
     motif: string;
@@ -145,7 +154,12 @@ export const supprimerDefinitivementUtilisateur = (utilisateurId: string) =>
 
 /** Change le rôle d'un utilisateur */
 export const changerRoleUtilisateur = (utilisateurId: string, donnees: ChangerRoleRequete) =>
-  clientAPI.patch<UtilisateurComplet>(`${PREFIXE}/${utilisateurId}/role`, donnees, { authentifie: true });
+  clientAPI.patch<UtilisateurComplet>(  `${PREFIXE}/${utilisateurId}/role`, donnees, { authentifie: true }
+);
+
+/** Crée un profil utilisateur avec un rôle spécifique (hors citoyen) — POST /super-admin/utilisateurs/profils */
+export const creerProfilUtilisateur = (donnees: CreerProfilRequete) =>
+  clientAPI.post<UtilisateurComplet>(`${PREFIXE}/profils`, donnees, { authentifie: true });
 
 // ============================================================================
 // DROITS — Assignation par email

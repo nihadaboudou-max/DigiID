@@ -40,6 +40,30 @@ export interface CreerAdminRequete {
   ville?: string;
 }
 
+export interface CreerProfilRequete {
+  email: string;
+  mot_de_passe: string;
+  prenom: string;
+  nom: string;
+  role: string;
+  ville?: string;
+}
+
+export interface UtilisateurApercu {
+  id: string;
+  email: string;
+  prenom: string | null;
+  nom: string | null;
+  role: string;
+  est_actif: boolean;
+  est_verrouille: boolean;
+  deux_fa_active: boolean;
+  est_email_verifie: boolean;
+  ville: string | null;
+  date_creation: string;
+  date_derniere_connexion: string | null;
+}
+
 export interface ModifierAdminRequete {
   prenom?: string;
   nom?: string;
@@ -142,6 +166,10 @@ export const obtenirAdminDetail = (adminId: string) =>
 /** Crée un nouvel administrateur */
 export const creerAdmin = (donnees: CreerAdminRequete) =>
   clientAPI.post<AdminApercu>(`${PREFIXE}/administrateurs`, donnees, { authentifie: true });
+
+/** Crée un profil utilisateur avec rôle spécifique (hors citoyen) */
+export const creerProfilUtilisateur = (donnees: CreerProfilRequete) =>
+  clientAPI.post<UtilisateurApercu>(`${PREFIXE}/utilisateurs/profils`, donnees, { authentifie: true });
 
 /** Modifie un administrateur (prénom, nom, ville) */
 export const modifierAdmin = (adminId: string, donnees: ModifierAdminRequete) =>

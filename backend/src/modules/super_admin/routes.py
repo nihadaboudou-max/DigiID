@@ -50,6 +50,7 @@ from src.modules.super_admin.schemas_securite import (
     ChangerRoleRequete,
 )
 from src.modules.super_admin.schemas_utilisateurs import (
+    CreerProfilRequete,
     ListeUtilisateurs,
     NombreUtilisateurs,
     UtilisateurApercu,
@@ -795,6 +796,43 @@ async def changer_role_utilisateur(
 # =============================================================================
 # UTILISATEURS — Gestion complète de tous les utilisateurs
 # =============================================================================
+
+
+@routeur_super_admin.post(
+    "/utilisateurs/profils",
+    response_model=UtilisateurApercu,
+    status_code=status.HTTP_201_CREATED,
+    summary="Créer un profil utilisateur (hors citoyen)",
+    description=(
+        "Crée un nouveau compte avec un rôle spécifique. "
+        "Rôles disponibles : ong, medecin, agent, police, administrateur, super_administrateur. "
+        "Le citoyen ne peut pas être créé ici (inscription libre)."
+    ),
+)
+async def creer_profil_utilisateur(
+    requete: Request,
+    donnees: CreerProfilRequete,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    super_admin: Annotated[Utilisateur, Depends(super_admin_courant)],
+):
+    """
+    Crée un profil utilisateur avec un rôle spécifique (sauf citoyen).
+
+    - **email** : obligatoire, unique
+    - **prenom / nom** : obligatoires, 2-50 caractères
+    - **mot_de_passe** : 12+ caractères avec maj, min, chiffre, spécial
+    - **role** : ong, medecin, agent, police, administrateur, super_administrateur
+    - **ville** : optionnelle
+
+    Les données personnelles sont chiffrées avant stockage.
+    L'action est tracée dans le journal d'audit.
+    """
+    return await service_utilisateurs.creer_utilisateur(
+        session=session,
+        super_admin=super_admin,
+        donnees=donnees,
+        adresse_ip=obtenir_ip_client(requete),
+    )
 
 
 @routeur_super_admin.get(

@@ -25,11 +25,12 @@ from src.modeles import (
     Utilisateur,
 )
 from src.modules.super_admin.schemas_utilisateurs import (
+    CreerProfilRequete,
     ListeUtilisateurs,
     NombreUtilisateurs,
     UtilisateurApercu,
 )
-from src.noyau import chiffrer_donnee, dechiffrer_donnee, journal
+from src.noyau import chiffrer_donnee, dechiffrer_donnee, generer_token_aleatoire, hacher_mot_de_passe, journal
 
 
 # =============================================================================
@@ -513,3 +514,85 @@ async def supprimer_definitivement_utilisateur(
     journal_audit(f"hard_delete_utilisateur | par={super_admin.id} | cible={utilisateur_id}")
 
     await session.commit()
+
+
+async def creer_utilisateur(
+    session: AsyncSession,
+    super_admin: Utilisateur,
+    donnees: CreerProfilRequete,
+    adresse_ip: Optional[str] = None,
+) -> UtilisateurApercu:
+    """
+    Crée un utilisateur avec un rôle spécifique (hors citoyen).
+
+    Le super admin peut créer des profils pour :
+      - ong, medecin, agent, police (institutionnels)
+      - administrateur, super_administrateur (administratifs)
+
+    Les données personnelles (email, prénom, nom) sont chiffrées avant stockage.
+    """
+    # 1. Vérifier que l'email n'est pas déjà utilisé
+    import hashlib
+    email_hash = hashlib.sha256(donnees.email.strip().lower().encode()).hexdigest()
+    existe = await session.execute(
+        select(Utilisateur).where(
+            Utilisateur.email_hash == email_hash,
+            Utilisateur.est_supprime == False,
+        )
+    )
+    if existe.scalar_one_or_none() is not None:
+        raise ErreurValidation(
+            f"L'email {donnees.email} est déjà utilisé",
+            message_utilisateur="Un compte avec cet email existe déjà.",
+        )
+
+    # 2. Créer l'utilisateur
+    mot_de_passe_hash = hacher_mot_de_passe(donnees.mot_de_passe)
+    digiid = f"DIGIID-{generer_token_aleatoire(12)}"
+
+    utilisateur = Utilisateur(
+        email_hash=email_hash,
+        email_chiffre=chiffrer_donnee(donnees.email),
+        prenom_chiffre=chiffrer_donnee(donnees.prenom),
+        nom_chiffre=chiffrer_donnee(donnees.nom),
+        mot_de_passe_hash=mot_de_passe_hash,
+        role=donnees.role,
+        digiid=digiid,
+        ville=donnees.ville or "",
+        est_actif=True,
+        est_email_verifie=False,
+        deux_fa_active=False,
+        cree_le=datetime.now(timezone.utc),
+    )
+    session.add(utilisateur)
+    await session.flush()
+
+    # 3. Audit
+    entree = JournalAudit(
+        date_evenement=datetime.now(timezone.utc),
+        utilisateur_id=super_admin.id,
+        role_acteur=super_admin.role,
+        type_evenement="creation_profil",
+        description=(
+            f"Super admin a créé un profil {donnees.role} : "
+            f"{donnees.prenom} {donnees.nom} ({donnees.email})"
+        ),
+        adresse_ip=adresse_ip,
+        donnees_supplementaires={
+            "utilisateur_cree_id": str(utilisateur.id),
+            "role": donnees.role,
+            "email": donnees.email,
+        },
+    )
+    session.add(entree)
+    journal_audit(f"creation_profil | par={super_admin.id} | role={donnees.role} | email={donnees.email}")
+
+    await session.commit()
+    await session.refresh(utilisateur)
+
+    journal.info(
+        f"Profil {donnees.role} créé par super_admin={super_admin.id} : "
+        f"{donnees.prenom} {donnees.nom} ({donnees.email})"
+    )
+
+    return _utilisateur_vers_apercu(utilisateur)
