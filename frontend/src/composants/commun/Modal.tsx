@@ -50,7 +50,7 @@ export function Modal({
     >
       <div
         className={clsx(
-          "bg-white rounded-2xl shadow-xl w-full flex flex-col max-h-[95vh]",
+          "bg-white rounded-2xl shadow-xl w-full flex flex-col max-h-[95vh] overflow-hidden min-h-0",
           TAILLES[taille],
         )}
         onClick={(e) => e.stopPropagation()}
