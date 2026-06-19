@@ -137,7 +137,7 @@ export default function PageVerification() {
     try {
       const reponse = await clientAPI.post<{ succes: boolean; message: string }>(
         "/api/v1/auth/verification/verifier",
-        { code, canal: canal === "sms" || canal === "appel" ? "sms" : canal },
+        { code, canal },
         { authentifie: true },
       );
       if (reponse.succes) {
