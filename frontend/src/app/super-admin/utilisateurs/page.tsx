@@ -904,7 +904,7 @@ function CreationModal({
 
         <div>
           <label className="text-xs uppercase text-ardoise-clair font-semibold mb-2 block">Rôle du profil</label>
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-4 gap-1.5">
             {ROLES_CREATION.map((r) => (
               <button
                 key={r.role}
