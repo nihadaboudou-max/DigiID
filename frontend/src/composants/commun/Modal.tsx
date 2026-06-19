@@ -50,7 +50,7 @@ export function Modal({
     >
       <div
         className={clsx(
-          "bg-white rounded-2xl shadow-xl w-full flex flex-col max-h-[95vh] overflow-hidden min-h-0",
+          "bg-white rounded-2xl shadow-xl w-full flex flex-col max-h-[95vh] overflow-hidden",
           TAILLES[taille],
         )}
         onClick={(e) => e.stopPropagation()}
@@ -76,7 +76,7 @@ export function Modal({
             </button>
           </div>
         )}
-        <div className="p-5 overflow-y-auto flex-1 min-h-0">{children}</div>
+        <div className="p-5 overflow-y-auto" style={{maxHeight: titre ? "calc(95vh - 80px)" : "95vh"}}>{children}</div>
       </div>
     </div>
   );
