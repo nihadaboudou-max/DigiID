@@ -548,7 +548,7 @@ async def creer_utilisateur(
 
     # 2. Créer l'utilisateur
     mot_de_passe_hash = hacher_mot_de_passe(donnees.mot_de_passe)
-    digiid = f"DIGIID-{generer_token_aleatoire(12)}"
+    digiid = f"DIGIID-{generer_token_aleatoire(9)}"
 
     utilisateur = Utilisateur(
         email_hash=email_hash,
