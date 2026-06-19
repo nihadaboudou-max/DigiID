@@ -557,12 +557,11 @@ async def creer_utilisateur(
         nom_chiffre=chiffrer_donnee(donnees.nom),
         mot_de_passe_hash=mot_de_passe_hash,
         role=donnees.role,
-        digiid=digiid,
+        digiid_public=digiid,
         ville=donnees.ville or "",
         est_actif=True,
         est_email_verifie=False,
         deux_fa_active=False,
-        cree_le=datetime.now(timezone.utc),
     )
     session.add(utilisateur)
     await session.flush()
