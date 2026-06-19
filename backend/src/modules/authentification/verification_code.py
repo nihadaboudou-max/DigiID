@@ -148,9 +148,15 @@ async def generer_et_envoyer_code(
 
     await session.commit()
 
+    from src.config import parametres
+
+    # En mode développement, toujours retourner le code pour affichage
+    # En production, uniquement si l'envoi a échoué (fallback de secours)
+    code_dev = code if (parametres.est_developpement or not succes) else None
+
     return {
         "canal": canal,
-        "code": code if not succes else None,  # Code uniquement si l'envoi a échoué (fallback dev)
+        "code": code_dev,
         "succes_envoi": succes,
         "destination_masquee": _masquer_destination(destination),
         "duree_validite_minutes": DUREE_VALIDITE_CODE_MINUTES,
@@ -247,11 +253,11 @@ async def verifier_code(
                 resultat_verification["est_email_verifie"] = True
                 journal.info(f"Email vérifié avec succès : utilisateur={utilisateur.id}")
 
-            # Activer le compte si c'était une inscription
-            if activer_compte and type_verification == "inscription" and not utilisateur.est_actif:
-                utilisateur.est_actif = True
-                resultat_verification["est_actif"] = True
-                journal.info(f"Compte activé après vérification email : utilisateur={utilisateur.id}")
+        # Activer le compte si c'était une inscription (quel que soit le canal : email, SMS ou appel)
+        if activer_compte and type_verification == "inscription" and not utilisateur.est_actif:
+            utilisateur.est_actif = True
+            resultat_verification["est_actif"] = True
+            journal.info(f"Compte activé après vérification ({canal}) : utilisateur={utilisateur.id}")
 
     await session.commit()
     return resultat_verification

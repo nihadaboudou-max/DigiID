@@ -230,17 +230,12 @@ async def envoyer_code_verification(
         type_verification="inscription",
     )
 
-    # Si l'envoi a échoué (aucun service email configuré sur Render),
-    # on retourne le code directement pour ne pas bloquer l'utilisateur
-    succes_envoi = resultat.get("succes_envoi", False)
-    code_dev = resultat.get("code") if not succes_envoi else None
-
     return VerifEnvoyerRep(
         succes=True,
         message="Code de vérification envoyé.",
         destination_masquee=resultat["destination_masquee"],
         duree_validite_minutes=resultat["duree_validite_minutes"],
-        code_dev=code_dev,
+        code_dev=resultat.get("code"),
     )
 
 
@@ -269,6 +264,8 @@ async def verifier_code_verification(
 
     if resultat["est_email_verifie"]:
         message = "Email vérifié avec succès ! Ton compte est maintenant actif."
+    elif resultat["est_actif"]:
+        message = "Téléphone vérifié avec succès ! Ton compte est maintenant actif."
     else:
         message = "Code vérifié mais une erreur est survenue. Contacte le support."
 
