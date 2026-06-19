@@ -664,7 +664,7 @@ function EditionModal({
             type="text"
             value={prenom}
             onChange={(e) => setPrenom(e.target.value)}
-            className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+            className="w-full mt-1 px-3 py-1.5 border border-ardoise-clair/20 rounded-lg text-sm"
           />
         </div>
         <div>
@@ -673,7 +673,7 @@ function EditionModal({
             type="text"
             value={nom}
             onChange={(e) => setNom(e.target.value)}
-            className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+            className="w-full mt-1 px-3 py-1.5 border border-ardoise-clair/20 rounded-lg text-sm"
           />
         </div>
         <div>
@@ -682,7 +682,7 @@ function EditionModal({
             type="text"
             value={ville}
             onChange={(e) => setVille(e.target.value)}
-            className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+            className="w-full mt-1 px-3 py-1.5 border border-ardoise-clair/20 rounded-lg text-sm"
           />
         </div>
 
@@ -838,7 +838,7 @@ function RoleModal({
             type="text"
             value={motif}
             onChange={(e) => setMotif(e.target.value)}
-            className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+            className="w-full mt-1 px-3 py-1.5 border border-ardoise-clair/20 rounded-lg text-sm"
             placeholder="Ex: Promu agent de mairie..."
           />
         </div>
@@ -901,24 +901,24 @@ function CreationModal({
 
   return (
     <Modal ouvert={true} surFermeture={onFermer} titre="Créer un profil" taille="grand">
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-3">
         {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
 
         <div>
           <label className="text-xs uppercase text-ardoise-clair font-semibold mb-2 block">Rôle du profil</label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-1.5">
             {ROLES_CREATION.map((r) => (
               <button
                 key={r.role}
                 type="button"
                 onClick={() => setRole(r.role)}
-                className={`px-3 py-2.5 rounded-lg text-xs font-medium border transition-all ${
+                className={`px-2 py-2 rounded-lg text-[11px] font-medium border transition-all ${
                   role === r.role
                     ? "bg-ocre text-white border-ocre shadow-sm"
                     : "bg-white text-ardoise border-ardoise-clair/20 hover:border-ocre hover:text-ocre"
                 }`}
               >
-                <span className="block text-base mb-1">{r.icone}</span>
+                <span className="block text-sm mb-0.5">{r.icone}</span>
                 {r.libelle}
               </button>
             ))}
@@ -934,7 +934,7 @@ function CreationModal({
               onChange={(e) => setPrenom(e.target.value)}
               required
               minLength={2}
-              className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+              className="w-full mt-1 px-3 py-1.5 border border-ardoise-clair/20 rounded-lg text-sm"
             />
           </div>
           <div>
@@ -945,7 +945,7 @@ function CreationModal({
               onChange={(e) => setNom(e.target.value)}
               required
               minLength={2}
-              className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+              className="w-full mt-1 px-3 py-1.5 border border-ardoise-clair/20 rounded-lg text-sm"
             />
           </div>
         </div>
@@ -957,7 +957,7 @@ function CreationModal({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+            className="w-full mt-1 px-3 py-1.5 border border-ardoise-clair/20 rounded-lg text-sm"
             placeholder="exemple@domaine.sn"
           />
         </div>
@@ -970,7 +970,7 @@ function CreationModal({
             onChange={(e) => setMotDePasse(e.target.value)}
             required
             minLength={12}
-            className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+            className="w-full mt-1 px-3 py-1.5 border border-ardoise-clair/20 rounded-lg text-sm"
           />
           <p className="text-xs text-ardoise-clair mt-1">
             12+ caractères avec majuscule, minuscule, chiffre et caractère spécial.
@@ -983,7 +983,7 @@ function CreationModal({
             type="text"
             value={ville}
             onChange={(e) => setVille(e.target.value)}
-            className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+            className="w-full mt-1 px-3 py-1.5 border border-ardoise-clair/20 rounded-lg text-sm"
             placeholder="Dakar"
           />
         </div>

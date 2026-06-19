@@ -43,20 +43,20 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8 bg-ardoise/60 backdrop-blur-sm apparition"
+      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-4 bg-ardoise/60 backdrop-blur-sm apparition"
       onClick={surFermeture}
       role="dialog"
       aria-modal="true"
     >
       <div
         className={clsx(
-          "bg-white rounded-2xl shadow-xl w-full flex flex-col max-h-[90vh]",
+          "bg-white rounded-2xl shadow-xl w-full flex flex-col max-h-[95vh]",
           TAILLES[taille],
         )}
         onClick={(e) => e.stopPropagation()}
       >
         {(titre || description) && (
-          <div className="px-6 pt-6 pb-4 border-b border-ardoise-clair/10 flex items-start justify-between gap-4 shrink-0">
+          <div className="px-5 pt-5 pb-3 border-b border-ardoise-clair/10 flex items-start justify-between gap-4 shrink-0">
             <div className="min-w-0">
               {titre && <h3 className="text-lagune mb-1">{titre}</h3>}
               {description && (
@@ -76,7 +76,7 @@ export function Modal({
             </button>
           </div>
         )}
-        <div className="p-6 overflow-y-auto flex-1 min-h-0">{children}</div>
+        <div className="p-5 overflow-y-auto flex-1 min-h-0">{children}</div>
       </div>
     </div>
   );
