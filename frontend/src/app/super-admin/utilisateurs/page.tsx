@@ -874,8 +874,6 @@ function CreationModal({
     { role: "medecin", libelle: "Médecin", icone: "🏥" },
     { role: "police", libelle: "Forces de l'ordre", icone: "👮" },
     { role: "ong", libelle: "ONG / Association", icone: "🤝" },
-    { role: "administrateur", libelle: "Administrateur", icone: "⚙️" },
-    { role: "super_administrateur", libelle: "Super administrateur", icone: "👑" },
   ];
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -906,7 +904,7 @@ function CreationModal({
 
         <div>
           <label className="text-xs uppercase text-ardoise-clair font-semibold mb-2 block">Rôle du profil</label>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
             {ROLES_CREATION.map((r) => (
               <button
                 key={r.role}
