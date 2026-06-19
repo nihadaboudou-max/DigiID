@@ -1,71 +1,102 @@
 "use client";
 
 /**
- * Page de verification d'identite.
- * Apres inscription, l'utilisateur doit confirmer son email et telephone.
+ * Page de vérification d'identité — l'utilisateur choisit SON moyen.
+ *
+ * Principe : un seul canal de vérification (email OU téléphone), pas les deux.
+ * En production, imposer les deux ferait fuir les utilisateurs.
+ *
+ * En mode développement, le code s'affiche à l'écran pour faciliter les tests.
  */
 import { useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Bouton } from "@/composants/commun/Bouton";
-import { Carte } from "@/composants/commun/Carte";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
 import { Logo } from "@/composants/commun/Logo";
 import { EnTete } from "@/composants/layouts/EnTete";
 import { clientAPI, ErreurAPI } from "@/services/client_api";
 
-type EtapeVerif = "email" | "telephone" | "termine";
+// ─── Types ───────────────────────────────────────────────────────────────────
 
-/**
- * Interface pour la réponse d'envoi qui peut contenir le code en dev.
- */
+type Etape = "choix" | "code" | "termine";
+type Canal = "email" | "sms" | "appel";
+
 interface ReponseEnvoi {
   destination_masquee: string;
   code_dev?: string | null;
 }
 
-/** Profil utilisateur depuis /api/v1/auth/moi */
 interface ProfilUtilisateur {
   telephone: string | null;
 }
 
+// ─── Configuration des canaux ────────────────────────────────────────────────
+
+interface OptionCanal {
+  canal: Canal;
+  icone: string;
+  titre: string;
+  description: string;
+}
+
+const OPTIONS_CANAUX: OptionCanal[] = [
+  {
+    canal: "email",
+    icone: "📧",
+    titre: "Par email",
+    description: "Reçois un code à 6 chiffres sur ta boîte mail",
+  },
+  {
+    canal: "sms",
+    icone: "💬",
+    titre: "Par SMS",
+    description: "Reçois un code par message texte",
+  },
+  {
+    canal: "appel",
+    icone: "📞",
+    titre: "Par appel",
+    description: "Écoute le code dicté par téléphone",
+  },
+];
+
+// ─── Page principale ─────────────────────────────────────────────────────────
+
 export default function PageVerification() {
   const router = useRouter();
-  const [etape, setEtape] = useState<EtapeVerif>("email");
-  const [codeEmail, setCodeEmail] = useState("");
-  const [codeTelephone, setCodeTelephone] = useState("");
-  const [canalTel, setCanalTel] = useState<"sms" | "appel">("sms");
+  const [etape, setEtape] = useState<Etape>("choix");
+  const [canal, setCanal] = useState<Canal>("email");
+  const [code, setCode] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   const [chargement, setChargement] = useState(false);
   const [destinationMasquee, setDestinationMasquee] = useState("");
   const [codeVisible, setCodeVisible] = useState<string | null>(null);
   const [compteur, setCompteur] = useState(0);
-  const [aTelephone, setATelephone] = useState<boolean | null>(null); // null = inconnu encore
-  const codeEnvoyeRef = useRef(false);
+  const [aTelephone, setATelephone] = useState<boolean | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Au montage, récupérer le profil pour savoir si l'utilisateur a un téléphone
+  // Au montage, récupérer le profil pour adapter les options
   useEffect(() => {
-    clientAPI.get<ProfilUtilisateur>("/api/v1/auth/moi", { authentifie: true })
+    clientAPI
+      .get<ProfilUtilisateur>("/api/v1/auth/moi", { authentifie: true })
       .then((profil) => setATelephone(!!profil.telephone))
-      .catch(() => setATelephone(false)); // si erreur, on suppose pas de téléphone
+      .catch(() => setATelephone(false));
   }, []);
 
-  // Envoyer le code email au montage (une seule fois, même en StrictMode)
+  // Nettoyage de l'intervalle au démontage
   useEffect(() => {
-    if (codeEnvoyeRef.current) return;
-    codeEnvoyeRef.current = true;
-    envoyerCodeEmail();
-
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
 
-  async function envoyerCodeEmail() {
+  // ── Envoi du code ────────────────────────────────────────────────────────
+
+  async function envoyerCode() {
     setChargement(true);
     setMessage(null);
     setErreur(null);
@@ -73,16 +104,23 @@ export default function PageVerification() {
     try {
       const reponse = await clientAPI.post<ReponseEnvoi>(
         "/api/v1/auth/verification/envoyer",
-        { canal: "email" },
+        { canal },
         { authentifie: true },
       );
       setDestinationMasquee(reponse.destination_masquee);
-      setMessage("Un code a 6 chiffres t'a ete envoye par email.");
-      // En mode developpement, le code est renvoye directement
+      setMessage(
+        canal === "email"
+          ? "Un code à 6 chiffres a été envoyé par email."
+          : canal === "sms"
+            ? "Un code à 6 chiffres a été envoyé par SMS."
+            : "Tu vas recevoir un appel avec le code dicté.",
+      );
+      // Mode développement : le code est renvoyé directement
       if (reponse.code_dev) {
         setCodeVisible(reponse.code_dev);
       }
       lancerCompteur();
+      setEtape("code");
     } catch (e) {
       setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur d'envoi");
     } finally {
@@ -90,29 +128,36 @@ export default function PageVerification() {
     }
   }
 
-  async function envoyerCodeTelephone() {
+  // ── Validation du code ───────────────────────────────────────────────────
+
+  async function verifierCode() {
+    if (code.length !== 6) return;
     setChargement(true);
-    setMessage(null);
     setErreur(null);
-    setCodeVisible(null);
     try {
-      const reponse = await clientAPI.post<ReponseEnvoi>(
-        "/api/v1/auth/verification/envoyer",
-        { canal: canalTel },
+      const reponse = await clientAPI.post<{ succes: boolean; message: string }>(
+        "/api/v1/auth/verification/verifier",
+        { code, canal: canal === "sms" || canal === "appel" ? "sms" : canal },
         { authentifie: true },
       );
-      setDestinationMasquee(reponse.destination_masquee);
-      setMessage(`Un code t'a ete envoye par ${canalTel === "sms" ? "SMS" : "appel"}.`);
-      if (reponse.code_dev) {
-        setCodeVisible(reponse.code_dev);
+      if (reponse.succes) {
+        setMessage(
+          canal === "email"
+            ? "Email confirmé !"
+            : "Téléphone confirmé !",
+        );
+        setEtape("termine");
+      } else {
+        setErreur("Code invalide. Demande un nouveau code.");
       }
-      lancerCompteur();
     } catch (e) {
-      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur d'envoi");
+      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de vérification");
     } finally {
       setChargement(false);
     }
   }
+
+  // ── Compteur de renvoi ──────────────────────────────────────────────────
 
   function lancerCompteur() {
     setCompteur(60);
@@ -129,57 +174,7 @@ export default function PageVerification() {
     }, 1000);
   }
 
-  async function verifierEmail() {
-    if (codeEmail.length !== 6) return;
-    setChargement(true);
-    setErreur(null);
-    try {
-      const reponse = await clientAPI.post<{ succes: boolean; message: string }>(
-        "/api/v1/auth/verification/verifier",
-        { code: codeEmail, canal: "email" },
-        { authentifie: true },
-      );
-      if (reponse.succes) {
-        setMessage("Email confirmé !");
-        // Si l'utilisateur n'a pas de téléphone, sauter directement à la fin
-        if (!aTelephone) {
-          setEtape("termine");
-        } else {
-          setEtape("telephone");
-          setTimeout(() => envoyerCodeTelephone(), 500);
-        }
-      } else {
-        setErreur("Code invalide. Demande un nouveau code.");
-      }
-    } catch (e) {
-      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de verification");
-    } finally {
-      setChargement(false);
-    }
-  }
-
-  async function verifierTelephone() {
-    if (codeTelephone.length !== 6) return;
-    setChargement(true);
-    setErreur(null);
-    try {
-      const reponse = await clientAPI.post<{ succes: boolean; message: string }>(
-        "/api/v1/auth/verification/verifier",
-        { code: codeTelephone, canal: "sms" },
-        { authentifie: true },
-      );
-      if (reponse.succes) {
-        setMessage("Telephone confirme !");
-        setEtape("termine");
-      } else {
-        setErreur("Code invalide. Demande un nouveau code.");
-      }
-    } catch (e) {
-      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de verification");
-    } finally {
-      setChargement(false);
-    }
-  }
+  // ── Écran terminé ───────────────────────────────────────────────────────
 
   if (etape === "termine") {
     return (
@@ -190,18 +185,20 @@ export default function PageVerification() {
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="text-3xl text-green-700">✓</span>
             </div>
-            <h1 className="text-2xl mb-2">Identite verifiee !</h1>
+            <h1 className="text-2xl mb-2">Identité vérifiée !</h1>
             <p className="text-ardoise-clair mb-6">
-              Ton email est confirmé. Tu peux maintenant utiliser pleinement DigiID.
+              Ton identité est confirmée. Tu peux maintenant utiliser pleinement DigiID.
             </p>
             <Bouton variante="primaire" onClick={() => router.push("/tableau-de-bord")}>
-              Acceder a mon espace
+              Accéder à mon espace
             </Bouton>
           </div>
         </main>
       </>
     );
   }
+
+  // ── Rendu principal ─────────────────────────────────────────────────────
 
   return (
     <>
@@ -212,121 +209,106 @@ export default function PageVerification() {
             <div className="flex justify-center mb-4">
               <Logo taille="moyen" />
             </div>
-            <h1 className="text-2xl mb-1">Verifie ton identite</h1>
+            <h1 className="text-2xl mb-1">Vérifie ton identité</h1>
             <p className="text-sm text-ardoise-clair">
-              On a besoin de confirmer que tu es bien toi pour eviter les faux profils.
+              Choisis le moyen que tu préfères pour recevoir ton code de vérification.
+              {etape === "choix" && " Un seul suffit — pas les deux."}
             </p>
           </div>
 
-          {/* Barre de progression */}
-          <div className="flex gap-2 mb-6">
-            <div className={`h-2 flex-1 rounded-full ${etape === "email" ? "bg-lagune" : "bg-lagune/30"}`} />
-            <div className={`h-2 flex-1 rounded-full ${etape === "email" ? "bg-lagune/30" : "bg-lagune"}`} />
-          </div>
-
           {erreur && (
-            <Alerte variante="erreur" className="mb-4">{erreur}</Alerte>
+            <Alerte variante="erreur" className="mb-4">
+              {erreur}
+            </Alerte>
           )}
           {message && (
-            <Alerte variante="info" className="mb-4">{message}</Alerte>
+            <Alerte variante="info" className="mb-4">
+              {message}
+            </Alerte>
           )}
 
-          {etape === "email" && (
-            <div className="space-y-4">
-              <p className="text-ardoise font-medium">
-                Etape 1 — Verifie ton email
+          {/* ── Écran de choix du canal ─────────────────────────────── */}
+          {etape === "choix" && (
+            <div className="space-y-3">
+              <p className="text-xs uppercase text-ardoise-clair font-semibold tracking-wider">
+                Choisis ton moyen de vérification
               </p>
-              <p className="text-sm text-ardoise-clair">
-                On a envoye un code a {destinationMasquee || "ton email"}.
-              </p>
-              {codeVisible && (
-                <div className="bg-lagune/10 border-2 border-dashed border-lagune rounded-xl p-4 text-center">
-                  <p className="text-xs text-ardoise-clair mb-1">
-                    🔧 Mode développement — code de vérification :
-                  </p>
-                  <p className="text-3xl font-mono font-bold text-lagune tracking-widest">
-                    {codeVisible}
-                  </p>
-                  <p className="text-xs text-terre mt-2">
-                    ⚠️ Ce code ne sera pas affiché en production. Il sera envoyé par email.
-                  </p>
-                </div>
-              )}
-              <ChampSaisie
-                libelle="Code de verification"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]{6}"
-                maxLength={6}
-                value={codeEmail}
-                onChange={(e) => setCodeEmail(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="123456"
-                autoComplete="one-time-code"
-                aide="Code a 6 chiffres recu par email"
-              />
-              <Bouton
-                variante="primaire"
-                className="w-full"
-                chargement={chargement}
-                onClick={verifierEmail}
-                disabled={codeEmail.length !== 6 || chargement}
-              >
-                Confirmer mon email
-              </Bouton>
-              <div className="text-center">
-                {compteur > 0 ? (
-                  <span className="text-xs text-ardoise-clair">
-                    Renvoyer dans {compteur}s
-                  </span>
-                ) : (
+
+              {OPTIONS_CANAUX.map((opt) => {
+                // Désactiver SMS et appel si pas de téléphone
+                const desactive =
+                  (opt.canal === "sms" || opt.canal === "appel") && !aTelephone;
+                return (
                   <button
+                    key={opt.canal}
                     type="button"
-                    onClick={envoyerCodeEmail}
-                    className="text-sm text-lagune hover:underline"
+                    disabled={desactive}
+                    onClick={() => {
+                      setCanal(opt.canal);
+                      setCode("");
+                      setMessage(null);
+                      setErreur(null);
+                      setCodeVisible(null);
+                      envoyerCode();
+                    }}
+                    className={`w-full p-4 rounded-xl border-2 text-left transition-all flex items-center gap-4 ${
+                      desactive
+                        ? "border-ardoise-clair/10 bg-ardoise-clair/5 text-ardoise-clair/50 cursor-not-allowed"
+                        : "border-ardoise-clair/20 hover:border-lagune hover:bg-lagune/5 cursor-pointer"
+                    }`}
                   >
-                    Renvoyer le code
+                    <span className="text-3xl flex-shrink-0">{opt.icone}</span>
+                    <div>
+                      <p
+                        className={`font-semibold ${
+                          desactive ? "text-ardoise-clair/50" : "text-ardoise"
+                        }`}
+                      >
+                        {opt.titre}
+                      </p>
+                      <p
+                        className={`text-sm ${
+                          desactive
+                            ? "text-ardoise-clair/40"
+                            : "text-ardoise-clair"
+                        }`}
+                      >
+                        {desactive
+                          ? "Aucun numéro de téléphone enregistré"
+                          : opt.description}
+                      </p>
+                    </div>
                   </button>
-                )}
+                );
+              })}
+
+              <div className="text-center pt-4">
+                <button
+                  type="button"
+                  onClick={() => router.push("/tableau-de-bord")}
+                  className="text-sm text-ardoise-clair hover:text-ardoise underline"
+                >
+                  Passer pour l&apos;instant
+                </button>
               </div>
             </div>
           )}
 
-          {etape === "telephone" && (
+          {/* ── Écran de saisie du code ────────────────────────────── */}
+          {etape === "code" && (
             <div className="space-y-4">
               <p className="text-ardoise font-medium">
-                Etape 2 — Confirme ton telephone
+                Entre le code reçu
               </p>
               <p className="text-sm text-ardoise-clair">
-                Choisis comment recevoir le code de verification.
+                {canal === "email"
+                  ? `Un code a été envoyé à ${destinationMasquee || "ton email"}.`
+                  : canal === "sms"
+                    ? `Un code a été envoyé par SMS au ${destinationMasquee || "téléphone"}.`
+                    : "Tu vas recevoir un appel avec le code dicté."}
               </p>
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => { setCanalTel("sms"); envoyerCodeTelephone(); }}
-                  className={`flex-1 p-4 rounded-xl border-2 text-center transition-all ${
-                    canalTel === "sms"
-                      ? "border-lagune bg-lagune/5"
-                      : "border-ardoise-clair/20 hover:border-lagune/50"
-                  }`}
-                >
-                  <span className="text-2xl block mb-1">💬</span>
-                  <span className="text-sm font-medium">SMS</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setCanalTel("appel"); envoyerCodeTelephone(); }}
-                  className={`flex-1 p-4 rounded-xl border-2 text-center transition-all ${
-                    canalTel === "appel"
-                      ? "border-lagune bg-lagune/5"
-                      : "border-ardoise-clair/20 hover:border-lagune/50"
-                  }`}
-                >
-                  <span className="text-2xl block mb-1">📞</span>
-                  <span className="text-sm font-medium">Appel</span>
-                </button>
-              </div>
-
+              {/* Code visible en mode développement */}
               {codeVisible && (
                 <div className="bg-lagune/10 border-2 border-dashed border-lagune rounded-xl p-4 text-center">
                   <p className="text-xs text-ardoise-clair mb-1">
@@ -340,30 +322,41 @@ export default function PageVerification() {
                   </p>
                 </div>
               )}
+
               <ChampSaisie
-                libelle="Code de verification"
+                libelle="Code de vérification"
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9]{6}"
                 maxLength={6}
-                value={codeTelephone}
-                onChange={(e) => setCodeTelephone(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                value={code}
+                onChange={(e) =>
+                  setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                }
                 placeholder="123456"
                 autoComplete="one-time-code"
-                aide={`Code recu par ${canalTel === "sms" ? "SMS au " + destinationMasquee : "appel"}`}
+                aide="Code à 6 chiffres"
               />
 
               <Bouton
                 variante="primaire"
                 className="w-full"
                 chargement={chargement}
-                onClick={verifierTelephone}
-                disabled={codeTelephone.length !== 6 || chargement}
+                onClick={verifierCode}
+                disabled={code.length !== 6 || chargement}
               >
-                Confirmer mon telephone
+                Confirmer
               </Bouton>
 
-              <div className="text-center">
+              <div className="flex items-center justify-between gap-4">
+                <button
+                  type="button"
+                  onClick={() => setEtape("choix")}
+                  className="text-sm text-ardoise-clair hover:text-ardoise underline"
+                >
+                  Changer de moyen
+                </button>
+
                 {compteur > 0 ? (
                   <span className="text-xs text-ardoise-clair">
                     Renvoyer dans {compteur}s
@@ -371,22 +364,12 @@ export default function PageVerification() {
                 ) : (
                   <button
                     type="button"
-                    onClick={envoyerCodeTelephone}
+                    onClick={envoyerCode}
                     className="text-sm text-lagune hover:underline"
                   >
                     Renvoyer le code
                   </button>
                 )}
-              </div>
-
-              <div className="text-center pt-2 border-t border-ardoise-clair/10">
-                <button
-                  type="button"
-                  onClick={() => setEtape("termine")}
-                  className="text-sm text-ardoise-clair hover:text-ardoise underline"
-                >
-                  Passer cette étape pour l'instant
-                </button>
               </div>
             </div>
           )}
