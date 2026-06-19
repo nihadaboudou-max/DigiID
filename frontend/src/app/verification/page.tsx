@@ -26,6 +26,11 @@ interface ReponseEnvoi {
   code_dev?: string | null;
 }
 
+/** Profil utilisateur depuis /api/v1/auth/moi */
+interface ProfilUtilisateur {
+  telephone: string | null;
+}
+
 export default function PageVerification() {
   const router = useRouter();
   const [etape, setEtape] = useState<EtapeVerif>("email");
@@ -38,8 +43,16 @@ export default function PageVerification() {
   const [destinationMasquee, setDestinationMasquee] = useState("");
   const [codeVisible, setCodeVisible] = useState<string | null>(null);
   const [compteur, setCompteur] = useState(0);
+  const [aTelephone, setATelephone] = useState<boolean | null>(null); // null = inconnu encore
   const codeEnvoyeRef = useRef(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Au montage, récupérer le profil pour savoir si l'utilisateur a un téléphone
+  useEffect(() => {
+    clientAPI.get<ProfilUtilisateur>("/api/v1/auth/moi", { authentifie: true })
+      .then((profil) => setATelephone(!!profil.telephone))
+      .catch(() => setATelephone(false)); // si erreur, on suppose pas de téléphone
+  }, []);
 
   // Envoyer le code email au montage (une seule fois, même en StrictMode)
   useEffect(() => {
@@ -127,9 +140,14 @@ export default function PageVerification() {
         { authentifie: true },
       );
       if (reponse.succes) {
-        setMessage("Email confirme !");
-        setEtape("telephone");
-        setTimeout(() => envoyerCodeTelephone(), 500);
+        setMessage("Email confirmé !");
+        // Si l'utilisateur n'a pas de téléphone, sauter directement à la fin
+        if (!aTelephone) {
+          setEtape("termine");
+        } else {
+          setEtape("telephone");
+          setTimeout(() => envoyerCodeTelephone(), 500);
+        }
       } else {
         setErreur("Code invalide. Demande un nouveau code.");
       }
@@ -172,9 +190,9 @@ export default function PageVerification() {
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="text-3xl text-green-700">✓</span>
             </div>
-            <h1 className="text-2xl mb-2">Identite confirmee !</h1>
+            <h1 className="text-2xl mb-2">Identite verifiee !</h1>
             <p className="text-ardoise-clair mb-6">
-              Ton email et ton telephone sont verifies. Tu peux maintenant utiliser pleinement DigiID.
+              Ton email est confirmé. Tu peux maintenant utiliser pleinement DigiID.
             </p>
             <Bouton variante="primaire" onClick={() => router.push("/tableau-de-bord")}>
               Acceder a mon espace
@@ -344,6 +362,7 @@ export default function PageVerification() {
               >
                 Confirmer mon telephone
               </Bouton>
+
               <div className="text-center">
                 {compteur > 0 ? (
                   <span className="text-xs text-ardoise-clair">
@@ -358,6 +377,16 @@ export default function PageVerification() {
                     Renvoyer le code
                   </button>
                 )}
+              </div>
+
+              <div className="text-center pt-2 border-t border-ardoise-clair/10">
+                <button
+                  type="button"
+                  onClick={() => setEtape("termine")}
+                  className="text-sm text-ardoise-clair hover:text-ardoise underline"
+                >
+                  Passer cette étape pour l'instant
+                </button>
               </div>
             </div>
           )}
