@@ -73,7 +73,7 @@ function Contenu() {
       </div>
 
       {message && (
-        <div className={`border-l-4 p-3 rounded ${message.includes("succès") || message.includes("Succès") ? "bg-vert/10 border-vert" : "bg-ocre/10 border-ocre"}`}>
+        <div className={`border-l-4 p-3 rounded ${message.includes("succès") || message.includes("Succès") || message.includes("Signalement") ? "bg-vert/10 border-vert text-vert" : "bg-ocre/10 border-ocre text-ocre"}`}>
           <p className="text-sm">{message}</p>
         </div>
       )}
@@ -89,7 +89,7 @@ function Contenu() {
       ) : (
         <div className="space-y-4">
           {ordonnances.map((o) => (
-            <div key={o.id} className="carte">
+            <Carte key={o.id}>
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -161,7 +161,7 @@ function Contenu() {
                   </button>
                 )}
               </div>
-            </div>
+            </Carte>
           ))}
         </div>
       )}
