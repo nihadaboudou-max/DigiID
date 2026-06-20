@@ -66,7 +66,8 @@ function Contenu() {
 
   function getDossierPatientName(dossierId: string): string {
     const d = dossiers.find((d) => d.id === dossierId);
-    return d ? d.patient_nom : "Dossier inconnu";
+    if (!d) return "Dossier inconnu";
+    return `${d.patient_nom} (${d.patient_digiid})`;
   }
 
   // Grouper les ordonnances par dossier

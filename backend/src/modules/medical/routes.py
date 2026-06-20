@@ -21,11 +21,14 @@ from src.modules.medical.schemas import (
     OrdonnanceCreate,
     OrdonnanceResponse,
     OrdonnanceUpdate,
+    SignalementCreate,
     VerificationDigiIDResponse,
 )
+from src.noyau.exceptions import ErreurAutorisation
 from src.modules.medical import service as medical_service
 
 routeur_medical = APIRouter(prefix=f"{PREFIXE_API_UTILISATEUR}/medical", tags=["Médical"])
+routeur_patient = APIRouter(prefix=f"{PREFIXE_API_UTILISATEUR}", tags=["Patient"])
 
 
 @routeur_medical.get("/verifier-patient/{digiid}", response_model=VerificationDigiIDResponse)
@@ -281,3 +284,60 @@ async def supprimer_ordonnance(
     """Supprime une ordonnance (médecin propriétaire uniquement)."""
     await medical_service.supprimer_ordonnance(session, ordonnance_id, medecin.id)
     journal_audit(f"ordonnance | supprime | ordonnance_id={ordonnance_id} | medecin={medecin.id}")
+
+
+# =============================================================================
+# ROUTES PATIENT (citoyen)
+# =============================================================================
+
+
+@routeur_patient.get("/mes-ordonnances", response_model=list[OrdonnanceResponse])
+async def lister_mes_ordonnances(
+    citoyen: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Liste toutes les ordonnances du citoyen connecté (via son DigiID)."""
+    ordonnances = await medical_service.obtenir_ordonnances_par_digiid(session, citoyen.digiid_public)
+    result = []
+    for o in ordonnances:
+        # Récupérer le nom du médecin
+        _, medecin = await medical_service.obtenir_medecin_ordonnance(session, o.id) or (None, None)
+        nom_medecin = None
+        if medecin:
+            nom = dechiffrer_donnee(medecin.nom_chiffre) if medecin.nom_chiffre else ""
+            prenom = dechiffrer_donnee(medecin.prenom_chiffre) if medecin.prenom_chiffre else ""
+            nom_medecin = f"{prenom} {nom}".strip() or "Médecin"
+        result.append(OrdonnanceResponse(
+            id=o.id,
+            dossier_id=o.dossier_id,
+            medecin_id=o.medecin_id,
+            medicaments=o.medicaments,
+            instructions=o.instructions,
+            date_prescription=o.date_prescription,
+            date_expiration=o.date_expiration,
+        ))
+    return result
+
+
+@routeur_patient.post("/mes-ordonnances/{ordonnance_id}/signaler", status_code=201)
+async def signaler_ordonnance(
+    ordonnance_id: UUID,
+    donnees: SignalementCreate,
+    citoyen: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Signale un problème sur une ordonnance."""
+    # Vérifier que l'ordonnance appartient bien au citoyen
+    appartient = await medical_service.verifier_patient_ordonnance(
+        session, ordonnance_id, citoyen.digiid_public
+    )
+    if not appartient:
+        raise ErreurAutorisation(
+            "Cette ordonnance ne vous appartient pas",
+            message_utilisateur="Vous ne pouvez signaler qu'une ordonnance qui vous concerne.",
+        )
+    journal_audit(
+        f"ordonnance | signale | ordonnance_id={ordonnance_id} "
+        f"| patient={citoyen.id} | motif={donnees.motif}"
+    )
+    return {"succes": True, "message": "Signalement envoyé avec succès. Le super administrateur sera notifié."}

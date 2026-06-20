@@ -101,6 +101,10 @@ function Contenu() {
                   const resultat = await verifierPatient(patient_digiid);
                   if (resultat.trouvé) {
                     setPatientVerifie(resultat);
+                    // Auto-remplir le nom complet avec prénom + nom pour éviter les confusions
+                    if (resultat.prenom && resultat.nom) {
+                      setPatientNom(`${resultat.prenom} ${resultat.nom}`);
+                    }
                     setEtape("formulaire");
                   } else {
                     setErreur(`Aucun citoyen trouvé avec le DigiID "${patient_digiid}". Vérifie l'identifiant.`);

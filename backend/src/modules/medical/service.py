@@ -171,3 +171,66 @@ async def compter_ordonnances(session: AsyncSession, dossier_id: UUID) -> int:
         select(func.count(Ordonnance.id)).where(Ordonnance.dossier_id == dossier_id)
     )
     return result.scalar() or 0
+
+
+async def obtenir_dossiers_par_digiid(
+    session: AsyncSession,
+    digiid: str,
+) -> list[DossierMedical]:
+    """Liste tous les dossiers médicaux d'un patient par son DigiID."""
+    result = await session.execute(
+        select(DossierMedical)
+        .where(DossierMedical.patient_digiid == digiid)
+        .order_by(DossierMedical.date_creation.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def obtenir_ordonnances_par_digiid(
+    session: AsyncSession,
+    digiid: str,
+) -> list[Ordonnance]:
+    """Liste toutes les ordonnances d'un patient via ses dossiers."""
+    dossiers = await obtenir_dossiers_par_digiid(session, digiid)
+    if not dossiers:
+        return []
+    dossier_ids = [d.id for d in dossiers]
+    result = await session.execute(
+        select(Ordonnance)
+        .where(Ordonnance.dossier_id.in_(dossier_ids))
+        .order_by(Ordonnance.date_prescription.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def obtenir_medecin_ordonnance(
+    session: AsyncSession,
+    ordonnance_id: UUID,
+) -> tuple[Ordonnance, Utilisateur] | None:
+    """Récupère une ordonnance avec les infos du médecin."""
+    result = await session.execute(
+        select(Ordonnance, Utilisateur)
+        .join(Utilisateur, Ordonnance.medecin_id == Utilisateur.id)
+        .where(Ordonnance.id == ordonnance_id)
+    )
+    row = result.one_or_none()
+    if not row:
+        return None
+    return row[0], row[1]
+
+
+async def verifier_patient_ordonnance(
+    session: AsyncSession,
+    ordonnance_id: UUID,
+    patient_digiid: str,
+) -> bool:
+    """Vérifie qu'une ordonnance appartient bien à un patient via ses dossiers."""
+    result = await session.execute(
+        select(Ordonnance)
+        .join(DossierMedical, Ordonnance.dossier_id == DossierMedical.id)
+        .where(
+            Ordonnance.id == ordonnance_id,
+            DossierMedical.patient_digiid == patient_digiid,
+        )
+    )
+    return result.scalar_one_or_none() is not None

@@ -90,6 +90,22 @@ class VerificationDigiIDResponse(BaseModel):
     email: Optional[str] = Field(None, description="Email du citoyen")
 
 
+class SignalementCreate(BaseModel):
+    motif: str = Field(..., min_length=10, max_length=500, description="Description du problème (min 10 car.)")
+
+
+class OrdonnancePatientResponse(BaseModel):
+    id: UUID
+    dossier_id: UUID
+    medecin_nom: Optional[str] = None
+    medicaments: str
+    instructions: Optional[str] = None
+    date_prescription: datetime
+    date_expiration: Optional[date] = None
+
+    model_config = {"from_attributes": True}
+
+
 class PatientSearchResponse(BaseModel):
     digiid: str
     nom: str

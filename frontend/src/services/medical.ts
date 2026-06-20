@@ -158,3 +158,22 @@ export async function supprimerOrdonnance(id: string): Promise<void> {
     { authentifie: true },
   );
 }
+
+/** Liste les ordonnances du citoyen connecté (patient). */
+export async function mesOrdonnances(): Promise<Ordonnance[]> {
+  return clientAPI.get<Ordonnance[]>("/api/v1/utilisateur/mes-ordonnances", {
+    authentifie: true,
+  });
+}
+
+/** Signale un problème sur une ordonnance (patient). */
+export async function signalerOrdonnance(
+  id: string,
+  motif: string,
+): Promise<{ succes: boolean; message: string }> {
+  return clientAPI.post<{ succes: boolean; message: string }>(
+    `/api/v1/utilisateur/mes-ordonnances/${id}/signaler`,
+    { motif },
+    { authentifie: true },
+  );
+}

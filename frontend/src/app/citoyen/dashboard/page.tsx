@@ -154,6 +154,7 @@ function Contenu() {
         <CarteAction titre="Mes documents" description="Documents et justificatifs" href="/documents" icone="📄" />
         <CarteAction titre="Parrainage" description="Invite tes proches" href="/parrainage" icone="📨" />
         <CarteAction titre="Mes badges" description="Gamification et récompenses" href="/badges" icone="🏆" />
+        <CarteAction titre="Mes ordonnances" description="Consultez et signalez vos prescriptions" href="/citoyen/mes-ordonnances" icone="💊" />
         <CarteAction titre="Mon score" description="Suis ton score de confiance" href="/score" icone="📊" />
         <CarteAction titre="Assistant DigiID" description="Pose tes questions" href="/chatbot" icone="🤖" />
       </div>

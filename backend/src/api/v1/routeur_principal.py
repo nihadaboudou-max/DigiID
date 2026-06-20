@@ -59,7 +59,7 @@ from src.modules.ui_permissions import routeur_ui_permissions
 from src.modules.ui_permissions.routes import routeur_ui_config
 
 # --- Modules métier par rôle professionnel ---
-from src.modules.medical import routeur_medical
+from src.modules.medical import routeur_medical, routeur_patient
 from src.modules.enrolement import routeur_enrolement
 from src.modules.police import routeur_police
 from src.modules.ong import routeur_ong
@@ -119,3 +119,6 @@ routeur_v1.include_router(routeur_medical)
 routeur_v1.include_router(routeur_enrolement)
 routeur_v1.include_router(routeur_police)
 routeur_v1.include_router(routeur_ong)
+
+# Module Patient — accès citoyen à ses informations médicales
+routeur_v1.include_router(routeur_patient)
