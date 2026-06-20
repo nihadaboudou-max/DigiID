@@ -90,7 +90,6 @@ class OrdonnanceUpdate(BaseModel):
     medicaments: Optional[str] = None
     instructions: Optional[str] = None
     date_expiration: Optional[date] = None
-    date_controle: Optional[date] = Field(None, description="Date recommandée pour le contrôle de suivi")
 
 
 class OrdonnanceResponse(BaseModel):
@@ -105,7 +104,6 @@ class OrdonnanceResponse(BaseModel):
     statut: str = "active"
     date_prescription: datetime
     date_expiration: Optional[date] = None
-    date_controle: Optional[date] = None
 
     model_config = {"from_attributes": True}
 

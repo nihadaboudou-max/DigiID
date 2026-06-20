@@ -11,6 +11,7 @@ import {
   obtenirDossier,
   listerConsultations,
   listerOrdonnances,
+  ajouterConsultation,
   creerOrdonnance,
   modifierOrdonnance,
   supprimerOrdonnance,
@@ -45,6 +46,20 @@ function Contenu() {
   const [editMedicaments, setEditMedicaments] = useState("");
   const [editInstructions, setEditInstructions] = useState("");
   const [editDateExp, setEditDateExp] = useState("");
+
+    // Nouvelle consultation
+  const [afficherConsultation, setAfficherConsultation] = useState(false);
+  const [consMotif, setConsMotif] = useState("");
+  const [consType, setConsType] = useState("");
+  const [consPoids, setConsPoids] = useState("");
+  const [consTaille, setConsTaille] = useState("");
+  const [consTemperature, setConsTemperature] = useState("");
+  const [consPression, setConsPression] = useState("");
+  const [consObservations, setConsObservations] = useState("");
+  const [consDiagnostic, setConsDiagnostic] = useState("");
+  const [consConclusion, setConsConclusion] = useState("");
+  const [consDateControle, setConsDateControle] = useState("");
+  const [envoiConsultation, setEnvoiConsultation] = useState(false);
 
   // Confirmation suppression
   const [supprId, setSupprId] = useState<string | null>(null);
@@ -108,6 +123,41 @@ function Contenu() {
     } catch (e: any) {
       console.error("Erreur modification ordonnance:", e);
       setMessage(e?.message_utilisateur || "Erreur lors de la modification.");
+    }
+  }
+
+  async function handleAjouterConsultation() {
+    if (!consMotif) { setMessage("Le motif est obligatoire."); return; }
+    setEnvoiConsultation(true);
+    setMessage("");
+    try {
+      await ajouterConsultation({
+        dossier_id: dossierId,
+        motif: consMotif,
+        type_consultation: consType || undefined,
+        observations: consObservations || undefined,
+        diagnostic: consDiagnostic || undefined,
+        conclusion: consConclusion || undefined,
+        poids: consPoids ? parseInt(consPoids) : undefined,
+        taille: consTaille ? parseInt(consTaille) : undefined,
+        temperature: consTemperature ? Math.round(parseFloat(consTemperature) * 10) : undefined,
+        pression_arterielle: consPression || undefined,
+        date_controle: consDateControle || undefined,
+      });
+      // Réinitialiser le formulaire
+      setConsMotif(""); setConsType(""); setConsPoids(""); setConsTaille("");
+      setConsTemperature(""); setConsPression(""); setConsObservations("");
+      setConsDiagnostic(""); setConsConclusion(""); setConsDateControle("");
+      setAfficherConsultation(false);
+      // Recharger les consultations
+      const c = await listerConsultations(dossierId);
+      setConsultations(c);
+      setMessage("Consultation ajoutée avec succès.");
+    } catch (error: any) {
+      console.error("Erreur ajout consultation:", error);
+      setMessage(error?.message_utilisateur || "Erreur lors de l'ajout de la consultation.");
+    } finally {
+      setEnvoiConsultation(false);
     }
   }
 
@@ -187,7 +237,200 @@ function Contenu() {
           </div>
         </Carte>
 
-        <Carte titre={"Consultations (" + consultations.length + ")"}>
+                <Carte titre={"Consultations (" + consultations.length + ")"}>
+          {/* Bouton pour ajouter une consultation */}
+          <div className="mb-3">
+            <Bouton
+              variante={afficherConsultation ? "ghost" : "primaire"}
+              taille="petit"
+              onClick={() => setAfficherConsultation(!afficherConsultation)}
+            >
+              {afficherConsultation ? "Annuler" : "+ Nouvelle consultation"}
+            </Bouton>
+          </div>
+
+          {/* Formulaire d'ajout de consultation */}
+          {afficherConsultation && (
+            <div className="mb-4 p-3 bg-sable rounded-lg space-y-3">
+              <p className="text-xs uppercase font-semibold text-ardoise-clair">
+                Ajouter une consultation
+              </p>
+
+              {/* Motif + Type */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-ardoise-clair font-semibold mb-0.5">Motif *</label>
+                  <input
+                    type="text"
+                    value={consMotif}
+                    onChange={(e) => setConsMotif(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-ardoise-clair/20 rounded text-xs"
+                    placeholder="Ex: Fièvre persistante"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ardoise-clair font-semibold mb-0.5">Type</label>
+                  <select
+                    value={consType}
+                    onChange={(e) => setConsType(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-ardoise-clair/20 rounded text-xs bg-white"
+                  >
+                    <option value="">-- Type --</option>
+                    <option value="consultation">Consultation</option>
+                    <option value="suivi">Suivi</option>
+                    <option value="controle">🔍 Contrôle</option>
+                    <option value="urgence">Urgence</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Signes vitaux */}
+              <div className="grid grid-cols-4 gap-2">
+                <div>
+                  <label className="block text-xs text-ardoise-clair font-semibold mb-0.5">Poids (kg)</label>
+                  <input
+                    type="number"
+                    value={consPoids}
+                    onChange={(e) => setConsPoids(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-ardoise-clair/20 rounded text-xs"
+                    placeholder="70"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ardoise-clair font-semibold mb-0.5">Taille (cm)</label>
+                  <input
+                    type="number"
+                    value={consTaille}
+                    onChange={(e) => setConsTaille(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-ardoise-clair/20 rounded text-xs"
+                    placeholder="175"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ardoise-clair font-semibold mb-0.5">Temp. (°C)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={consTemperature}
+                    onChange={(e) => setConsTemperature(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-ardoise-clair/20 rounded text-xs"
+                    placeholder="37.5"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ardoise-clair font-semibold mb-0.5">Tension</label>
+                  <input
+                    type="text"
+                    value={consPression}
+                    onChange={(e) => setConsPression(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-ardoise-clair/20 rounded text-xs"
+                    placeholder="120/80"
+                  />
+                </div>
+              </div>
+
+              {/* Diagnostic */}
+              <div>
+                <label className="block text-xs text-ardoise-clair font-semibold mb-0.5">Diagnostic</label>
+                <input
+                  type="text"
+                  value={consDiagnostic}
+                  onChange={(e) => setConsDiagnostic(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-ardoise-clair/20 rounded text-xs"
+                  placeholder="Ex: Infection respiratoire aiguë"
+                />
+              </div>
+
+              {/* Observations */}
+              <div>
+                <label className="block text-xs text-ardoise-clair font-semibold mb-0.5">Observations</label>
+                <textarea
+                  value={consObservations}
+                  onChange={(e) => setConsObservations(e.target.value)}
+                  rows={2}
+                  className="w-full px-2 py-1.5 border border-ardoise-clair/20 rounded text-xs resize-none"
+                  placeholder="Notes complémentaires..."
+                />
+              </div>
+
+              {/* Conclusion */}
+              <div>
+                <label className="block text-xs text-ardoise-clair font-semibold mb-0.5">Conclusion</label>
+                <textarea
+                  value={consConclusion}
+                  onChange={(e) => setConsConclusion(e.target.value)}
+                  rows={2}
+                  className="w-full px-2 py-1.5 border border-ardoise-clair/20 rounded text-xs resize-none"
+                  placeholder="Conclusion médicale..."
+                />
+              </div>
+
+              {/* Date de contrôle */}
+              <div>
+                <label className="block text-xs text-ardoise-clair font-semibold mb-0.5">
+                  📅 Date de contrôle recommandé
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={consDateControle}
+                    onChange={(e) => setConsDateControle(e.target.value)}
+                    min={new Date().toISOString().split("T")[0]}
+                    className="flex-1 px-2 py-1.5 border border-ardoise-clair/20 rounded text-xs"
+                  />
+                  {/* Boutons rapides : +7j, +14j, +30j */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date();
+                      d.setDate(d.getDate() + 7);
+                      setConsDateControle(d.toISOString().split("T")[0]);
+                    }}
+                    className="text-xs px-2 py-1.5 bg-ocre/10 text-ocre rounded hover:bg-ocre/20 transition-colors"
+                  >
+                    +7j
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date();
+                      d.setDate(d.getDate() + 14);
+                      setConsDateControle(d.toISOString().split("T")[0]);
+                    }}
+                    className="text-xs px-2 py-1.5 bg-ocre/10 text-ocre rounded hover:bg-ocre/20 transition-colors"
+                  >
+                    +14j
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date();
+                      d.setDate(d.getDate() + 30);
+                      setConsDateControle(d.toISOString().split("T")[0]);
+                    }}
+                    className="text-xs px-2 py-1.5 bg-ocre/10 text-ocre rounded hover:bg-ocre/20 transition-colors"
+                  >
+                    +30j
+                  </button>
+                </div>
+                {consDateControle && (
+                  <p className="text-xs text-ocre mt-1">
+                    🔍 Contrôle prévu le {new Date(consDateControle).toLocaleDateString("fr-FR")}
+                  </p>
+                )}
+              </div>
+
+              <Bouton
+                variante="primaire"
+                taille="petit"
+                disabled={!consMotif || envoiConsultation}
+                onClick={handleAjouterConsultation}
+              >
+                {envoiConsultation ? "Enregistrement..." : "Enregistrer la consultation"}
+              </Bouton>
+            </div>
+          )}
+
           {consultations.length === 0 ? (
             <p className="text-sm text-ardoise-clair italic">Aucune consultation</p>
           ) : (
