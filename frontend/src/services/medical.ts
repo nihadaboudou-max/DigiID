@@ -145,6 +145,7 @@ export async function listerToutesOrdonnances(): Promise<Ordonnance[]> {
 
 export async function creerOrdonnance(data: {
   dossier_id: string;
+  hopital?: string;
   medicaments: string;
   instructions?: string;
   date_expiration?: string;
