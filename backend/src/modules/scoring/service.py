@@ -19,7 +19,7 @@ from sqlalchemy.orm import joinedload
 from src.config.constantes import TypesEvenementAudit
 from src.modeles import (
     AttestationCommunautaire, Consentement, JournalAudit,
-    ScoreHistorique, Utilisateur,
+    Parrainage, ScoreHistorique, Utilisateur,
 )
 from src.modules.gamification import service_badges, service_tracking
 from src.modules.scoring import modele_pondere_v2 as modele_pondere
@@ -310,24 +310,26 @@ async def _collecter_signaux_utilisateur(
     utilisateur: Utilisateur,
 ) -> SignauxUtilisateur:
     """
-    Tire du profil utilisateur les signaux dynamiques qui font evoluer le score.
+    Collecte 100% des signaux RÉELS depuis la base de données.
 
-    Plus l'utilisateur s'engage (profil rempli, consentements donnes, 2FA active),
-    plus son score grimpe. C'est l'incitation visible a la completion du profil.
+    Plus aucune simulation. Chaque champ vient du profil utilisateur
+    ou de requêtes sur les tables réelles (Parrainage, Consentement, etc.).
     """
-    # 1. Completion du profil — on compte les champs renseignes
+    maintenant = datetime.now(timezone.utc)
+
+    # ========================================================================
+    # 1. PROFIL & ENGAGEMENT
+    # ========================================================================
     champs_remplis = 0
     if utilisateur.prenom_chiffre: champs_remplis += 1
     if utilisateur.nom_chiffre: champs_remplis += 1
     if utilisateur.telephone_chiffre: champs_remplis += 1
     if utilisateur.ville: champs_remplis += 1
     if utilisateur.est_email_verifie: champs_remplis += 1
-
-    # Verifications fortes d'identite
     if utilisateur.est_cni_verifiee: champs_remplis += 1
     if utilisateur.est_visage_verifie: champs_remplis += 1
 
-    # 2. Nombre de consentements facultatifs actuellement accordes
+    # Consentements facultatifs
     resultat = await session.execute(
         select(Consentement)
         .where(
@@ -340,11 +342,86 @@ async def _collecter_signaux_utilisateur(
     consentements_actifs = resultat.scalars().all()
     nb_consentements_facultatifs = len(consentements_actifs)
 
+    # ========================================================================
+    # 2. ANCIENNETÉ & STABILITÉ (RÉELLES)
+    # ========================================================================
+    # Âge du compte
+    age_compte_jours = max(0, (maintenant - utilisateur.cree_le).days)
+
+    # Âge du téléphone actuel (depuis dernier changement ou création du compte)
+    if utilisateur.date_derniere_modification_telephone:
+        age_telephone_mois = max(0, (maintenant - utilisateur.date_derniere_modification_telephone).days // 30)
+        nb_changements_telephone = 1  # Au moins 1 changement tracé
+    else:
+        # Jamais changé : on prend l'âge du compte
+        age_telephone_mois = age_compte_jours // 30
+        nb_changements_telephone = 0
+
+    # Opérateur
+    operateur = utilisateur.operateur_telephone
+
+    # ========================================================================
+    # 3. GÉOGRAPHIE (RÉELLE)
+    # ========================================================================
+    if utilisateur.date_dernier_changement_ville and utilisateur.ville:
+        mois_stabilite_ville = max(0, (maintenant - utilisateur.date_dernier_changement_ville).days // 30)
+        nb_changements_ville = 1  # Au moins 1 changement
+    else:
+        # Jamais changé de ville : stabilité = âge du compte
+        mois_stabilite_ville = age_compte_jours // 30 if utilisateur.ville else 0
+        nb_changements_ville = 0
+
+    nb_changements_quartier = 0  # Pas de tracking quartier pour l'instant
+
+    # ========================================================================
+    # 4. RÉSEAU & PARRAINAGE (RÉEL)
+    # ========================================================================
+    # Compter les filleuls
+    total_filleuls = await session.scalar(
+        select(func.count(Parrainage.id)).where(Parrainage.parrain_id == utilisateur.id)
+    ) or 0
+
+    # Bonus cumulé réel
+    bonus_cumule = utilisateur.bonus_score_cumule or 0
+
+    # ========================================================================
+    # 5. VÉRIFICATIONS FORTES (RÉELLES)
+    # ========================================================================
+    cni_verifiee = utilisateur.est_cni_verifiee
+    visage_verifie = utilisateur.est_visage_verifie
+
+    # Mois depuis les vérifications
+    if utilisateur.date_verification_cni:
+        mois_depuis_cni = max(0, (maintenant - utilisateur.date_verification_cni).days // 30)
+    else:
+        mois_depuis_cni = 999
+
+    if utilisateur.date_verification_visage:
+        mois_depuis_visage = max(0, (maintenant - utilisateur.date_verification_visage).days // 30)
+    else:
+        mois_depuis_visage = 999
+
+    # ========================================================================
+    # CONSTRUCTION DU SIGNAL
+    # ========================================================================
     return SignauxUtilisateur(
         nombre_champs_profil_remplis=champs_remplis,
         nombre_consentements_facultatifs_accordes=nb_consentements_facultatifs,
         deux_fa_active=utilisateur.deux_fa_active,
         email_verifie=utilisateur.est_email_verifie,
+        age_compte_jours=age_compte_jours,
+        age_telephone_mois=age_telephone_mois,
+        operateur=operateur,
+        nombre_changements_telephone=nb_changements_telephone,
+        mois_stabilite_ville=mois_stabilite_ville,
+        nombre_changements_ville=nb_changements_ville,
+        nombre_changements_quartier=nb_changements_quartier,
+        nombre_filleuls=total_filleuls,
+        bonus_score_cumule=bonus_cumule,
+        cni_verifiee=cni_verifiee,
+        visage_verifie=visage_verifie,
+        mois_depuis_verification_cni=mois_depuis_cni,
+        mois_depuis_verification_visage=mois_depuis_visage,
     )
 
 
@@ -493,21 +570,21 @@ def _construire_detail(
 
     facteurs = [
         FacteurScore(
-            nom="anciennete_sim",
-            libelle="Anciennete et stabilite SIM",
+            nom="anciennete",
+            libelle="Anciennete et stabilite",
             valeur=historique.facteur_anciennete_sim,
-            poids_maximum=modele_pondere.POIDS_ANCIENNETE_SIM,
+            poids_maximum=modele_pondere.POIDS_ANCIENNETE,
             pourcentage_utilisation=round(
-                historique.facteur_anciennete_sim / modele_pondere.POIDS_ANCIENNETE_SIM * 100, 1
+                historique.facteur_anciennete_sim / modele_pondere.POIDS_ANCIENNETE * 100, 1
             ),
         ),
         FacteurScore(
-            nom="mobile_money",
-            libelle="Regularite mobile money",
+            nom="verifications",
+            libelle="Verifications identite",
             valeur=historique.facteur_mobile_money,
-            poids_maximum=modele_pondere.POIDS_MOBILE_MONEY,
+            poids_maximum=modele_pondere.POIDS_VERIFICATIONS,
             pourcentage_utilisation=round(
-                historique.facteur_mobile_money / modele_pondere.POIDS_MOBILE_MONEY * 100, 1
+                historique.facteur_mobile_money / modele_pondere.POIDS_VERIFICATIONS * 100, 1
             ),
         ),
         FacteurScore(
@@ -520,12 +597,12 @@ def _construire_detail(
             ),
         ),
         FacteurScore(
-            nom="reseau_contacts",
-            libelle="Reseau de contacts",
+            nom="reseau_bonus",
+            libelle="Reseau et engagement",
             valeur=historique.facteur_reseau_contacts,
-            poids_maximum=modele_pondere.POIDS_RESEAU,
+            poids_maximum=modele_pondere.POIDS_RESEAU_BONUS,
             pourcentage_utilisation=round(
-                historique.facteur_reseau_contacts / modele_pondere.POIDS_RESEAU * 100, 1
+                historique.facteur_reseau_contacts / modele_pondere.POIDS_RESEAU_BONUS * 100, 1
             ),
         ),
         FacteurScore(

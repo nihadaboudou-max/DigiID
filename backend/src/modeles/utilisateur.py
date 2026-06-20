@@ -69,7 +69,20 @@ class Utilisateur(Base, MelangeTracabilite):
     prenom_chiffre: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     nom_chiffre: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     telephone_chiffre: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    operateur_telephone: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True,
+        doc="Opérateur mobile déclaré (Orange, Wave, Free, etc.)"
+    )
+    date_derniere_modification_telephone: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        doc="Date du dernier changement de numéro de téléphone"
+    )
     ville: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    quartier: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    date_dernier_changement_ville: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        doc="Date du dernier changement de ville déclaré"
+    )
     pays: Mapped[Optional[str]] = mapped_column(String(50), default="Sénégal")
 
     # --- Rôle et permissions ---
