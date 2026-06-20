@@ -1,4 +1,4 @@
-Ôªø"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
@@ -77,8 +77,8 @@ function Contenu() {
       setNouvMedicaments(""); setNouvInstructions(""); setNouvDateExp("");
       const o = await listerOrdonnances(dossierId);
       setOrdonnances(o);
-      setMessage("Ordonnance cr√©√©e avec succ√®s.");
-    } catch { setMessage("Erreur lors de la cr√©ation."); }
+      setMessage("Ordonnance crÈÈe avec succËs.");
+    } catch { setMessage("Erreur lors de la crÈation."); }
     finally { setEnvoi(false); }
   }
 
@@ -99,8 +99,8 @@ function Contenu() {
         date_expiration: editDateExp || undefined,
       });
       setEditId(null); setEditMedicaments(""); setEditInstructions(""); setEditDateExp("");
-      setMessage("Ordonnance modifi√©e avec succ√®s.");
-      // Rechargement silencieux ‚Äî ne pas afficher d'erreur si le refresh √©choue
+      setMessage("Ordonnance modifiÈe avec succËs.");
+      // Rechargement silencieux ó ne pas afficher d'erreur si le refresh Èchoue
       try {
         const o = await listerOrdonnances(dossierId);
         setOrdonnances(o);
@@ -119,7 +119,7 @@ function Contenu() {
       setSupprId(null);
       const o = await listerOrdonnances(dossierId);
       setOrdonnances(o);
-      setMessage("Ordonnance supprim√©e avec succ√®s.");
+      setMessage("Ordonnance supprimÈe avec succËs.");
     } catch { setMessage("Erreur lors de la suppression."); }
   }
 
@@ -168,7 +168,7 @@ function Contenu() {
           </div>
           <p className="text-ardoise-clair mt-1 font-mono text-sm">{dossier.patient_digiid}</p>
           {dossier.hopital && (
-            <p className="text-xs text-ocre mt-1">üè• {dossier.hopital}</p>
+            <p className="text-xs text-ocre mt-1">?? {dossier.hopital}</p>
           )}
         </div>
       </div>
@@ -178,12 +178,12 @@ function Contenu() {
           <div className="space-y-2 text-sm">
             <p><strong>Nom :</strong> {dossier.patient_prenom ? `${dossier.patient_prenom} ${dossier.patient_nom}` : dossier.patient_nom}</p>
             <p><strong>DigiID :</strong> <span className="font-mono">{dossier.patient_digiid}</span></p>
-            {dossier.patient_date_naissance && <p><strong>N√©(e) le :</strong> {new Date(dossier.patient_date_naissance).toLocaleDateString("fr-FR")}</p>}
-            {dossier.hopital && <p><strong>√âtablissement :</strong> üè• {dossier.hopital}</p>}
+            {dossier.patient_date_naissance && <p><strong>NÈ(e) le :</strong> {new Date(dossier.patient_date_naissance).toLocaleDateString("fr-FR")}</p>}
+            {dossier.hopital && <p><strong>…tablissement :</strong> ?? {dossier.hopital}</p>}
             <p><strong>Motif :</strong> {dossier.motif}</p>
-            <p><strong>Diagnostic :</strong> {dossier.diagnostic || "Non renseign√©"}</p>
-            <p><strong>Cr√©e le :</strong> {new Date(dossier.date_creation).toLocaleString("fr-FR")}</p>
-            <p><strong>Modifi√© le :</strong> {new Date(dossier.date_modification).toLocaleString("fr-FR")}</p>
+            <p><strong>Diagnostic :</strong> {dossier.diagnostic || "Non renseignÈ"}</p>
+            <p><strong>CrÈe le :</strong> {new Date(dossier.date_creation).toLocaleString("fr-FR")}</p>
+            <p><strong>ModifiÈ le :</strong> {new Date(dossier.date_modification).toLocaleString("fr-FR")}</p>
           </div>
         </Carte>
 
@@ -201,10 +201,10 @@ function Contenu() {
                   {c.diagnostic && <p className="text-xs text-ardoise-clair mt-1">{c.diagnostic}</p>}
                   <div className="flex flex-wrap gap-2 mt-1 text-xs text-ardoise-clair">
                     <span>{new Date(c.date_consultation).toLocaleString("fr-FR")}</span>
-                    {c.poids && <span>‚öñÔ∏è {c.poids} kg</span>}
-                    {c.taille && <span>üìè {c.taille} cm</span>}
-                    {c.temperature && <span>üå°Ô∏è {(c.temperature / 10).toFixed(1)}¬∞C</span>}
-                    {c.pression_arterielle && <span>üíâ {c.pression_arterielle}</span>}
+                    {c.poids && <span>?? {c.poids} kg</span>}
+                    {c.taille && <span>?? {c.taille} cm</span>}
+                    {c.temperature && <span>??? {(c.temperature / 10).toFixed(1)}∞C</span>}
+                    {c.pression_arterielle && <span>?? {c.pression_arterielle}</span>}
                   </div>
                   {c.observations && <p className="text-xs text-ardoise-clair mt-1">{c.observations}</p>}
                   {c.conclusion && <p className="text-xs font-medium text-ardoise mt-1">Conclusion : {c.conclusion}</p>}
@@ -223,7 +223,7 @@ function Contenu() {
               {ordonnances.map((o) => (
                 <div key={o.id} className="p-2 bg-sable rounded text-sm">
                   {editId === o.id ? (
-                    /* Mode √©dition */
+                    /* Mode Èdition */
                     <div className="space-y-2">
                       <textarea
                         value={editMedicaments}
@@ -262,17 +262,17 @@ function Contenu() {
                             <p className="font-semibold">{o.medicaments}</p>
                             <span className="text-xs text-ardoise-clair font-mono">#{o.numero_ordonnance}</span>
                             {o.statut !== "active" && (
-                              <Badge variante={o.statut === "expiree" ? "neutre" : "danger"}>
-                                {o.statut === "expiree" ? "Expir√©e" : "Annul√©e"}
+                              <Badge variante={o.statut === "expiree" ? "neutre" : "terre"}>
+                                {o.statut === "expiree" ? "ExpirÈe" : "AnnulÈe"}
                               </Badge>
                             )}
                           </div>
                           {o.instructions && <p className="text-xs text-ardoise-clair mt-1">{o.instructions}</p>}
                           <div className="flex flex-wrap gap-3 mt-1 text-xs text-ardoise-clair">
-                            <span>üìÖ {new Date(o.date_prescription).toLocaleDateString("fr-FR")} √† {new Date(o.date_prescription).toLocaleTimeString("fr-FR", {hour: "2-digit", minute: "2-digit"})}</span>
-                            {o.date_expiration && <span className="text-terre">‚è≥ Expire le {new Date(o.date_expiration).toLocaleDateString("fr-FR")}</span>}
-                            {o.medecin_nom && <span>üë®‚Äç‚öïÔ∏è Dr. {o.medecin_nom}</span>}
-                            {o.hopital && <span>üè• {o.hopital}</span>}
+                            <span>?? {new Date(o.date_prescription).toLocaleDateString("fr-FR")} ‡ {new Date(o.date_prescription).toLocaleTimeString("fr-FR", {hour: "2-digit", minute: "2-digit"})}</span>
+                            {o.date_expiration && <span className="text-terre">? Expire le {new Date(o.date_expiration).toLocaleDateString("fr-FR")}</span>}
+                            {o.medecin_nom && <span>????? Dr. {o.medecin_nom}</span>}
+                            {o.hopital && <span>?? {o.hopital}</span>}
                           </div>
                         </div>
                         <div className="flex gap-1 ml-2 shrink-0">
@@ -281,14 +281,14 @@ function Contenu() {
                             className="text-xs text-ocre hover:text-ocre-fonce px-1.5 py-0.5 rounded hover:bg-ocre/10 transition-colors"
                             title="Modifier"
                           >
-                            ‚úèÔ∏è
+                            ??
                           </button>
                           <button
                             onClick={() => setSupprId(o.id)}
                             className="text-xs text-terre hover:text-terre-fonce px-1.5 py-0.5 rounded hover:bg-terre/10 transition-colors"
                             title="Supprimer"
                           >
-                            üóëÔ∏è
+                            ???
                           </button>
                         </div>
                       </div>
@@ -308,7 +308,7 @@ function Contenu() {
                 onChange={(e) => setNouvMedicaments(e.target.value)}
                 rows={2}
                 className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm resize-none"
-                placeholder="M√©dicaments et posologie..."
+                placeholder="MÈdicaments et posologie..."
               />
               <textarea
                 value={nouvInstructions}
@@ -324,7 +324,7 @@ function Contenu() {
                 className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
               />
               <Bouton variante="primaire" taille="petit" disabled={!nouvMedicaments || envoi} onClick={handleCreer}>
-                {envoi ? "Cr√©ation..." : "+ Prescrire"}
+                {envoi ? "CrÈation..." : "+ Prescrire"}
               </Bouton>
             </div>
           </div>
@@ -337,7 +337,7 @@ function Contenu() {
           <div className="bg-white rounded-xl p-6 max-w-sm shadow-2xl">
             <h3 className="text-lg font-bold text-ardoise mb-2">Confirmer la suppression</h3>
             <p className="text-sm text-ardoise-clair mb-4">
-              Cette action est irr√©versible. L&apos;ordonnance sera d√©finitivement supprim√©e.
+              Cette action est irrÈversible. L&apos;ordonnance sera dÈfinitivement supprimÈe.
               L&apos;historique reste consultable par le super administrateur.
             </p>
             <div className="flex gap-3 justify-end">
