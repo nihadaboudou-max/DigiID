@@ -22,7 +22,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.base_donnees.session import obtenir_session
 from src.config.constantes import PREFIXE_API_ADMIN, RolesUtilisateur
 from src.modeles import Utilisateur, JournalAudit, FraudeIncident, Notification, SessionAuthentification, VerificationVisuelle
-from src.modules.super_admin.service_phase6 import consulter_audit_pagine
+from src.modules.super_admin.schemas_phase6 import FiltresAudit
+from src.modules.super_admin.service_phase6 import lister_audit
 from src.modeles.enrolement import Enrolement
 from src.modules.authentification.dependances import admin_courant, obtenir_ip_client
 from src.modules.super_admin import monitoring_temps_reel as service_monitoring
@@ -900,20 +901,21 @@ async def lister_audit_admin(
       - **date_debut** : date début (ex: 2024-01-01)
       - **date_fin** : date fin (ex: 2024-12-31)
     """
-    from datetime import datetime
+        from datetime import datetime
     
-    # Simuler les filtres pour consulter_audit_pagine
-    filtres = lambda: None
-    filtres.type_evenement = type_evenement
-    filtres.recherche = recherche
-    filtres.date_debut = datetime.fromisoformat(date_debut) if date_debut else None
-    filtres.date_fin = datetime.fromisoformat(date_fin) if date_fin else None
-    filtres.limite = limite
+    # Construire les filtres d'audit
+    filtres = FiltresAudit(
+        page=page,
+        limite=limite,
+        type_evenement=type_evenement,
+        recherche=recherche,
+        date_debut=datetime.fromisoformat(date_debut) if date_debut else None,
+        date_fin=datetime.fromisoformat(date_fin) if date_fin else None,
+    )
     
-    evenements, total = await consulter_audit_pagine(
+    resultat = await lister_audit(
         session=session,
         filtres=filtres,
-        page=page,
     )
     
     return ListeAuditAdminReponse(
@@ -928,10 +930,10 @@ async def lister_audit_admin(
                 adresse_ip=e.adresse_ip,
                 donnees_supplementaires=e.donnees_supplementaires,
             )
-            for e in evenements
+            for e in resultat.donnees
         ],
-        total=total,
-        page=page,
+        total=resultat.total,
+        page=filtres.page,
     )
 
 
