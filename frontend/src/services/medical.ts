@@ -123,6 +123,13 @@ export async function listerOrdonnances(dossierId: string): Promise<Ordonnance[]
   );
 }
 
+/** Liste toutes les ordonnances du médecin connecté. */
+export async function listerToutesOrdonnances(): Promise<Ordonnance[]> {
+  return clientAPI.get<Ordonnance[]>("/api/v1/utilisateur/medical/ordonnances", {
+    authentifie: true,
+  });
+}
+
 export async function creerOrdonnance(data: {
   dossier_id: string;
   medicaments: string;

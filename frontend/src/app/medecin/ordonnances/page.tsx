@@ -7,7 +7,7 @@ import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { useRoleUI } from "@/crochets/useRoleUI";
-import { listerDossiers, listerOrdonnances, creerOrdonnance } from "@/services/medical";
+import { listerDossiers, listerToutesOrdonnances, creerOrdonnance } from "@/services/medical";
 import type { Ordonnance, DossierMedical } from "@/services/medical";
 
 export default function OrdonnancesPage() {
@@ -35,7 +35,7 @@ function Contenu() {
     try {
       const [dossiersData, ordonnancesData] = await Promise.all([
         listerDossiers(),
-        Promise.resolve([] as Ordonnance[]),
+        listerToutesOrdonnances(),
       ]);
       setDossiers(dossiersData);
       setOrdonnances(ordonnancesData);
@@ -49,8 +49,13 @@ function Contenu() {
     try {
       await creerOrdonnance({ dossier_id: dossierId, medicaments, instructions: instructions || undefined });
       setMedicaments(""); setInstructions(""); setDossierId("");
-      const data = await listerDossiers();
-      setDossiers(data);
+      // Recharger les deux listes après création
+      const [dossiersData, ordonnancesData] = await Promise.all([
+        listerDossiers(),
+        listerToutesOrdonnances(),
+      ]);
+      setDossiers(dossiersData);
+      setOrdonnances(ordonnancesData);
     } catch {}
     finally { setEnvoi(false); }
   }

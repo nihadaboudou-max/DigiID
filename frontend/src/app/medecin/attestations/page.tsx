@@ -7,6 +7,8 @@ import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { useRoleUI } from "@/crochets/useRoleUI";
+import { listerDossiers } from "@/services/medical";
+import type { DossierMedical } from "@/services/medical";
 
 export default function AttestationsPage() {
   return (
@@ -18,6 +20,23 @@ export default function AttestationsPage() {
 
 function Contenu() {
   const { can } = useRoleUI();
+  const [dossiers, setDossiers] = useState<DossierMedical[]>([]);
+  const [dossierId, setDossierId] = useState("");
+  const [typeAttestation, setTypeAttestation] = useState("");
+  const [chargement, setChargement] = useState(true);
+
+  useEffect(() => {
+    listerDossiers()
+      .then(setDossiers)
+      .catch(() => {})
+      .finally(() => setChargement(false));
+  }, []);
+
+  async function genererAttestation() {
+    if (!dossierId || !typeAttestation) return;
+    // TODO: appel API création d'attestation médicale
+    alert("Fonctionnalité à venir : création d'attestation médicale.");
+  }
 
   return (
     <div className="space-y-8 apparition">
@@ -39,20 +58,44 @@ function Contenu() {
             <p className="text-sm text-ardoise-clair mb-4">
               Selectionnez un dossier medical et le type d attestation.
             </p>
-            <form className="max-w-md space-y-3" onSubmit={(e) => e.preventDefault()}>
-              <select className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm bg-white">
+            <div className="max-w-md space-y-3">
+              <select
+                value={dossierId}
+                onChange={(e) => setDossierId(e.target.value)}
+                className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm bg-white"
+              >
                 <option value="">-- Selectionnez un dossier --</option>
-                <option value="..." disabled>Dossiers disponibles (bientot)</option>
+                {chargement ? (
+                  <option disabled>Chargement des dossiers...</option>
+                ) : dossiers.length === 0 ? (
+                  <option disabled>Aucun dossier disponible</option>
+                ) : (
+                  dossiers.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.patient_nom} ({d.patient_digiid}) — {d.motif}
+                    </option>
+                  ))
+                )}
               </select>
-              <select className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm bg-white">
+              <select
+                value={typeAttestation}
+                onChange={(e) => setTypeAttestation(e.target.value)}
+                className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm bg-white"
+              >
                 <option value="">-- Type d attestation --</option>
-                <option>Certificat medical</option>
-                <option>Certificat de vaccination</option>
-                <option>Certificat d aptitude</option>
-                <option>Certificat de visite</option>
+                <option value="certificat_medical">Certificat medical</option>
+                <option value="certificat_vaccination">Certificat de vaccination</option>
+                <option value="certificat_aptitude">Certificat d aptitude</option>
+                <option value="certificat_visite">Certificat de visite</option>
               </select>
-              <Bouton variante="primaire" disabled>Generer l attestation</Bouton>
-            </form>
+              <Bouton
+                variante="primaire"
+                onClick={genererAttestation}
+                disabled={!dossierId || !typeAttestation}
+              >
+                Generer l attestation
+              </Bouton>
+            </div>
           </Carte>
 
           <Carte titre="Attestations recentes">

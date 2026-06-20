@@ -186,6 +186,27 @@ async def ajouter_consultation(
     )
 
 
+@routeur_medical.get("/ordonnances", response_model=list[OrdonnanceResponse])
+async def lister_toutes_ordonnances(
+    medecin: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Liste toutes les ordonnances du médecin connecté, triées par date."""
+    ordonnances = await medical_service.obtenir_toutes_ordonnances(session, medecin.id)
+    return [
+        OrdonnanceResponse(
+            id=o.id,
+            dossier_id=o.dossier_id,
+            medecin_id=o.medecin_id,
+            medicaments=o.medicaments,
+            instructions=o.instructions,
+            date_prescription=o.date_prescription,
+            date_expiration=o.date_expiration,
+        )
+        for o in ordonnances
+    ]
+
+
 @routeur_medical.get("/dossiers/{dossier_id}/ordonnances", response_model=list[OrdonnanceResponse])
 async def lister_ordonnances(
     dossier_id: UUID,

@@ -146,6 +146,19 @@ async def obtenir_ordonnances(
     return list(result.scalars().all())
 
 
+async def obtenir_toutes_ordonnances(
+    session: AsyncSession,
+    medecin_id: UUID,
+) -> list[Ordonnance]:
+    """Liste toutes les ordonnances prescrites par un médecin, triées par date décroissante."""
+    result = await session.execute(
+        select(Ordonnance)
+        .where(Ordonnance.medecin_id == medecin_id)
+        .order_by(Ordonnance.date_prescription.desc())
+    )
+    return list(result.scalars().all())
+
+
 async def compter_consultations(session: AsyncSession, dossier_id: UUID) -> int:
     result = await session.execute(
         select(func.count(Consultation.id)).where(Consultation.dossier_id == dossier_id)
