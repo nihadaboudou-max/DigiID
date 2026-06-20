@@ -15,9 +15,9 @@ from src.modules.gamification import service_notifications
 from src.noyau import journal
 
 
-# Bonus distribues
-BONUS_PARRAIN = 5
-BONUS_FILLEUL = 3
+# Bonus distribues (reduits : evite l'inflation du compteur)
+BONUS_PARRAIN = 2
+BONUS_FILLEUL = 1
 
 
 def _generer_code_unique() -> str:

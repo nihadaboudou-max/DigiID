@@ -1,3 +1,4 @@
+
 "use client";
 
 /**
@@ -84,8 +85,8 @@ function Contenu() {
         </p>
         <h1 className="mt-1">Invite tes amis</h1>
         <p className="text-ardoise-clair mt-2 max-w-2xl">
-          Partage ton code avec tes amis. A chaque inscription, tu gagnes <strong>5 points</strong> de
-          bonus et ton ami gagne <strong>3 points</strong> de bienvenue.
+          Partage ton code avec tes amis. A chaque inscription, tu gagnes <strong>2 points</strong> de
+          bonus et ton ami gagne <strong>1 point</strong> de bienvenue.
         </p>
       </header>
 
@@ -144,8 +145,8 @@ function Contenu() {
         <ol className="space-y-3 text-sm text-ardoise list-decimal list-inside">
           <li>Tu partages ton code <code className="bg-ocre/15 px-2 py-0.5 rounded font-mono">{donnees.code}</code> avec un ami.</li>
           <li>Ton ami s'inscrit sur DigiID en saisissant ton code dans le formulaire.</li>
-          <li>Des qu'il a valide son inscription, tu gagnes <strong>+5 points</strong> et un badge "Sociable".</li>
-          <li>Lui gagne <strong>+3 points</strong> de bienvenue immediats.</li>
+          <li>Des qu'il a valide son inscription, tu gagnes <strong>+2 points</strong> et un badge "Sociable".</li>
+                      <li>Lui gagne <strong>+1 point</strong> de bienvenue immediats.</li>
           <li>Tu peux parrainer un nombre illimite d'amis !</li>
         </ol>
       </Carte>

@@ -88,9 +88,9 @@ const CONSEILS: Conseil[] = [
     icone: "👥",
     titre: "Parraine tes proches",
     description:
-      "Invite tes amis et ta famille à rejoindre DigiID. Un réseau de confiance partagé renforce ton propre score. Chaque filleul rapporte +5 points.",
-    impact: "Bonus de +5 points par filleul",
-    points: 5,
+      "Invite tes amis et ta famille à rejoindre DigiID. Un réseau de confiance partagé renforce ton propre score. Chaque filleul rapporte +2 points.",
+    impact: "Bonus de +2 points par filleul",
+    points: 2,
   },
   {
     niveau: "expert",
