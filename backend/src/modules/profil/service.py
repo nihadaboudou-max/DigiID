@@ -71,8 +71,6 @@ def _utilisateur_vers_profil(utilisateur: Utilisateur) -> ProfilDetail:
         prenom=dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else None,
         nom=dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else None,
         telephone=dechiffrer_donnee(utilisateur.telephone_chiffre) if utilisateur.telephone_chiffre else None,
-        operateur_telephone=utilisateur.operateur_telephone,
-        quartier=utilisateur.quartier,
         ville=utilisateur.ville,
         pays=utilisateur.pays,
         role=utilisateur.role,
@@ -189,23 +187,11 @@ async def modifier_profil(
     if donnees.telephone is not None:
         ancien = dechiffrer_donnee(utilisateur.telephone_chiffre) if utilisateur.telephone_chiffre else None
         utilisateur.telephone_chiffre = chiffrer_donnee(donnees.telephone)
-        utilisateur.date_derniere_modification_telephone = datetime.now(timezone.utc)
         modifications["telephone"] = {"avant": ancien, "apres": donnees.telephone}
-
-    if donnees.operateur_telephone is not None:
-        modifications["operateur_telephone"] = {
-            "avant": utilisateur.operateur_telephone, "apres": donnees.operateur_telephone
-        }
-        utilisateur.operateur_telephone = donnees.operateur_telephone
-
-    if donnees.quartier is not None:
-        modifications["quartier"] = {"avant": utilisateur.quartier, "apres": donnees.quartier}
-        utilisateur.quartier = donnees.quartier
 
     if donnees.ville is not None:
         modifications["ville"] = {"avant": utilisateur.ville, "apres": donnees.ville}
         utilisateur.ville = donnees.ville
-        utilisateur.date_dernier_changement_ville = datetime.now(timezone.utc)
 
     if donnees.pays is not None:
         modifications["pays"] = {"avant": utilisateur.pays, "apres": donnees.pays}

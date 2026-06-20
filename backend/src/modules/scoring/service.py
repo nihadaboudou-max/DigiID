@@ -342,46 +342,32 @@ async def _collecter_signaux_utilisateur(
     consentements_actifs = resultat.scalars().all()
     nb_consentements_facultatifs = len(consentements_actifs)
 
+        # ========================================================================
+    # 2. ANCIENNETÉ & STABILITÉ (RÉELLES — colonnes existantes uniquement)
     # ========================================================================
-    # 2. ANCIENNETÉ & STABILITÉ (RÉELLES)
-    # ========================================================================
-    # Âge du compte
+    # Âge réel du compte
     age_compte_jours = max(0, (maintenant - utilisateur.cree_le).days)
 
-    # Âge du téléphone actuel (depuis dernier changement ou création du compte)
-    if utilisateur.date_derniere_modification_telephone:
-        age_telephone_mois = max(0, (maintenant - utilisateur.date_derniere_modification_telephone).days // 30)
-        nb_changements_telephone = 1  # Au moins 1 changement tracé
-    else:
-        # Jamais changé : on prend l'âge du compte
-        age_telephone_mois = age_compte_jours // 30
-        nb_changements_telephone = 0
-
-    # Opérateur
-    operateur = utilisateur.operateur_telephone
+    # Proxy stabilité téléphone : on utilise l'âge du compte
+    # (pas de colonne date_derniere_modification_telephone en DB)
+    age_telephone_mois = age_compte_jours // 30
+    nb_changements_telephone = 0
+    operateur = None  # Pas de colonne operateur_telephone en DB
 
     # ========================================================================
-    # 3. GÉOGRAPHIE (RÉELLE)
+    # 3. GÉOGRAPHIE (RÉELLE — colonne ville existante)
     # ========================================================================
-    if utilisateur.date_dernier_changement_ville and utilisateur.ville:
-        mois_stabilite_ville = max(0, (maintenant - utilisateur.date_dernier_changement_ville).days // 30)
-        nb_changements_ville = 1  # Au moins 1 changement
-    else:
-        # Jamais changé de ville : stabilité = âge du compte
-        mois_stabilite_ville = age_compte_jours // 30 if utilisateur.ville else 0
-        nb_changements_ville = 0
-
-    nb_changements_quartier = 0  # Pas de tracking quartier pour l'instant
+    # Proxy : si ville renseignée, stabilité = âge du compte
+    mois_stabilite_ville = age_compte_jours // 30 if utilisateur.ville else 0
+    nb_changements_ville = 0
+    nb_changements_quartier = 0
 
     # ========================================================================
-    # 4. RÉSEAU & PARRAINAGE (RÉEL)
+    # 4. RÉSEAU & PARRAINAGE (RÉEL — colonnes existantes)
     # ========================================================================
-    # Compter les filleuls
     total_filleuls = await session.scalar(
         select(func.count(Parrainage.id)).where(Parrainage.parrain_id == utilisateur.id)
     ) or 0
-
-    # Bonus cumulé réel
     bonus_cumule = utilisateur.bonus_score_cumule or 0
 
     # ========================================================================
@@ -390,7 +376,6 @@ async def _collecter_signaux_utilisateur(
     cni_verifiee = utilisateur.est_cni_verifiee
     visage_verifie = utilisateur.est_visage_verifie
 
-    # Mois depuis les vérifications
     if utilisateur.date_verification_cni:
         mois_depuis_cni = max(0, (maintenant - utilisateur.date_verification_cni).days // 30)
     else:
@@ -401,9 +386,6 @@ async def _collecter_signaux_utilisateur(
     else:
         mois_depuis_visage = 999
 
-    # ========================================================================
-    # CONSTRUCTION DU SIGNAL
-    # ========================================================================
     return SignauxUtilisateur(
         nombre_champs_profil_remplis=champs_remplis,
         nombre_consentements_facultatifs_accordes=nb_consentements_facultatifs,

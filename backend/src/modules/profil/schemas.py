@@ -44,8 +44,6 @@ class ProfilDetail(BaseModel):
     prenom: Optional[str]
     nom: Optional[str]
     telephone: Optional[str]
-    operateur_telephone: Optional[str] = None
-    quartier: Optional[str] = None
     ville: Optional[str]
     pays: Optional[str]
     role: str
@@ -77,8 +75,6 @@ class ProfilModification(BaseModel):
     prenom: Optional[str] = Field(default=None, min_length=2, max_length=50)
     nom: Optional[str] = Field(default=None, min_length=2, max_length=50)
     telephone: Optional[str] = Field(default=None, max_length=20)
-    operateur_telephone: Optional[str] = Field(default=None, max_length=50)
-    quartier: Optional[str] = Field(default=None, max_length=100)
     ville: Optional[str] = Field(default=None, max_length=100)
     pays: Optional[str] = Field(default=None, max_length=50)
 
