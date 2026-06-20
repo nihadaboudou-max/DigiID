@@ -55,6 +55,7 @@ class ConsultationCreate(BaseModel):
     observations: Optional[str] = None
     diagnostic: Optional[str] = None
     conclusion: Optional[str] = None
+    date_controle: Optional[date] = Field(None, description="Date recommandée pour le contrôle de suivi")
 
 
 class ConsultationResponse(BaseModel):
@@ -71,6 +72,7 @@ class ConsultationResponse(BaseModel):
     observations: Optional[str] = None
     diagnostic: Optional[str] = None
     conclusion: Optional[str] = None
+    date_controle: Optional[date] = None
     date_consultation: datetime
 
     model_config = {"from_attributes": True}
@@ -88,6 +90,7 @@ class OrdonnanceUpdate(BaseModel):
     medicaments: Optional[str] = None
     instructions: Optional[str] = None
     date_expiration: Optional[date] = None
+    date_controle: Optional[date] = Field(None, description="Date recommandée pour le contrôle de suivi")
 
 
 class OrdonnanceResponse(BaseModel):
@@ -102,6 +105,7 @@ class OrdonnanceResponse(BaseModel):
     statut: str = "active"
     date_prescription: datetime
     date_expiration: Optional[date] = None
+    date_controle: Optional[date] = None
 
     model_config = {"from_attributes": True}
 
@@ -129,6 +133,15 @@ class OrdonnancePatientResponse(BaseModel):
     statut: str = "active"
     date_prescription: datetime
     date_expiration: Optional[date] = None
+
+    model_config = {"from_attributes": True}
+
+
+class DossierCompletResponse(BaseModel):
+    """Dossier médical complet du patient avec toutes ses informations."""
+    dossier: DossierMedicalResponse
+    consultations: list[ConsultationResponse]
+    ordonnances: list[OrdonnanceResponse]
 
     model_config = {"from_attributes": True}
 

@@ -116,6 +116,7 @@ COLONNES_A_VERIFIER = [
     ("consultations", "temperature", "INTEGER"),
     ("consultations", "pression_arterielle", "VARCHAR(20)"),
     ("consultations", "conclusion", "TEXT"),
+    ("consultations", "date_controle", "DATE"),
     ("ordonnances", "hopital", "VARCHAR(255)"),
     ("ordonnances", "medecin_nom", "VARCHAR(255)"),
     ("ordonnances", "statut", "VARCHAR(20) NOT NULL DEFAULT 'active'"),

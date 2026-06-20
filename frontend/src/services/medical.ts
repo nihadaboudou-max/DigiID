@@ -34,6 +34,7 @@ export interface Consultation {
   observations: string | null;
   diagnostic: string | null;
   conclusion: string | null;
+  date_controle: string | null;
   date_consultation: string;
 }
 
@@ -121,8 +122,15 @@ export async function listerConsultations(dossierId: string): Promise<Consultati
 export async function ajouterConsultation(data: {
   dossier_id: string;
   motif: string;
+  type_consultation?: string;
   observations?: string;
   diagnostic?: string;
+  conclusion?: string;
+  poids?: number;
+  taille?: number;
+  temperature?: number;
+  pression_arterielle?: string;
+  date_controle?: string;
 }): Promise<Consultation> {
   return clientAPI.post<Consultation>("/api/v1/utilisateur/medical/consultations", data, {
     authentifie: true,
@@ -171,6 +179,17 @@ export async function supprimerOrdonnance(id: string): Promise<void> {
     `/api/v1/utilisateur/medical/ordonnances/${id}`,
     { authentifie: true },
   );
+}
+
+/** Récupère le dossier médical complet du citoyen connecté. */
+export async function monDossierMedical(): Promise<{
+  dossier: DossierMedical;
+  consultations: Consultation[];
+  ordonnances: Ordonnance[];
+}[]> {
+  return clientAPI.get<
+    { dossier: DossierMedical; consultations: Consultation[]; ordonnances: Ordonnance[] }[]
+  >("/api/v1/utilisateur/mon-dossier-medical", { authentifie: true });
 }
 
 /** Liste les ordonnances du citoyen connecté (patient). */

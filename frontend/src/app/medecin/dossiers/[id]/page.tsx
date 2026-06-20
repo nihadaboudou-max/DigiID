@@ -206,8 +206,11 @@ function Contenu() {
                     {c.temperature && <span>🌡️ {(c.temperature / 10).toFixed(1)}°C</span>}
                     {c.pression_arterielle && <span>💉 {c.pression_arterielle}</span>}
                   </div>
-                  {c.observations && <p className="text-xs text-ardoise-clair mt-1">{c.observations}</p>}
+                                    {c.observations && <p className="text-xs text-ardoise-clair mt-1">{c.observations}</p>}
                   {c.conclusion && <p className="text-xs font-medium text-ardoise mt-1">Conclusion : {c.conclusion}</p>}
+                  {c.date_controle && (
+                    <p className="text-xs mt-2 font-medium">📅 Contrôle recommandé : {new Date(c.date_controle).toLocaleDateString("fr-FR")}</p>
+                  )}
                 </div>
               ))}
             </div>

@@ -23,8 +23,9 @@ from src.modules.medical.schemas import (
     OrdonnanceUpdate,
     SignalementCreate,
     VerificationDigiIDResponse,
+    DossierCompletResponse,
 )
-from src.noyau.exceptions import ErreurAutorisation
+from src.noyau.exceptions import ErreurAutorisation, ErreurRessourceIntrouvable
 from src.modules.medical import service as medical_service
 
 routeur_medical = APIRouter(prefix=f"{PREFIXE_API_UTILISATEUR}/medical", tags=["Médical"])
@@ -182,6 +183,7 @@ async def lister_consultations(
             observations=c.observations,
             diagnostic=c.diagnostic,
             conclusion=c.conclusion,
+            date_controle=c.date_controle,
             date_consultation=c.date_consultation,
         )
         for c in consultations
@@ -209,6 +211,7 @@ async def ajouter_consultation(
         observations=consultation.observations,
         diagnostic=consultation.diagnostic,
         conclusion=consultation.conclusion,
+        date_controle=consultation.date_controle,
         date_consultation=consultation.date_consultation,
     )
 
@@ -383,3 +386,75 @@ async def signaler_ordonnance(
         f"| patient={citoyen.id} | motif={donnees.motif}"
     )
     return {"succes": True, "message": "Signalement envoyé avec succès. Le super administrateur sera notifié."}
+
+
+@routeur_patient.get("/mon-dossier-medical", response_model=list[DossierCompletResponse])
+async def mon_dossier_medical(
+    citoyen: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """
+    Récupère le dossier médical complet du citoyen connecté.
+    Retourne tous ses dossiers avec leurs consultations et ordonnances.
+    """
+    dossiers = await medical_service.obtenir_dossiers_par_digiid(session, citoyen.digiid_public)
+    result = []
+    for d in dossiers:
+        consultations = await medical_service.obtenir_consultations(session, d.id)
+        ordonnances = await medical_service.obtenir_ordonnances(session, d.id)
+
+        result.append(DossierCompletResponse(
+            dossier=DossierMedicalResponse(
+                id=d.id,
+                medecin_id=d.medecin_id,
+                patient_nom=d.patient_nom,
+                patient_prenom=d.patient_prenom,
+                patient_digiid=d.patient_digiid,
+                patient_date_naissance=d.patient_date_naissance,
+                hopital=d.hopital,
+                motif=d.motif,
+                diagnostic=d.diagnostic,
+                statut=d.statut,
+                consultations_count=len(consultations),
+                ordonnances_count=len(ordonnances),
+                date_creation=d.date_creation,
+                date_modification=d.date_modification,
+            ),
+            consultations=[
+                ConsultationResponse(
+                    id=c.id,
+                    dossier_id=c.dossier_id,
+                    medecin_id=c.medecin_id,
+                    hopital=c.hopital,
+                    motif=c.motif,
+                    type_consultation=c.type_consultation,
+                    poids=c.poids,
+                    taille=c.taille,
+                    temperature=c.temperature,
+                    pression_arterielle=c.pression_arterielle,
+                    observations=c.observations,
+                    diagnostic=c.diagnostic,
+                    conclusion=c.conclusion,
+                    date_controle=c.date_controle,
+                    date_consultation=c.date_consultation,
+                )
+                for c in consultations
+            ],
+            ordonnances=[
+                OrdonnanceResponse(
+                    id=o.id,
+                    dossier_id=o.dossier_id,
+                    medecin_id=o.medecin_id,
+                    numero_ordonnance=o.numero_ordonnance,
+                    hopital=o.hopital,
+                    medecin_nom=o.medecin_nom,
+                    medicaments=o.medicaments,
+                    instructions=o.instructions,
+                    statut=o.statut,
+                    date_prescription=o.date_prescription,
+                    date_expiration=o.date_expiration,
+                )
+                for o in ordonnances
+            ],
+        ))
+    return result

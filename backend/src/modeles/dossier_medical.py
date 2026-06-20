@@ -51,6 +51,7 @@ class Consultation(Base):
     diagnostic = Column(Text, nullable=True)
     conclusion = Column(Text, nullable=True)
     date_consultation = Column(DateTime, default=datetime.utcnow, nullable=False)
+    date_controle = Column(Date, nullable=True)  # Date recommandée pour le contrôle de suivi
 
 
 class Ordonnance(Base):
