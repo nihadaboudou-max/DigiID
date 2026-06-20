@@ -99,10 +99,16 @@ function Contenu() {
         date_expiration: editDateExp || undefined,
       });
       setEditId(null); setEditMedicaments(""); setEditInstructions(""); setEditDateExp("");
-      const o = await listerOrdonnances(dossierId);
-      setOrdonnances(o);
       setMessage("Ordonnance modifiée avec succès.");
-    } catch { setMessage("Erreur lors de la modification."); }
+      // Rechargement silencieux — ne pas afficher d'erreur si le refresh échoue
+      try {
+        const o = await listerOrdonnances(dossierId);
+        setOrdonnances(o);
+      } catch { /* silencieux */ }
+    } catch (e: any) {
+      console.error("Erreur modification ordonnance:", e);
+      setMessage(e?.message_utilisateur || "Erreur lors de la modification.");
+    }
   }
 
   async function handleSupprimer() {

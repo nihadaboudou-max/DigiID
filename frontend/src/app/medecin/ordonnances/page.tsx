@@ -124,11 +124,15 @@ function Contenu() {
       setEditMedicaments("");
       setEditInstructions("");
       setEditDateExp("");
-      const o = await listerToutesOrdonnances();
-      setOrdonnances(o);
       setMessage("Ordonnance modifiée avec succès.");
-    } catch {
-      setMessage("Erreur lors de la modification.");
+      // Rechargement silencieux
+      try {
+        const o = await listerToutesOrdonnances();
+        setOrdonnances(o);
+      } catch { /* silencieux */ }
+    } catch (e: any) {
+      console.error("Erreur modification ordonnance:", e);
+      setMessage(e?.message_utilisateur || "Erreur lors de la modification.");
     }
   }
 
