@@ -186,6 +186,51 @@ async def obtenir_dossiers_par_digiid(
     return list(result.scalars().all())
 
 
+async def _obtenir_ordonnance(
+    session: AsyncSession,
+    ordonnance_id: UUID,
+    medecin_id: UUID,
+) -> Ordonnance:
+    """Récupère une ordonnance et vérifie qu'elle appartient au médecin."""
+    result = await session.execute(
+        select(Ordonnance).where(
+            Ordonnance.id == ordonnance_id,
+            Ordonnance.medecin_id == medecin_id,
+        )
+    )
+    ordonnance = result.scalar_one_or_none()
+    if not ordonnance:
+        raise ErreurRessourceIntrouvable(f"Ordonnance {ordonnance_id} introuvable ou ne vous appartient pas")
+    return ordonnance
+
+
+async def modifier_ordonnance(
+    session: AsyncSession,
+    ordonnance_id: UUID,
+    medecin_id: UUID,
+    data: dict,
+) -> Ordonnance:
+    """Modifie une ordonnance existante si elle appartient au médecin."""
+    ordonnance = await _obtenir_ordonnance(session, ordonnance_id, medecin_id)
+    for key, value in data.items():
+        if value is not None:
+            setattr(ordonnance, key, value)
+    await session.commit()
+    await session.refresh(ordonnance)
+    return ordonnance
+
+
+async def supprimer_ordonnance(
+    session: AsyncSession,
+    ordonnance_id: UUID,
+    medecin_id: UUID,
+) -> None:
+    """Supprime une ordonnance si elle appartient au médecin."""
+    ordonnance = await _obtenir_ordonnance(session, ordonnance_id, medecin_id)
+    await session.delete(ordonnance)
+    await session.commit()
+
+
 async def obtenir_ordonnances_par_digiid(
     session: AsyncSession,
     digiid: str,
