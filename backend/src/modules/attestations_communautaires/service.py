@@ -685,14 +685,11 @@ class ServiceAttestations:
             journal.info(
                 "_reinitialiser_score_atteste | utilisateur=%s | "
                 "score_avant=%s | score_apres=%s | "
-                "facteur_attestations=%s | donnees_brutes=%s",
+                "methode=%s",
                 atteste.id,
                 score_avant,
                 resultat.score_total,
-                resultat.facteurs[-1].valeur if resultat.facteurs else "?",
-                {k: v for k, v in resultat.facteurs[-1].model_dump().items()}
-                if hasattr(resultat.facteurs[-1], "model_dump")
-                else "?",
+                resultat.methode,
             )
 
             return float(resultat.score_total)

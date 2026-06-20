@@ -73,7 +73,8 @@ class DonneesComportementales:
 
     # --- Famille attestations communautaires (Nouveau facteur correcteur) ---
     attestations_approuvees_recues: int   # Nombre d'attestations approuvées
-    poids_total_attestations: float       # Somme des poids des attestations
+    poids_total_attestations: float       # Somme des poids bruts configurés
+    poids_total_effectif_attestations: float  # Somme des poids pondérés par crédibilité de l'attestant
     attestants_uniques: int               # Nombre d'attestants distincts
 
 
@@ -262,5 +263,6 @@ def generer_donnees_pour_utilisateur(
         anciennete_telephone_mois=anciennete_tel_mois,
         attestations_approuvees_recues=nb_attestations,
         poids_total_attestations=round(poids_attest, 1),
+        poids_total_effectif_attestations=round(poids_attest * (1 + rng() * 0.5), 1),
         attestants_uniques=attestants_uniq,
     )

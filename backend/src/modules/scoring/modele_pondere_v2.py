@@ -142,9 +142,10 @@ def _score_attestations(d: DonneesComportementales) -> float:
       - Poids total : somme des poids > 30 pour plein score (0.3 * 15 = 4.5 pts)
       - Diversite des attestants : 5 attestants uniques (0.1 * 15 = 1.5 pts)
     """
-    composante_nombre = min(1.0, d.attestations_approuvees_recues / 5) * 0.6
-    composante_poids = min(1.0, d.poids_total_attestations / 30) * 0.3
-    composante_diversite = min(1.0, d.attestants_uniques / 5) * 0.1
+    # Poids effectif (pondéré par crédibilité de l'attestant) remplace le poids brut
+    composante_nombre = min(1.0, d.attestations_approuvees_recues / 10) * 0.5
+    composante_poids = min(1.0, d.poids_total_effectif_attestations / 50) * 0.35
+    composante_diversite = min(1.0, d.attestants_uniques / 8) * 0.15
 
     pourcentage = composante_nombre + composante_poids + composante_diversite
     return min(POIDS_ATTESTATIONS, pourcentage * POIDS_ATTESTATIONS)
@@ -187,6 +188,7 @@ def calculer(donnees: DonneesComportementales) -> ResultatCalcul:
             "contacts_communs_digiid": donnees.contacts_communs_digiid,
             "attestations_approuvees_recues": donnees.attestations_approuvees_recues,
             "poids_total_attestations": donnees.poids_total_attestations,
+            "poids_total_effectif_attestations": donnees.poids_total_effectif_attestations,
             "attestants_uniques": donnees.attestants_uniques,
         },
     )

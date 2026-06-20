@@ -14,6 +14,7 @@ from uuid import UUID
 
 from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from src.config.constantes import TypesEvenementAudit
 from src.modeles import (
@@ -91,9 +92,10 @@ async def calculer_et_enregistrer_score(
         signaux=signaux,
     )
 
-    # 2bis. Injecter les vraies donnees d'attestations (remplace la simulation)
+        # 2bis. Injecter les vraies donnees d'attestations (remplace la simulation)
     donnees.attestations_approuvees_recues = stats_attestations["approuvees_recues"]
     donnees.poids_total_attestations = stats_attestations["poids_total"]
+    donnees.poids_total_effectif_attestations = stats_attestations["poids_total_effectif"]
     donnees.attestants_uniques = stats_attestations["attestants_uniques"]
 
     # 3. Calculer le score
@@ -353,7 +355,12 @@ async def _collecter_attestations(
     """
     Collecte les donnees reelles d'attestations communautaires depuis la base.
     Remplace les valeurs simulees par les vraies donnees.
+
+    Calcule le POIDS EFFECTIF en ponderant chaque attestation par la
+    credibilite de l'attestant (son role, son score, sa reussite).
+    Un agent d'etat atteste plus fort qu'un citoyen lambda.
     """
+    # 1. Compter les attestations approuvees
     resultat = await session.execute(
         select(
             func.count(AttestationCommunautaire.id).label("total"),
@@ -366,22 +373,115 @@ async def _collecter_attestations(
         )
     )
     ligne = resultat.one()
+    nb_attestations = ligne.total or 0
+    poids_brut = float(ligne.poids_total or 0)
+    attestants_uniques = ligne.attestants or 0
+
+    # 2. Calculer le poids effectif pondéré par la crédibilité de chaque attestant
+    #    Facteurs de crédibilité :
+    #      - Role : admin/super_admin → +50%, agent/medecin/police/ong → +25%
+    #      - Score de l'attestant : >70 → +20%, >50 → +10%, >30 → +5%
+    #      - Type d'attestation : competence → +10%, personnalise → -10%
+    poids_effectif_total = 0.0
+    if nb_attestations > 0:
+                # Récupérer chaque attestation avec l'attestant pour pondérer
+        attestations = await session.execute(
+            select(AttestationCommunautaire)
+            .options(
+                joinedload(AttestationCommunautaire.attestant)
+            )
+            .where(
+                AttestationCommunautaire.atteste_id == utilisateur.id,
+                AttestationCommunautaire.statut == "APPROUVEE",
+                AttestationCommunautaire.est_active.is_(True),
+            )
+        )
+        for att in attestations.scalars().all():
+            credibilite = _calculer_credibilite_attestant(
+                attestant=att.attestant,
+                type_attestation=att.type_attestation,
+            )
+            poids_effectif = att.poids_score * credibilite
+            poids_effectif_total += poids_effectif
+
+            journal.debug(
+                "Attestation %s : credibilite=%.2f poids_brut=%.1f poids_effectif=%.1f (%s)",
+                att.id, credibilite, att.poids_score, poids_effectif, att.attestant.role or "citoyen",
+            )
 
     stats = {
-        "approuvees_recues": ligne.total or 0,
-        "poids_total": float(ligne.poids_total or 0),
-        "attestants_uniques": ligne.attestants or 0,
+        "approuvees_recues": nb_attestations,
+        "poids_total": poids_brut,
+        "poids_total_effectif": round(poids_effectif_total, 1),
+        "attestants_uniques": attestants_uniques,
     }
 
     journal.debug(
-        "_collecter_attestations | utilisateur=%s | recues=%s | poids=%s | uniques=%s",
+        "_collecter_attestations | utilisateur=%s | recues=%s | poids_brut=%s | poids_effectif=%s | uniques=%s",
         utilisateur.id,
         stats["approuvees_recues"],
         stats["poids_total"],
+        stats["poids_total_effectif"],
         stats["attestants_uniques"],
     )
 
     return stats
+
+
+def _calculer_credibilite_attestant(
+    attestant: Utilisateur,
+    type_attestation: str = "identite",
+) -> float:
+    """
+    Calcule un coefficient de crédibilité pour un attestant (1.0 = neutre).
+
+    Ce coefficient pondère le poids de l'attestation :
+      - Un attestant avec un score élevé et un rôle de confiance
+        (admin, agent, médecin...) atteste "plus fort"
+      - Un inconnu avec un score bas atteste "moins fort"
+
+    Retourne un facteur multiplicateur entre 0.5 et 2.0.
+    """
+    facteur = 1.0
+
+    # 1. Bonus/Malus selon le rôle de l'attestant
+    role = (attestant.role or "citoyen").lower()
+    bonus_role = {
+        "super_administrateur": +0.50,
+        "administrateur": +0.40,
+        "agent": +0.25,
+        "medecin": +0.25,
+        "police": +0.25,
+        "ong": +0.15,
+        "citoyen": 0.0,
+    }
+    facteur += bonus_role.get(role, 0.0)
+
+    # 2. Bonus selon le score de confiance de l'attestant
+    score = attestant.score_actuel or 0
+    if score >= 90:
+        facteur += 0.30
+    elif score >= 70:
+        facteur += 0.20
+    elif score >= 50:
+        facteur += 0.10
+    elif score >= 30:
+        facteur += 0.05
+    # score < 30 : aucun bonus
+
+    # 3. Ajustement selon le type d'attestation
+    bonus_type = {
+        "competence": +0.10,   # Attestation pro nécessite plus de crédibilité
+        "moralite": +0.05,     # Attestation morale nécessite confiance
+        "identite": 0.0,       # Neutre
+        "residence": -0.05,    # Plus facile à vérifier
+        "activite": -0.05,     # Plus factuelle
+        "personnalise": -0.10, # Type libre = moins de poids
+    }
+    facteur += bonus_type.get(type_attestation, 0.0)
+
+    # 4. Clamp entre 0.5 et 2.0
+    return max(0.5, min(2.0, facteur))
 
 
 def _construire_detail(
