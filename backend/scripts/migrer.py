@@ -106,6 +106,19 @@ COLONNES_A_VERIFIER = [
     # (table, colonne, type_sql)
     # Ajoutées par les migrations après la suppression de create_all :
     ("score_historique", "facteur_attestations", "FLOAT NOT NULL DEFAULT 0.0"),
+    # Migration 20260620_1200_enrichissement_medical
+    ("dossiers_medicaux", "patient_prenom", "VARCHAR(255)"),
+    ("dossiers_medicaux", "hopital", "VARCHAR(255)"),
+    ("consultations", "hopital", "VARCHAR(255)"),
+    ("consultations", "type_consultation", "VARCHAR(50)"),
+    ("consultations", "poids", "INTEGER"),
+    ("consultations", "taille", "INTEGER"),
+    ("consultations", "temperature", "INTEGER"),
+    ("consultations", "pression_arterielle", "VARCHAR(20)"),
+    ("consultations", "conclusion", "TEXT"),
+    ("ordonnances", "hopital", "VARCHAR(255)"),
+    ("ordonnances", "medecin_nom", "VARCHAR(255)"),
+    ("ordonnances", "statut", "VARCHAR(20) NOT NULL DEFAULT 'active'"),
 ]
 
 
@@ -133,6 +146,44 @@ def _corriger_colonnes_manquantes(engine):
         with engine.begin() as conn:
             conn.execute(sa_text(sql))
         logger.warning("⚠️  Colonne manquante ajoutée : %s.%s (%s)", table, colonne, type_sql)
+
+    # Cas spécial : numero_ordonnance (plus complexe : unique, sequence, NOT NULL)
+    if "ordonnances" in tables_presentes:
+        with engine.connect() as conn:
+            col_infos = [c["name"] for c in inspect(conn).get_columns("ordonnances")]
+
+        if "numero_ordonnance" not in col_infos:
+            with engine.begin() as conn:
+                # Créer la séquence
+                conn.execute(sa_text(
+                    "CREATE SEQUENCE IF NOT EXISTS seq_numero_ordonnance START 1"
+                ))
+                # Ajouter la colonne (nullable d'abord)
+                conn.execute(sa_text(
+                    "ALTER TABLE ordonnances ADD COLUMN IF NOT EXISTS numero_ordonnance VARCHAR(30)"
+                ))
+                # Remplir les enregistrements existants
+                conn.execute(sa_text("""
+                    UPDATE ordonnances
+                    SET numero_ordonnance = 'ORD-'
+                        || TO_CHAR(NOW(), 'YYYY')
+                        || '-'
+                        || LPAD(nextval('seq_numero_ordonnance')::text, 6, '0')
+                    WHERE numero_ordonnance IS NULL
+                """))
+                # Rendre NOT NULL
+                conn.execute(sa_text(
+                    "ALTER TABLE ordonnances ALTER COLUMN numero_ordonnance SET NOT NULL"
+                ))
+            logger.warning("⚠️  Colonne manquante ajoutée : ordonnances.numero_ordonnance (VARCHAR(30) UNIQUE)")
+            # Contrainte unique (dans un block séparé)
+            try:
+                with engine.begin() as conn:
+                    conn.execute(sa_text(
+                        "ALTER TABLE ordonnances ADD CONSTRAINT uq_ordonnances_numero UNIQUE (numero_ordonnance)"
+                    ))
+            except Exception:
+                logger.warning("⚠️  Contrainte unique déjà présente sur ordonnances.numero_ordonnance")
 
 
 def _recreer_alembic_version_texte(url_sync: str) -> str | None:

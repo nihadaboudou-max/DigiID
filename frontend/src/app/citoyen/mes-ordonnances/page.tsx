@@ -33,8 +33,9 @@ function Contenu() {
     try {
       const data = await mesOrdonnances();
       setOrdonnances(data);
-    } catch {
-      setMessage("Erreur lors du chargement de vos ordonnances.");
+    } catch (error: any) {
+      console.error("Erreur chargement ordonnances:", error);
+      setMessage(error?.message || "Erreur lors du chargement de vos ordonnances.");
     } finally {
       setChargement(false);
     }
