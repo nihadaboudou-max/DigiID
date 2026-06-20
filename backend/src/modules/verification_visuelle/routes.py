@@ -39,13 +39,13 @@ async def uploader_photo(
     user_agent: Annotated[str, Depends(obtenir_agent_utilisateur)],
     fichier: UploadFile = File(..., description="Photo du visage au format JPG ou PNG"),
 ):
-        verification = await service.traiter_upload_photo(
+    verification = await service.traiter_upload_photo(
         session=session,
         utilisateur=utilisateur,
         fichier=fichier,
         adresse_ip=adresse_ip,
         user_agent=user_agent,
-        )
+    )
     await enregistrer_evenement_audit(
         session=session,
         type_evenement="verification_visuelle_upload",
@@ -120,7 +120,7 @@ async def supprimer_verification(
     verification_id: str,
 ):
     """Déplace une vérification dans la corbeille (soft-delete)."""
-        await enregistrer_evenement_audit(
+    await enregistrer_evenement_audit(
         session=session,
         type_evenement="verification_visuelle_suppression",
         description=f"Suppression vérification visuelle {verification_id}",
