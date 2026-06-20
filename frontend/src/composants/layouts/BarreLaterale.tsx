@@ -34,12 +34,13 @@ interface SousMenu {
 // ---- Définition des menus ----
 
 const LIENS_UTILISATEUR: Lien[] = [
-  { href: "/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
-  { href: "/profil",          libelle: "Mon profil",      Icone: IconeUtilisateur },
-  { href: "/documents",       libelle: "Mes documents",    Icone: IconeJournal },
-  { href: "/historique",      libelle: "Historique d'accès", Icone: IconeAlerte },
-  { href: "/chatbot",         libelle: "Assistant",       Icone: IconeChat },
-  { href: "/parametres",      libelle: "Paramètres",      Icone: IconeParametres },
+  { href: "/tableau-de-bord",       libelle: "Tableau de bord",      Icone: IconeAccueil },
+  { href: "/profil",                libelle: "Mon profil",           Icone: IconeUtilisateur },
+  { href: "/documents-identite",    libelle: "Documents d'identité", Icone: IconeIdentite },
+  { href: "/documents",             libelle: "Mes documents",         Icone: IconeJournal },
+  { href: "/historique",            libelle: "Historique d'accès",    Icone: IconeAlerte },
+  { href: "/chatbot",               libelle: "Assistant",             Icone: IconeChat },
+  { href: "/parametres",            libelle: "Paramètres",            Icone: IconeParametres },
 ];
 
 // ---- Menu Score — Suivi et amélioration ----
@@ -418,6 +419,7 @@ export function BarreLaterale() {
     pathname === "/tableau-de-bord" ||
     pathname === "/profil" ||
     pathname === "/documents" ||
+    pathname === "/documents-identite" ||
     pathname === "/historique" ||
     pathname === "/chatbot" ||
     pathname === "/parametres" ||
@@ -634,14 +636,15 @@ export function BarreLaterale() {
                     Navigation
                   </p>
                   {[
-                    { href: "/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
-                    { href: "/profil",          libelle: "Mon profil",      Icone: IconeUtilisateur },
-                    { href: "/documents",       libelle: "Mes documents",    Icone: IconeJournal },
-                    { href: "/historique",      libelle: "Historique d'accès", Icone: IconeAlerte },
-                    { href: "/citoyen/mes-ordonnances", libelle: "Mes ordonnances", Icone: IconeJournal },
-                    { href: "/chatbot",         libelle: "Assistant",       Icone: IconeChat },
-                    { href: "/parametres",      libelle: "Paramètres",      Icone: IconeParametres },
-                  ].map((lien) => {
+                    { href: "/tableau-de-bord",       libelle: "Tableau de bord",      Icone: IconeAccueil },
+                    { href: "/profil",                libelle: "Mon profil",           Icone: IconeUtilisateur },
+                    { href: "/documents-identite",    libelle: "Documents d'identité", Icone: IconeIdentite },
+                    { href: "/documents",             libelle: "Mes documents",         Icone: IconeJournal },
+                    { href: "/historique",            libelle: "Historique d'accès",    Icone: IconeAlerte },
+                    { href: "/citoyen/mes-ordonnances", libelle: "Mes ordonnances",     Icone: IconeJournal },
+                    { href: "/chatbot",               libelle: "Assistant",             Icone: IconeChat },
+                    { href: "/parametres",            libelle: "Paramètres",            Icone: IconeParametres },
+                ].map((lien) => {
                     const actif = pathname === lien.href;
                     return (
                       <Link
@@ -678,10 +681,11 @@ export function BarreLaterale() {
                 >
                   <div className="space-y-0.5">
                     {[
-                      { href: "/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
-                      { href: "/profil",          libelle: "Mon profil",      Icone: IconeUtilisateur },
-                      { href: "/documents",       libelle: "Mes documents",    Icone: IconeJournal },
-                      { href: "/historique",      libelle: "Historique d'accès", Icone: IconeAlerte },
+                      { href: "/tableau-de-bord",       libelle: "Tableau de bord",      Icone: IconeAccueil },
+                      { href: "/profil",                libelle: "Mon profil",           Icone: IconeUtilisateur },
+                      { href: "/documents-identite",    libelle: "Documents d'identité", Icone: IconeIdentite },
+                      { href: "/documents",             libelle: "Mes documents",         Icone: IconeJournal },
+                      { href: "/historique",            libelle: "Historique d'accès",    Icone: IconeAlerte },
                     ].map((lien) => {
                       const actif = pathname === lien.href;
                       return (

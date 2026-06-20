@@ -148,6 +148,7 @@ function Contenu() {
 
       {/* Grille d'accès rapide — liens vers les pages réelles */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <CarteAction titre="Documents d'identité" description="CNI, Permis, Assurance" href="/documents-identite" icone="🆔" />
         <CarteAction titre="Vérifier ma CNI" description="Scanner ta carte d'identité" href="/identite/verification-cni" icone="🪪" />
         <CarteAction titre="Vérification faciale" description="Reconnaissance biométrique" href="/identite/verification-visuelle" icone="📸" />
         <CarteAction titre="Mes consentements" description="Gérer les accès autorisés" href="/consentements" icone="✅" />
