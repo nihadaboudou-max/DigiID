@@ -22,6 +22,7 @@ from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.ocr_cni import service
 from src.modules.scoring import declencher_recalcul_score
 from src.noyau import journal as journal_module
+from src.noyau.journal import enregistrer_evenement_audit
 from src.modules.ocr_cni.schemas import (
     ListeVerificationsCNI,
     ReponseUploadCNI,
@@ -67,6 +68,14 @@ async def uploader_cni(
         utilisateur=utilisateur,
         fichier=fichier,
         face=face,
+    )
+
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="cni_upload",
+        description=f"Upload CNI face {face} — statut: {resultat['statut']}",
+        utilisateur_id=utilisateur.id,
+        role_acteur=utilisateur.role,
     )
 
     # Upload CNI réussi = vérification forte → recalcul score
@@ -151,6 +160,13 @@ async def supprimer_verification(
         from fastapi import HTTPException
         raise HTTPException(status_code=422, detail="ID de vérification invalide.")
 
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="cni_suppression",
+        description=f"Suppression vérification CNI {verification_id}",
+        utilisateur_id=utilisateur.id,
+        role_acteur=utilisateur.role,
+    )
     return await service.supprimer_verification(
         session=session,
         utilisateur=utilisateur,

@@ -15,6 +15,7 @@ from src.modules.police.schemas import (
     VerificationPoliceCreate,
     VerificationPoliceResponse,
 )
+from src.noyau.journal import enregistrer_evenement_audit
 from src.modules.police import service
 
 routeur_police = APIRouter(prefix=f"{PREFIXE_API_UTILISATEUR}/police", tags=["Police"])
@@ -27,6 +28,13 @@ async def verifier_identite(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     v = await service.creer_verification(session, officier.id, data.model_dump())
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="police_verification_identite",
+        description=f"Vérification identité {data.personne_digiid} — résultat: {data.resultat}",
+        utilisateur_id=officier.id,
+        role_acteur=officier.role,
+    )
     return VerificationPoliceResponse(
         id=v.id, officier_id=v.officier_id, personne_digiid=v.personne_digiid,
         personne_nom=v.personne_nom, type_verification=v.type_verification,
@@ -68,6 +76,13 @@ async def creer_signalement(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     s = await service.creer_signalement(session, officier.id, data.model_dump())
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="police_signalement_fraude",
+        description=f"Signalement fraude {data.personne_digiid} — motif: {data.motif}",
+        utilisateur_id=officier.id,
+        role_acteur=officier.role,
+    )
     return SignalementFraudeResponse(
         id=s.id, officier_id=s.officier_id, personne_digiid=s.personne_digiid,
         motif=s.motif, description=s.description, statut=s.statut,

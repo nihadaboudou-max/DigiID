@@ -17,6 +17,7 @@ from src.modules.gamification import (
     service_notifications, service_parrainage, service_recommandations,
 )
 from src.modules.gamification.catalogue_badges import CATALOGUE
+from src.noyau.journal import enregistrer_evenement_audit
 from src.modules.gamification.schemas import (
     BadgeDetail, ListeBadges, StatistiquesEngagement,
     ListeRecommandations, RecommandationDetail,

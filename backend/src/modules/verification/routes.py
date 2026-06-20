@@ -25,6 +25,7 @@ from src.modules.scoring import declencher_recalcul_score
 from src.noyau.exceptions import ErreurValidation
 from src.noyau import dechiffrer_donnee
 from src.noyau import journal as journal_module
+from src.noyau.journal import enregistrer_evenement_audit
 
 
 routeur_verification = APIRouter(
@@ -176,5 +177,12 @@ async def verifier_code(
             )
         except Exception as e:
             journal_module.warning(f"Recalcul score ignoré (verification) : {e}")
+        await enregistrer_evenement_audit(
+            session=session,
+            type_evenement="verification_code_reussi",
+            description=f"Vérification {donnees.type_verification} réussie pour {utilisateur.id}",
+            utilisateur_id=utilisateur.id,
+            role_acteur=utilisateur.role,
+        )
         return ReponseVerification(succes=True, message="Code valide ! Identite confirmee.")
     return ReponseVerification(succes=False, message="Code invalide ou expire. Demande un nouveau code.")

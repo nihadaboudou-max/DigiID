@@ -14,6 +14,7 @@ from src.modules.ong.schemas import (
     ProgrammeCreate, ProgrammeResponse,
     MissionCreate, MissionResponse,
 )
+from src.noyau.journal import enregistrer_evenement_audit
 from src.modules.ong import service
 
 routeur_ong = APIRouter(prefix=f"{PREFIXE_API_UTILISATEUR}/ong", tags=["ONG"])
@@ -42,6 +43,13 @@ async def creer_beneficiaire(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     b = await service.creer_beneficiaire(session, ong.id, data.model_dump())
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="ong_beneficiaire_creation",
+        description=f"Bénéficiaire {data.nom} créé (programme: {data.programme})",
+        utilisateur_id=ong.id,
+        role_acteur=ong.role,
+    )
     return BeneficiaireResponse(
         id=b.id, ong_id=b.ong_id, nom=b.nom, digiid=b.digiid,
         programme=b.programme, zone=b.zone,
@@ -72,6 +80,13 @@ async def creer_programme(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     p = await service.creer_programme(session, ong.id, data.model_dump())
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="ong_programme_creation",
+        description=f"Programme {data.nom} créé (zone: {data.zone})",
+        utilisateur_id=ong.id,
+        role_acteur=ong.role,
+    )
     return ProgrammeResponse(
         id=p.id, ong_id=p.ong_id, nom=p.nom, description=p.description,
         zone=p.zone, budget=p.budget, date_debut=p.date_debut,
@@ -102,6 +117,13 @@ async def creer_mission(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     m = await service.creer_mission(session, ong.id, data.model_dump())
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="ong_mission_creation",
+        description=f"Mission {data.titre} créée (zone: {data.zone})",
+        utilisateur_id=ong.id,
+        role_acteur=ong.role,
+    )
     return MissionResponse(
         id=m.id, ong_id=m.ong_id, programme_id=m.programme_id,
         titre=m.titre, zone=m.zone, date_depart=m.date_depart,

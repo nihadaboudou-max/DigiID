@@ -123,3 +123,51 @@ def journal_audit(message: str, **donnees) -> None:
     Va dans le fichier audit.log dédié, séparé des logs applicatifs.
     """
     journal.bind(audit=True).info(message, **donnees)
+
+
+async def enregistrer_evenement_audit(
+    session: "AsyncSession",
+    type_evenement: str,
+    description: str,
+    utilisateur_id: "UUID | None" = None,
+    role_acteur: str | None = None,
+    adresse_ip: str | None = None,
+    agent_utilisateur: str | None = None,
+    donnees_supplementaires: dict | None = None,
+) -> None:
+    """
+    Enregistre un événement dans la table `JournalAudit` (base de données).
+    
+    C'est CETTE fonction que le super admin consulte dans /super-admin/audit.
+    Contrairement à `journal_audit()` qui écrit seulement dans les fichiers logs,
+    celle-ci écrit en DB pour que l'événement soit visible dans l'interface d'audit.
+    
+    Usage :
+        from src.noyau.journal import enregistrer_evenement_audit
+        await enregistrer_evenement_audit(
+            session=db,
+            type_evenement="dossier_medical_creation",
+            description=f"Création dossier pour patient {digiid}",
+            utilisateur_id=medecin.id,
+            role_acteur="medecin",
+            adresse_ip=ip,
+        )
+    """
+    # Import différé pour éviter les imports circulaires
+    from datetime import datetime, timezone
+    from src.modeles.audit import JournalAudit
+    
+    entree = JournalAudit(
+        date_evenement=datetime.now(timezone.utc),
+        utilisateur_id=utilisateur_id,
+        role_acteur=role_acteur,
+        type_evenement=type_evenement,
+        description=description,
+        adresse_ip=adresse_ip,
+        agent_utilisateur=agent_utilisateur,
+        donnees_supplementaires=donnees_supplementaires,
+    )
+    session.add(entree)
+    
+    # Aussi dans les logs fichiers
+    journal_audit(f"{type_evenement} | utilisateur={utilisateur_id} | {description}")

@@ -11,7 +11,7 @@ from src.config.constantes import PREFIXE_API_UTILISATEUR
 from src.modeles import Utilisateur
 from src.modules.authentification.dependances import utilisateur_courant
 from src.noyau import dechiffrer_donnee
-from src.noyau.journal import journal_audit
+from src.noyau.journal import journal_audit, enregistrer_evenement_audit
 from src.modules.medical.schemas import (
     ConsultationCreate,
     ConsultationResponse,
@@ -90,6 +90,16 @@ async def creer_dossier(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     dossier = await medical_service.creer_dossier(session, medecin.id, data.model_dump())
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="dossier_medical_creation",
+        description=(
+            f"Création dossier médical pour patient {data.patient_nom} "
+            f"(DigiID: {data.patient_digiid}) — motif: {data.motif}"
+        ),
+        utilisateur_id=medecin.id,
+        role_acteur=medecin.role,
+    )
     return DossierMedicalResponse(
         id=dossier.id,
         medecin_id=dossier.medecin_id,
@@ -197,6 +207,16 @@ async def ajouter_consultation(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     consultation = await medical_service.ajouter_consultation(session, medecin.id, data.model_dump())
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="consultation_ajoutee",
+        description=(
+            f"Consultation ajoutée au dossier {data.dossier_id} "
+            f"— motif: {data.motif}"
+        ),
+        utilisateur_id=medecin.id,
+        role_acteur=medecin.role,
+    )
     return ConsultationResponse(
         id=consultation.id,
         dossier_id=consultation.dossier_id,
@@ -280,6 +300,16 @@ async def creer_ordonnance(
     ordonnance = await medical_service.creer_ordonnance(
         session, medecin.id, data.model_dump(), medecin_nom=medecin_nom
     )
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="ordonnance_creation",
+        description=(
+            f"Ordonnance #{ordonnance.numero_ordonnance} créée pour "
+            f"le dossier {ordonnance.dossier_id} — {data.medicaments[:100]}"
+        ),
+        utilisateur_id=medecin.id,
+        role_acteur=medecin.role,
+    )
     journal_audit(f"ordonnance | cree | numero={ordonnance.numero_ordonnance} | dossier_id={ordonnance.dossier_id} | medecin={medecin.id}")
     return OrdonnanceResponse(
         id=ordonnance.id,
@@ -307,6 +337,13 @@ async def modifier_ordonnance(
     ordonnance = await medical_service.modifier_ordonnance(
         session, ordonnance_id, medecin.id, data.model_dump(exclude_none=True)
     )
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="ordonnance_modification",
+        description=f"Ordonnance #{ordonnance.numero_ordonnance} modifiée",
+        utilisateur_id=medecin.id,
+        role_acteur=medecin.role,
+    )
     journal_audit(f"ordonnance | modifie | numero={ordonnance.numero_ordonnance} | medecin={medecin.id}")
     return OrdonnanceResponse(
         id=ordonnance.id,
@@ -331,6 +368,13 @@ async def supprimer_ordonnance(
 ):
     """Supprime une ordonnance (médecin propriétaire uniquement)."""
     await medical_service.supprimer_ordonnance(session, ordonnance_id, medecin.id)
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="ordonnance_suppression",
+        description=f"Ordonnance supprimée — dossier {ordonnance_id}",
+        utilisateur_id=medecin.id,
+        role_acteur=medecin.role,
+    )
     journal_audit(f"ordonnance | supprime | ordonnance_id={ordonnance_id} | medecin={medecin.id}")
 
 
@@ -381,6 +425,13 @@ async def signaler_ordonnance(
             "Cette ordonnance ne vous appartient pas",
             message_utilisateur="Vous ne pouvez signaler qu'une ordonnance qui vous concerne.",
         )
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="ordonnance_signalement",
+        description=f"Signalement sur ordonnance {ordonnance_id} — motif: {donnees.motif}",
+        utilisateur_id=citoyen.id,
+        role_acteur=citoyen.role,
+    )
     journal_audit(
         f"ordonnance | signale | ordonnance_id={ordonnance_id} "
         f"| patient={citoyen.id} | motif={donnees.motif}"

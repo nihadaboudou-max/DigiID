@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.base_donnees.session import obtenir_session
 from src.modeles import Utilisateur
 from src.modules.authentification.dependances import utilisateur_courant
+from src.noyau.journal import enregistrer_evenement_audit
 from src.modules.documents import service
 from src.modules.documents.schemas import DocumentDetail, ListeDocuments
 
@@ -32,6 +33,13 @@ async def uploader(
 ):
     """Upload un fichier. Le texte est extrait et stocké pour usage par ton chatbot."""
     document = await service.uploader_document(session, utilisateur, fichier)
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="document_upload",
+        description=f"Upload document {fichier.filename} ({fichier.content_type})",
+        utilisateur_id=utilisateur.id,
+        role_acteur=utilisateur.role,
+    )
     return DocumentDetail.model_validate(document)
 
 
@@ -57,4 +65,12 @@ async def supprimer(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
 ):
+    doc = await service.obtenir_document(session, utilisateur, document_id)
     await service.supprimer_document(session, utilisateur, document_id)
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="document_suppression",
+        description=f"Suppression document {doc.nom_original if doc else document_id}",
+        utilisateur_id=utilisateur.id,
+        role_acteur=utilisateur.role,
+    )

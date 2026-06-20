@@ -11,6 +11,7 @@ from src.modules.authentification.dependances import utilisateur_courant, obteni
 from src.modules.verification_visuelle import service
 from src.modules.scoring import declencher_recalcul_score
 from src.noyau import journal as journal_module
+from src.noyau.journal import enregistrer_evenement_audit
 from src.modules.verification_visuelle.schemas import (
     ListeVerificationVisuelle,
     SuppressionVerification,
@@ -38,13 +39,20 @@ async def uploader_photo(
     user_agent: Annotated[str, Depends(obtenir_agent_utilisateur)],
     fichier: UploadFile = File(..., description="Photo du visage au format JPG ou PNG"),
 ):
-    verification = await service.traiter_upload_photo(
+        verification = await service.traiter_upload_photo(
         session=session,
         utilisateur=utilisateur,
         fichier=fichier,
         adresse_ip=adresse_ip,
         user_agent=user_agent,
         )
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="verification_visuelle_upload",
+        description=f"Upload photo visage — statut: {verification.statut} score_liveness: {verification.score_liveness}",
+        utilisateur_id=utilisateur.id,
+        role_acteur=utilisateur.role,
+    )
     # Upload photo = signal positif → recalcul score
     try:
         await declencher_recalcul_score(
@@ -112,6 +120,13 @@ async def supprimer_verification(
     verification_id: str,
 ):
     """Déplace une vérification dans la corbeille (soft-delete)."""
+        await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="verification_visuelle_suppression",
+        description=f"Suppression vérification visuelle {verification_id}",
+        utilisateur_id=utilisateur.id,
+        role_acteur=utilisateur.role,
+    )
     return await service.supprimer_verification(
         session=session,
         utilisateur=utilisateur,

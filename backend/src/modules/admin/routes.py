@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.base_donnees.session import obtenir_session
 from src.config.constantes import PREFIXE_API_ADMIN, RolesUtilisateur
 from src.modeles import Utilisateur, JournalAudit, FraudeIncident, Notification, SessionAuthentification, VerificationVisuelle
+from src.modules.super_admin.service_phase6 import consulter_audit_pagine
 from src.modeles.enrolement import Enrolement
 from src.modules.authentification.dependances import admin_courant, obtenir_ip_client
 from src.modules.super_admin import monitoring_temps_reel as service_monitoring
@@ -843,6 +844,95 @@ async def lister_enrolements_admin(
             date_validation=e.date_validation.strftime("%Y-%m-%dT%H:%M:%S") if e.date_validation else None,
         ))
     return resultats
+
+
+# ---------------------------------------------------------------------------
+# AUDIT LOGS POUR ADMIN — Même journal que le super admin
+# ---------------------------------------------------------------------------
+
+
+class AuditEvenementAdminItem(BaseModel):
+    """Événement d'audit vu par l'admin."""
+    id: str
+    date_evenement: str
+    utilisateur_id: str | None = None
+    role_acteur: str | None = None
+    type_evenement: str
+    description: str
+    adresse_ip: str | None = None
+    donnees_supplementaires: dict | None = None
+
+
+class ListeAuditAdminReponse(BaseModel):
+    """Liste paginée des événements d'audit."""
+    donnees: list[AuditEvenementAdminItem]
+    total: int
+    page: int
+
+
+@routeur_admin.get(
+    "/audit",
+    response_model=ListeAuditAdminReponse,
+    summary="Journal d'audit pour les administrateurs",
+    description=(
+        "Retourne le journal d'audit complet, paginé et filtrable. "
+        "Accessible aux administrateurs et super admins."
+    ),
+)
+async def lister_audit_admin(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    _: Annotated[Utilisateur, Depends(admin_courant)],
+    page: int = Query(1, ge=1, description="Numéro de page"),
+    limite: int = Query(50, ge=1, le=200, description="Éléments par page"),
+    type_evenement: str | None = Query(None, description="Filtrer par type d'événement"),
+    recherche: str | None = Query(None, description="Recherche textuelle"),
+    date_debut: str | None = Query(None, description="Date début (ISO 8601)"),
+    date_fin: str | None = Query(None, description="Date fin (ISO 8601)"),
+):
+    """
+    Journal d'audit paginé et filtrable pour les administrateurs.
+    
+    Paramètres :
+      - **page** : numéro de page (défaut: 1)
+      - **limite** : éléments par page (défaut: 50, max: 200)
+      - **type_evenement** : filtrer par type d'événement
+      - **recherche** : recherche dans la description
+      - **date_debut** : date début (ex: 2024-01-01)
+      - **date_fin** : date fin (ex: 2024-12-31)
+    """
+    from datetime import datetime
+    
+    # Simuler les filtres pour consulter_audit_pagine
+    filtres = lambda: None
+    filtres.type_evenement = type_evenement
+    filtres.recherche = recherche
+    filtres.date_debut = datetime.fromisoformat(date_debut) if date_debut else None
+    filtres.date_fin = datetime.fromisoformat(date_fin) if date_fin else None
+    filtres.limite = limite
+    
+    evenements, total = await consulter_audit_pagine(
+        session=session,
+        filtres=filtres,
+        page=page,
+    )
+    
+    return ListeAuditAdminReponse(
+        donnees=[
+            AuditEvenementAdminItem(
+                id=str(e.id),
+                date_evenement=e.date_evenement.strftime("%Y-%m-%dT%H:%M:%S"),
+                utilisateur_id=str(e.utilisateur_id) if e.utilisateur_id else None,
+                role_acteur=e.role_acteur,
+                type_evenement=e.type_evenement,
+                description=e.description,
+                adresse_ip=e.adresse_ip,
+                donnees_supplementaires=e.donnees_supplementaires,
+            )
+            for e in evenements
+        ],
+        total=total,
+        page=page,
+    )
 
 
 # ---------------------------------------------------------------------------

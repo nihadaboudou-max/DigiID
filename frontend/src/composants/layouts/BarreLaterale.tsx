@@ -92,6 +92,7 @@ const LIENS_ADMIN: Lien[] = [
   { href: "/admin/utilisateurs",    libelle: "Utilisateurs",     Icone: IconeUtilisateur },
   { href: "/attestations-communautaires",    libelle: "Attestations",     Icone: IconeCheck },
   { href: "/admin/droits",          libelle: "Droits",           Icone: IconeBouclier },
+  { href: "/admin/audit",           libelle: "Journal d'audit",  Icone: IconeJournal },
   { href: "/admin/alertes",         libelle: "Alertes",          Icone: IconeAlerte },
   { href: "/admin/statistiques",    libelle: "Statistiques",     Icone: IconeStatistique },
 ];
