@@ -900,8 +900,8 @@ async def lister_audit_admin(
       - **recherche** : recherche dans la description
       - **date_debut** : date début (ex: 2024-01-01)
       - **date_fin** : date fin (ex: 2024-12-31)
-    """
-        from datetime import datetime
+        """
+    from datetime import datetime
     
     # Construire les filtres d'audit
     filtres = FiltresAudit(
