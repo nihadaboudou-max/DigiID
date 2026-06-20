@@ -18,7 +18,7 @@ from sqlalchemy.orm import joinedload
 
 from src.config.constantes import TypesEvenementAudit
 from src.modeles import (
-    AttestationCommunautaire, Consentement, JournalAudit,
+    AttestationCommunautaire, Consentement, DocumentIdentite, JournalAudit,
     Parrainage, ScoreHistorique, Utilisateur,
 )
 from src.modules.gamification import service_badges, service_tracking
@@ -386,6 +386,53 @@ async def _collecter_signaux_utilisateur(
     else:
         mois_depuis_visage = 999
 
+    # ========================================================================
+    # 6. DOCUMENTS D'IDENTITÉ (CNI + Permis + Assurance)
+    # ========================================================================
+    docs = await session.execute(
+        select(DocumentIdentite).where(
+            DocumentIdentite.utilisateur_id == utilisateur.id,
+            DocumentIdentite.est_actif.is_(True),
+        )
+    )
+    documents = docs.scalars().all()
+
+    doc_cni_present = False
+    doc_permis_present = False
+    doc_assurance_present = False
+    nb_champs_cni = 0
+    nb_champs_permis = 0
+    nb_champs_assurance = 0
+    date_derniere_modif_document = None
+
+    for doc in documents:
+        if doc.type_document == "cni":
+            doc_cni_present = True
+            for champ in [doc.numero_document, doc.nom_complet, doc.date_naissance,
+                          doc.lieu_naissance, doc.sexe, doc.adresse, doc.profession]:
+                if champ:
+                    nb_champs_cni += 1
+        elif doc.type_document == "permis":
+            doc_permis_present = True
+            for champ in [doc.numero_permis, doc.nom_complet, doc.categories_permis,
+                          doc.date_delivrance, doc.date_expiration, doc.centre_examen]:
+                if champ:
+                    nb_champs_permis += 1
+        elif doc.type_document == "assurance":
+            doc_assurance_present = True
+            for champ in [doc.compagnie_assurance, doc.type_couverture, doc.numero_contrat,
+                          doc.immatriculation_vehicule, doc.marque_vehicule, doc.modele_vehicule]:
+                if champ:
+                    nb_champs_assurance += 1
+
+        if date_derniere_modif_document is None or doc.modifie_le > date_derniere_modif_document:
+            date_derniere_modif_document = doc.modifie_le
+
+    if date_derniere_modif_document:
+        mois_depuis_modif_doc = max(0, (maintenant - date_derniere_modif_document).days // 30)
+    else:
+        mois_depuis_modif_doc = 999
+
     return SignauxUtilisateur(
         nombre_champs_profil_remplis=champs_remplis,
         nombre_consentements_facultatifs_accordes=nb_consentements_facultatifs,
@@ -404,6 +451,14 @@ async def _collecter_signaux_utilisateur(
         visage_verifie=visage_verifie,
         mois_depuis_verification_cni=mois_depuis_cni,
         mois_depuis_verification_visage=mois_depuis_visage,
+        # Documents d'identité
+        document_cni_present=doc_cni_present,
+        document_permis_present=doc_permis_present,
+        document_assurance_present=doc_assurance_present,
+        nb_champs_cni_remplis=nb_champs_cni,
+        nb_champs_permis_remplis=nb_champs_permis,
+        nb_champs_assurance_remplis=nb_champs_assurance,
+        mois_depuis_derniere_modif_document=mois_depuis_modif_doc,
     )
 
 

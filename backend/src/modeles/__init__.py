@@ -21,6 +21,7 @@ from src.modeles.attestation_communautaire import AttestationCommunautaire
 from src.modeles.dossier_medical import DossierMedical, Consultation, Ordonnance
 from src.modeles.enrolement import Enrolement
 from src.modeles.verification_police import VerificationPolice, SignalementFraude
+from src.modeles.document_identite import DocumentIdentite
 from src.modeles.ong import BeneficiaireONG, ProgrammeONG, MissionTerrain
 
 __all__ = [
@@ -46,6 +47,7 @@ __all__ = [
     "DossierMedical",
     "Consultation",
     "Ordonnance",
+    "DocumentIdentite",
     "Enrolement",
     "VerificationPolice",
     "SignalementFraude",

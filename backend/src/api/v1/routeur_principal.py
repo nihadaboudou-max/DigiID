@@ -42,6 +42,9 @@ from src.modules.gamification import routeur_gamification
 # --- Module OCR CNI ---
 from src.modules.ocr_cni import routeur_ocr_cni
 
+# --- Module Documents d'Identité (CNI + Permis + Assurance) ---
+from src.modules.documents_identite import routeur_documents
+
 # --- Module Roles & Permissions (RBAC étendu) ---
 from src.modules.roles import routeur_roles
 
@@ -97,6 +100,9 @@ routeur_v1.include_router(routeur_gamification)
 
 # Module OCR CNI — scan et authentification carte d'identité
 routeur_v1.include_router(routeur_ocr_cni)
+
+# Module Documents d'Identité — CNI, Permis, Assurance (avec correction utilisateur)
+routeur_v1.include_router(routeur_documents)
 
 # Module Roles & Permissions (RBAC étendu) — Étape 2
 routeur_v1.include_router(routeur_roles)

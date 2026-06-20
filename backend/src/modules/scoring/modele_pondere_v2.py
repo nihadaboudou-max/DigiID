@@ -86,28 +86,55 @@ def _score_anciennete(d: DonneesComportementales) -> float:
 
 def _score_verifications(d: DonneesComportementales) -> float:
     """
-    Sous-score vérifications identité (max 20).
+    Sous-score vérifications identité & documents (max 20).
 
     REMPLACE Mobile Money (25 pts) car pas d'API opérateur.
-    Utilise les vérifications RÉELLES de l'utilisateur.
+    Utilise les vérifications RÉELLES + les documents d'identité.
 
     Composantes (20 pts max) :
-      - Email vérifié : 0.15 * 20 = 3 pts
-      - 2FA activée : 0.20 * 20 = 4 pts (plus fort car sécurité)
-      - CNI vérifiée : 0.25 * 20 = 5 pts
-      - Visage vérifié : 0.25 * 20 = 5 pts
-      - Consentements facultatifs : 0.10 * 20 = 2 pts (0-5, 3 pour max)
-      - Champs profil : 0.05 * 20 = 1 pt (7 champs pour max)
+      - Connexions : Email vérifié + 2FA activée = 0.12 * 20 = 2.4 pts
+      - Vérifications fortes : CNI vérifiée + Visage vérifié = 0.25 * 20 = 5 pts
+      - Complétion profil : consentements + champs = 0.08 * 20 = 1.6 pts
+      - DOCUMENTS IDENTITÉ : 0.55 * 20 = 11 pts (nouveau !)
+          * CNI présente : 0.20 * 20 = 4 pts
+          * Permis présent : 0.15 * 20 = 3 pts
+          * Assurance présente : 0.10 * 20 = 2 pts
+          * Stabilité documents : 0.10 * 20 = 2 pts (pas de modif récentes)
     """
-    composante_email = d.email_verifie * 0.15
-    composante_2fa = d.deux_fa_active * 0.20
-    composante_cni = d.cni_verifiee * 0.25
-    composante_visage = d.visage_verifie * 0.25
-    composante_consentements = min(1.0, d.nb_consentements / 3) * 0.10
-    composante_profil = min(1.0, d.champs_profil / 7) * 0.05
+    # --- Connexions (email + 2FA) ---
+    composante_connexion = (d.email_verifie + d.deux_fa_active) * 0.06  # max 0.12
 
-    pourcentage = (composante_email + composante_2fa + composante_cni
-                   + composante_visage + composante_consentements + composante_profil)
+    # --- Vérifications fortes ---
+    composante_verif_forte = (d.cni_verifiee + d.visage_verifie) * 0.125  # max 0.25
+
+    # --- Complétion profil ---
+    composante_consentements = min(1.0, d.nb_consentements / 3) * 0.04  # max 0.04
+    composante_profil = min(1.0, d.champs_profil / 7) * 0.04  # max 0.04
+
+    # --- DOCUMENTS D'IDENTITÉ (NOUVEAU) ---
+    # Présence des documents : chaque type = bonus
+    composante_cni_present = d.document_cni_present * 0.20  # max 0.20
+    composante_permis_present = d.document_permis_present * 0.15  # max 0.15
+    composante_assurance_present = d.document_assurance_present * 0.10  # max 0.10
+
+    # Stabilité : pas de modification récente = + de points
+    # < 1 mois = pénalité, 1-3 mois = neutre, > 3 mois = bonus
+    if d.mois_depuis_derniere_modif_document >= 6:
+        composante_stabilite = 0.10  # max
+    elif d.mois_depuis_derniere_modif_document >= 3:
+        composante_stabilite = 0.06
+    elif d.mois_depuis_derniere_modif_document >= 1:
+        composante_stabilite = 0.03
+    else:
+        composante_stabilite = 0.0  # Modifié récemment = pas de bonus stabilité
+
+    pourcentage = (
+        composante_connexion
+        + composante_verif_forte
+        + composante_consentements + composante_profil
+        + composante_cni_present + composante_permis_present
+        + composante_assurance_present + composante_stabilite
+    )
     return min(POIDS_VERIFICATIONS, pourcentage * POIDS_VERIFICATIONS)
 
 

@@ -56,6 +56,15 @@ class SignauxUtilisateur:
     mois_depuis_verification_cni: int = 999
     mois_depuis_verification_visage: int = 999
 
+    # === Documents d'identité (CNI + Permis + Assurance) ===
+    document_cni_present: bool = False
+    document_permis_present: bool = False
+    document_assurance_present: bool = False
+    nb_champs_cni_remplis: int = 0
+    nb_champs_permis_remplis: int = 0
+    nb_champs_assurance_remplis: int = 0
+    mois_depuis_derniere_modif_document: int = 999
+
 
 @dataclass
 class DonneesComportementales:
@@ -91,6 +100,15 @@ class DonneesComportementales:
     visage_verifie: int = 0      # 0 ou 1
     nb_consentements: int = 0    # 0-5
     champs_profil: int = 0       # 0-7
+
+    # --- Documents d'identité (RÉELS) ---
+    document_cni_present: int = 0
+    document_permis_present: int = 0
+    document_assurance_present: int = 0
+    nb_champs_cni_remplis: int = 0
+    nb_champs_permis_remplis: int = 0
+    nb_champs_assurance_remplis: int = 0
+    mois_depuis_derniere_modif_document: int = 999
 
     # --- Attestations (RÉELLES, écrasées par service.py) ---
     attestations_approuvees_recues: int = 0
@@ -131,5 +149,13 @@ def generer_donnees_pour_utilisateur(
         visage_verifie=1 if signaux.visage_verifie else 0,
         nb_consentements=signaux.nombre_consentements_facultatifs_accordes,
         champs_profil=signaux.nombre_champs_profil_remplis,
+        # Documents d'identité
+        document_cni_present=1 if signaux.document_cni_present else 0,
+        document_permis_present=1 if signaux.document_permis_present else 0,
+        document_assurance_present=1 if signaux.document_assurance_present else 0,
+        nb_champs_cni_remplis=signaux.nb_champs_cni_remplis,
+        nb_champs_permis_remplis=signaux.nb_champs_permis_remplis,
+        nb_champs_assurance_remplis=signaux.nb_champs_assurance_remplis,
+        mois_depuis_derniere_modif_document=signaux.mois_depuis_derniere_modif_document,
         # Attestations (écrasées par _collecter_attestations dans service.py)
     )
