@@ -7,7 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles.dossier_medical import DossierMedical, Consultation, Ordonnance
 from src.modeles import Utilisateur
+from datetime import datetime
+
 from src.noyau.exceptions import ErreurRessourceIntrouvable, ErreurValidation
+from src.noyau import dechiffrer_donnee
 
 
 async def verifier_digiid(session: AsyncSession, digiid: str) -> Utilisateur | None:
@@ -122,11 +125,36 @@ async def obtenir_consultations(
     return list(result.scalars().all())
 
 
+async def _generer_numero_ordonnance(session: AsyncSession) -> str:
+    """Génère un numéro d'ordonnance unique: ORD-2024-000001"""
+    result = await session.execute(
+        select(func.max(Ordonnance.numero_ordonnance)).where(
+            Ordonnance.numero_ordonnance.isnot(None)
+        )
+    )
+    dernier = result.scalar()
+    annee = str(datetime.utcnow().year)
+    if dernier and dernier.startswith(f"ORD-{annee}-"):
+        try:
+            dernier_num = int(dernier.split("-")[-1])
+            nouveau_num = dernier_num + 1
+        except (IndexError, ValueError):
+            nouveau_num = 1
+    else:
+        nouveau_num = 1
+    return f"ORD-{annee}-{nouveau_num:06d}"
+
+
 async def creer_ordonnance(
     session: AsyncSession,
     medecin_id: UUID,
     data: dict,
+    medecin_nom: str | None = None,
 ) -> Ordonnance:
+    numero = await _generer_numero_ordonnance(session)
+    data["numero_ordonnance"] = numero
+    data["medecin_nom"] = medecin_nom or "Médecin"
+    data["statut"] = "active"
     ordonnance = Ordonnance(medecin_id=medecin_id, **data)
     session.add(ordonnance)
     await session.commit()
@@ -144,6 +172,17 @@ async def obtenir_ordonnances(
         .order_by(Ordonnance.date_prescription.desc())
     )
     return list(result.scalars().all())
+
+
+async def obtenir_ordonnance_par_numero(
+    session: AsyncSession,
+    numero: str,
+) -> Ordonnance | None:
+    """Recherche une ordonnance par son numéro unique."""
+    result = await session.execute(
+        select(Ordonnance).where(Ordonnance.numero_ordonnance == numero)
+    )
+    return result.scalar_one_or_none()
 
 
 async def obtenir_toutes_ordonnances(

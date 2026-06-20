@@ -67,8 +67,10 @@ async def lister_dossiers(
             id=d.id,
             medecin_id=d.medecin_id,
             patient_nom=d.patient_nom,
+            patient_prenom=d.patient_prenom,
             patient_digiid=d.patient_digiid,
             patient_date_naissance=d.patient_date_naissance,
+            hopital=d.hopital,
             motif=d.motif,
             diagnostic=d.diagnostic,
             statut=d.statut,
@@ -91,8 +93,10 @@ async def creer_dossier(
         id=dossier.id,
         medecin_id=dossier.medecin_id,
         patient_nom=dossier.patient_nom,
+        patient_prenom=dossier.patient_prenom,
         patient_digiid=dossier.patient_digiid,
         patient_date_naissance=dossier.patient_date_naissance,
+        hopital=dossier.hopital,
         motif=dossier.motif,
         diagnostic=dossier.diagnostic,
         statut=dossier.statut,
@@ -116,8 +120,10 @@ async def obtenir_dossier(
         id=dossier.id,
         medecin_id=dossier.medecin_id,
         patient_nom=dossier.patient_nom,
+        patient_prenom=dossier.patient_prenom,
         patient_digiid=dossier.patient_digiid,
         patient_date_naissance=dossier.patient_date_naissance,
+        hopital=dossier.hopital,
         motif=dossier.motif,
         diagnostic=dossier.diagnostic,
         statut=dossier.statut,
@@ -140,8 +146,10 @@ async def modifier_dossier(
         id=dossier.id,
         medecin_id=dossier.medecin_id,
         patient_nom=dossier.patient_nom,
+        patient_prenom=dossier.patient_prenom,
         patient_digiid=dossier.patient_digiid,
         patient_date_naissance=dossier.patient_date_naissance,
+        hopital=dossier.hopital,
         motif=dossier.motif,
         diagnostic=dossier.diagnostic,
         statut=dossier.statut,
@@ -164,9 +172,16 @@ async def lister_consultations(
             id=c.id,
             dossier_id=c.dossier_id,
             medecin_id=c.medecin_id,
+            hopital=c.hopital,
             motif=c.motif,
+            type_consultation=c.type_consultation,
+            poids=c.poids,
+            taille=c.taille,
+            temperature=c.temperature,
+            pression_arterielle=c.pression_arterielle,
             observations=c.observations,
             diagnostic=c.diagnostic,
+            conclusion=c.conclusion,
             date_consultation=c.date_consultation,
         )
         for c in consultations
@@ -184,9 +199,16 @@ async def ajouter_consultation(
         id=consultation.id,
         dossier_id=consultation.dossier_id,
         medecin_id=consultation.medecin_id,
+        hopital=consultation.hopital,
         motif=consultation.motif,
+        type_consultation=consultation.type_consultation,
+        poids=consultation.poids,
+        taille=consultation.taille,
+        temperature=consultation.temperature,
+        pression_arterielle=consultation.pression_arterielle,
         observations=consultation.observations,
         diagnostic=consultation.diagnostic,
+        conclusion=consultation.conclusion,
         date_consultation=consultation.date_consultation,
     )
 
@@ -203,8 +225,12 @@ async def lister_toutes_ordonnances(
             id=o.id,
             dossier_id=o.dossier_id,
             medecin_id=o.medecin_id,
+            numero_ordonnance=o.numero_ordonnance,
+            hopital=o.hopital,
+            medecin_nom=o.medecin_nom,
             medicaments=o.medicaments,
             instructions=o.instructions,
+            statut=o.statut,
             date_prescription=o.date_prescription,
             date_expiration=o.date_expiration,
         )
@@ -224,8 +250,12 @@ async def lister_ordonnances(
             id=o.id,
             dossier_id=o.dossier_id,
             medecin_id=o.medecin_id,
+            numero_ordonnance=o.numero_ordonnance,
+            hopital=o.hopital,
+            medecin_nom=o.medecin_nom,
             medicaments=o.medicaments,
             instructions=o.instructions,
+            statut=o.statut,
             date_prescription=o.date_prescription,
             date_expiration=o.date_expiration,
         )
@@ -239,14 +269,25 @@ async def creer_ordonnance(
     medecin: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    ordonnance = await medical_service.creer_ordonnance(session, medecin.id, data.model_dump())
-    journal_audit(f"ordonnance | cree | ordonnance_id={ordonnance.id} | dossier_id={ordonnance.dossier_id} | medecin={medecin.id}")
+    # Récupérer le nom du médecin pour le stocker dans l'ordonnance
+    nom = dechiffrer_donnee(medecin.nom_chiffre) if medecin.nom_chiffre else ""
+    prenom = dechiffrer_donnee(medecin.prenom_chiffre) if medecin.prenom_chiffre else ""
+    medecin_nom = f"{prenom} {nom}".strip() or "Médecin"
+
+    ordonnance = await medical_service.creer_ordonnance(
+        session, medecin.id, data.model_dump(), medecin_nom=medecin_nom
+    )
+    journal_audit(f"ordonnance | cree | numero={ordonnance.numero_ordonnance} | dossier_id={ordonnance.dossier_id} | medecin={medecin.id}")
     return OrdonnanceResponse(
         id=ordonnance.id,
         dossier_id=ordonnance.dossier_id,
         medecin_id=ordonnance.medecin_id,
+        numero_ordonnance=ordonnance.numero_ordonnance,
+        hopital=ordonnance.hopital,
+        medecin_nom=ordonnance.medecin_nom,
         medicaments=ordonnance.medicaments,
         instructions=ordonnance.instructions,
+        statut=ordonnance.statut,
         date_prescription=ordonnance.date_prescription,
         date_expiration=ordonnance.date_expiration,
     )
@@ -263,13 +304,17 @@ async def modifier_ordonnance(
     ordonnance = await medical_service.modifier_ordonnance(
         session, ordonnance_id, medecin.id, data.model_dump(exclude_none=True)
     )
-    journal_audit(f"ordonnance | modifie | ordonnance_id={ordonnance_id} | dossier_id={ordonnance.dossier_id} | medecin={medecin.id}")
+    journal_audit(f"ordonnance | modifie | numero={ordonnance.numero_ordonnance} | medecin={medecin.id}")
     return OrdonnanceResponse(
         id=ordonnance.id,
         dossier_id=ordonnance.dossier_id,
         medecin_id=ordonnance.medecin_id,
+        numero_ordonnance=ordonnance.numero_ordonnance,
+        hopital=ordonnance.hopital,
+        medecin_nom=ordonnance.medecin_nom,
         medicaments=ordonnance.medicaments,
         instructions=ordonnance.instructions,
+        statut=ordonnance.statut,
         date_prescription=ordonnance.date_prescription,
         date_expiration=ordonnance.date_expiration,
     )
@@ -300,19 +345,16 @@ async def lister_mes_ordonnances(
     ordonnances = await medical_service.obtenir_ordonnances_par_digiid(session, citoyen.digiid_public)
     result = []
     for o in ordonnances:
-        # Récupérer le nom du médecin
-        _, medecin = await medical_service.obtenir_medecin_ordonnance(session, o.id) or (None, None)
-        nom_medecin = None
-        if medecin:
-            nom = dechiffrer_donnee(medecin.nom_chiffre) if medecin.nom_chiffre else ""
-            prenom = dechiffrer_donnee(medecin.prenom_chiffre) if medecin.prenom_chiffre else ""
-            nom_medecin = f"{prenom} {nom}".strip() or "Médecin"
         result.append(OrdonnanceResponse(
             id=o.id,
             dossier_id=o.dossier_id,
             medecin_id=o.medecin_id,
+            numero_ordonnance=o.numero_ordonnance,
+            hopital=o.hopital,
+            medecin_nom=o.medecin_nom,
             medicaments=o.medicaments,
             instructions=o.instructions,
+            statut=o.statut,
             date_prescription=o.date_prescription,
             date_expiration=o.date_expiration,
         ))

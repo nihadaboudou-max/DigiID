@@ -19,8 +19,10 @@ class DossierMedical(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     medecin_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
     patient_nom = Column(String(255), nullable=False)
+    patient_prenom = Column(String(255), nullable=True)
     patient_digiid = Column(String(50), nullable=False, index=True)
     patient_date_naissance = Column(Date, nullable=True)
+    hopital = Column(String(255), nullable=True)
     motif = Column(String(500), nullable=False)
     diagnostic = Column(Text, nullable=True)
     statut = Column(String(20), default="ouvert")  # ouvert, archive
@@ -38,9 +40,16 @@ class Consultation(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     dossier_id = Column(UUID(as_uuid=True), ForeignKey("dossiers_medicaux.id"), nullable=False, index=True)
     medecin_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False)
+    hopital = Column(String(255), nullable=True)
     motif = Column(String(500), nullable=False)
+    type_consultation = Column(String(50), nullable=True)  # consultation, suivi, urgence, controle
+    poids = Column(Integer, nullable=True)  # en kg
+    taille = Column(Integer, nullable=True)  # en cm
+    temperature = Column(Integer, nullable=True)  # en dixiemes de degre (375 = 37.5°C)
+    pression_arterielle = Column(String(20), nullable=True)  # ex: "120/80"
     observations = Column(Text, nullable=True)
     diagnostic = Column(Text, nullable=True)
+    conclusion = Column(Text, nullable=True)
     date_consultation = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
@@ -50,7 +59,11 @@ class Ordonnance(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     dossier_id = Column(UUID(as_uuid=True), ForeignKey("dossiers_medicaux.id"), nullable=False, index=True)
     medecin_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False)
-    medicaments = Column(Text, nullable=False)  # JSON list
+    numero_ordonnance = Column(String(30), unique=True, nullable=False)
+    hopital = Column(String(255), nullable=True)
+    medecin_nom = Column(String(255), nullable=True)  # cache pour affichage rapide
+    medicaments = Column(Text, nullable=False)
     instructions = Column(Text, nullable=True)
+    statut = Column(String(20), default="active")  # active, expiree, annulee
     date_prescription = Column(DateTime, default=datetime.utcnow, nullable=False)
     date_expiration = Column(Date, nullable=True)

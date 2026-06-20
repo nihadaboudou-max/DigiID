@@ -8,9 +8,11 @@ from pydantic import BaseModel, Field
 
 
 class DossierMedicalCreate(BaseModel):
-    patient_nom: str = Field(..., description="Nom complet du patient")
+    patient_nom: str = Field(..., description="Nom du patient")
+    patient_prenom: Optional[str] = Field(None, description="Prénom du patient")
     patient_digiid: str = Field(..., description="DigiID du patient")
     patient_date_naissance: Optional[date] = None
+    hopital: Optional[str] = Field(None, description="Hôpital ou clinique")
     motif: str = Field(..., description="Motif de la consultation")
     diagnostic: Optional[str] = None
 
@@ -18,6 +20,7 @@ class DossierMedicalCreate(BaseModel):
 class DossierMedicalUpdate(BaseModel):
     motif: Optional[str] = None
     diagnostic: Optional[str] = None
+    hopital: Optional[str] = None
     statut: Optional[str] = None
 
 
@@ -25,8 +28,10 @@ class DossierMedicalResponse(BaseModel):
     id: UUID
     medecin_id: UUID
     patient_nom: str
+    patient_prenom: Optional[str] = None
     patient_digiid: str
     patient_date_naissance: Optional[date] = None
+    hopital: Optional[str] = None
     motif: str
     diagnostic: Optional[str] = None
     statut: str
@@ -40,18 +45,32 @@ class DossierMedicalResponse(BaseModel):
 
 class ConsultationCreate(BaseModel):
     dossier_id: UUID
+    hopital: Optional[str] = None
     motif: str
+    type_consultation: Optional[str] = Field(None, description="consultation, suivi, urgence, controle")
+    poids: Optional[int] = Field(None, description="Poids en kg")
+    taille: Optional[int] = Field(None, description="Taille en cm")
+    temperature: Optional[int] = Field(None, description="Température en dixièmes de degré (ex: 375 = 37.5°C)")
+    pression_arterielle: Optional[str] = Field(None, description="Tension artérielle (ex: 120/80)")
     observations: Optional[str] = None
     diagnostic: Optional[str] = None
+    conclusion: Optional[str] = None
 
 
 class ConsultationResponse(BaseModel):
     id: UUID
     dossier_id: UUID
     medecin_id: UUID
+    hopital: Optional[str] = None
     motif: str
+    type_consultation: Optional[str] = None
+    poids: Optional[int] = None
+    taille: Optional[int] = None
+    temperature: Optional[int] = None
+    pression_arterielle: Optional[str] = None
     observations: Optional[str] = None
     diagnostic: Optional[str] = None
+    conclusion: Optional[str] = None
     date_consultation: datetime
 
     model_config = {"from_attributes": True}
@@ -59,7 +78,8 @@ class ConsultationResponse(BaseModel):
 
 class OrdonnanceCreate(BaseModel):
     dossier_id: UUID
-    medicaments: str = Field(..., description="Liste JSON des médicaments")
+    hopital: Optional[str] = Field(None, description="Hôpital ou clinique")
+    medicaments: str = Field(..., description="Liste des médicaments")
     instructions: Optional[str] = None
     date_expiration: Optional[date] = None
 
@@ -74,8 +94,12 @@ class OrdonnanceResponse(BaseModel):
     id: UUID
     dossier_id: UUID
     medecin_id: UUID
+    numero_ordonnance: str
+    hopital: Optional[str] = None
+    medecin_nom: Optional[str] = None
     medicaments: str
     instructions: Optional[str] = None
+    statut: str = "active"
     date_prescription: datetime
     date_expiration: Optional[date] = None
 
@@ -97,9 +121,12 @@ class SignalementCreate(BaseModel):
 class OrdonnancePatientResponse(BaseModel):
     id: UUID
     dossier_id: UUID
+    numero_ordonnance: str
+    hopital: Optional[str] = None
     medecin_nom: Optional[str] = None
     medicaments: str
     instructions: Optional[str] = None
+    statut: str = "active"
     date_prescription: datetime
     date_expiration: Optional[date] = None
 
