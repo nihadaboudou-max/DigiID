@@ -64,10 +64,10 @@ class DonneesComportementales:
     Les champs sans API partenaire sont mis à 0.
     """
     # --- Ancienneté & Stabilité (RÉEL) ---
-    age_compte_mois: int
-    age_telephone_mois: int
-    operateur_renseigne: bool
-    nombre_changements_telephone: int
+    age_compte_mois: int = 0
+    age_telephone_mois: int = 0
+    operateur_renseigne: bool = False
+    nombre_changements_telephone: int = 0
 
     # --- Mobile money (EN ATTENTE API) ---
     transactions_par_mois: int = 0
@@ -76,13 +76,13 @@ class DonneesComportementales:
     diversite_partenaires: int = 0
 
     # --- Géographie (RÉELLE) ---
-    mois_stabilite_ville: int
-    nombre_changements_ville: int
+    mois_stabilite_ville: int = 0
+    nombre_changements_ville: int = 0
     nombre_changements_quartier: int = 0
 
     # --- Réseau (RÉEL : parrainage) ---
-    nombre_filleuls: int
-    bonus_score_cumule: int
+    nombre_filleuls: int = 0
+    bonus_score_cumule: int = 0
 
     # --- Vérifications identité (RÉELLES) ---
     email_verifie: int = 0       # 0 ou 1
@@ -91,12 +91,6 @@ class DonneesComportementales:
     visage_verifie: int = 0      # 0 ou 1
     nb_consentements: int = 0    # 0-5
     champs_profil: int = 0       # 0-7
-
-    # --- Anciens alias Mobile Money (mis à 0) ---
-    transactions_par_mois: int = 0
-    montant_moyen_transaction_fcfa: int = 0
-    regularite_temporelle: float = 0.0
-    diversite_partenaires: int = 0
 
     # --- Attestations (RÉELLES, écrasées par service.py) ---
     attestations_approuvees_recues: int = 0
