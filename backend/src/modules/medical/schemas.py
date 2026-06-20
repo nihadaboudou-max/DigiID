@@ -64,6 +64,12 @@ class OrdonnanceCreate(BaseModel):
     date_expiration: Optional[date] = None
 
 
+class OrdonnanceUpdate(BaseModel):
+    medicaments: Optional[str] = None
+    instructions: Optional[str] = None
+    date_expiration: Optional[date] = None
+
+
 class OrdonnanceResponse(BaseModel):
     id: UUID
     dossier_id: UUID

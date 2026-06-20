@@ -140,3 +140,21 @@ export async function creerOrdonnance(data: {
     authentifie: true,
   });
 }
+
+export async function modifierOrdonnance(
+  id: string,
+  data: { medicaments?: string; instructions?: string; date_expiration?: string },
+): Promise<Ordonnance> {
+  return clientAPI.patch<Ordonnance>(
+    `/api/v1/utilisateur/medical/ordonnances/${id}`,
+    data,
+    { authentifie: true },
+  );
+}
+
+export async function supprimerOrdonnance(id: string): Promise<void> {
+  return clientAPI.delete(
+    `/api/v1/utilisateur/medical/ordonnances/${id}`,
+    { authentifie: true },
+  );
+}

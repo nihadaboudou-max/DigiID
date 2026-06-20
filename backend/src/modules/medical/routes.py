@@ -11,6 +11,7 @@ from src.config.constantes import PREFIXE_API_UTILISATEUR
 from src.modeles import Utilisateur
 from src.modules.authentification.dependances import utilisateur_courant
 from src.noyau import dechiffrer_donnee
+from src.noyau.journal import journal_audit
 from src.modules.medical.schemas import (
     ConsultationCreate,
     ConsultationResponse,
@@ -19,6 +20,7 @@ from src.modules.medical.schemas import (
     DossierMedicalUpdate,
     OrdonnanceCreate,
     OrdonnanceResponse,
+    OrdonnanceUpdate,
     VerificationDigiIDResponse,
 )
 from src.modules.medical import service as medical_service
@@ -235,6 +237,7 @@ async def creer_ordonnance(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     ordonnance = await medical_service.creer_ordonnance(session, medecin.id, data.model_dump())
+    journal_audit(f"ordonnance | cree | ordonnance_id={ordonnance.id} | dossier_id={ordonnance.dossier_id} | medecin={medecin.id}")
     return OrdonnanceResponse(
         id=ordonnance.id,
         dossier_id=ordonnance.dossier_id,
@@ -244,3 +247,37 @@ async def creer_ordonnance(
         date_prescription=ordonnance.date_prescription,
         date_expiration=ordonnance.date_expiration,
     )
+
+
+@routeur_medical.patch("/ordonnances/{ordonnance_id}", response_model=OrdonnanceResponse)
+async def modifier_ordonnance(
+    ordonnance_id: UUID,
+    data: OrdonnanceUpdate,
+    medecin: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Modifie une ordonnance existante (médecin propriétaire uniquement)."""
+    ordonnance = await medical_service.modifier_ordonnance(
+        session, ordonnance_id, medecin.id, data.model_dump(exclude_none=True)
+    )
+    journal_audit(f"ordonnance | modifie | ordonnance_id={ordonnance_id} | dossier_id={ordonnance.dossier_id} | medecin={medecin.id}")
+    return OrdonnanceResponse(
+        id=ordonnance.id,
+        dossier_id=ordonnance.dossier_id,
+        medecin_id=ordonnance.medecin_id,
+        medicaments=ordonnance.medicaments,
+        instructions=ordonnance.instructions,
+        date_prescription=ordonnance.date_prescription,
+        date_expiration=ordonnance.date_expiration,
+    )
+
+
+@routeur_medical.delete("/ordonnances/{ordonnance_id}", status_code=204)
+async def supprimer_ordonnance(
+    ordonnance_id: UUID,
+    medecin: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Supprime une ordonnance (médecin propriétaire uniquement)."""
+    await medical_service.supprimer_ordonnance(session, ordonnance_id, medecin.id)
+    journal_audit(f"ordonnance | supprime | ordonnance_id={ordonnance_id} | medecin={medecin.id}")
