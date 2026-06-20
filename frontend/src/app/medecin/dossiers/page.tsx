@@ -21,7 +21,7 @@ export default function SuiviDossiers() {
 function Contenu() {
   const [dossiers, setDossiers] = useState<DossierMedical[]>([]);
   const [chargement, setChargement] = useState(true);
-  const [filtre, setFiltre] = useState<"tous" | "ouverts" | "archives">("tous");
+  const [filtre, setFiltre] = useState<"tous" | "ouvert" | "archive">("tous");
   const [recherche, setRecherche] = useState("");
 
   useEffect(() => { charger(); }, []);
@@ -57,10 +57,10 @@ function Contenu() {
       </div>
 
       <div className="flex gap-2 flex-wrap">
-        {(["tous", "ouverts", "archives"] as const).map((f) => (
+        {(["tous", "ouvert", "archive"] as const).map((f) => (
           <button key={f} onClick={() => setFiltre(f)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${filtre === f ? "bg-ocre text-white" : "text-ardoise-clair hover:text-ardoise bg-sable"}`}>
-            {f === "tous" ? "Tous" : f === "ouverts" ? "Ouverts" : "Archives"}
+            {f === "tous" ? "Tous" : f === "ouvert" ? "Ouverts" : "Archives"}
           </button>
         ))}
       </div>
