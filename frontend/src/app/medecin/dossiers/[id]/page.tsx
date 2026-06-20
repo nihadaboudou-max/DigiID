@@ -160,23 +160,30 @@ function Contenu() {
 
       <div className="flex justify-between items-start">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-ardoise">{dossier.patient_nom}</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold text-ardoise">{dossier.patient_prenom ? `${dossier.patient_prenom} ${dossier.patient_nom}` : dossier.patient_nom}</h1>
             <Badge variante={dossier.statut === "ouvert" ? "succes" : "lagune"}>
               {dossier.statut === "ouvert" ? "Ouvert" : "Archive"}
             </Badge>
           </div>
-          <p className="text-ardoise-clair mt-1">{dossier.patient_digiid}</p>
+          <p className="text-ardoise-clair mt-1 font-mono text-sm">{dossier.patient_digiid}</p>
+          {dossier.hopital && (
+            <p className="text-xs text-ocre mt-1">🏥 {dossier.hopital}</p>
+          )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Carte titre="Informations">
+        <Carte titre="Informations patient">
           <div className="space-y-2 text-sm">
+            <p><strong>Nom :</strong> {dossier.patient_prenom ? `${dossier.patient_prenom} ${dossier.patient_nom}` : dossier.patient_nom}</p>
+            <p><strong>DigiID :</strong> <span className="font-mono">{dossier.patient_digiid}</span></p>
+            {dossier.patient_date_naissance && <p><strong>Né(e) le :</strong> {new Date(dossier.patient_date_naissance).toLocaleDateString("fr-FR")}</p>}
+            {dossier.hopital && <p><strong>Établissement :</strong> 🏥 {dossier.hopital}</p>}
             <p><strong>Motif :</strong> {dossier.motif}</p>
             <p><strong>Diagnostic :</strong> {dossier.diagnostic || "Non renseigné"}</p>
-            <p><strong>Crée le :</strong> {new Date(dossier.date_creation).toLocaleDateString("fr-FR")}</p>
-            <p><strong>Modifié le :</strong> {new Date(dossier.date_modification).toLocaleDateString("fr-FR")}</p>
+            <p><strong>Crée le :</strong> {new Date(dossier.date_creation).toLocaleString("fr-FR")}</p>
+            <p><strong>Modifié le :</strong> {new Date(dossier.date_modification).toLocaleString("fr-FR")}</p>
           </div>
         </Carte>
 
@@ -187,9 +194,20 @@ function Contenu() {
             <div className="space-y-3">
               {consultations.map((c) => (
                 <div key={c.id} className="p-2 bg-sable rounded text-sm">
-                  <p className="font-semibold">{c.motif}</p>
-                  {c.diagnostic && <p className="text-xs text-ardoise-clair">{c.diagnostic}</p>}
-                  <p className="text-xs text-ardoise-clair">{new Date(c.date_consultation).toLocaleDateString("fr-FR")}</p>
+                  <div className="flex justify-between items-start">
+                    <p className="font-semibold">{c.motif}</p>
+                    {c.type_consultation && <Badge variante="ocre">{c.type_consultation}</Badge>}
+                  </div>
+                  {c.diagnostic && <p className="text-xs text-ardoise-clair mt-1">{c.diagnostic}</p>}
+                  <div className="flex flex-wrap gap-2 mt-1 text-xs text-ardoise-clair">
+                    <span>{new Date(c.date_consultation).toLocaleString("fr-FR")}</span>
+                    {c.poids && <span>⚖️ {c.poids} kg</span>}
+                    {c.taille && <span>📏 {c.taille} cm</span>}
+                    {c.temperature && <span>🌡️ {(c.temperature / 10).toFixed(1)}°C</span>}
+                    {c.pression_arterielle && <span>💉 {c.pression_arterielle}</span>}
+                  </div>
+                  {c.observations && <p className="text-xs text-ardoise-clair mt-1">{c.observations}</p>}
+                  {c.conclusion && <p className="text-xs font-medium text-ardoise mt-1">Conclusion : {c.conclusion}</p>}
                 </div>
               ))}
             </div>
@@ -240,12 +258,22 @@ function Contenu() {
                     <>
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <p className="font-semibold">{o.medicaments}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold">{o.medicaments}</p>
+                            <span className="text-xs text-ardoise-clair font-mono">#{o.numero_ordonnance}</span>
+                            {o.statut !== "active" && (
+                              <Badge variante={o.statut === "expiree" ? "neutre" : "danger"}>
+                                {o.statut === "expiree" ? "Expirée" : "Annulée"}
+                              </Badge>
+                            )}
+                          </div>
                           {o.instructions && <p className="text-xs text-ardoise-clair mt-1">{o.instructions}</p>}
-                          <p className="text-xs text-ardoise-clair mt-1">
-                            Prescrite le {new Date(o.date_prescription).toLocaleDateString("fr-FR")}
-                            {o.date_expiration && " · Expire le " + new Date(o.date_expiration).toLocaleDateString("fr-FR")}
-                          </p>
+                          <div className="flex flex-wrap gap-3 mt-1 text-xs text-ardoise-clair">
+                            <span>📅 {new Date(o.date_prescription).toLocaleDateString("fr-FR")} à {new Date(o.date_prescription).toLocaleTimeString("fr-FR", {hour: "2-digit", minute: "2-digit"})}</span>
+                            {o.date_expiration && <span className="text-terre">⏳ Expire le {new Date(o.date_expiration).toLocaleDateString("fr-FR")}</span>}
+                            {o.medecin_nom && <span>👨‍⚕️ Dr. {o.medecin_nom}</span>}
+                            {o.hopital && <span>🏥 {o.hopital}</span>}
+                          </div>
                         </div>
                         <div className="flex gap-1 ml-2 shrink-0">
                           <button

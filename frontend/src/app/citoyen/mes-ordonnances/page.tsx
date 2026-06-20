@@ -92,19 +92,25 @@ function Contenu() {
             <div key={o.id} className="carte">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <h3 className="font-bold text-ardoise">{o.medicaments}</h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-bold text-ardoise">{o.medicaments}</h3>
+                    <span className="text-xs text-ardoise-clair font-mono">#{o.numero_ordonnance}</span>
+                    {o.statut !== "active" && (
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${o.statut === "expiree" ? "bg-ardoise-clair/20 text-ardoise-clair" : "bg-terre/10 text-terre"}`}>
+                        {o.statut === "expiree" ? "Expirée" : "Annulée"}
+                      </span>
+                    )}
+                  </div>
                   {o.instructions && (
                     <p className="text-sm text-ardoise-clair mt-1">{o.instructions}</p>
                   )}
                   <div className="flex flex-wrap gap-4 mt-2 text-xs text-ardoise-clair">
-                    <span>
-                      Prescrite le {new Date(o.date_prescription).toLocaleDateString("fr-FR")}
-                    </span>
+                    <span>📅 {new Date(o.date_prescription).toLocaleString("fr-FR")}</span>
                     {o.date_expiration && (
-                      <span className="text-terre">
-                        Expire le {new Date(o.date_expiration).toLocaleDateString("fr-FR")}
-                      </span>
+                      <span className="text-terre">⏳ Expire le {new Date(o.date_expiration).toLocaleDateString("fr-FR")}</span>
                     )}
+                    {o.medecin_nom && <span>👨‍⚕️ Dr. {o.medecin_nom}</span>}
+                    {o.hopital && <span>🏥 {o.hopital}</span>}
                   </div>
                 </div>
               </div>

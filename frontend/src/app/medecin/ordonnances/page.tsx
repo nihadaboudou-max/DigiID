@@ -36,6 +36,7 @@ function Contenu() {
   const [instructions, setInstructions] = useState("");
   const [dateExpiration, setDateExpiration] = useState("");
   const [envoi, setEnvoi] = useState(false);
+  const [hopital, setHopital] = useState("");
 
   // Modification
   const [editId, setEditId] = useState<string | null>(null);
@@ -67,7 +68,9 @@ function Contenu() {
   function getDossierPatientName(dossierId: string): string {
     const d = dossiers.find((d) => d.id === dossierId);
     if (!d) return "Dossier inconnu";
-    return `${d.patient_nom} (${d.patient_digiid})`;
+    const prenom = d.patient_prenom ? `${d.patient_prenom} ` : "";
+    const hopital = d.hopital ? ` - ${d.hopital}` : "";
+    return `${prenom}${d.patient_nom} (${d.patient_digiid})${hopital}`;
   }
 
   // Grouper les ordonnances par dossier
@@ -86,6 +89,7 @@ function Contenu() {
     try {
       await creerOrdonnance({
         dossier_id: dossierId,
+        hopital: hopital || undefined,
         medicaments,
         instructions: instructions || undefined,
         date_expiration: dateExpiration || undefined,
@@ -94,6 +98,7 @@ function Contenu() {
       setInstructions("");
       setDateExpiration("");
       setDossierId("");
+      setHopital("");
       const o = await listerToutesOrdonnances();
       setOrdonnances(o);
       setMessage("Ordonnance créée avec succès.");
@@ -175,6 +180,18 @@ function Contenu() {
       {can.managePrescriptions && (
         <Carte titre="Nouvelle ordonnance">
           <div className="max-w-md space-y-3">
+            <div>
+              <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
+                Hôpital / Clinique
+              </label>
+              <input
+                type="text"
+                value={hopital}
+                onChange={(e) => setHopital(e.target.value)}
+                className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+                placeholder="Ex: CHU de Cocody"
+              />
+            </div>
             <select
               value={dossierId}
               onChange={(e) => setDossierId(e.target.value)}
@@ -284,16 +301,24 @@ function Contenu() {
                       /* Mode affichage */
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <p className="font-semibold text-ardoise">{o.medicaments}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-ardoise">{o.medicaments}</p>
+                            <span className="text-xs text-ardoise-clair font-mono">#{o.numero_ordonnance}</span>
+                            {o.statut !== "active" && (
+                              <span className={`text-xs px-1.5 py-0.5 rounded ${o.statut === "expiree" ? "bg-ardoise-clair/20 text-ardoise-clair" : "bg-terre/10 text-terre"}`}>
+                                {o.statut === "expiree" ? "Expirée" : "Annulée"}
+                              </span>
+                            )}
+                          </div>
                           {o.instructions && (
                             <p className="text-xs text-ardoise-clair mt-1">{o.instructions}</p>
                           )}
-                          <p className="text-xs text-ardoise-clair mt-1">
-                            Prescrite le {new Date(o.date_prescription).toLocaleDateString("fr-FR")}
-                            {o.date_expiration &&
-                              " &middot; Expire le " +
-                                new Date(o.date_expiration).toLocaleDateString("fr-FR")}
-                          </p>
+                          <div className="flex flex-wrap gap-3 mt-1 text-xs text-ardoise-clair">
+                            <span>📅 {new Date(o.date_prescription).toLocaleString("fr-FR")}</span>
+                            {o.date_expiration && <span className="text-terre">⏳ Expire le {new Date(o.date_expiration).toLocaleDateString("fr-FR")}</span>}
+                            {o.medecin_nom && <span>👨‍⚕️ Dr. {o.medecin_nom}</span>}
+                            {o.hopital && <span>🏥 {o.hopital}</span>}
+                          </div>
                         </div>
                         <div className="flex gap-1 ml-2 shrink-0">
                           <button

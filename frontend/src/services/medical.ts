@@ -7,8 +7,10 @@ export interface DossierMedical {
   id: string;
   medecin_id: string;
   patient_nom: string;
+  patient_prenom: string | null;
   patient_digiid: string;
   patient_date_naissance: string | null;
+  hopital: string | null;
   motif: string;
   diagnostic: string | null;
   statut: string;
@@ -22,9 +24,16 @@ export interface Consultation {
   id: string;
   dossier_id: string;
   medecin_id: string;
+  hopital: string | null;
   motif: string;
+  type_consultation: string | null;
+  poids: number | null;
+  taille: number | null;
+  temperature: number | null;
+  pression_arterielle: string | null;
   observations: string | null;
   diagnostic: string | null;
+  conclusion: string | null;
   date_consultation: string;
 }
 
@@ -32,8 +41,12 @@ export interface Ordonnance {
   id: string;
   dossier_id: string;
   medecin_id: string;
+  numero_ordonnance: string;
+  hopital: string | null;
+  medecin_nom: string | null;
   medicaments: string;
   instructions: string | null;
+  statut: string;
   date_prescription: string;
   date_expiration: string | null;
 }
