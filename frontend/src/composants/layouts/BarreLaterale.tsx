@@ -637,6 +637,7 @@ export function BarreLaterale() {
                     { href: "/profil",          libelle: "Mon profil",      Icone: IconeUtilisateur },
                     { href: "/documents",       libelle: "Mes documents",    Icone: IconeJournal },
                     { href: "/historique",      libelle: "Historique d'accès", Icone: IconeAlerte },
+                    { href: "/citoyen/mes-ordonnances", libelle: "Mes ordonnances", Icone: IconeJournal },
                     { href: "/chatbot",         libelle: "Assistant",       Icone: IconeChat },
                     { href: "/parametres",      libelle: "Paramètres",      Icone: IconeParametres },
                   ].map((lien) => {
@@ -680,6 +681,33 @@ export function BarreLaterale() {
                       { href: "/profil",          libelle: "Mon profil",      Icone: IconeUtilisateur },
                       { href: "/documents",       libelle: "Mes documents",    Icone: IconeJournal },
                       { href: "/historique",      libelle: "Historique d'accès", Icone: IconeAlerte },
+                    ].map((lien) => {
+                      const actif = pathname === lien.href;
+                      return (
+                        <Link
+                          key={lien.href}
+                          href={lien.href}
+                          className={clsx(
+                            "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
+                            actif
+                              ? "bg-sable/60 text-lagune font-medium"
+                              : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
+                          )}
+                        >
+                          <lien.Icone className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span className="truncate">{lien.libelle}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+
+                  {/* Santé — Mes ordonnances */}
+                  <div className="space-y-0.5 mt-2">
+                    <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
+                      Santé
+                    </p>
+                    {[
+                      { href: "/citoyen/mes-ordonnances", libelle: "Mes ordonnances", Icone: IconeJournal },
                     ].map((lien) => {
                       const actif = pathname === lien.href;
                       return (
