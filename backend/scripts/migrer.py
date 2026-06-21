@@ -87,6 +87,9 @@ COLONNES_A_VERIFIER = [
     ("ordonnances", "hopital", "VARCHAR(255)"),
     ("ordonnances", "medecin_nom", "VARCHAR(255)"),
     ("ordonnances", "statut", "VARCHAR(20) NOT NULL DEFAULT 'active'"),
+    # Colonnes soft-delete verification_visuelle
+    ("verification_visuelle", "est_supprime", "BOOLEAN NOT NULL DEFAULT false"),
+    ("verification_visuelle", "date_suppression", "TIMESTAMP WITH TIME ZONE"),
 ]
 
 
