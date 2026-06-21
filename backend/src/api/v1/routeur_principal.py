@@ -28,13 +28,14 @@ from src.modules.profil import routeur_profil
 from src.modules.consentements import routeur_consentements
 from src.modules.scoring import routeur_scoring
 
-# --- Phase 3 — chatbot et documents ---
+# --- Phase 3 — chatbot et documents RAG ---
 from src.modules.documents import routeur_documents
 from src.modules.chatbot import routeur_chatbot
 
 # --- Phase 4 — sécurité avancée ---
 from src.modules.detection_fraude import routeur_fraude
-from src.modules.verification_visuelle import routeur_verification
+# CORRECTION : renommé pour éviter le conflit avec routeur_verification (module verification)
+from src.modules.verification_visuelle import routeur_verification_visuelle
 
 # --- Bonus — gamification (badges, streak, recommandations, notifications, parrainage) ---
 from src.modules.gamification import routeur_gamification
@@ -94,7 +95,8 @@ routeur_v1.include_router(routeur_chatbot)
 
 # Phase 4 — sécurité avancée
 routeur_v1.include_router(routeur_fraude)
-routeur_v1.include_router(routeur_verification)
+# CORRECTION : utilise routeur_verification_visuelle
+routeur_v1.include_router(routeur_verification_visuelle)
 
 # Bonus — gamification (badges, streak, recommandations, notifications, parrainage)
 routeur_v1.include_router(routeur_gamification)
