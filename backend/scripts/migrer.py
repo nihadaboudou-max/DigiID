@@ -3,30 +3,36 @@
 Script de migration robuste pour DigiID.
 Gère 3 cas :
 1. Base vierge (pas de tables)
-→ alembic upgrade head crée toutes les tables et enregistre les versions
+   → alembic upgrade head crée toutes les tables et enregistre les versions
 2. Base avec tables + alembic_version à jour
-→ upgrade normal (no-op si déjà à jour)
+   → upgrade normal (no-op si déjà à jour)
 3. Base avec tables SANS alembic_version (créées par ancien create_all)
-→ stamp HEAD d'abord, puis upgrade (no-op)
+   → stamp HEAD d'abord, puis upgrade (no-op)
+
 Cas 3 : sans auto-stamp, `alembic upgrade head` tente de re-créer toutes les
 tables une par une → DuplicateTableError sur CHAQUE migration.
 """
 import logging
 import sys
 from pathlib import Path
+
 # Ajouter le répertoire parent au path pour pouvoir importer les modules
 # depuis l'entrypoint (où PYTHONPATH=/app)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from sqlalchemy import create_engine, inspect, text as sa_text
 from alembic.config import Config as AlembicConfig
 from alembic import command as alembic_command
 from src.config import parametres
+
 # Configuration du logging
 logging.basicConfig(
-level=logging.INFO,
-format="%(levelname)-5s [%(name)s] %(message)s",
+    level=logging.INFO,
+    format="%(levelname)-5s [%(name)s] %(message)s",
 )
 logger = logging.getLogger("migrer")
+
+
 def _determiner_etat_base(engine) -> str:
     """
     Vérifie si les tables principales existent dans la base.
