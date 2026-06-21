@@ -18,6 +18,7 @@ from typing import Tuple
 from fastapi import UploadFile
 
 from src.noyau.exceptions import ErreurValidation
+from src.noyau import journal
 
 
 # Limite : 5 Mo par document
@@ -58,7 +59,15 @@ async def extraire_texte_depuis_upload(
         )
 
     # Lire le contenu en mémoire
-    contenu_bytes = await fichier.read()
+    try:
+        contenu_bytes = await fichier.read()
+    except Exception as e:
+        journal.error(f"Erreur lecture fichier : {e}")
+        raise ErreurValidation(
+            f"Impossible de lire le fichier : {e}",
+            message_utilisateur="Erreur lors de la lecture du fichier. Réessaie.",
+        )
+    
     taille = len(contenu_bytes)
 
     # Vérifier la taille
@@ -91,7 +100,7 @@ async def extraire_texte_depuis_upload(
     if not contenu_texte.strip():
         raise ErreurValidation(
             "Document vide après extraction",
-            message_utilisateur="Le fichier semble vide ou son texte n'a pas pu être extrait.",
+            message_utilisateur="Le fichier semble vide ou son texte n'a pas pu être extrait. Si c'est un PDF scanné (image), le texte ne peut pas être extrait automatiquement.",
         )
 
     return contenu_texte, type_mime, taille
@@ -109,10 +118,32 @@ def _extraire_pdf(contenu_bytes: bytes) -> str:
             message_utilisateur="Le serveur ne peut pas lire les PDF pour l'instant.",
         )
 
-    reader = PdfReader(io.BytesIO(contenu_bytes))
+    # ✅ Gestion des erreurs PDF (corrompu, chiffré, malformé)
+    try:
+        reader = PdfReader(io.BytesIO(contenu_bytes))
+    except Exception as e:
+        journal.error(f"Erreur lecture PDF : {e}")
+        raise ErreurValidation(
+            f"Impossible de lire le PDF : {e}",
+            message_utilisateur="Le PDF est peut-être corrompu, chiffré ou dans un format non supporté. Essaie un autre fichier.",
+        )
+
+    # ✅ Vérifier si le PDF est chiffré
+    if reader.is_encrypted:
+        raise ErreurValidation(
+            "PDF chiffré",
+            message_utilisateur="Ce PDF est protégé par un mot de passe. Retire la protection avant de l'uploader.",
+        )
+
+    # Extraire le texte de chaque page
     pages_texte = []
-    for page in reader.pages:
-        texte = page.extract_text() or ""
-        pages_texte.append(texte)
+    for i, page in enumerate(reader.pages):
+        try:
+            texte = page.extract_text() or ""
+            pages_texte.append(texte)
+        except Exception as e:
+            journal.warning(f"Erreur extraction page {i} : {e}")
+            # Continuer avec les autres pages
+            continue
 
     return "\n\n".join(pages_texte)
