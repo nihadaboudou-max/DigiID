@@ -1,11 +1,9 @@
 "use client";
-
 /**
  * Page Documents — upload de fichiers pour enrichir le chatbot.
  * Le chatbot utilise ces documents pour répondre aux questions de l'utilisateur.
  */
 import { useEffect, useRef, useState } from "react";
-
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Badge } from "@/composants/commun/Badge";
@@ -13,7 +11,9 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Alerte } from "@/composants/commun/Alerte";
 import { useNotifications } from "@/contextes/notifications";
 import {
-  uploaderDocument, listerDocuments, supprimerDocument,
+  uploaderDocument,
+  listerDocuments,
+  supprimerDocument,
   type DocumentDetail,
 } from "@/services/documents";
 import { ErreurAPI } from "@/services/client_api";
@@ -33,7 +33,6 @@ function Contenu() {
   const [uploadEnCours, setUploadEnCours] = useState(false);
   const refInput = useRef<HTMLInputElement>(null);
 
-  // Au chargement, on récupère la liste des documents déjà uploadés
   useEffect(() => {
     listerDocuments()
       .then((r) => setDocuments(r.documents))
@@ -44,7 +43,6 @@ function Contenu() {
       .finally(() => setChargement(false));
   }, []);
 
-  // Gérer l'upload d'un fichier
   async function gererUpload(evt: React.ChangeEvent<HTMLInputElement>) {
     const fichier = evt.target.files?.[0];
     if (!fichier) return;
@@ -59,12 +57,10 @@ function Contenu() {
       notifier(msg, "erreur");
     } finally {
       setUploadEnCours(false);
-      // Reset l'input pour pouvoir réuploader le même fichier si besoin
       if (refInput.current) refInput.current.value = "";
     }
   }
 
-  // Gérer la suppression d'un document
   async function gererSuppression(doc: DocumentDetail) {
     if (!confirm(`Supprimer "${doc.nom_fichier}" ?`)) return;
     try {
@@ -77,7 +73,6 @@ function Contenu() {
     }
   }
 
-  // Taille totale en Mo (calculée localement)
   const tailleTotaleMo = documents.reduce((s, d) => s + d.taille_octets, 0) / 1024 / 1024;
 
   return (
@@ -103,7 +98,6 @@ function Contenu() {
             </p>
           </div>
           <div>
-            {/* Input fichier caché — déclenché par le bouton */}
             <input
               ref={refInput}
               type="file"
@@ -171,7 +165,8 @@ function Contenu() {
 }
 
 function CarteDocument({
-  doc, surSuppression,
+  doc,
+  surSuppression,
 }: {
   doc: DocumentDetail;
   surSuppression: (d: DocumentDetail) => void;
