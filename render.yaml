@@ -173,10 +173,7 @@ services:
       - key: NEXT_PUBLIC_URL_BACKEND
         value: https://digiid-backend.onrender.com
       - key: URL_BACKEND
-        fromService:
-          type: web
-          name: digiid-backend
-          property: url
+        value: https://digiid-backend.onrender.com
 
 # --------------------------------------------------------------------------
 # POSTGRESQL — Base de données managée
