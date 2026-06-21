@@ -1,8 +1,6 @@
 "use client";
-
 /**
  * Page Documents d'Identité — CNI, Permis de Conduire, Assurance.
- *
  * L'utilisateur :
  *   - Saisit/modifie ses informations d'identité
  *   - Peut corriger les champs mal extraits par l'OCR
@@ -34,6 +32,29 @@ import {
 import { ErreurAPI } from "@/services/client_api";
 
 type OngletType = "cni" | "permis" | "assurance";
+
+// =============================================================================
+// Champs obligatoires par type de document
+// =============================================================================
+const CHAMPS_OBLIGATOIRES: Record<OngletType, string[]> = {
+  cni: ["nom_complet", "date_naissance", "numero_document", "nationalite"],
+  permis: ["nom_complet", "date_naissance", "numero_permis", "categories_permis"],
+  assurance: ["compagnie_assurance", "type_couverture", "numero_contrat", "date_expiration"],
+};
+
+// Libellés lisibles pour les messages d'erreur
+const LIBELLES_CHAMPS: Record<string, string> = {
+  nom_complet: "Nom complet",
+  date_naissance: "Date de naissance",
+  numero_document: "Numéro du document",
+  nationalite: "Nationalité",
+  numero_permis: "Numéro du permis",
+  categories_permis: "Catégories de permis",
+  compagnie_assurance: "Compagnie d'assurance",
+  type_couverture: "Type de couverture",
+  numero_contrat: "Numéro de contrat",
+  date_expiration: "Date d'expiration",
+};
 
 export default function PageDocumentsIdentite() {
   return (
@@ -76,9 +97,9 @@ function Contenu() {
         <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
           Mon identité
         </p>
-        <h1 className="mt-1">Mes documents d&apos;identité</h1>
+        <h1 className="mt-1">Mes documents d'identité</h1>
         <p className="text-ardoise-clair mt-2 max-w-3xl">
-          Ajoute tes documents d&apos;identité (CNI, Permis de Conduire, Assurance)
+          Ajoute tes documents d'identité (CNI, Permis de Conduire, Assurance)
           pour renforcer ton profil. Tu peux corriger chaque champ à tout moment.
           Plus tes documents sont stables (pas de modifications récentes),
           plus ton score de confiance est élevé.
@@ -164,7 +185,7 @@ function Contenu() {
           )}
 
           {/* Impact score */}
-          <Carte variante="pointilles" titre="📊 Impact sur ton score">
+          <Carte variante="pointilles" titre=" Impact sur ton score">
             <div className="space-y-2 text-sm">
               <p className="text-ardoise">
                 Chaque document d&apos;identité que tu renseignes améliore ton score :
@@ -202,7 +223,6 @@ function Contenu() {
 // =============================================================================
 // Vue d'un document existant (lecture)
 // =============================================================================
-
 function VueDocument({
   document: doc,
   onModifier,
@@ -219,7 +239,7 @@ function VueDocument({
   const modifDate = new Date(doc.modifie_le).toLocaleDateString("fr-FR", {
     day: "numeric", month: "long", year: "numeric",
   });
-  const modifDays = Math.floor((Date.now() - new Date(doc.modifie_le).getTime()) / (1000*60*60*24));
+  const modifDays = Math.floor((Date.now() - new Date(doc.modifie_le).getTime()) / (1000 * 60 * 60 * 24));
 
   return (
     <div className={`carte border-l-4 ${COULEURS_BORDURE[doc.type_document]}`}>
@@ -293,7 +313,6 @@ function VueDocument({
 // =============================================================================
 // Formulaire d'édition / création
 // =============================================================================
-
 function FormulaireDocument({
   typeDocument,
   document,
@@ -308,6 +327,9 @@ function FormulaireDocument({
   const champs = champsParType(typeDocument);
   const [valeurs, setValeurs] = useState<Record<string, any>>({});
   const [sauvegarde, setSauvegarde] = useState(false);
+  const [erreurs, setErreurs] = useState<Record<string, string>>({});
+
+  const obligatoires = CHAMPS_OBLIGATOIRES[typeDocument];
 
   useEffect(() => {
     if (document) {
@@ -321,13 +343,41 @@ function FormulaireDocument({
       champs.forEach((c) => { initiales[c.key] = ""; });
       setValeurs(initiales);
     }
+    setErreurs({});
   }, [document, champs]);
 
   function setValeur(key: string, valeur: any) {
     setValeurs((v) => ({ ...v, [key]: valeur }));
+    // Supprimer l'erreur dès que l'utilisateur modifie le champ
+    if (erreurs[key]) {
+      setErreurs((prev) => {
+        const copie = { ...prev };
+        delete copie[key];
+        return copie;
+      });
+    }
+  }
+
+  function validerFormulaire(): boolean {
+    const nouvellesErreurs: Record<string, string> = {};
+
+    for (const champKey of obligatoires) {
+      const valeur = valeurs[champKey];
+      if (!valeur || (typeof valeur === "string" && valeur.trim() === "")) {
+        const libelle = LIBELLES_CHAMPS[champKey] || champKey;
+        nouvellesErreurs[champKey] = `${libelle} est obligatoire`;
+      }
+    }
+
+    setErreurs(nouvellesErreurs);
+    return Object.keys(nouvellesErreurs).length === 0;
   }
 
   async function soumettre() {
+    if (!validerFormulaire()) {
+      return;
+    }
+
     setSauvegarde(true);
     try {
       // Nettoyer les valeurs vides
@@ -345,18 +395,41 @@ function FormulaireDocument({
     }
   }
 
+  const nombreErreurs = Object.keys(erreurs).length;
+
   return (
     <Carte titre={document ? `✏️ Corriger ${LIBELLES_TYPE_DOCUMENT[typeDocument].toLowerCase()}` : `➕ Ajouter ${LIBELLES_TYPE_DOCUMENT[typeDocument].toLowerCase()}`}>
-      <p className="text-sm text-ardoise-clair mb-6">
+      <p className="text-sm text-ardoise-clair mb-4">
         {document?.source === "ocr"
           ? "Les données ont été extraites automatiquement. Corrige les champs mal lus."
-          : "Renseigne les champs que tu souhaites. Les champs vides n'auront pas d'impact négatif."
-        }
+          : "Renseigne les informations de ton document."}
       </p>
+
+      {/* Indicateur de champs obligatoires */}
+      <p className="text-xs text-ardoise-clair mb-6 flex items-center gap-2">
+        <span className="text-red-500 font-bold">*</span>
+        <span>Champs obligatoires pour {LIBELLES_TYPE_DOCUMENT[typeDocument]}</span>
+      </p>
+
+      {/* Alerte d'erreurs */}
+      {nombreErreurs > 0 && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3">
+          <p className="text-sm font-medium text-red-700 mb-1">
+            ️ {nombreErreurs} champ{nombreErreurs > 1 ? "s" : ""} obligatoire{nombreErreurs > 1 ? "s" : ""} manquant{nombreErreurs > 1 ? "s" : ""} :
+          </p>
+          <ul className="text-xs text-red-600 list-disc list-inside space-y-0.5">
+            {Object.entries(erreurs).map(([key, message]) => (
+              <li key={key}>{message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {champs.map((champ) => {
           const valeur = valeurs[champ.key] ?? "";
+          const estObligatoire = obligatoires.includes(champ.key);
+          const aErreur = !!erreurs[champ.key];
 
           if (champ.type_champ === "select") {
             const options = champ.key === "sexe" ? OPTIONS_SEXE
@@ -366,17 +439,30 @@ function FormulaireDocument({
               <div key={champ.key}>
                 <label className="block text-xs font-medium text-ardoise mb-1">
                   {champ.libelle}
+                  {estObligatoire && <span className="text-red-500 ml-0.5">*</span>}
                 </label>
                 <select
                   value={valeur}
                   onChange={(e) => setValeur(champ.key, e.target.value)}
-                  className="w-full rounded-lg border border-ardoise-clair/20 px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-ocre/50 focus:border-ocre outline-none"
+                  required={estObligatoire}
+                  className={`w-full rounded-lg border px-3 py-2 text-sm bg-white focus:ring-2 outline-none ${
+                    aErreur
+                      ? "border-red-400 focus:ring-red-300 focus:border-red-500"
+                      : estObligatoire
+                      ? "border-ocre/40 focus:ring-ocre/50 focus:border-ocre"
+                      : "border-ardoise-clair/20 focus:ring-ocre/50 focus:border-ocre"
+                  }`}
                 >
-                  <option value="">— Non renseigné —</option>
+                  <option value="">
+                    {estObligatoire ? `— Choisir ${champ.libelle} —` : "— Non renseigné —"}
+                  </option>
                   {options.map((opt) => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
+                {aErreur && (
+                  <p className="text-xs text-red-500 mt-1">{erreurs[champ.key]}</p>
+                )}
               </div>
             );
           }
@@ -385,14 +471,25 @@ function FormulaireDocument({
             <div key={champ.key}>
               <label className="block text-xs font-medium text-ardoise mb-1">
                 {champ.libelle}
+                {estObligatoire && <span className="text-red-500 ml-0.5">*</span>}
               </label>
               <input
                 type={champ.type_champ}
                 value={valeur}
                 onChange={(e) => setValeur(champ.key, e.target.value)}
-                placeholder={champ.libelle}
-                className="w-full rounded-lg border border-ardoise-clair/20 px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-ocre/50 focus:border-ocre outline-none"
+                placeholder={estObligatoire ? `${champ.libelle} (obligatoire)` : champ.libelle}
+                required={estObligatoire}
+                className={`w-full rounded-lg border px-3 py-2 text-sm bg-white focus:ring-2 outline-none ${
+                  aErreur
+                    ? "border-red-400 focus:ring-red-300 focus:border-red-500"
+                    : estObligatoire
+                    ? "border-ocre/40 focus:ring-ocre/50 focus:border-ocre"
+                    : "border-ardoise-clair/20 focus:ring-ocre/50 focus:border-ocre"
+                }`}
               />
+              {aErreur && (
+                <p className="text-xs text-red-500 mt-1">{erreurs[champ.key]}</p>
+              )}
             </div>
           );
         })}
