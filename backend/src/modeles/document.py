@@ -1,70 +1,136 @@
 # -*- coding: utf-8 -*-
 """
-Modèle Document — fichiers uploadés par l'utilisateur pour le chatbot RAG.
-
-Chaque utilisateur peut uploader des documents (PDF, TXT, DOCX).
-Le contenu textuel est extrait et stocké en base. Le chatbot
-peut alors les utiliser pour répondre aux questions de l'utilisateur.
-
-Sécurité : seul l'utilisateur propriétaire peut accéder à ses documents.
+Service Documents — upload, listing, suppression.
 """
-import uuid
-from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from fastapi import UploadFile
+from sqlalchemy import select, func, desc
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.base_donnees.base import Base, MelangeTracabilite
+from src.modeles import Document, Utilisateur
+from src.modules.documents.extraction import extraire_texte_depuis_upload
+from src.modules.documents.schemas import DocumentDetail, ListeDocuments
+from src.modules.gamification import service_badges, service_tracking
+from src.noyau import journal
+from src.noyau.exceptions import ErreurRessourceIntrouvable, ErreurValidation
 
 
-class Document(Base, MelangeTracabilite):
-    """Document uploadé par un utilisateur pour enrichir son chatbot."""
+async def uploader_document(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    fichier: UploadFile,
+) -> Document:
+    """
+    Upload un fichier et stocke son texte extrait pour usage par le chatbot.
+    """
+    # Extraire le texte (vérifie aussi le type MIME et la taille)
+    try:
+        contenu_texte, type_mime, taille = await extraire_texte_depuis_upload(fichier)
+    except Exception as e:
+        journal.error(f"Échec extraction texte : {e}")
+        raise ErreurValidation(
+            f"Impossible d'extraire le texte du fichier : {e}",
+            message_utilisateur="Le fichier est peut-être corrompu ou dans un format non supporté.",
+        )
 
-    # Identifiant unique du document
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid4,
+    # ✅ Vérifier que le texte extrait n'est pas vide
+    if not contenu_texte or not contenu_texte.strip():
+        raise ErreurValidation(
+            "Le fichier ne contient aucun texte extractible",
+            message_utilisateur="Le fichier semble vide ou ne contient pas de texte (peut-être un scan/image ?).",
+        )
+
+    # Construire un petit résumé (premiers 500 caractères)
+    resume = contenu_texte[:2000]
+    if len(contenu_texte) > 2000:
+        resume = resume.rsplit(" ", 1)[0] + "..."  # Coupe au dernier mot complet
+
+    # Enregistrer en base
+    document = Document(
+        utilisateur_id=utilisateur.id,
+        nom_fichier=fichier.filename or "sans_nom",
+        type_mime=type_mime,
+        taille_octets=taille,
+        contenu_texte=contenu_texte,
+        resume=resume,
     )
-    # Propriétaire — le document n'est visible que par lui
-    utilisateur_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("utilisateur.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
+    session.add(document)
+    await session.commit()
+    await session.refresh(document)
+
+    await service_tracking.tracker_action(session, utilisateur, "document_upload")
+    await service_badges.verifier_et_debloquer_badges(session, utilisateur)
+    await session.commit()
+
+    journal.info(
+        f"Document uploadé : utilisateur={utilisateur.id} "
+        f"nom='{document.nom_fichier}' taille={taille}"
+    )
+    return document
+
+
+async def lister_documents(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+) -> ListeDocuments:
+    """Liste tous les documents de l'utilisateur."""
+    resultat = await session.execute(
+        select(Document)
+        .where(Document.utilisateur_id == utilisateur.id)
+        .order_by(desc(Document.cree_le))
+    )
+    documents = resultat.scalars().all()
+
+    taille_totale = sum(d.taille_octets for d in documents)
+    return ListeDocuments(
+        documents=[DocumentDetail.model_validate(d) for d in documents],
+        total=len(documents),
+        taille_totale_octets=taille_totale,
     )
 
-    # --- Métadonnées du fichier ---
-    nom_fichier: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-        doc="Nom original du fichier tel que l'utilisateur l'a uploadé"
-    )
-    type_mime: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-        doc="Type MIME (ex : application/pdf, text/plain, application/msword)"
-    )
-    taille_octets: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-        doc="Taille du fichier en octets"
-    )
 
-    # --- Contenu extrait ---
-    contenu_texte: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-        doc="Texte extrait du document — utilisé par le chatbot pour répondre"
+async def supprimer_document(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    document_id: UUID,
+) -> None:
+    """Supprime un document — uniquement si son propriétaire est l'appelant."""
+    resultat = await session.execute(
+        select(Document).where(
+            Document.id == document_id,
+            Document.utilisateur_id == utilisateur.id,  # Sécurité : on filtre par owner
+        )
     )
-    # Petit résumé pour l'affichage frontend
-    resume: Mapped[Optional[str]] = mapped_column(
-        String(2000),
-        nullable=True,
-        doc="Premiers 2000 caractères pour aperçu rapide"
-    )
+    document = resultat.scalar_one_or_none()
+    if document is None:
+        raise ErreurRessourceIntrouvable(
+            f"Document {document_id} introuvable pour utilisateur {utilisateur.id}",
+            message_utilisateur="Document introuvable ou tu n'as pas le droit de le supprimer.",
+        )
 
-    def __repr__(self) -> str:
-        return f"<Document {self.nom_fichier} ({self.taille_octets} octets) pour {self.utilisateur_id}>"
+    await session.delete(document)
+    await session.commit()
+    journal.info(f"Document supprimé : id={document_id} utilisateur={utilisateur.id}")
+
+
+async def obtenir_textes_documents(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    limite: int = 5,
+) -> list[tuple[str, str]]:
+    """
+    Récupère le contenu textuel des N documents les plus récents de l'utilisateur.
+    Utilisé par le chatbot pour construire son contexte de réponse.
+
+    Retour :
+        Liste de tuples (nom_fichier, contenu_texte)
+    """
+    resultat = await session.execute(
+        select(Document)
+        .where(Document.utilisateur_id == utilisateur.id)
+        .order_by(desc(Document.cree_le))
+        .limit(limite)
+    )
+    return [(d.nom_fichier, d.contenu_texte) for d in resultat.scalars().all()]
