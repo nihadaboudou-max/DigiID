@@ -13,6 +13,6 @@ Contient :
   - schemas.py            : contrats de vérification visuelle
 """
 
-from src.modules.verification_visuelle.routes import routeur_verification
+from src.modules.verification_visuelle.routes import routeur_verification as routeur_verification_visuelle
 
-__all__ = ["routeur_verification"]
+__all__ = ["routeur_verification_visuelle"]
