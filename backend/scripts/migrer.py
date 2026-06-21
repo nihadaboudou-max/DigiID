@@ -7,10 +7,10 @@ Gère 3 cas :
 2. Base avec tables + alembic_version à jour
    → upgrade normal (no-op si déjà à jour)
 3. Base avec tables SANS alembic_version (créées par ancien create_all)
-   → toutes les migrations utilisent IF NOT EXISTS → upgrade direct sans stamp
+   → stamp HEAD d'abord, puis upgrade (no-op)
 
-Toutes les migrations étant idempotentes (IF NOT EXISTS), Alembic peut
-les exécuter sans risque même si les tables existent déjà.
+Cas 3 : sans auto-stamp, `alembic upgrade head` tente de re-créer toutes les
+tables une par une → DuplicateTableError sur CHAQUE migration.
 """
 import logging
 import sys
@@ -31,12 +31,6 @@ logger = logging.getLogger("migrer")
 
 
 def _determiner_etat_base(engine) -> str:
-    """
-    Vérifie si les tables principales existent dans la base.
-    Retourne :
-    - "VIERGE" : aucune table
-    - "TABLES_EXIST" : au moins les tables principales existent
-    """
     with engine.connect() as conn:
         tables = set(inspect(conn).get_table_names())
         if {"role", "utilisateur", "consentement"}.issubset(tables):
@@ -44,8 +38,32 @@ def _determiner_etat_base(engine) -> str:
         return "VIERGE"
 
 
+def _obtenir_revision_head() -> str:
+    alembic_cfg_path = Path(__file__).resolve().parent.parent / "alembic.ini"
+    config = AlembicConfig(str(alembic_cfg_path))
+    from alembic.script import ScriptDirectory
+    repertoire = ScriptDirectory.from_config(config)
+    tetes = repertoire.get_heads()
+    if not tetes:
+        raise RuntimeError("Aucune révision HEAD trouvée dans Alembic")
+    return tetes[0]
+
+
+def _stamp_sync(url_sync: str, revision: str):
+    engine = create_engine(url_sync)
+    try:
+        with engine.begin() as conn:
+            conn.execute(sa_text("DELETE FROM alembic_version"))
+            conn.execute(
+                sa_text("INSERT INTO alembic_version (version_num) VALUES (:v)"),
+                {"v": revision},
+            )
+            logger.info("✅ Base stampée avec %s", revision)
+    finally:
+        engine.dispose()
+
+
 def _upgrade_alembic():
-    """Lance alembic upgrade head (utilise env.py -> moteur async)."""
     alembic_cfg_path = Path(__file__).resolve().parent.parent / "alembic.ini"
     config = AlembicConfig(str(alembic_cfg_path))
     alembic_command.upgrade(config, "head")
@@ -55,9 +73,7 @@ def _upgrade_alembic():
 # Correcteur de colonnes manquantes
 # ===========================================================================
 COLONNES_A_VERIFIER = [
-    # (table, colonne, type_sql)
     ("score_historique", "facteur_attestations", "FLOAT NOT NULL DEFAULT 0.0"),
-    # Migration 20260620_1200_enrichissement_medical
     ("dossiers_medicaux", "patient_prenom", "VARCHAR(255)"),
     ("dossiers_medicaux", "hopital", "VARCHAR(255)"),
     ("consultations", "hopital", "VARCHAR(255)"),
@@ -75,10 +91,6 @@ COLONNES_A_VERIFIER = [
 
 
 def _corriger_colonnes_manquantes(engine):
-    """
-    Ajoute les colonnes manquantes dans les tables existantes.
-    Utilise ALTER TABLE ADD COLUMN IF NOT EXISTS (PostgreSQL 9.6+).
-    """
     with engine.connect() as conn:
         tables_presentes = set(inspect(conn).get_table_names())
 
@@ -94,7 +106,6 @@ def _corriger_colonnes_manquantes(engine):
             conn.execute(sa_text(sql))
             logger.warning("⚠️  Colonne manquante ajoutée : %s.%s (%s)", table, colonne, type_sql)
 
-    # Cas spécial : numero_ordonnance
     with engine.connect() as conn:
         tables_presentes = set(inspect(conn).get_table_names())
 
@@ -135,21 +146,16 @@ def _corriger_colonnes_manquantes(engine):
 # ===========================================================================
 # Correcteur de tables manquantes
 # ===========================================================================
-TABLES_CRITIQUES_A_VERIFIER = ["document_identite"]
+TABLES_CRITIQUES_A_VERIFIER = ["document_identite", "code_verification"]
 
 
 def _tables_manquantes(engine) -> list[str]:
-    """Retourne la liste des tables critiques manquantes."""
     with engine.connect() as conn:
         tables = set(inspect(conn).get_table_names())
         return [t for t in TABLES_CRITIQUES_A_VERIFIER if t not in tables]
 
 
 def _creer_table_document_identite(engine):
-    """
-    Crée la table document_identite si elle n'existe pas.
-    Reproduction fidèle de la migration 20260620_2100_document_identite.
-    """
     with engine.connect() as conn:
         tables = set(inspect(conn).get_table_names())
         if "document_identite" in tables:
@@ -205,13 +211,38 @@ def _creer_table_document_identite(engine):
     logger.info("✅ Table document_identite créée avec succès")
 
 
+def _creer_table_code_verification(engine):
+    with engine.connect() as conn:
+        tables = set(inspect(conn).get_table_names())
+        if "code_verification" in tables:
+            logger.info("✓ Table code_verification déjà présente")
+            return
+
+    logger.warning("⚠️  Table code_verification manquante → création manuelle...")
+    with engine.begin() as conn:
+        conn.execute(sa_text("""
+            CREATE TABLE IF NOT EXISTS code_verification (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                utilisateur_id UUID NOT NULL REFERENCES utilisateur(id) ON DELETE CASCADE,
+                canal VARCHAR(20) NOT NULL,
+                code VARCHAR(10) NOT NULL,
+                destination VARCHAR(255) NOT NULL,
+                tentative INTEGER NOT NULL DEFAULT 0,
+                est_utilise BOOLEAN NOT NULL DEFAULT false,
+                date_expiration TIMESTAMP WITH TIME ZONE NOT NULL,
+                type_verification VARCHAR(50) NOT NULL DEFAULT 'email',
+                cree_le TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                modifie_le TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+            )
+        """))
+        conn.execute(sa_text(
+            "CREATE INDEX IF NOT EXISTS ix_code_verification_utilisateur_id "
+            "ON code_verification(utilisateur_id)"
+        ))
+    logger.info("✅ Table code_verification créée avec succès")
+
+
 def _recreer_alembic_version_texte(url_sync: str) -> str | None:
-    """
-    RECRÉE TOUJOURS alembic_version avec version_num en TEXT.
-    Même si la base est vierge, on pré-crée la table pour
-    empêcher Alembic d'utiliser VARCHAR(32) par défaut.
-    Retourne la version actuelle (si existait), None sinon.
-    """
     engine = create_engine(url_sync)
     try:
         version_actuelle = None
@@ -244,19 +275,6 @@ def _recreer_alembic_version_texte(url_sync: str) -> str | None:
 
 
 def executer_migrations():
-    """
-    Exécute les migrations selon l'état de la base.
-
-    Algorithme :
-    1. Vérifier si les tables principales existent (ou base vierge)
-    2. TOUJOURS recréer alembic_version avec TEXT (pour révisions longues)
-    3. Si tables existent :
-       a. Corriger les colonnes manquantes
-       b. Corriger les tables manquantes (ex: document_identite)
-       c. Alembic upgrade head directement — toutes les migrations
-          utilisent IF NOT EXISTS donc aucun risque de DuplicateTableError
-    4. Si vierge : upgrade simple (alembic crée tout)
-    """
     url_sync = parametres.url_base_donnees_sync
     logger.info("Connexion à %s@%s:%s/%s",
                 parametres.postgres_utilisateur,
@@ -265,7 +283,7 @@ def executer_migrations():
                 parametres.postgres_nom_base)
 
     try:
-        # --- Étape 1 : état de la base ---
+        # Étape 1 : état de la base
         moteur = create_engine(url_sync)
         try:
             etat = _determiner_etat_base(moteur)
@@ -273,22 +291,22 @@ def executer_migrations():
             moteur.dispose()
         logger.info("État de la base : %s", etat)
 
-        # --- Étape 2 : recréer alembic_version en TEXT ---
+        # Étape 2 : recréer alembic_version en TEXT
         _recreer_alembic_version_texte(url_sync)
 
-        # --- Étape 3 : décision ---
+        # Étape 3 : décision
         if etat == "VIERGE":
             logger.info("Base vierge → upgrade crée toutes les tables...")
             _upgrade_alembic()
         else:
-            # 3a. Ajouter les colonnes manquantes
+            # 3a. Colonnes manquantes
             moteur = create_engine(url_sync)
             try:
                 _corriger_colonnes_manquantes(moteur)
             finally:
                 moteur.dispose()
 
-            # 3b. Créer les tables critiques manquantes non couvertes par Alembic
+            # 3b. Tables manquantes
             moteur = create_engine(url_sync)
             try:
                 manquantes = _tables_manquantes(moteur)
@@ -296,15 +314,17 @@ def executer_migrations():
                     logger.warning("⚠️  Tables critiques manquantes : %s", manquantes)
                     if "document_identite" in manquantes:
                         _creer_table_document_identite(moteur)
+                    if "code_verification" in manquantes:
+                        _creer_table_code_verification(moteur)
                 else:
                     logger.info("✓ Toutes les tables critiques sont présentes")
             finally:
                 moteur.dispose()
 
-            # 3c. Upgrade direct — toutes les migrations utilisent IF NOT EXISTS
-            # Pas de stamp HEAD : Alembic applique toutes les migrations manquantes
-            # (code_verification, attestations, roles, etc.)
-            logger.info("Exécution de toutes les migrations Alembic (IF NOT EXISTS)...")
+            # 3c. Stamp HEAD puis upgrade (no-op)
+            revision = _obtenir_revision_head()
+            logger.info("Tables existantes → stamp %s puis upgrade...", revision)
+            _stamp_sync(url_sync, revision)
             _upgrade_alembic()
 
         logger.info("✅ Migration terminée avec succès")
