@@ -6,7 +6,6 @@
 import { useEffect, useRef, useState } from "react";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
-import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Alerte } from "@/composants/commun/Alerte";
 import { useNotifications } from "@/contextes/notifications";
@@ -88,7 +87,6 @@ function Contenu() {
         </p>
       </header>
 
-      {/* Zone d'upload */}
       <Carte variante="accent">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -117,7 +115,6 @@ function Contenu() {
         </div>
       </Carte>
 
-      {/* Compteur */}
       {!chargement && documents.length > 0 && (
         <div className="flex justify-between text-sm text-ardoise-clair">
           <span>
@@ -130,7 +127,6 @@ function Contenu() {
         </div>
       )}
 
-      {/* Liste */}
       {chargement ? (
         <p className="text-center text-ardoise-clair italic py-8">Chargement...</p>
       ) : documents.length === 0 ? (
@@ -146,7 +142,6 @@ function Contenu() {
         </div>
       )}
 
-      {/* Conseils */}
       <Carte variante="pointilles" titre="Comment ça marche">
         <ol className="space-y-2 text-sm text-ardoise list-decimal list-inside">
           <li>Tu uploades un fichier ici (PDF, TXT, Markdown).</li>
