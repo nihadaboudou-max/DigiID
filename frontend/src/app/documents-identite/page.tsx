@@ -7,7 +7,7 @@
  *   - Voit l'impact sur son score
  *   - Les modifications récentes réduisent temporairement le score (stabilité)
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Badge } from "@/composants/commun/Badge";
@@ -185,7 +185,7 @@ function Contenu() {
           )}
 
           {/* Impact score */}
-          <Carte variante="pointilles" titre=" Impact sur ton score">
+          <Carte variante="pointilles" titre="📊 Impact sur ton score">
             <div className="space-y-2 text-sm">
               <p className="text-ardoise">
                 Chaque document d&apos;identité que tu renseignes améliore ton score :
@@ -324,27 +324,28 @@ function FormulaireDocument({
   onSauvegarder: (donnees: Partial<DocumentIdentitePayload>) => Promise<void>;
   onAnnuler: () => void;
 }) {
-  const champs = champsParType(typeDocument);
+  // ✅ FIX : mémoïser champs pour éviter une nouvelle référence à chaque render
+  const champs = useMemo(() => champsParType(typeDocument), [typeDocument]);
+  
   const [valeurs, setValeurs] = useState<Record<string, any>>({});
   const [sauvegarde, setSauvegarde] = useState(false);
   const [erreurs, setErreurs] = useState<Record<string, string>>({});
 
   const obligatoires = CHAMPS_OBLIGATOIRES[typeDocument];
 
+  // ✅ FIX : dépendances corrigées (document + typeDocument, pas champs)
   useEffect(() => {
-    if (document) {
-      const initiales: Record<string, any> = {};
-      champs.forEach((c) => {
+    const initiales: Record<string, any> = {};
+    champs.forEach((c) => {
+      if (document) {
         initiales[c.key] = (document as any)[c.key] ?? "";
-      });
-      setValeurs(initiales);
-    } else {
-      const initiales: Record<string, any> = {};
-      champs.forEach((c) => { initiales[c.key] = ""; });
-      setValeurs(initiales);
-    }
+      } else {
+        initiales[c.key] = "";
+      }
+    });
+    setValeurs(initiales);
     setErreurs({});
-  }, [document, champs]);
+  }, [document, typeDocument]);
 
   function setValeur(key: string, valeur: any) {
     setValeurs((v) => ({ ...v, [key]: valeur }));
@@ -380,7 +381,6 @@ function FormulaireDocument({
 
     setSauvegarde(true);
     try {
-      // Nettoyer les valeurs vides
       const donnees: Record<string, any> = {};
       for (const [key, valeur] of Object.entries(valeurs)) {
         if (valeur !== "" && valeur !== null) {
@@ -415,7 +415,7 @@ function FormulaireDocument({
       {nombreErreurs > 0 && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3">
           <p className="text-sm font-medium text-red-700 mb-1">
-            ️ {nombreErreurs} champ{nombreErreurs > 1 ? "s" : ""} obligatoire{nombreErreurs > 1 ? "s" : ""} manquant{nombreErreurs > 1 ? "s" : ""} :
+            ⚠️ {nombreErreurs} champ{nombreErreurs > 1 ? "s" : ""} obligatoire{nombreErreurs > 1 ? "s" : ""} manquant{nombreErreurs > 1 ? "s" : ""} :
           </p>
           <ul className="text-xs text-red-600 list-disc list-inside space-y-0.5">
             {Object.entries(erreurs).map(([key, message]) => (
