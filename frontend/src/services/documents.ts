@@ -6,10 +6,6 @@ import { clientAPI, obtenirTokenAcces, ErreurAPI } from "./client_api";
 
 const PREFIXE = "/api/v1/utilisateur/documents";
 
-// En production, utiliser directement l'URL du backend
-// En développement, utiliser le proxy Next.js
-const URL_BASE = process.env.NEXT_PUBLIC_URL_BACKEND || "/api/backend";
-
 export interface DocumentDetail {
   id: string;
   nom_fichier: string;
@@ -34,7 +30,9 @@ export async function uploaderDocument(fichier: File): Promise<DocumentDetail> {
   formData.append("fichier", fichier);
 
   const token = obtenirTokenAcces();
-  const reponse = await fetch(`${URL_BASE}${PREFIXE}`, {
+  
+  // ✅ Utiliser /api/backend pour passer par le proxy Next.js
+  const reponse = await fetch(`/api/backend${PREFIXE}`, {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     body: formData,
