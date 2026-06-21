@@ -43,7 +43,8 @@ from src.modules.gamification import routeur_gamification
 from src.modules.ocr_cni import routeur_ocr_cni
 
 # --- Module Documents d'Identité (CNI + Permis + Assurance) ---
-from src.modules.documents_identite import routeur_documents
+# CORRECTION : renommé pour éviter l'écrasement de routeur_documents (Phase 3)
+from src.modules.documents_identite import routeur_documents_identite
 
 # --- Module Roles & Permissions (RBAC étendu) ---
 from src.modules.roles import routeur_roles
@@ -87,7 +88,7 @@ routeur_v1.include_router(routeur_profil)
 routeur_v1.include_router(routeur_consentements)
 routeur_v1.include_router(routeur_scoring)
 
-# Modules Phase 3 (chatbot et documents — utilisateur authentifié uniquement)
+# Modules Phase 3 — chatbot et documents RAG (utilisateur authentifié uniquement)
 routeur_v1.include_router(routeur_documents)
 routeur_v1.include_router(routeur_chatbot)
 
@@ -101,8 +102,9 @@ routeur_v1.include_router(routeur_gamification)
 # Module OCR CNI — scan et authentification carte d'identité
 routeur_v1.include_router(routeur_ocr_cni)
 
-# Module Documents d'Identité — CNI, Permis, Assurance (avec correction utilisateur)
-routeur_v1.include_router(routeur_documents)
+# Module Documents d'Identité — CNI, Permis, Assurance
+# CORRECTION : utilise routeur_documents_identite (distinct de routeur_documents Phase 3)
+routeur_v1.include_router(routeur_documents_identite)
 
 # Module Roles & Permissions (RBAC étendu) — Étape 2
 routeur_v1.include_router(routeur_roles)
