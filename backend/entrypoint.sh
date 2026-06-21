@@ -26,7 +26,7 @@ if [ -n "$SEED_SUPER_ADMIN_EMAIL" ] && [ -n "$SEED_SUPER_ADMIN_MOT_DE_PASSE" ]; 
 fi
 
 # -------------------------------------------------------------------
-# Étape 3 : Lancer l'API
+# Étape 3 : Lancer l'API (OBLIGATOIRE !)
 # -------------------------------------------------------------------
-echo "→ Lancement de l'API..."
+echo "→ Lancement de l'API sur le port ${PORT:-8000}..."
 exec uvicorn src.main:application --host 0.0.0.0 --port "${PORT:-8000}"
