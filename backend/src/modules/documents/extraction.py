@@ -82,14 +82,23 @@ async def extraire_texte_depuis_upload(
     # Extraire le texte selon le format
     extension = TYPES_MIME_AUTORISES[type_mime]
 
+    # ========================================================================
+    # 📄 EXTRACTION PDF
+    # ========================================================================
     if extension == "pdf":
         contenu_texte = _extraire_pdf(contenu_bytes)
+    
+    # ========================================================================
+    # 📝 EXTRACTION TXT / MARKDOWN
+    # ========================================================================
     elif extension in ("txt", "md"):
-        # Décoder en UTF-8, ou latin-1 en fallback
+        # Décoder en UTF-8 (standard), ou latin-1 en fallback
         try:
             contenu_texte = contenu_bytes.decode("utf-8")
         except UnicodeDecodeError:
+            # Fallback : latin-1 accepte tous les bytes (jamais d'erreur)
             contenu_texte = contenu_bytes.decode("latin-1", errors="replace")
+            journal.warning(f"Fichier {fichier.filename} décodé en latin-1 (UTF-8 invalide)")
     else:
         raise ErreurValidation(
             f"Extension non gérée : {extension}",
@@ -118,7 +127,7 @@ def _extraire_pdf(contenu_bytes: bytes) -> str:
             message_utilisateur="Le serveur ne peut pas lire les PDF pour l'instant.",
         )
 
-    # ✅ Gestion des erreurs PDF (corrompu, chiffré, malformé)
+    # Gestion des erreurs PDF (corrompu, chiffré, malformé)
     try:
         reader = PdfReader(io.BytesIO(contenu_bytes))
     except Exception as e:
@@ -128,7 +137,7 @@ def _extraire_pdf(contenu_bytes: bytes) -> str:
             message_utilisateur="Le PDF est peut-être corrompu, chiffré ou dans un format non supporté. Essaie un autre fichier.",
         )
 
-    # ✅ Vérifier si le PDF est chiffré
+    # Vérifier si le PDF est chiffré
     if reader.is_encrypted:
         raise ErreurValidation(
             "PDF chiffré",
