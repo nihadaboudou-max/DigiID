@@ -292,21 +292,21 @@ def analyser_image_cni(donnees_image: bytes) -> dict:
     texte_principal, confiance_principal = _executer_tesseract(image_binaire)
 
     # 4. OCR secondaire sur l'image en niveaux de gris (pour les détails)
-    try:
-        import pytesseract
-        pil_gris = Image.fromarray(cv2.cvtColor(
-            cv2.resize(image, (image.shape[1], image.shape[0])),
-            cv2.COLOR_BGR2GRAY
-        ))
-        texte_gris = pytesseract.image_to_string(
-            pil_gris,
-            lang="fra+eng",
-            config=CONFIG_TESSERACT
-        )
-    except (ImportError, Exception) as erreur:
-        texte_gris = ""
-        if "pytesseract" not in str(erreur):
-            journal.warning(f"OCR secondaire échoué : {erreur}")
+    #try:
+    #    import pytesseract
+    #    pil_gris = Image.fromarray(cv2.cvtColor(
+    #        cv2.resize(image, (image.shape[1], image.shape[0])),
+    #        cv2.COLOR_BGR2GRAY
+    #    ))
+    #    texte_gris = pytesseract.image_to_string(
+    #        pil_gris,
+    #        lang="fra+eng",
+    #        config=CONFIG_TESSERACT
+    #    )
+    #except (ImportError, Exception) as erreur:
+    #    texte_gris = ""
+    #    if "pytesseract" not in str(erreur):
+    #        journal.warning(f"OCR secondaire échoué : {erreur}")
 
     # 5. Combiner les résultats (le meilleur des deux)
     texte_combine = texte_principal
