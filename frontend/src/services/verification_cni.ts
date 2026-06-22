@@ -98,6 +98,10 @@ export interface ListeVerificationsCNI {
   total: number;
 }
 
+// ✅ FIX : Toujours utiliser le proxy Next.js pour éviter les erreurs CORS
+// Le proxy redirige /api/backend/* vers le backend réel via next.config.js
+const URL_BASE = "/api/backend";
+
 /**
  * Upload une photo de CNI (recto ou verso) pour analyse OCR.
  * Utilise fetch directement car le clientAPI ne gère pas le multipart/form-data.
@@ -112,16 +116,9 @@ export async function uploaderCNI(
 
   const token = obtenirTokenAcces();
 
-  // Déterminer l'URL du backend : soit via le proxy Next.js (dev), soit direct (prod)
-  let urlUpload: string;
-  if (process.env.NODE_ENV === "production") {
-    // En production sur Render, on appelle le backend DIRECTEMENT
-    // car le proxy Next.js cause des ECONNRESET entre services Render
-    urlUpload = "https://digiid-backend.onrender.com/api/v1/utilisateur/verification-cni/upload";
-  } else {
-    // En dev, on passe par le proxy Next.js
-    urlUpload = "/api/backend/api/v1/utilisateur/verification-cni/upload";
-  }
+  // ✅ FIX : Toujours passer par le proxy Next.js (dev ET production)
+  // Cela évite les erreurs CORS et les problèmes ECONNRESET entre services Render
+  const urlUpload = `${URL_BASE}/api/v1/utilisateur/verification-cni/upload`;
 
   let reponse: Response;
   try {
