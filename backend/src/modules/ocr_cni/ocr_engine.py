@@ -35,7 +35,7 @@ from src.noyau.journal import journal
 # =============================================================================
 
 # Taille cible pour l'image redimensionnée (garder les proportions)
-TAILLE_CIBLE_LONGUEUR_MAX = 1500  # pixels
+TAILLE_CIBLE_LONGUEUR_MAX = 1200  # pixels
 
 # Configuration Tesseract
 CONFIG_TESSERACT = (
