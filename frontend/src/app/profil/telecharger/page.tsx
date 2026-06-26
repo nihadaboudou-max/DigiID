@@ -1,9 +1,4 @@
 "use client";
-
-/**
- * Page Téléchargement du profil numérique (PDF/JSON).
- * Génère un export complet des données du citoyen.
- */
 import { useState } from "react";
 import Link from "next/link";
 
@@ -140,21 +135,10 @@ function Contenu() {
         <span className="text-ardoise font-semibold">Télécharger mon profil</span>
       </nav>
 
-      <header>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
-          Mes données
-        </p>
-        <h1 className="mt-1">Télécharger mon profil numérique</h1>
-        <p className="text-ardoise-clair mt-2 max-w-2xl">
-          Télécharge l'ensemble de tes données DigiID. Idéal pour constituer un dossier
-          administratif, présenter ton identité numérique certifiée, ou conserver une trace.
-        </p>
-      </header>
-
-      <Alerte variante="info" titre="Tes données t'appartiennent">
-        Conformément à la loi 2008-12 sur la protection des données (Sénégal),
-        tu peux à tout moment récupérer l'ensemble des informations que DigiID conserve sur toi.
-      </Alerte>
+      <div>
+        <p className="text-ocre text-sm uppercase font-semibold tracking-wider">Export</p>
+        <h1 className="mt-1">Télécharger mon profil</h1>
+      </div>
 
       {message && (
         <Alerte variante={message.type === "succes" ? "succes" : message.type === "erreur" ? "erreur" : "info"}>
@@ -163,119 +147,57 @@ function Contenu() {
       )}
 
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Choix du format */}
         <Carte titre="Format du fichier">
-          <div className="space-y-3">
-            <label
-              onClick={() => setFormat("json")}
-              className={`flex items-center gap-4 p-4 rounded-xl cursor-pointer border-2 transition-all ${
-                format === "json"
-                  ? "border-lagune bg-lagune/5"
-                  : "border-ardoise-clair/10 bg-sable"
-              }`}
-            >
-              <input type="radio" name="format" value="json" checked={format === "json"} onChange={() => {}} className="sr-only" />
-              <span className="text-3xl">📄</span>
-              <div>
-                <p className="font-bold text-ardoise">JSON structuré</p>
-                <p className="text-xs text-ardoise-clair">Export brut, idéal pour traitement informatique</p>
-              </div>
+          <div className="space-y-2">
+            <label onClick={()=>setFormat("json")} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border-2 ${format==="json"?"border-lagune bg-lagune/5":"border-ardoise-clair/10 bg-sable"}`}>
+              <input type="radio" name="format" value="json" checked={format==="json"} onChange={()=>{}} className="sr-only" />
+              <span className="text-2xl">📄</span>
+              <div><p className="font-bold text-ardoise text-sm">JSON</p><p className="text-[10px] text-ardoise-clair">Structuré, pour traitement</p></div>
             </label>
-
-            <label
-              onClick={() => setFormat("pdf")}
-              className={`flex items-center gap-4 p-4 rounded-xl cursor-pointer border-2 transition-all ${
-                format === "pdf"
-                  ? "border-lagune bg-lagune/5"
-                  : "border-ardoise-clair/10 bg-sable"
-              }`}
-            >
-              <input type="radio" name="format" value="pdf" checked={format === "pdf"} onChange={() => {}} className="sr-only" />
-              <span className="text-3xl">📋</span>
-              <div>
-                <p className="font-bold text-ardoise">Profil visuel (HTML/PDF)</p>
-                <p className="text-xs text-ardoise-clair">Document formaté, prêt à imprimer</p>
-              </div>
+            <label onClick={()=>setFormat("pdf")} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border-2 ${format==="pdf"?"border-lagune bg-lagune/5":"border-ardoise-clair/10 bg-sable"}`}>
+              <input type="radio" name="format" value="pdf" checked={format==="pdf"} onChange={()=>{}} className="sr-only" />
+              <span className="text-2xl">📋</span>
+              <div><p className="font-bold text-ardoise text-sm">HTML/PDF</p><p className="text-[10px] text-ardoise-clair">Prêt à imprimer</p></div>
             </label>
           </div>
         </Carte>
-
-        {/* Contenu à inclure */}
-        <Carte titre="Données à inclure">
-          <div className="space-y-3">
-            {[
-              { key: "profil" as const, label: "Identité et coordonnées", icone: "👤", defaut: true },
-              { key: "score" as const, label: "Score de confiance", icone: "📊", defaut: true },
-              { key: "activite" as const, label: "Activité récente (50 derniers événements)", icone: "🕐", defaut: true },
-              { key: "documents" as const, label: "Documents et justificatifs", icone: "📄", defaut: true },
-              { key: "consentements" as const, label: "Consentements et autorisations", icone: "✅", defaut: true },
-              { key: "attestations" as const, label: "Attestations communautaires", icone: "📜", defaut: true },
-            ].map((item) => (
-              <label key={item.key} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-sable/50">
-                <input
-                  type="checkbox"
-                  checked={inclure[item.key]}
-                  onChange={() => basculerInclusion(item.key)}
-                  className="rounded border-ardoise-clair/30"
-                />
-                <span className="text-lg">{item.icone}</span>
-                <span className="text-sm text-ardoise">{item.label}</span>
+        <Carte titre="Données">
+          <div className="space-y-1">
+            {[{key:"profil" as const,label:"Identité",icone:"👤"},{key:"score" as const,label:"Score",icone:"📊"},{key:"activite" as const,label:"Activité",icone:"🕐"},{key:"documents" as const,label:"Documents",icone:"📄"},{key:"consentements" as const,label:"Consentements",icone:"✅"},{key:"attestations" as const,label:"Attestations",icone:"📜"}].map(item=>(
+              <label key={item.key} className="flex items-center gap-2 cursor-pointer p-1.5 rounded hover:bg-sable/50">
+                <input type="checkbox" checked={inclure[item.key]} onChange={()=>basculerInclusion(item.key)} className="rounded" />
+                <span>{item.icone}</span>
+                <span className="text-xs text-ardoise">{item.label}</span>
               </label>
             ))}
           </div>
         </Carte>
       </div>
 
-      {/* Résumé du profil */}
-      <Carte titre="Aperçu du profil exporté">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-ocre/10 flex items-center justify-center text-ocre text-2xl font-bold">
-            {((utilisateur.prenom?.[0] || "") + (utilisateur.nom?.[0] || "")).toUpperCase() || "?"}
+      <Carte titre="Aperçu">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-ocre/10 flex items-center justify-center text-ocre font-bold">
+            {((utilisateur.prenom?.[0]||"")+(utilisateur.nom?.[0]||"")).toUpperCase()||"?"}
           </div>
           <div>
-            <p className="font-bold text-ardoise text-lg">
-              {[utilisateur.prenom, utilisateur.nom].filter(Boolean).join(" ") || utilisateur.email}
-            </p>
-            <p className="text-sm text-ardoise-clair font-mono">{utilisateur.digiid_public || "—"}</p>
-            <div className="flex gap-2 mt-1">
-              <Badge variante="lagune" taille="petit">{utilisateur.role?.replace(/_/g, " ")}</Badge>
-              <Badge variante={utilisateur.est_email_verifie ? "succes" : "terre"} taille="petit">
-                {utilisateur.est_email_verifie ? "Email vérifié" : "Email non vérifié"}
-              </Badge>
-            </div>
+            <p className="font-bold text-ardoise text-sm">{[utilisateur.prenom,utilisateur.nom].filter(Boolean).join(" ")||utilisateur.email}</p>
+            <p className="text-xs text-ardoise-clair font-mono">{utilisateur.digiid_public||"—"}</p>
+          </div>
+          <div className="flex gap-1 ml-auto">
+            <Badge variante="lagune" taille="petit">{utilisateur.role?.replace(/_/g," ")}</Badge>
           </div>
         </div>
       </Carte>
 
-      {/* Bouton d'export */}
       <div className="text-center">
-        <Bouton
-          variante="primaire"
-          chargement={chargement}
-          disabled={chargement}
-          onClick={handleExporter}
-          className="px-10 py-4 text-lg"
-        >
-          {chargement ? "Génération en cours..." : `📥 Télécharger mon profil (${format.toUpperCase()})`}
+        <Bouton variante="primaire" chargement={chargement} disabled={chargement} onClick={handleExporter}>
+          {chargement ? "Génération..." : `📥 Télécharger (${format.toUpperCase()})`}
         </Bouton>
       </div>
-
-      {/* Actions */}
-      <div className="flex gap-3 flex-wrap justify-center">
-        <Link href="/profil">
-          <Bouton variante="ghost">← Retour à mon profil</Bouton>
-        </Link>
-        <Link href="/partage">
-          <Bouton variante="secondaire">Partager mon DigiID</Bouton>
-        </Link>
+      <div className="flex gap-2 justify-center">
+        <Link href="/profil"><Bouton variante="ghost">← Profil</Bouton></Link>
+        <Link href="/partage"><Bouton variante="secondaire">Partager</Bouton></Link>
       </div>
-
-      <Alerte variante="avertissement" titre="Conformité">
-        Ce fichier contient des données personnelles sensibles (identité, score).
-        Conserve-le dans un endroit sécurisé. Ne le partage pas par email non chiffré.
-        Conformément au RGPD et à la loi 2008-12, tu peux demander la suppression
-        de ces données à tout moment depuis ton profil.
-      </Alerte>
     </div>
   );
 }

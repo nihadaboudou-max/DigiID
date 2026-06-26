@@ -1,9 +1,4 @@
 "use client";
-
-/**
- * Page profil utilisateur — informations personnelles avec mode édition.
- * La partie vérifications d'identité a été déplacée dans le menu Identité dédié.
- */
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
@@ -127,25 +122,12 @@ function Contenu() {
 
   return (
     <div className="space-y-8 apparition">
-      <header>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
-          Mes informations
-        </p>
+      <div>
+        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Mes informations</p>
         <h1 className="mt-1">Mon profil</h1>
-        <p className="text-ardoise-clair mt-2">
-          Toutes les données que DigiID conserve sur toi, classées et chiffrées.
-        </p>
-      </header>
-
-      <Alerte variante="info" titre="Tes données t'appartiennent">
-        Toutes ces informations sont chiffrées au repos avec AES-256-GCM.
-        Même les administrateurs de DigiID ne peuvent pas les lire en clair.
-      </Alerte>
-
-      {message && <Alerte variante="succes">{message}</Alerte>}
-      {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
-
-      {/* Identité civile */}
+      </div>
+      {message && <p className="text-sm text-succes bg-succes/10 p-3 rounded">{message}</p>}
+      {erreur && <p className="text-sm text-terre bg-terre/10 p-3 rounded">{erreur}</p>}
       <Carte titre="Identité civile">
         {modeEdition ? (
           <div className="space-y-4">
@@ -190,17 +172,10 @@ function Contenu() {
         )}
       </Carte>
 
-      {/* Identifiant DigiID */}
-      <Carte titre="Mon identifiant DigiID" description="C'est ce que tu partages à un tiers">
-        <p className="text-3xl font-mono font-bold text-lagune break-all mb-2">
-          {utilisateur.digiid_public}
-        </p>
-        <p className="text-xs text-ardoise-clair italic">
-          16 caractères. Unique. Stable. Reconnu par les partenaires DigiID.
-        </p>
+      <Carte titre="Mon identifiant DigiID">
+        <p className="text-3xl font-mono font-bold text-lagune break-all">{utilisateur.digiid_public}</p>
       </Carte>
 
-      {/* État du compte */}
       <Carte titre="État du compte">
         <div className="space-y-3">
           <LigneÉtat libelle="Statut" valeur={<Badge variante="succes">Actif</Badge>} />
@@ -225,127 +200,61 @@ function Contenu() {
         )}
       </Carte>
 
-      {/* Attestations communautaires */}
-      {utilisateur.attestations_recues && utilisateur.attestations_recues.length > 0 && (
-        <Carte titre="Attestations reçues" description="Des membres de la communauté attestent pour toi">
-          <div className="space-y-3">
+      {utilisateur.attestations_recues?.length > 0 && (
+        <Carte titre="Attestations reçues">
+          <div className="space-y-2">
             {utilisateur.attestations_recues.map((a) => (
-              <div key={a.id} className="flex items-start justify-between p-3 rounded-lg border border-ardoise-clair/10">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <Badge variante={a.statut === "APPROUVEE" ? "succes" : a.statut === "EN_ATTENTE" ? "info" : "neutre"}>
-                      {a.statut}
-                    </Badge>
-                    <span className="font-medium text-ardoise">{a.titre}</span>
-                  </div>
-                  <p className="text-sm text-ardoise-clair mt-1">
-                    Type : {a.type_attestation}
-                    {a.lien_nature && ` — ${a.lien_nature}`}
-                    {a.lien_connu_depuis && ` (${a.lien_connu_depuis})`}
-                  </p>
-                  <p className="text-xs text-ardoise-clair mt-1">
-                    {a.poids_score} pts · {new Date(a.date_soumission).toLocaleDateString()}
-                  </p>
+              <div key={a.id} className="flex items-center justify-between p-2 rounded border border-ardoise-clair/10">
+                <div className="flex items-center gap-2">
+                  <Badge variante={a.statut === "APPROUVEE" ? "succes" : a.statut === "EN_ATTENTE" ? "info" : "neutre"} taille="petit">{a.statut}</Badge>
+                  <span className="text-sm font-medium text-ardoise">{a.titre}</span>
                 </div>
+                <span className="text-xs text-ardoise-clair">{a.poids_score} pts</span>
               </div>
             ))}
-          </div>
-          <div className="mt-4 pt-4 border-t border-ardoise-clair/10">
-            <Link href="/attestations-communautaires">
-              <Bouton variante="primaire">Voir toutes mes attestations →</Bouton>
-            </Link>
           </div>
         </Carte>
       )}
 
-      {/* Lien vers le menu identité */}
-      <Carte titre="Vérifications d'identité" description="Retrouve toutes les étapes dans le menu dédié">
-        <p className="text-sm text-ardoise-clair mb-4">
-          Les vérifications d&apos;identité (faciale, CNI, email, 2FA, rôle) 
-          sont maintenant regroupées dans le menu <strong>Identité</strong>.
-        </p>
-        <Link href="/identite">
-          <Bouton variante="primaire">Accéder au menu Identité →</Bouton>
-        </Link>
+      <Carte titre="Vérifications d'identité">
+        <Link href="/identite"><Bouton variante="primaire">Accéder au menu Identité →</Bouton></Link>
       </Carte>
 
-      {/* Score de confiance */}
       {scoreData && (
-        <Carte titre="🎯 Mon score de confiance">
-          <div className="flex items-center gap-6">
-            <div className="text-center flex-shrink-0">
-              <p className="text-5xl font-bold text-lagune">{scoreData.score_total}</p>
-              <p className="text-xs text-ardoise-clair font-semibold uppercase">/100</p>
-            </div>
+        <Carte titre="🎯 Score">
+          <div className="flex items-center gap-4">
+            <p className="text-4xl font-bold text-lagune">{scoreData.score_total}<span className="text-sm text-ardoise-clair">/100</span></p>
             <div className="flex-1">
               <BarreProgression valeur={Math.min(scoreData.score_total, 100)} couleur="lagune" />
-              <div className="flex justify-between mt-2 text-sm">
-                <span className="text-ardoise-clair">Niveau: <strong>{scoreData.niveau || "—"}</strong></span>
-                <Link href="/score" className="text-ocre hover:underline">Détails →</Link>
-              </div>
+              <div className="flex justify-between mt-1 text-xs"><span className="text-ardoise-clair">Niveau: <strong>{scoreData.niveau||"—"}</strong></span><Link href="/score" className="text-ocre">Détails →</Link></div>
             </div>
           </div>
         </Carte>
       )}
 
-      {/* Activité récente */}
       <Carte titre="🕐 Activité récente">
-        {chargementDonnees ? (
-          <p className="text-ardoise-clair italic text-sm">Chargement...</p>
-        ) : activites.length > 0 ? (
-          <div className="space-y-2">
-            {activites.slice(0, 5).map((a, i) => (
-              <div key={a.id || i} className="flex items-center gap-3 text-sm p-2 rounded hover:bg-sable transition-colors">
-                <span className="text-lg">
-                  {a.type === "connexion_reussie" ? "🔑"
-                  : a.type === "modification_profil" ? "✏️"
-                  : a.type === "partage_digiid" ? "📤"
-                  : "📋"}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-ardoise truncate">{a.description || a.type.replace(/_/g, " ")}</p>
-                </div>
-                <span className="text-xs text-ardoise-clair/60 whitespace-nowrap">
-                  {new Date(a.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                </span>
+        {chargementDonnees ? <p className="text-ardoise-clair italic text-sm">Chargement...</p>
+        : activites.length > 0 ? <div className="space-y-1">
+            {activites.slice(0, 5).map((a,i) => (
+              <div key={a.id||i} className="flex items-center gap-2 text-sm p-1.5 rounded hover:bg-sable">
+                <span>{a.type==="connexion_reussie"?"🔑":a.type==="modification_profil"?"✏️":"📋"}</span>
+                <p className="flex-1 text-ardoise truncate text-xs">{a.description||a.type.replace(/_/g," ")}</p>
+                <span className="text-[10px] text-ardoise-clair/60 whitespace-nowrap">{new Date(a.date).toLocaleDateString("fr-FR",{day:"numeric",month:"short"})}</span>
               </div>
             ))}
-            <Link href="/autorisations" className="block text-sm text-ocre hover:underline mt-2">
-              Voir tout l'historique →
-            </Link>
+            <Link href="/autorisations" className="text-xs text-ocre">Tout l'historique →</Link>
           </div>
-        ) : (
-          <p className="text-ardoise-clair italic text-sm">Aucune activité récente.</p>
-        )}
+        : <p className="text-ardoise-clair italic text-sm">Aucune.</p>}
       </Carte>
 
-      {/* Accès rapide */}
       <Carte titre="🔗 Accès rapide">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <Link href="/partage" className="p-3 bg-sable rounded-lg hover:bg-sable/80 transition-colors text-center">
-            <p className="text-2xl mb-1">📱</p>
-            <p className="text-xs font-semibold text-ardoise">Partager mon DigiID</p>
-          </Link>
-          <Link href="/autorisations" className="p-3 bg-sable rounded-lg hover:bg-sable/80 transition-colors text-center">
-            <p className="text-2xl mb-1">🔒</p>
-            <p className="text-xs font-semibold text-ardoise">Mes autorisations</p>
-          </Link>
-          <Link href="/profil/telecharger" className="p-3 bg-sable rounded-lg hover:bg-sable/80 transition-colors text-center">
-            <p className="text-2xl mb-1">📥</p>
-            <p className="text-xs font-semibold text-ardoise">Télécharger mon profil</p>
-          </Link>
-          <Link href="/consentements" className="p-3 bg-sable rounded-lg hover:bg-sable/80 transition-colors text-center">
-            <p className="text-2xl mb-1">✅</p>
-            <p className="text-xs font-semibold text-ardoise">Mes consentements</p>
-          </Link>
-          <Link href="/score" className="p-3 bg-sable rounded-lg hover:bg-sable/80 transition-colors text-center">
-            <p className="text-2xl mb-1">📊</p>
-            <p className="text-xs font-semibold text-ardoise">Mon score</p>
-          </Link>
-          <Link href="/badges" className="p-3 bg-sable rounded-lg hover:bg-sable/80 transition-colors text-center">
-            <p className="text-2xl mb-1">🏆</p>
-            <p className="text-xs font-semibold text-ardoise">Mes badges</p>
-          </Link>
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+          <Link href="/partage" className="p-2 bg-sable rounded-lg hover:bg-sable/80 text-center"><p className="text-xl">📱</p><p className="text-[10px] font-semibold text-ardoise">Partage</p></Link>
+          <Link href="/autorisations" className="p-2 bg-sable rounded-lg hover:bg-sable/80 text-center"><p className="text-xl">🔒</p><p className="text-[10px] font-semibold text-ardoise">Accès</p></Link>
+          <Link href="/profil/telecharger" className="p-2 bg-sable rounded-lg hover:bg-sable/80 text-center"><p className="text-xl">📥</p><p className="text-[10px] font-semibold text-ardoise">Export</p></Link>
+          <Link href="/consentements" className="p-2 bg-sable rounded-lg hover:bg-sable/80 text-center"><p className="text-xl">✅</p><p className="text-[10px] font-semibold text-ardoise">Consentements</p></Link>
+          <Link href="/score" className="p-2 bg-sable rounded-lg hover:bg-sable/80 text-center"><p className="text-xl">📊</p><p className="text-[10px] font-semibold text-ardoise">Score</p></Link>
+          <Link href="/badges" className="p-2 bg-sable rounded-lg hover:bg-sable/80 text-center"><p className="text-xl">🏆</p><p className="text-[10px] font-semibold text-ardoise">Badges</p></Link>
         </div>
       </Carte>
 

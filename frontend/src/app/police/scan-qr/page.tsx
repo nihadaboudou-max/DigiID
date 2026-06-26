@@ -1,4 +1,4 @@
-"use client";
+rfa"use client";
 
 /**
  * Page de scan QR — Saisie manuelle d'un DigiID pour consultation rapide.

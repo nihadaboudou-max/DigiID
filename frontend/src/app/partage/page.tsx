@@ -1,10 +1,4 @@
 "use client";
-
-/**
- * Page Partage — QR code réel via API externe, téléchargement PNG, partage.
- * Sans dépendance npm : QR généré via qrserver.com,
- * téléchargement via Canvas, partage via Web Share API.
- */
 import { useState, useRef, useCallback } from "react";
 import Link from "next/link";
 
@@ -119,16 +113,10 @@ function Contenu() {
         <span className="text-ardoise font-semibold">Partager mon DigiID</span>
       </nav>
 
-      <header>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
-          Partager mon identité numérique
-        </p>
+      <div>
+        <p className="text-ocre text-sm uppercase font-semibold tracking-wider">Partage</p>
         <h1 className="mt-1">Mon identifiant DigiID</h1>
-        <p className="text-ardoise-clair mt-2 max-w-2xl">
-          Présente ce QR code ou partage ton identifiant avec une institution de confiance
-          (banque, hôpital, administration) pour vérifier ton identité instantanément.
-        </p>
-      </header>
+      </div>
 
       <div className="grid md:grid-cols-2 gap-6">
         <Carte className="flex flex-col items-center text-center">
@@ -172,9 +160,7 @@ function Contenu() {
               🖨️ Imprimer
             </Bouton>
           </div>
-          <p className="text-xs text-ardoise-clair italic mt-4">
-            L'institution scanne ce code et consulte ton profil vérifié.
-          </p>
+
         </Carte>
 
         <Carte>
@@ -225,30 +211,15 @@ function Contenu() {
       </div>
 
       <Carte titre="Partages récents">
-        <div className="flex items-center gap-4 p-4 bg-sable rounded-lg">
-          <span className="text-3xl">🔒</span>
-          <div>
-            <p className="text-sm font-semibold text-ardoise">Tes partages sont tracés</p>
-            <p className="text-xs text-ardoise-clair">
-              Chaque scan ou consultation de ton profil par un tiers est enregistré.
-              Voir qui a consulté tes données.
-            </p>
-          </div>
-        </div>
-        <div className="mt-4">
-          <Link href="/autorisations">
-            <Bouton variante="secondaire">Voir qui a accédé à mes données →</Bouton>
-          </Link>
+        <div className="flex items-center gap-3 p-3 bg-sable rounded-lg">
+          <span className="text-2xl">🔒</span>
+          <p className="text-sm text-ardoise-clair flex-1">Chaque consultation est tracée.</p>
+          <Link href="/autorisations"><Bouton variante="ghost" taille="petit">Voir →</Bouton></Link>
         </div>
       </Carte>
 
-      <Alerte variante="avertissement" titre="🔐 Conseils de sécurité">
-        <ul className="space-y-1 text-sm">
-          <li>✓ Ne partage ton DigiID qu'avec des institutions de confiance.</li>
-          <li>✓ DigiID ne te contactera jamais pour te demander ton code.</li>
-          <li>✓ Chaque consultation est tracée — vérifie qui accède à tes données.</li>
-          <li>✓ Tu peux révoquer un accès depuis <Link href="/autorisations" className="text-lagune hover:underline">Mes autorisations</Link>.</li>
-        </ul>
+      <Alerte variante="avertissement" titre="🔐 Sécurité">
+        <p className="text-sm">Ne partage ton DigiID qu'avec des institutions de confiance. Chaque consultation est tracée.</p>
       </Alerte>
 
       <Carte titre="Qui peut interroger mon DigiID ?">
@@ -259,10 +230,10 @@ function Contenu() {
         </div>
       </Carte>
 
-      <div className="flex gap-3 flex-wrap">
-        <Link href="/profil"><Bouton variante="primaire">← Retour à mon profil</Bouton></Link>
-        <Link href="/autorisations"><Bouton variante="secondaire">Mes autorisations</Bouton></Link>
-        <Link href="/profil/telecharger"><Bouton variante="ghost">📥 Télécharger mon profil</Bouton></Link>
+      <div className="flex gap-2">
+        <Link href="/profil"><Bouton variante="primaire">← Profil</Bouton></Link>
+        <Link href="/autorisations"><Bouton variante="secondaire">Autorisations</Bouton></Link>
+        <Link href="/profil/telecharger"><Bouton variante="ghost">📥 Export</Bouton></Link>
       </div>
     </div>
   );

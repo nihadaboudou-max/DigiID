@@ -1,4 +1,4 @@
-"use client";
+"uslee client";
 
 /**
  * Page carte géographique des vérifications police.
