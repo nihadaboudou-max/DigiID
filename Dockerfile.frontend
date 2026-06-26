@@ -1,36 +1,47 @@
 # =============================================================================
 # DigiID — Frontend Dockerfile (depuis la racine pour Render)
 # =============================================================================
-
-FROM node:20-alpine AS deps
-WORKDIR /app
-
-# 🔧 Mise à jour de npm pour éviter le bug SWC lockfile de Next.js 14
-RUN npm install -g npm@latest
-
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci --only=production || npm install
+# Stratégie :
+#   1. npm install (pas npm ci) — évite le crash SWC lockfile patch
+#   2. Patch du bug Next.js 14.2.x "Cannot read properties of undefined (reading 'os')"
+#      en remplaçant le script patch-incorrect-lockfile par un noop
+#   3. Préinstallation du binaire SWC Alpine (musl)
 
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# 🔧 npm à jour aussi dans le builder
-RUN npm install -g npm@latest
+# 🔧 npm à jour
+RUN npm install -g npm@latest && npm cache clean --force
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/package-lock.json* ./
+# 🔧 Installer explicitement le binaire SWC Alpine
+RUN npm install @next/swc-linux-x64-musl --no-save 2>/dev/null || true
+
+# 📦 Copie des sources
 COPY frontend/ .
 
-# ✅ Rendre disponible l'URL du backend pour le rewrite Next.js
+# 🔴 Installer TOUTES les dépendances (prod + dev)
+RUN npm install
+
+# 🔧 CORRECTION: Supprimer le script buggé de Next.js qui patche le lockfile
+# Bug: TypeError: Cannot read properties of undefined (reading 'os')
+# dans node_modules/next/dist/lib/patch-incorrect-lockfile.js
+RUN if [ -f node_modules/next/dist/lib/patch-incorrect-lockfile.js ]; then \
+      echo "module.exports = async () => {};" > node_modules/next/dist/lib/patch-incorrect-lockfile.js; \
+    fi
+
+# ✅ URL du backend pour le rewrite Next.js
 ARG NEXT_PUBLIC_URL_BACKEND
 ENV NEXT_PUBLIC_URL_BACKEND=${NEXT_PUBLIC_URL_BACKEND}
 
-# 🔴 Désactiver la télémétrie Next.js (évite les logs inutiles)
+# 🔴 Désactiver télémétrie Next
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# 🔴 IMPÉRATIF : builder l'application Next.js pour générer le dossier .next
+# 🔴 Build production (avec le patch corrigé, le crash ne se produit plus)
 RUN npm run build
 
+# =============================================================================
+# Étape finale — image légère de production
+# =============================================================================
 FROM node:20-alpine AS coureur
 WORKDIR /app
 ENV NODE_ENV=production
