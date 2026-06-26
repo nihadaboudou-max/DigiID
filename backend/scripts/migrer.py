@@ -285,6 +285,24 @@ def executer_migrations():
                 parametres.postgres_port,
                 parametres.postgres_nom_base)
 
+    # Attendre que PostgreSQL soit prêt (jusqu'à 60s)
+    import time
+    for tentative in range(12):
+        try:
+            moteur_test = create_engine(url_sync)
+            with moteur_test.connect() as conn:
+                conn.execute(sa_text("SELECT 1"))
+            moteur_test.dispose()
+            logger.info("✓ PostgreSQL prêt")
+            break
+        except Exception:
+            if tentative < 11:
+                logger.warning("⏳ PostgreSQL pas encore prêt, attente 5s... (tentative %d/12)", tentative + 1)
+                time.sleep(5)
+            else:
+                logger.error("❌ PostgreSQL indisponible après 60s")
+                sys.exit(1)
+
     try:
         # Étape 1 : état de la base
         moteur = create_engine(url_sync)
