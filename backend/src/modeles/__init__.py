@@ -20,7 +20,7 @@ from src.modeles.verification_cni import VerificationCNI
 from src.modeles.attestation_communautaire import AttestationCommunautaire
 from src.modeles.dossier_medical import DossierMedical, Consultation, Ordonnance
 from src.modeles.enrolement import Enrolement
-from src.modeles.verification_police import VerificationPolice, SignalementFraude, AlertesPolice, NoteInternePolice, HistoriqueRecherchePolice, EnrolementPolice
+from src.modeles.verification_police import VerificationPolice, SignalementFraude, AlertePolice, NoteInternePolice, HistoriqueRecherchePolice, EnrolementPolice
 from src.modeles.document_identite import DocumentIdentite
 from src.modeles.ong import BeneficiaireONG, ProgrammeONG, MissionTerrain
 from src.modeles.token_reinitialisation import TokenReinitialisation
@@ -52,7 +52,7 @@ __all__ = [
     "Enrolement",
     "VerificationPolice",
     "SignalementFraude",
-    "AlertesPolice",
+    "AlertePolice",
     "NoteInternePolice",
     "HistoriqueRecherchePolice",
     "EnrolementPolice",

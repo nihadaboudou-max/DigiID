@@ -12,7 +12,7 @@ from sqlalchemy.orm import relationship
 from src.base_donnees.base import Base
 
 
-class AlertesPolice(Base):
+class AlertePolice(Base):
     __tablename__ = "alertes_police"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -53,8 +53,10 @@ class HistoriqueRecherchePolice(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     officier_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
     personne_digiid = Column(String(50), nullable=True, index=True)
-    criteres_recherche = Column(JSON, nullable=True)
     type_recherche = Column(String(50), nullable=False, default="digiid")
+    terme_recherche = Column(String(255), nullable=True)
+    criteres_recherche = Column(JSON, nullable=True)
+    resultats_trouves = Column(Text, nullable=True)
     date_recherche = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     officier = relationship("Utilisateur", backref="historique_recherches")
