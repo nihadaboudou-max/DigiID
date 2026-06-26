@@ -74,7 +74,7 @@ function Contenu() {
         </div>
         <div className="mt-2"><Link href="/consentements"><Bouton variante="ghost" taille="petit">Gérer →</Bouton></Link></div>
       </Carte>
-      <Modal ouvert={accesDetail!==null} onFermer={()=>setAccesDetail(null)} titre="Détail">
+      <Modal ouvert={accesDetail!==null} surFermeture={()=>setAccesDetail(null)} titre="Détail">
         {accesDetail&&<div className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <div className="p-2 bg-sable rounded"><p className="text-[10px] text-ardoise-clair uppercase">Type</p><p className="text-sm font-semibold text-ardoise">{accesDetail.type.replace(/_/g," ")}</p></div>
@@ -89,3 +89,12 @@ function Contenu() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+

@@ -12,7 +12,8 @@ import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
 import { EnTete } from "@/composants/layouts/EnTete";
 import { Logo } from "@/composants/commun/Logo";
-import { demanderReinitialisationMotDePasse, ErreurAPI } from "@/services/authentification";
+import { ErreurAPI } from "@/services/client_api";
+import { demanderReinitialisationMotDePasse } from "@/services/authentification";
 
 export default function PageMotDePasseOublie() {
   const [email, setEmail] = useState("");
@@ -41,7 +42,7 @@ export default function PageMotDePasseOublie() {
     }
   }
 
-  return (
+    return (
     <>
       <EnTete />
       <main className="flex-grow flex items-center justify-center px-6 py-12 bg-sable-clair">

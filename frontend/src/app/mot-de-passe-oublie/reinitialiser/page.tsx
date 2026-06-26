@@ -1,3 +1,4 @@
+
 "use client";
 
 /**
@@ -14,7 +15,8 @@ import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
 import { EnTete } from "@/composants/layouts/EnTete";
 import { Logo } from "@/composants/commun/Logo";
-import { reinitialiserMotDePasse, ErreurAPI } from "@/services/authentification";
+import { ErreurAPI } from "@/services/client_api";
+import { reinitialiserMotDePasse } from "@/services/authentification";
 
 function ContenuReinitialisation() {
   const router = useRouter();

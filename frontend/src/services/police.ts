@@ -189,6 +189,20 @@ export async function obtenirVerificationParId(
 // RECHERCHE AVANCÉE
 // =============================================================================
 
+/**
+ * Recherche rapide d'une personne par DigiID ou numéro CNI.
+ * Retourne un tableau de résultats simplifié.
+ */
+export async function rechercherPersonne(
+  digiid: string,
+): Promise<PersonneRecherchee[]> {
+  return clientAPI.post<
+    { resultats: PersonneRecherchee[]; total: number; page: number; limite: number; temps_ms: number }
+  >("/api/v1/utilisateur/police/rechercher", { query: digiid, limite: 10 }, {
+    authentifie: true,
+  }).then((r) => r.resultats);
+}
+
 export async function rechercherPersonnes(data: {
   query: string;
   type_recherche?: string;
