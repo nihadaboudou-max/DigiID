@@ -4,18 +4,29 @@
 
 FROM node:20-alpine AS deps
 WORKDIR /app
-COPY frontend/package.json ./
-RUN npm install
+
+# 🔧 Mise à jour de npm pour éviter le bug SWC lockfile de Next.js 14
+RUN npm install -g npm@latest
+
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci --only=production || npm install
 
 FROM node:20-alpine AS builder
 WORKDIR /app
+
+# 🔧 npm à jour aussi dans le builder
+RUN npm install -g npm@latest
+
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/package-lock.json* ./
 COPY frontend/ .
 
 # ✅ Rendre disponible l'URL du backend pour le rewrite Next.js
-# Cette variable EST utilisée par next.config.js pour le proxy API
 ARG NEXT_PUBLIC_URL_BACKEND
 ENV NEXT_PUBLIC_URL_BACKEND=${NEXT_PUBLIC_URL_BACKEND}
+
+# 🔴 Désactiver la télémétrie Next.js (évite les logs inutiles)
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # 🔴 IMPÉRATIF : builder l'application Next.js pour générer le dossier .next
 RUN npm run build
