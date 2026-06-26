@@ -203,7 +203,7 @@ function Contenu() {
       {(utilisateur.attestations_recues?.length ?? 0) > 0 && (
         <Carte titre="Attestations reçues">
           <div className="space-y-2">
-            {utilisateur.attestations_recues.map((a) => (
+            {utilisateur.attestations_recues?.map((a) => (
               <div key={a.id} className="flex items-center justify-between p-2 rounded border border-ardoise-clair/10">
                 <div className="flex items-center gap-2">
                   <Badge variante={a.statut === "APPROUVEE" ? "succes" : a.statut === "EN_ATTENTE" ? "info" : "neutre"} taille="petit">{a.statut}</Badge>
