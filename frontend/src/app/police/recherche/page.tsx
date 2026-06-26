@@ -7,7 +7,7 @@ import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { ChampRecherche } from "@/composants/commun/ChampRecherche";
 import { Badge } from "@/composants/commun/Badge";
-import { rechercherPersonne } from "@/services/police";
+import { rechercherPersonnes } from "@/services/police";
 import type { PersonneRecherchee } from "@/services/police";
 
 export default function RecherchePage() {
@@ -27,9 +27,8 @@ function Contenu() {
     if (!query) return;
     setRecherche(true);
     try {
-      // Le backend renvoie maintenant directement un tableau
-      const personnes = await rechercherPersonne(query);
-      setResultats(personnes || []);
+      const resultats = await rechercherPersonnes({ query });
+      setResultats(resultats.resultats || []);
     } catch {
       setResultats([]);
     } finally {
@@ -60,20 +59,23 @@ function Contenu() {
 
       {resultats.length > 0 ? (
         resultats.map((p, i) => (
-          <div key={i} className="carte flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold">
-              {/* Correction : gère les noms vides ou nuls */}
-              {(p.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
-            </div>
-            <div>
-              <p className="font-bold text-ardoise">{p.nom}</p>
-              <p className="text-sm text-ardoise-clair">{p.digiid}</p>
-              <div className="flex gap-2 mt-1">
-                <Badge variante={p.est_actif ? "succes" : "terre"}>{p.est_actif ? "Actif" : "Inactif"}</Badge>
-                <span className="text-xs text-ardoise-clair">Score: {p.score}</span>
+          <Link key={i} href={`/police/profil/${p.digiid}`} className="block group">
+            <div className="carte flex items-center gap-4 group-hover:shadow-md transition-all">
+              <div className="w-12 h-12 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold">
+                {(p.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
               </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-ardoise group-hover:text-ocre transition-colors">{p.nom}</p>
+                <p className="text-sm text-ardoise-clair font-mono">{p.digiid}</p>
+                <div className="flex gap-2 mt-1 flex-wrap">
+                  <Badge variante={p.est_actif ? "succes" : "terre"} taille="petit">{p.est_actif ? "Actif" : "Inactif"}</Badge>
+                  <span className="text-xs text-ardoise-clair">Score: {p.score}</span>
+                  {p.numero_cni && <span className="text-xs text-ardoise-clair">CNI: {p.numero_cni}</span>}
+                </div>
+              </div>
+              <span className="text-xs text-ocre group-hover:translate-x-1 transition-all">→</span>
             </div>
-          </div>
+          </Link>
         ))
       ) : (
         <Carte><p className="text-ardoise-clair italic text-center py-8">Utilisez le champ ci-dessus pour rechercher.</p></Carte>

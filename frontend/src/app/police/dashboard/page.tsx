@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
@@ -8,8 +9,8 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { ChampRecherche } from "@/composants/commun/ChampRecherche";
 import { useRoleUI } from "@/crochets/useRoleUI";
-import { listerVerifications, rechercherPersonne, listerSignalements } from "@/services/police";
-import type { VerificationPolice, PersonneRecherchee } from "@/services/police";
+import { listerVerifications, rechercherPersonnes, obtenirStatistiques } from "@/services/police";
+import type { VerificationPolice, StatistiquesPolice } from "@/services/police";
 
 export default function PoliceDashboard() {
   return (
@@ -24,7 +25,7 @@ function Contenu() {
   const [verifications, setVerifications] = useState<VerificationPolice[]>([]);
   const [chargementVerif, setChargementVerif] = useState(true);
   const [recherche, setRecherche] = useState("");
-  const [personnes, setPersonnes] = useState<PersonneRecherchee[]>([]);
+  const [stats, setStats] = useState<StatistiquesPolice | null>(null);
   const [rechercheEnCours, setRechercheEnCours] = useState(false);
 
   useEffect(() => { charger(); }, []);
@@ -39,11 +40,11 @@ function Contenu() {
   const handleSearch = useCallback(async () => {
     if (!recherche) return;
     setRechercheEnCours(true);
-    try { 
-      const resultats = await rechercherPersonne(recherche);
-      setPersonnes(resultats || []);
+    try {
+      const resultats = await rechercherPersonnes({ query: recherche });
+      setVerifications([]);
     }
-    catch { setPersonnes([]); }
+    catch { /* silencieux */ }
     finally { setRechercheEnCours(false); }
   }, [recherche]);
 
@@ -95,34 +96,27 @@ function Contenu() {
             {rechercheEnCours ? "..." : "🔍"}
           </Bouton>
         </div>
-        {personnes.length > 0 && (
-          <div className="mt-4 space-y-3">
-            {personnes.map((p) => (
-              <div key={p.digiid} className="p-3 bg-lagune/5 rounded-lg">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold">
-                    {(p.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="font-bold text-ardoise">{p.nom || "Nom inconnu"}</p>
-                    <p className="text-xs text-ardoise-clair">{p.digiid}</p>
-                    <Badge variante={p.est_actif ? "succes" : "terre"}>
-                      {p.est_actif ? "Actif" : "Inactif"}
-                    </Badge>
-                    <span className="ml-2 text-xs">Score: {p.score}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+        {recherche && (
+          <Link href={`/police/recherche?q=${encodeURIComponent(recherche)}`} className="mt-3 inline-block">
+            <Bouton variante="secondaire" taille="petit">Recherche avancée →</Bouton>
+          </Link>
         )}
-        <p className="text-xs text-ardoise-clair mt-2">Chaque consultation est automatiquement loguee.</p>
+        <p className="text-xs text-ardoise-clair mt-2">Chaque consultation est automatiquement loguée.</p>
       </Carte>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {can.verifyIdentity && <CarteAction titre="Verification identite" description="Verifier l identite complete" href="/police/verification" icone="🔍" />}
-        {can.searchPerson && <CarteAction titre="Recherche avancee" description="Par empreinte, CNI ou visage" href="/police/recherche" icone="🔐" />}
-        {can.viewPoliceAudit && <CarteAction titre="Mon historique" description="Mes verifications effectuees" href="/police/audit" icone="🕐" />}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {can.verifyIdentity && <CarteAction titre="Vérification" description="Vérifier identité complète" href="/police/verification" icone="🔍" />}
+        {can.searchPerson && <CarteAction titre="Recherche" description="Par DigiID, nom, CNI" href="/police/recherche" icone="🔐" />}
+        <CarteAction titre="Profil" description="Consulter un profil" href="/police/profil/" icone="👤" />
+        <CarteAction titre="Scan QR" description="Scanner un QR code" href="/police/scan-qr" icone="📱" />
+        <CarteAction titre="Comparaison" description="Comparer des photos" href="/police/comparaison-photos" icone="🖼️" />
+        <CarteAction titre="Carte" description="Vue géographique" href="/police/carte" icone="🗺️" />
+        <CarteAction titre="Alertes" description="Alertes en temps réel" href="/police/alertes" icone="🔔" />
+        <CarteAction titre="Notes" description="Notes internes" href="/police/notes" icone="📝" />
+        <CarteAction titre="Historique" description="Toutes les activités" href="/police/historique" icone="🕐" />
+        {can.viewPoliceAudit && <CarteAction titre="Audit" description="Journal d'audit" href="/police/audit" icone="📜" />}
+        <CarteAction titre="Export" description="Exporter des rapports" href="/police/export" icone="📊" />
+        <CarteAction titre="Signalement" description="Signaler une fraude" href="/police/signalement" icone="🚨" />
       </div>
 
       <div className="bg-ocre/5 border border-ocre/20 p-4 rounded">
