@@ -200,7 +200,7 @@ function Contenu() {
         )}
       </Carte>
 
-      {utilisateur.attestations_recues?.length > 0 && (
+      {(utilisateur.attestations_recues?.length ?? 0) > 0 && (
         <Carte titre="Attestations reçues">
           <div className="space-y-2">
             {utilisateur.attestations_recues.map((a) => (
