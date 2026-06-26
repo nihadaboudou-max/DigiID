@@ -182,6 +182,7 @@ function Contenu() {
       {/* Formulaire modal */}
       {(afficherFormulaire || noteEdition) && (
         <Modal
+          ouvert={true}
           titre={noteEdition ? "Modifier la note" : "Nouvelle note"}
           surFermeture={() => setAfficherFormulaire(false)}
         >
