@@ -153,13 +153,15 @@ interface OptionsRequete extends RequestInit {
   authentifie?: boolean;
   /** Interne — évite une boucle infinie lors du retry après refresh. */
   _retry?: boolean;
+  /** Paramètres de requête (query string) */
+  params?: Record<string, unknown>;
 }
 
 async function appel_api<T>(
   chemin: string,
   options: OptionsRequete = {},
 ): Promise<T> {
-  const { authentifie = false, headers = {}, _retry = false, ...reste } = options;
+  const { authentifie = false, headers = {}, _retry = false, params, ...reste } = options;
 
   // Construction des en-têtes
   const enTetes: Record<string, string> = {
@@ -174,8 +176,13 @@ async function appel_api<T>(
     }
   }
 
-  // URL complète
-  const url = `${URL_BASE}${chemin}`;
+  // URL complète (avec query string si params)
+  const queryString = params
+    ? '?' + new URLSearchParams(
+        Object.entries(params).filter(([_, v]) => v !== undefined).map(([k, v]) => [k, String(v)])
+      ).toString()
+    : '';
+  const url = `${URL_BASE}${chemin}${queryString}`;
 
   // Appel fetch
   let reponse: Response;
