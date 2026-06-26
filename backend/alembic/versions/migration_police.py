@@ -1,5 +1,18 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+"""migration police
+
+Revision ID: police_001
+Revises: 003_ajouter_image_data_et_index
+Create Date: 2026-06-27 12:00:00.000000
+"""
+from alembic import op
+import sqlalchemy as sa
+
+# revision identifiers, used by Alembic.
+revision = 'police_001'
+down_revision = '003_ajouter_image_data_et_index'
+branch_labels = None
+depends_on = None
+
 """
 Script de migration manuelle pour les tables du module Police.
 
@@ -15,6 +28,128 @@ Pré-requis :
     - DATABASE_URL dans l'environnement ou .env
     - Connexion directe à la base PostgreSQL
 """
+import argparse
+import os
+import sys
+from typing import Optional
+
+
+# =============================================================================
+# Fonctions Alembic (appelées automatiquement par alembic upgrade head)
+# =============================================================================
+
+
+def upgrade() -> None:
+    """Applique toutes les migrations police via Alembic."""
+    # Migration 1 : colonnes de vérification
+    op.execute("""
+        ALTER TABLE verifications_police
+        ADD COLUMN IF NOT EXISTS personne_email VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS personne_telephone VARCHAR(50),
+        ADD COLUMN IF NOT EXISTS motif_verification VARCHAR(500),
+        ADD COLUMN IF NOT EXISTS localisation_lat DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS localisation_lng DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS localisation_adresse VARCHAR(500),
+        ADD COLUMN IF NOT EXISTS officier_nom VARCHAR(255)
+    """)
+
+    # Migration 2 : table alertes_police
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS alertes_police (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            officier_id UUID NOT NULL REFERENCES utilisateur(id) ON DELETE CASCADE,
+            type_alerte VARCHAR(50) NOT NULL,
+            titre VARCHAR(200) NOT NULL,
+            message TEXT NOT NULL,
+            niveau VARCHAR(20) NOT NULL DEFAULT 'info',
+            est_lue BOOLEAN NOT NULL DEFAULT FALSE,
+            est_active BOOLEAN NOT NULL DEFAULT TRUE,
+            donnees_liees JSONB,
+            date_creation TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            date_lecture TIMESTAMPTZ
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_alertes_police_officier ON alertes_police(officier_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_alertes_police_non_lues ON alertes_police(officier_id, est_lue) WHERE est_lue = FALSE")
+
+    # Migration 3 : table notes_internes
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS notes_internes (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            officier_id UUID NOT NULL REFERENCES utilisateur(id) ON DELETE CASCADE,
+            personne_digiid VARCHAR(50) NOT NULL,
+            titre VARCHAR(200) NOT NULL,
+            contenu TEXT,
+            categorie VARCHAR(50) NOT NULL DEFAULT 'general',
+            est_important BOOLEAN NOT NULL DEFAULT FALSE,
+            est_partagee BOOLEAN NOT NULL DEFAULT FALSE,
+            date_creation TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            date_modification TIMESTAMPTZ
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_notes_internes_officier ON notes_internes(officier_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_notes_internes_personne ON notes_internes(personne_digiid)")
+
+    # Migration 4 : colonnes signalements_fraude
+    op.execute("""
+        ALTER TABLE signalements_fraude
+        ADD COLUMN IF NOT EXISTS pieces_jointes JSONB,
+        ADD COLUMN IF NOT EXISTS priorite VARCHAR(20) NOT NULL DEFAULT 'normale',
+        ADD COLUMN IF NOT EXISTS notes_traitement TEXT,
+        ADD COLUMN IF NOT EXISTS traite_par_id UUID REFERENCES utilisateur(id) ON DELETE SET NULL
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_signalements_fraude_statut_priorite ON signalements_fraude(statut, priorite)")
+
+    # Migration 5 : table enrolements_police
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS enrolements_police (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            officier_id UUID NOT NULL REFERENCES utilisateur(id) ON DELETE CASCADE,
+            personne_digiid VARCHAR(50),
+            nom_complet VARCHAR(255),
+            statut VARCHAR(30) NOT NULL DEFAULT 'en_attente',
+            type_enrolement VARCHAR(50) NOT NULL,
+            donnees_saisies JSONB,
+            documents_uploads JSONB,
+            notes TEXT,
+            date_enrolement TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            date_completion TIMESTAMPTZ
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_enrolements_police_officier ON enrolements_police(officier_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_enrolements_police_statut ON enrolements_police(statut)")
+
+
+def downgrade() -> None:
+    """Annule les migrations police."""
+    op.execute("DROP INDEX IF EXISTS ix_enrolements_police_statut")
+    op.execute("DROP INDEX IF EXISTS ix_enrolements_police_officier")
+    op.execute("DROP TABLE IF EXISTS enrolements_police")
+    op.execute("DROP INDEX IF EXISTS ix_signalements_fraude_statut_priorite")
+    op.execute("ALTER TABLE signalements_fraude DROP COLUMN IF EXISTS traite_par_id")
+    op.execute("ALTER TABLE signalements_fraude DROP COLUMN IF EXISTS notes_traitement")
+    op.execute("ALTER TABLE signalements_fraude DROP COLUMN IF EXISTS priorite")
+    op.execute("ALTER TABLE signalements_fraude DROP COLUMN IF EXISTS pieces_jointes")
+    op.execute("DROP INDEX IF EXISTS ix_notes_internes_personne")
+    op.execute("DROP INDEX IF EXISTS ix_notes_internes_officier")
+    op.execute("DROP TABLE IF EXISTS notes_internes")
+    op.execute("DROP INDEX IF EXISTS ix_alertes_police_non_lues")
+    op.execute("DROP INDEX IF EXISTS ix_alertes_police_officier")
+    op.execute("DROP TABLE IF EXISTS alertes_police")
+    op.execute("ALTER TABLE verifications_police DROP COLUMN IF EXISTS officier_nom")
+    op.execute("ALTER TABLE verifications_police DROP COLUMN IF EXISTS localisation_adresse")
+    op.execute("ALTER TABLE verifications_police DROP COLUMN IF EXISTS localisation_lng")
+    op.execute("ALTER TABLE verifications_police DROP COLUMN IF EXISTS localisation_lat")
+    op.execute("ALTER TABLE verifications_police DROP COLUMN IF EXISTS motif_verification")
+    op.execute("ALTER TABLE verifications_police DROP COLUMN IF EXISTS personne_telephone")
+    op.execute("ALTER TABLE verifications_police DROP COLUMN IF EXISTS personne_email")
+
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+import argparse
 import argparse
 import os
 import sys
