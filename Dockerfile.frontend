@@ -26,7 +26,7 @@ RUN npm install
 # Bug: TypeError: Cannot read properties of undefined (reading 'os')
 # dans node_modules/next/dist/lib/patch-incorrect-lockfile.js
 RUN if [ -f node_modules/next/dist/lib/patch-incorrect-lockfile.js ]; then \
-      echo "module.exports = async () => {};" > node_modules/next/dist/lib/patch-incorrect-lockfile.js; \
+      printf 'async function patchIncorrectLockfile(){}\nmodule.exports={patchIncorrectLockfile}\n' > node_modules/next/dist/lib/patch-incorrect-lockfile.js; \
     fi
 
 # ✅ URL du backend pour le rewrite Next.js
