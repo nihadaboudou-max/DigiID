@@ -40,6 +40,7 @@ function Contenu() {
   }
 
   async function handleExporter() {
+    if (!utilisateur) return;
     setChargement(true);
     setMessage(null);
 
