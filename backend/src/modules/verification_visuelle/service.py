@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 """Service de vérification visuelle — upload, comparaison, statut."""
 from datetime import datetime, timezone
@@ -55,7 +56,6 @@ async def _chercher_doublons(
     ]
     return comparaison.comparer_embeddings(embedding, historique, seuil=parametres.seuil_similarite_visage)
 
-
 async def traiter_upload_photo(
     session: AsyncSession,
     utilisateur: Utilisateur,
@@ -80,24 +80,39 @@ async def traiter_upload_photo(
     embedding = embedding_facial.generer_embedding(contenu)
     doublons = await _chercher_doublons(session, embedding, utilisateur.id)
 
-    statut = "en_attente"
-    raison = "Photo reçue, vérification en cours."
+    # ✅ CORRECTION : Déterminer le statut avec logique complète
+    statut = "approuve"  # Par défaut, on approuve
+    raison = "Vérification réussie. Identité confirmée."
     score_similarite = None
+    date_verification = datetime.now(timezone.utc)
+
+    # Vérifications de rejet
     if verdict != "vivant":
         statut = "rejete"
         raison = "Photo suspecte d'usurpation ou de faible qualité."
+        date_verification = None
     elif doublons:
         statut = "rejete"
         raison = "Un visage similaire existe déjà dans la base DigiID."
         score_similarite = doublons[0]["similarite"]
+        date_verification = None
     elif score_liveness < 0.3:
         statut = "rejete"
         raison = "La qualité du visage est insuffisante pour vérifier l'identité."
+        date_verification = None
+    else:
+        # Vérifier les listes de personnes recherchées
+        resultat_listes = listes_recherchees.verifier_listes_officielles(None, None)
+        if resultat_listes:
+            raison = "Correspondance détectée avec une liste de personnes recherchées."
+            statut = "rejete"
+            date_verification = None
 
-    resultat_listes = listes_recherchees.verifier_listes_officielles(None, None)
-    if resultat_listes:
-        raison = "Correspondance détectée avec une liste de personnes recherchées."
-        statut = "rejete"
+    journal.info(
+        f"Traitement vérification visuelle : verdict={verdict}, "
+        f"score_liveness={score_liveness:.2f}, doublons={len(doublons)}, "
+        f"statut_final={statut}"
+    )
 
     verification = VerificationVisuelle(
         utilisateur_id=utilisateur.id,
@@ -115,7 +130,24 @@ async def traiter_upload_photo(
             "adresse_ip": adresse_ip,
             "verdict_anti_spoofing": verdict,
         },
-            )
+        date_verification=date_verification,  # ✅ Définir la date de vérification
+    )
+    session.add(verification)
+    await session.commit()
+    await session.refresh(verification)
+
+    # --- Mettre à jour le statut de l'utilisateur si approuvé ---
+    if statut == "approuve":
+        utilisateur.est_visage_verifie = True
+        utilisateur.date_verification_visage = datetime.now(timezone.utc)
+        utilisateur.date_derniere_mise_a_jour_verifications = datetime.now(timezone.utc)
+        await session.commit()
+
+    journal.info(
+        f"Vérification visuelle enregistrée : utilisateur={utilisateur.id} statut={statut}"
+    )
+    return verification
+
     session.add(verification)
     await session.commit()
     await session.refresh(verification)

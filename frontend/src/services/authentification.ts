@@ -164,3 +164,57 @@ export async function obtenirStatutVerification(): Promise<StatutVerificationRep
     { authentifie: true },
   );
 }
+
+// =============================================================================
+// Mot de passe oublié / réinitialisation
+// =============================================================================
+
+export interface MotDePasseOublieReponse {
+  succes: boolean;
+  message: string;
+  destination_masquee?: string | null;
+  duree_validite_minutes: number;
+  token_dev?: string | null;
+}
+
+export interface MotDePasseReinitialisationReponse {
+  succes: boolean;
+  message: string;
+}
+
+/**
+ * Demande un lien de réinitialisation de mot de passe.
+ * Le frontend envoie son origine pour que le lien dans l'email
+ * pointe vers le bon déploiement.
+ */
+export async function demanderReinitialisationMotDePasse(
+  email: string,
+): Promise<MotDePasseOublieReponse> {
+  const frontendUrl = typeof window !== "undefined"
+    ? window.location.origin
+    : undefined;
+
+  return clientAPI.post<MotDePasseOublieReponse>(
+    `${PREFIXE}/mot-de-passe/oublie`,
+    {
+      email,
+      ...(frontendUrl ? { frontend_url: frontendUrl } : {}),
+    },
+  );
+}
+
+/**
+ * Réinitialise le mot de passe avec un token de réinitialisation.
+ */
+export async function reinitialiserMotDePasse(
+  token: string,
+  nouveauMotDePasse: string,
+): Promise<MotDePasseReinitialisationReponse> {
+  return clientAPI.post<MotDePasseReinitialisationReponse>(
+    `${PREFIXE}/mot-de-passe/reinitialiser`,
+    {
+      token,
+      nouveau_mot_de_passe: nouveauMotDePasse,
+    },
+  );
+}

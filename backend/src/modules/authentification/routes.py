@@ -35,6 +35,8 @@ from src.schemas.authentification import (
     VerificationVerifierRequete as VerifVerifierReq,
     VerificationVerifierReponse as VerifVerifierRep,
     VerificationStatutReponse as VerifStatutRep,
+    MotDePasseOublieRequete, MotDePasseOublieReponse,
+    MotDePasseReinitialisationRequete, MotDePasseReinitialisationReponse,
 )
 
 
@@ -291,6 +293,67 @@ async def statut_verification(
     return VerifStatutRep(
         est_email_verifie=utilisateur.est_email_verifie,
         doit_verifier=not utilisateur.est_email_verifie,
+    )
+
+
+# =============================================================================
+# Mot de passe oublié / réinitialisation
+# =============================================================================
+
+@routeur_authentification.post(
+    "/mot-de-passe/oublie",
+    response_model=MotDePasseOublieReponse,
+    summary="Demander un lien de réinitialisation de mot de passe",
+)
+async def mot_de_passe_oublie(
+    requete: Request,
+    donnees: MotDePasseOublieRequete,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """
+    Envoie un email avec un lien de réinitialisation si le compte existe.
+
+    La réponse est délibérément identique que l'email existe ou non
+    pour éviter l'énumération des comptes existants.
+    """
+    resultat = await service.demander_reinitialisation_mot_de_passe(
+        session=session,
+        email=donnees.email,
+        frontend_url=donnees.frontend_url,
+        adresse_ip=obtenir_ip_client(requete),
+    )
+    return MotDePasseOublieReponse(
+        succes=resultat["succes"],
+        message=resultat["message"],
+        destination_masquee=resultat.get("destination_masquee"),
+        duree_validite_minutes=resultat["duree_validite_minutes"],
+        token_dev=resultat.get("token_dev"),
+    )
+
+
+@routeur_authentification.post(
+    "/mot-de-passe/reinitialiser",
+    response_model=MotDePasseReinitialisationReponse,
+    summary="Réinitialiser le mot de passe avec un token",
+)
+async def mot_de_passe_reinitialiser(
+    requete: Request,
+    donnees: MotDePasseReinitialisationRequete,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """
+    Réinitialise le mot de passe à l'aide d'un token de réinitialisation valide.
+    Invalide toutes les sessions actives pour forcer la reconnexion.
+    """
+    resultat = await service.reinitialiser_mot_de_passe(
+        session=session,
+        token=donnees.token,
+        nouveau_mot_de_passe=donnees.nouveau_mot_de_passe,
+        adresse_ip=obtenir_ip_client(requete),
+    )
+    return MotDePasseReinitialisationReponse(
+        succes=resultat["succes"],
+        message=resultat["message"],
     )
 
 

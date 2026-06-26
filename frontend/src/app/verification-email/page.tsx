@@ -23,7 +23,7 @@ import { useAuthentification } from "@/contextes/authentification";
 
 export default function PageVerificationEmail() {
   const router = useRouter();
-  const { utilisateur, seDeconnecter } = useAuthentification();
+  const { utilisateur, seDeconnecter, rafraichirProfil } = useAuthentification();
 
   const [code, setCode] = useState("");
   const [destinationMasquee, setDestinationMasquee] = useState("");
@@ -101,6 +101,10 @@ export default function PageVerificationEmail() {
       if (reponse.succes && reponse.est_email_verifie) {
         setVerifie(true);
         setMessageSucces("Email vérifié avec succès !");
+
+        // dans le contexte d'authentification AVANT de rediriger
+        await rafraichirProfil();
+
         // Rediriger vers le tableau de bord après 1,5 seconde
         setTimeout(() => {
           router.push("/tableau-de-bord");

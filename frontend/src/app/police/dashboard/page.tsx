@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
@@ -24,7 +24,7 @@ function Contenu() {
   const [verifications, setVerifications] = useState<VerificationPolice[]>([]);
   const [chargementVerif, setChargementVerif] = useState(true);
   const [recherche, setRecherche] = useState("");
-  const [personne, setPersonne] = useState<PersonneRecherchee | null>(null);
+  const [personnes, setPersonnes] = useState<PersonneRecherchee[]>([]);
   const [rechercheEnCours, setRechercheEnCours] = useState(false);
 
   useEffect(() => { charger(); }, []);
@@ -39,8 +39,11 @@ function Contenu() {
   const handleSearch = useCallback(async () => {
     if (!recherche) return;
     setRechercheEnCours(true);
-    try { setPersonne(await rechercherPersonne(recherche)); }
-    catch { setPersonne(null); }
+    try { 
+      const resultats = await rechercherPersonne(recherche);
+      setPersonnes(resultats || []);
+    }
+    catch { setPersonnes([]); }
     finally { setRechercheEnCours(false); }
   }, [recherche]);
 
@@ -92,21 +95,25 @@ function Contenu() {
             {rechercheEnCours ? "..." : "🔍"}
           </Bouton>
         </div>
-        {personne && (
-          <div className="mt-4 p-3 bg-lagune/5 rounded-lg">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold">
-                {personne.nom.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+        {personnes.length > 0 && (
+          <div className="mt-4 space-y-3">
+            {personnes.map((p) => (
+              <div key={p.digiid} className="p-3 bg-lagune/5 rounded-lg">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold">
+                    {(p.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="font-bold text-ardoise">{p.nom || "Nom inconnu"}</p>
+                    <p className="text-xs text-ardoise-clair">{p.digiid}</p>
+                    <Badge variante={p.est_actif ? "succes" : "terre"}>
+                      {p.est_actif ? "Actif" : "Inactif"}
+                    </Badge>
+                    <span className="ml-2 text-xs">Score: {p.score}</span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="font-bold text-ardoise">{personne.nom}</p>
-                <p className="text-xs text-ardoise-clair">{personne.digiid}</p>
-                <Badge variante={personne.est_actif ? "succes" : "terre"}>
-                  {personne.est_actif ? "Actif" : "Inactif"}
-                </Badge>
-                <span className="ml-2 text-xs">Score: {personne.score}</span>
-              </div>
-            </div>
+            ))}
           </div>
         )}
         <p className="text-xs text-ardoise-clair mt-2">Chaque consultation est automatiquement loguee.</p>

@@ -15,7 +15,7 @@ COPY frontend/ .
 # ✅ Rendre disponible l'URL du backend pour le rewrite Next.js
 # Cette variable EST utilisée par next.config.js pour le proxy API
 ARG NEXT_PUBLIC_URL_BACKEND
-ENV NEXT_PUBLIC_URL_BACKEND=${NEXT_PUBLIC_URL_BACKEND:-http://localhost:8000}
+ENV NEXT_PUBLIC_URL_BACKEND=${NEXT_PUBLIC_URL_BACKEND}
 
 # 🔴 IMPÉRATIF : builder l'application Next.js pour générer le dossier .next
 RUN npm run build

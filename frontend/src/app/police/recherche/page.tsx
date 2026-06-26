@@ -27,8 +27,9 @@ function Contenu() {
     if (!query) return;
     setRecherche(true);
     try {
-      const p = await rechercherPersonne(query);
-      setResultats(p ? [p] : []);
+      // Le backend renvoie maintenant directement un tableau
+      const personnes = await rechercherPersonne(query);
+      setResultats(personnes || []);
     } catch {
       setResultats([]);
     } finally {
@@ -61,7 +62,8 @@ function Contenu() {
         resultats.map((p, i) => (
           <div key={i} className="carte flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold">
-              {p.nom.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+              {/* Correction : gère les noms vides ou nuls */}
+              {(p.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
             </div>
             <div>
               <p className="font-bold text-ardoise">{p.nom}</p>

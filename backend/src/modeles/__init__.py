@@ -23,6 +23,7 @@ from src.modeles.enrolement import Enrolement
 from src.modeles.verification_police import VerificationPolice, SignalementFraude
 from src.modeles.document_identite import DocumentIdentite
 from src.modeles.ong import BeneficiaireONG, ProgrammeONG, MissionTerrain
+from src.modeles.token_reinitialisation import TokenReinitialisation
 
 __all__ = [
     "Utilisateur",
@@ -54,4 +55,5 @@ __all__ = [
     "BeneficiaireONG",
     "ProgrammeONG",
     "MissionTerrain",
+    "TokenReinitialisation",
 ]

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useRef } from "react";
 import Link from "next/link";
@@ -44,7 +44,8 @@ function Contenu() {
     setPersonne(null);
     setResultat(null);
     try {
-      const p = await rechercherPersonne(digiid);
+      const resultats = await rechercherPersonne(digiid);
+      const p = resultats && resultats.length > 0 ? resultats[0] : null;
       if (p) {
         setPersonne(p);
         setResultat("confirme");
@@ -81,7 +82,7 @@ function Contenu() {
     try {
       const resultat: ReponseUploadCNI = await uploaderCNI(fichierCNI, "recto");
       const d = resultat.resultat_ocr?.donnees;
-      // Chercher un DigiID ou un numero CNI dans les donnes
+      // Chercher un DigiID ou un numero CNI dans les données
       const extrait = d?.numero_cni || d?.nom_famille || "";
       if (extrait) {
         setDigiidExtrait(extrait);
@@ -179,9 +180,9 @@ function Contenu() {
       {/* ========== SAISIE MANUELLE ========== */}
       <Carte titre="⌨️ Saisie manuelle du DigiID">
         <div className="max-w-md space-y-4">
-          <ChampSaisie libelle="DigiID de la personne" value={digiid}
+          <ChampSaisie libelle="DigiID ou numero CNI" value={digiid}
             onChange={(e) => setDigiid(e.target.value)}
-            placeholder="Ex: DIG-A1B2C3D4E5F6" />
+            placeholder="Ex: DIG-A1B2C3D4E5F6 ou 5005310826" />
           <Bouton variante="primaire" disabled={digiid.length < 4 || enRecherche}
             onClick={handleRecherche} id="btn-recherche-digiid">
             {enRecherche ? "Recherche..." : "Verifier l identite"}
@@ -192,18 +193,24 @@ function Contenu() {
       {/* ========== ERREURS ========== */}
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
 
-      {/* ========== RESULTAT ========== */}
+      {/* ========== RESULTAT CONFIRME ========== */}
       {resultat === "confirme" && personne && (
         <Carte titre="✅ Identite confirmee">
           <div className="flex items-center gap-4 p-3 bg-succes/5 rounded-lg">
             <div className="w-16 h-16 rounded-full bg-succes/10 flex items-center justify-center text-succes font-bold text-xl">
-              {personne.nom.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+              {(personne.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
             </div>
-            <div>
-              <p className="font-bold text-lg text-ardoise">{personne.nom}</p>
-              <p className="text-sm text-ardoise-clair">{personne.digiid}</p>
+            <div className="flex-1">
+              <p className="font-bold text-lg text-ardoise">{personne.nom || "Nom inconnu"}</p>
+              <p className="text-sm text-ardoise-clair">DigiID: {personne.digiid || "N/A"}</p>
+              {personne.numero_cni && (
+                <p className="text-sm text-ardoise-clair">N° CNI: {personne.numero_cni}</p>
+              )}
+              <p className="text-sm text-ardoise-clair">Email: {personne.email || "N/A"}</p>
               <div className="flex gap-2 mt-2">
-                <Badge variante="succes">Actif</Badge>
+                <Badge variante={personne.est_actif ? "succes" : "terre"}>
+                  {personne.est_actif ? "Actif" : "Inactif"}
+                </Badge>
                 <span className="text-xs text-ardoise-clair">Score: {personne.score}</span>
               </div>
             </div>
@@ -211,6 +218,7 @@ function Contenu() {
         </Carte>
       )}
 
+      {/* ========== RESULTAT INFIRME ========== */}
       {resultat === "infirme" && !personne && (
         <div className="bg-terre/10 border-l-4 border-terre p-4 rounded">
           <p className="text-sm text-terre font-semibold">Identite non confirmee</p>

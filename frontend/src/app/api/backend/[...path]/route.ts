@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 const BACKEND_URL =
   process.env.URL_BACKEND ||
   process.env.NEXT_PUBLIC_URL_BACKEND ||
-  'http://127.0.0.1:8000';
+  'http://backend:8000';
 
 const BACKEND_BASE = BACKEND_URL.replace(/\/$/, '');
 

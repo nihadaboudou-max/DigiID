@@ -181,21 +181,73 @@ def valider_numero_cni(numero: Optional[str]) -> Tuple[bool, str]:
     return True, "Format du numéro valide."
 
 
+def _normaliser_date(date_str: Optional[str]) -> Optional[str]:
+    """
+    Normalise une date vers le format JJ/MM/AAAA.
+    Accepte : JJ/MM/AAAA, JJ-MM-AAAA, JJ.MM.AAAA, AAMMJJ (MRZ), etc.
+    """
+    if not date_str:
+        return None
+    
+    # Déjà au bon format JJ/MM/AAAA
+    if re.match(r'^\d{2}/\d{2}/\d{4}$', date_str):
+        return date_str
+    
+    # Format avec séparateurs différents (JJ-MM-AAAA ou JJ.MM.AAAA)
+    match = re.match(r'^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$', date_str)
+    if match:
+        jj, mm, aaaa = match.groups()
+        if len(aaaa) == 2:
+            aaaa = "19" + aaaa if int(aaaa) > 40 else "20" + aaaa
+        return f"{jj.zfill(2)}/{mm.zfill(2)}/{aaaa}"
+    
+    # Format MRZ : AAMMJJ (6 chiffres)
+    if re.match(r'^\d{6}$', date_str):
+        aa = int(date_str[0:2])
+        mm = int(date_str[2:4])
+        jj = int(date_str[4:6])
+        aaaa = 1900 + aa if aa >= 40 else 2000 + aa
+        if 1 <= mm <= 12 and 1 <= jj <= 31:
+            return f"{jj:02d}/{mm:02d}/{aaaa}"
+    
+    # Format texte : "9 septembre 2024" ou "12 octobre 2002"
+    mois_map = {
+        "JANVIER": "01", "FÉVRIER": "02", "FEVRIER": "02",
+        "MARS": "03", "AVRIL": "04", "MAI": "05",
+        "JUIN": "06", "JUILLET": "07", "AOÛT": "08", "AOUT": "08",
+        "SEPTEMBRE": "09", "OCTOBRE": "10", "NOVEMBRE": "11",
+        "DÉCEMBRE": "12", "DECEMBRE": "12"
+    }
+    
+    date_upper = date_str.upper()
+    for mois_nom, mois_num in mois_map.items():
+        if mois_nom in date_upper:
+            match = re.search(r'(\d{1,2})\s+' + mois_nom + r'\s+(\d{4})', date_upper)
+            if match:
+                jj, aaaa = match.groups()
+                return f"{jj.zfill(2)}/{mois_num}/{aaaa}"
+    
+    return None
+
+
 def valider_date_naissance(date_naissance: Optional[str],
                            date_expiration: Optional[str] = None) -> Tuple[bool, str]:
     """
     Valide la date de naissance : format et cohérence.
-
-    Plus permissive que la version française (pas d'âge minimum strict
-    car un parent peut scanner la CNI de son enfant).
+    Accepte plusieurs formats : JJ/MM/AAAA, AAMMJJ (MRZ), texte, etc.
     """
     if not date_naissance:
         return False, "Date de naissance manquante."
 
+    # Normaliser la date
+    ddn_str = _normaliser_date(date_naissance)
+    if not ddn_str:
+        return False, f"Format de date invalide : {date_naissance}. Attendu : JJ/MM/AAAA ou AAMMJJ."
+
     try:
-        ddn = datetime.strptime(date_naissance, "%d/%m/%Y").date()
+        ddn = datetime.strptime(ddn_str, "%d/%m/%Y").date()
     except ValueError:
-        return False, f"Format de date invalide : {date_naissance}. Attendu : JJ/MM/AAAA."
+        return False, f"Date de naissance invalide : {ddn_str}."
 
     aujourd_hui = date.today()
     if ddn > aujourd_hui:
@@ -203,14 +255,16 @@ def valider_date_naissance(date_naissance: Optional[str],
 
     # Vérifier cohérence avec la date d'expiration
     if date_expiration:
-        try:
-            dexp = datetime.strptime(date_expiration, "%d/%m/%Y").date()
-            if dexp <= ddn:
-                return False, "La date d'expiration précède la date de naissance."
-        except ValueError:
-            pass
+        dexp_str = _normaliser_date(date_expiration)
+        if dexp_str:
+            try:
+                dexp = datetime.strptime(dexp_str, "%d/%m/%Y").date()
+                if dexp <= ddn:
+                    return False, "La date d'expiration précède la date de naissance."
+            except ValueError:
+                pass
 
-    return True, f"Date de naissance valide ({ddn.strftime('%d/%m/%Y')})."
+    return True, f"Date de naissance valide ({ddn_str})."
 
 
 def valider_date_expiration(date_expiration: Optional[str]) -> Tuple[bool, str]:

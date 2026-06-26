@@ -1,0 +1,119 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: digiid_db
+    restart: always
+    environment:
+      POSTGRES_USER: digiid_db_user
+      POSTGRES_PASSWORD: ${POSTGRES_MOT_DE_PASSE}
+      POSTGRES_DB: digiid_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    container_name: digiid_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: digiid_backend
+    restart: always
+    ports:
+      - "${PORT_BACKEND:-8000}:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    environment:
+      # ─── Application ────────────────────────────────────
+      - ENVIRONNEMENT=${ENVIRONNEMENT:-production}
+      - NOM_APPLICATION=${NOM_APPLICATION:-DigiID}
+      - VERSION_API=${VERSION_API:-v1}
+      - ACTIVER_DEBUG=${ACTIVER_DEBUG:-false}
+      - PORT=${PORT_BACKEND:-8000}
+
+      # ─── Sécurité ──────────────────────────────────────
+      - ALGORITHME_JWT=${ALGORITHME_JWT:-HS256}
+      - CLE_CHIFFREMENT_DONNEES=${CLE_CHIFFREMENT_DONNEES}
+      - CLE_SECRETE_JWT=${CLE_SECRETE_JWT}
+      - DUREE_TOKEN_ACCES_MINUTES=${DUREE_TOKEN_ACCES_MINUTES:-15}
+      - DUREE_TOKEN_RAFRAICHISSEMENT_JOURS=${DUREE_TOKEN_RAFRAICHISSEMENT_JOURS:-7}
+
+      # ─── PostgreSQL ────────────────────────────────────
+      - POSTGRES_UTILISATEUR=${POSTGRES_UTILISATEUR}
+      - POSTGRES_MOT_DE_PASSE=${POSTGRES_MOT_DE_PASSE}
+      - POSTGRES_NOM_BASE=${POSTGRES_NOM_BASE:-digiid_db}
+      - POSTGRES_HOST=${POSTGRES_HOST:-db}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - DATABASE_URL=${DATABASE_URL}
+
+      # ─── Redis ─────────────────────────────────────────
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_MOT_DE_PASSE=${REDIS_MOT_DE_PASSE:-}
+
+      # ─── LLM ───────────────────────────────────────────
+      - FOURNISSEUR_LLM=${FOURNISSEUR_LLM:-groq}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GROQ_MODELE=${GROQ_MODELE:-llama-3.3-70b-versatile}
+
+      # ─── Rate limiting ─────────────────────────────────
+      - LIMITE_REQUETES_PAR_MINUTE_ANONYME=${LIMITE_REQUETES_PAR_MINUTE_ANONYME:-20}
+      - LIMITE_REQUETES_PAR_MINUTE_AUTHENTIFIE=${LIMITE_REQUETES_PAR_MINUTE_AUTHENTIFIE:-120}
+      - LIMITE_REQUETES_PAR_MINUTE_ADMIN=${LIMITE_REQUETES_PAR_MINUTE_ADMIN:-300}
+
+      # ─── Super Admin seed ──────────────────────────────
+      - SEED_SUPER_ADMIN_EMAIL=${SEED_SUPER_ADMIN_EMAIL:-admin@digiid.africa}
+      - SEED_SUPER_ADMIN_MOT_DE_PASSE=${SEED_SUPER_ADMIN_MOT_DE_PASSE}
+      - SEED_SUPER_ADMIN_PRENOM=${SEED_SUPER_ADMIN_PRENOM:-Super}
+      - SEED_SUPER_ADMIN_NOM=${SEED_SUPER_ADMIN_NOM:-Admin}
+
+      # ─── 2FA ───────────────────────────────────────────
+      - ACTIVER_2FA_OBLIGATOIRE_ADMIN=${ACTIVER_2FA_OBLIGATOIRE_ADMIN:-false}
+      - DUREE_VALIDITE_CODE_2FA_SECONDES=${DUREE_VALIDITE_CODE_2FA_SECONDES:-300}
+
+      # ─── Email ─────────────────────────────────────────
+      - SMTP_MOT_DE_PASSE=${SMTP_MOT_DE_PASSE}
+      - EMAIL_EXPEDITEUR=${EMAIL_EXPEDITEUR:-DigiID <bigdataism2024@gmail.com>}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+
+      # ─── Monitoring ────────────────────────────────────
+      - NIVEAU_JOURNAL=${NIVEAU_JOURNAL:-INFO}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - ACTIVER_METRIQUES_PROMETHEUS=${ACTIVER_METRIQUES_PROMETHEUS:-true}
+
+      # ─── CORS (IP du serveur OVH via .env) ──────────
+      - ORIGINES_AUTORISEES=${ORIGINES_AUTORISEES}
+      - URL_FRONTEND=${URL_FRONTEND}
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        # IP du serveur lue depuis .env
+        NEXT_PUBLIC_URL_BACKEND: ${NEXT_PUBLIC_URL_BACKEND:-http://152.228.141.69:8000}
+        URL_BACKEND: ${URL_BACKEND_INTERNE:-http://backend:8000}
+    container_name: digiid_frontend
+    restart: always
+    ports:
+      - "${PORT_FRONTEND:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_URL_BACKEND=${NEXT_PUBLIC_URL_BACKEND:-http://152.228.141.69:8000}
+      - URL_BACKEND=${URL_BACKEND_INTERNE:-http://backend:8000}
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

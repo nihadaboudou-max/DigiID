@@ -91,7 +91,7 @@ class VerificationCNI(Base, MelangeTracabilite):
         String(255), nullable=True, doc="Prénom(s) extraits"
     )
     sexe: Mapped[Optional[str]] = mapped_column(
-        String(10), nullable=True, doc="Sexe extrait (M/F/non_detecte)"
+        String(20), nullable=True, doc="Sexe extrait (M/F/non_detecte)"
     )
     date_naissance: Mapped[Optional[str]] = mapped_column(
         String(15), nullable=True, doc="Date de naissance extraite (JJ/MM/AAAA)"

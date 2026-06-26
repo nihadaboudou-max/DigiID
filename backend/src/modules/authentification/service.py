@@ -33,6 +33,8 @@ from src.noyau.exceptions import (
     ErreurConflit, ErreurValidation, Erreur2FARequis, Erreur2FAInvalide,
 )
 from src.modules.authentification.totp import verifier_code_totp
+from src.modeles.token_reinitialisation import TokenReinitialisation
+from src.noyau.notification import envoyer_email
 from src.noyau.journal import journal_audit
 
 
@@ -472,3 +474,338 @@ async def _enregistrer_audit(
     journal_audit(
         f"{type_evenement} | utilisateur={utilisateur_id} | {description}",
     )
+
+
+# =============================================================================
+# Mot de passe oublié / réinitialisation
+# =============================================================================
+
+import secrets
+
+
+def _generer_token_reinitialisation() -> str:
+    """Génère un token aléatoire sécurisé pour la réinitialisation."""
+    return secrets.token_urlsafe(48)
+
+
+def _masquer_email(email: str) -> str:
+    """Masque partiellement un email pour l'affichage.
+    
+    Exemple : a***@example.com
+    """
+    if "@" not in email:
+        return email
+    nom, domaine = email.split("@", 1)
+    if len(nom) <= 2:
+        nom_masque = nom[0] + "***"
+    else:
+        nom_masque = nom[0] + "***" + nom[-1]
+    return f"{nom_masque}@{domaine}"
+
+
+async def demander_reinitialisation_mot_de_passe(
+    session: AsyncSession,
+    email: str,
+    frontend_url: str | None = None,
+    adresse_ip: str = "",
+) -> dict:
+    """
+    Demande un lien de réinitialisation de mot de passe.
+    
+    Si l'email existe, génère un token, le stocke en base
+    et envoie un email avec le lien de réinitialisation.
+    
+    La réponse est délibérément identique que l'email existe ou non
+    (message d'évitement d'énumération de comptes).
+    
+    Retourne un dict avec :
+        - succes: bool
+        - message: str
+        - destination_masquee: str (si compte trouvé)
+        - duree_validite_minutes: int
+        - token_dev: str | None (visible uniquement en dev)
+    """
+    email_hash = _hasher_email(email)
+    duree_validite_minutes = 30
+
+    # Chercher l'utilisateur
+    resultat = await session.execute(
+        select(Utilisateur).where(
+            Utilisateur.email_hash == email_hash,
+            Utilisateur.est_supprime == False,
+        )
+    )
+    utilisateur = resultat.scalar_one_or_none()
+
+    # Message identique dans tous les cas (prévention énumération)
+    message = (
+        "Si un compte existe avec cet email, un lien de réinitialisation "
+        "vient d'être envoyé. Vérifie ta boîte de réception et tes spams."
+    )
+
+    if utilisateur is None:
+        journal.info(
+            f"Demande de réinitialisation pour email inconnu (hash={email_hash[:8]}...)"
+        )
+        # On simule quand même un log pour éviter l'énumération
+        await _enregistrer_audit(
+            session,
+            type_evenement="demande_reinitialisation_mdp",
+            description=f"Demande pour email inconnu (hash={email_hash[:8]}...)",
+            adresse_ip=adresse_ip,
+        )
+        await session.commit()
+        return {
+            "succes": True,
+            "message": message,
+            "destination_masquee": _masquer_email(email),
+            "duree_validite_minutes": duree_validite_minutes,
+            "token_dev": None,
+        }
+
+    # L'utilisateur existe — vérifier qu'il est actif
+    if not utilisateur.est_actif:
+        journal.warning(
+            f"Demande de réinitialisation pour compte désactivé id={utilisateur.id}"
+        )
+        await _enregistrer_audit(
+            session,
+            type_evenement="demande_reinitialisation_mdp",
+            description=f"Compte désactivé id={utilisateur.id}",
+            adresse_ip=adresse_ip,
+        )
+        await session.commit()
+        return {
+            "succes": True,
+            "message": message,
+            "destination_masquee": _masquer_email(email),
+            "duree_validite_minutes": duree_validite_minutes,
+            "token_dev": None,
+        }
+
+    # Générer le token
+    token = _generer_token_reinitialisation()
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    # Révoquer les anciens tokens non utilisés
+    anciens_tokens = await session.execute(
+        select(TokenReinitialisation).where(
+            TokenReinitialisation.utilisateur_id == utilisateur.id,
+            TokenReinitialisation.est_utilise == False,
+            TokenReinitialisation.date_expiration > datetime.now(timezone.utc),
+        )
+    )
+    for ancien in anciens_tokens.scalars().all():
+        ancien.est_utilise = True
+
+    # Sauvegarder le nouveau token
+    nouveau_token = TokenReinitialisation(
+        utilisateur_id=utilisateur.id,
+        token_hash=token_hash,
+        date_expiration=datetime.now(timezone.utc) + timedelta(minutes=duree_validite_minutes),
+        adresse_ip_demande=adresse_ip,
+    )
+    session.add(nouveau_token)
+
+    # Envoyer l'email
+    email_destinataire = dechiffrer_donnee(utilisateur.email_chiffre)
+    prenom_utilisateur = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else None
+
+    # Construire le lien de réinitialisation (URL dynamique du frontend)
+    url_frontend = frontend_url or parametres.url_frontend or "http://localhost:3000"
+    lien_reinitialisation = f"{url_frontend}/mot-de-passe-oublie/reinitialiser?token={token}"
+
+    sujet = "DigiID — Réinitialisation de ton mot de passe"
+    prenom_texte = f"{prenom_utilisateur}, " if prenom_utilisateur else ""
+    corps_texte = f"""
+Bonjour {prenom_texte}
+
+Tu as demandé la réinitialisation de ton mot de passe DigiID.
+
+Clique sur le lien ci-dessous pour choisir un nouveau mot de passe :
+
+{lien_reinitialisation}
+
+Ce lien expire dans {duree_validite_minutes} minutes.
+
+Si tu n'as pas demandé cette réinitialisation, ignore cet email.
+Ton mot de passe actuel reste valide.
+
+---
+L'équipe DigiID
+"""
+    corps_html = f"""
+<div style="max-width:480px;margin:0 auto;padding:20px;font-family:Arial,sans-serif">
+    <h1 style="color:#1a73e8;font-size:24px;text-align:center">DigiID</h1>
+    <p>Bonjour {prenom_texte}</p>
+    <p>Tu as demandé la réinitialisation de ton mot de passe DigiID.</p>
+    <div style="text-align:center;margin:20px 0">
+        <a href="{lien_reinitialisation}"
+           style="display:inline-block;background:#1a73e8;color:white;padding:14px 28px;
+                  border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">
+            Réinitialiser mon mot de passe
+        </a>
+    </div>
+    <p style="color:#666;font-size:14px">Ce lien expire dans {duree_validite_minutes} minutes.</p>
+    <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+    <p style="color:#999;font-size:12px">
+        Si tu n'as pas demandé cette réinitialisation, ignore cet email.<br>
+        Ton mot de passe actuel reste valide.
+    </p>
+</div>"""
+
+    envoyer_email(email_destinataire, sujet, corps_texte, corps_html)
+
+    # Audit
+    await _enregistrer_audit(
+        session,
+        utilisateur_id=utilisateur.id,
+        role_acteur=utilisateur.role,
+        type_evenement="demande_reinitialisation_mdp",
+        description=f"Lien de réinitialisation envoyé à {_masquer_email(email_destinataire)}",
+        adresse_ip=adresse_ip,
+    )
+    await session.commit()
+
+    journal.info(
+        f"Lien de réinitialisation envoyé : utilisateur={utilisateur.id} "
+        f"email={_masquer_email(email_destinataire)}"
+    )
+
+    return {
+        "succes": True,
+        "message": message,
+        "destination_masquee": _masquer_email(email_destinataire),
+        "duree_validite_minutes": duree_validite_minutes,
+        "token_dev": token if parametres.est_developpement else None,
+    }
+
+
+async def reinitialiser_mot_de_passe(
+    session: AsyncSession,
+    token: str,
+    nouveau_mot_de_passe: str,
+    adresse_ip: str = "",
+) -> dict:
+    """
+    Réinitialise le mot de passe avec un token valide.
+    
+    Vérifie que le token existe, n'est pas expiré, n'a pas été utilisé.
+    Met à jour le mot de passe et invalide toutes les sessions actives.
+    
+    Retourne un dict avec :
+        - succes: bool
+        - message: str
+    """
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    # Chercher le token
+    resultat = await session.execute(
+        select(TokenReinitialisation).where(
+            TokenReinitialisation.token_hash == token_hash,
+        )
+    )
+    token_objet = resultat.scalar_one_or_none()
+
+    if token_objet is None:
+        journal.warning(
+            f"Tentative de réinitialisation avec token inconnu (hash={token_hash[:8]}...)"
+        )
+        raise ErreurAuthentification(
+            "Token de réinitialisation invalide",
+            message_utilisateur="Ce lien de réinitialisation est invalide ou a déjà été utilisé.",
+        )
+
+    # Vérifier si déjà utilisé
+    if token_objet.est_utilise:
+        journal.warning(
+            f"Token déjà utilisé : utilisateur={token_objet.utilisateur_id}"
+        )
+        raise ErreurAuthentification(
+            "Token déjà utilisé",
+            message_utilisateur="Ce lien de réinitialisation a déjà été utilisé. "
+            "Fais une nouvelle demande si tu as besoin de réinitialiser ton mot de passe.",
+        )
+
+    # Vérifier expiration
+    if token_objet.date_expiration < datetime.now(timezone.utc):
+        journal.warning(
+            f"Token expiré : utilisateur={token_objet.utilisateur_id}"
+        )
+        raise ErreurAuthentification(
+            "Token expiré",
+            message_utilisateur="Ce lien de réinitialisation a expiré. "
+            "Fais une nouvelle demande pour recevoir un nouveau lien.",
+        )
+
+    # Vérifier tentatives max (5 max)
+    if token_objet.tentative >= 5:
+        token_objet.est_utilise = True
+        journal.warning(
+            f"Trop de tentatives pour le token : utilisateur={token_objet.utilisateur_id}"
+        )
+        raise ErreurAuthentification(
+            "Trop de tentatives",
+            message_utilisateur="Trop de tentatives. Fais une nouvelle demande pour recevoir un nouveau lien.",
+        )
+
+    # Récupérer l'utilisateur
+    resultat_utilisateur = await session.execute(
+        select(Utilisateur).where(
+            Utilisateur.id == token_objet.utilisateur_id,
+            Utilisateur.est_supprime == False,
+        )
+    )
+    utilisateur = resultat_utilisateur.scalar_one_or_none()
+
+    if utilisateur is None:
+        token_objet.est_utilise = True
+        await session.commit()
+        raise ErreurAuthentification(
+            "Utilisateur introuvable",
+            message_utilisateur="Ce compte n'existe plus. Contacte le support.",
+        )
+
+    if not utilisateur.est_actif:
+        raise ErreurAuthentification(
+            "Compte désactivé",
+            message_utilisateur="Ce compte est désactivé. Contacte le support.",
+        )
+
+    # Mettre à jour le mot de passe
+    utilisateur.mot_de_passe_hash = hacher_mot_de_passe(nouveau_mot_de_passe)
+
+    # Marquer le token comme utilisé
+    token_objet.est_utilise = True
+    token_objet.date_utilisation = datetime.now(timezone.utc)
+
+    # Révoquer toutes les sessions actives pour forcer la reconnexion
+    sessions_actives = await session.execute(
+        select(SessionAuthentification).where(
+            SessionAuthentification.utilisateur_id == utilisateur.id,
+            SessionAuthentification.est_revoquee == False,
+        )
+    )
+    for session_auth in sessions_actives.scalars().all():
+        session_auth.est_revoquee = True
+        session_auth.raison_revocation = "changement_mot_de_passe"
+
+    # Audit
+    await _enregistrer_audit(
+        session,
+        utilisateur_id=utilisateur.id,
+        role_acteur=utilisateur.role,
+        type_evenement=TypesEvenementAudit.CHANGEMENT_MOT_DE_PASSE.value,
+        description="Mot de passe réinitialisé via lien 'mot de passe oublié'",
+        adresse_ip=adresse_ip,
+    )
+    await session.commit()
+
+    journal.info(
+        f"Mot de passe réinitialisé avec succès : utilisateur={utilisateur.id}"
+    )
+
+    return {
+        "succes": True,
+        "message": "Mot de passe réinitialisé avec succès ! Tu peux maintenant te connecter avec ton nouveau mot de passe.",
+    }

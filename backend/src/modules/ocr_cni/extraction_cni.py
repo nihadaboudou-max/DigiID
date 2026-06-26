@@ -287,8 +287,8 @@ def _extraire_valeur_label(texte: str, patterns_label: list[str], contexte: str 
             if match:
                 # Valeur sur la même ligne après le label
                 valeur = ligne_propre[match.end():].strip()
-                valeur = re.sub(r"^[:\\-.\s]+", "", valeur)
-                valeur = re.sub(r"[:\\-.\s]+$", "", valeur)
+                valeur = re.sub(r"^[:.\s-]+", "", valeur)
+                valeur = re.sub(r"[:.\s-]+$", "", valeur)
                 if valeur and not re.match(r"^\s*$", valeur):
                     return _nettoyer_valeur(valeur, contexte)
 
@@ -325,7 +325,7 @@ def _nettoyer_valeur(valeur: str, contexte: str) -> str:
             return "M"
         if valeur.upper().startswith("FEM"):
             return "F"
-        return "non_detecte"
+        return "N/A"
 
     elif contexte == "date_naissance":
         valeur = re.sub(r"[.\-]", "/", valeur)
@@ -340,40 +340,91 @@ def _nettoyer_valeur(valeur: str, contexte: str) -> str:
 
     return valeur
 
-
 def _extraire_generique(texte: str) -> dict:
     """Extraction de dernier recours : patterns universels."""
     resultats: dict = {}
     texte_upper = texte.upper()
 
-    # NIN Nigeria (11 chiffres)
-    nin = re.search(PATTERN_NIN, texte)
-    if nin:
-        resultats["numero_cni"] = nin.group(1)
+    # 🔑 NUMÉRO CNI - Plusieurs patterns
+    patterns_numero = [
+        r"N[°O]\s*[:\-]?\s*([A-Z0-9]{8,20})",
+        r"NUMERO\s*[:\-]?\s*([A-Z0-9]{8,20})",
+        r"NIN\s*[:\-]?\s*(\d{11,15})",
+        r"ID\s*(?:NUMBER)?\s*[:\-]?\s*([A-Z0-9]{8,20})",
+        r"CARTE\s*N°\s*([A-Z0-9]{8,15})",
+    ]
 
-    # Numéros CNI (8-15 alphanum)
-    numeros = re.findall(r"\b([A-Z0-9]{9,15})\b", texte_upper)
-    for num in numeros:
-        if not re.match(r"^[A-Z]{6,}$", num):
-            resultats.setdefault("numero_cni", num)
+    for pattern in patterns_numero:
+        match = re.search(pattern, texte_upper)
+        if match:
+            resultats["numero_cni"] = match.group(1).strip()
             break
 
-    # Dates
-    dates = re.findall(PATTERN_DATE, texte)
-    if dates:
-        d = dates[0]
-        resultats["date_naissance"] = f"{d[0]}/{d[1]}/{d[2]}"
+    # Pattern 2 : NIN Nigeria (11 chiffres)
+    if "numero_cni" not in resultats:
+        nin = re.search(r"\b(\d{11})\b", texte)
+        if nin:
+            resultats["numero_cni"] = nin.group(1)
 
-    # Sexe
-    sexe = re.search(PATTERN_SEXE, texte, re.IGNORECASE)
-    if sexe:
-        s = sexe.group(1).upper()[:1]
-        resultats["sexe"] = "M" if s == "M" else "F"
+    # Pattern 3 : Chercher une longue séquence alphanumérique (fallback)
+    if "numero_cni" not in resultats:
+        numeros = re.findall(r"\b([A-Z0-9]{10,15})\b", texte_upper)
+        for num in numeros:
+            if not re.match(r"^[A-Z]{8,}$", num) and not re.match(r"^\d{8}$", num):
+                resultats["numero_cni"] = num
+                break
 
-    # Taille
-    taille = re.search(PATTERN_TAILLE, texte, re.IGNORECASE)
-    if taille:
-        resultats["taille"] = taille.group(1)
+    #  DATE DE NAISSANCE - Formats multiples
+    patterns_date = [
+        r"N[ÉEÉ]\s+LE?\s+[:\-]?\s*(\d{1,2}\s*[/\-\.]\s*\d{1,2}\s*[/\-\.]\s*\d{2,4})",
+        r"DATE\s+DE\s+NAISSANCE\s*[:\-]?\s*(\d{1,2}\s*[/\-\.]\s*\d{1,2}\s*[/\-\.]\s*\d{2,4})",
+        r"NE\s+LE?\s+[:\-]?\s*(\d{1,2}\s*[/\-\.]\s*\d{1,2}\s*[/\-\.]\s*\d{2,4})",
+        r"DATE\s+NAISSANCE\s*[:\-]?\s*(\d{1,2}\s*[/\-\.]\s*\d{1,2}\s*[/\-\.]\s*\d{2,4})",
+    ]
+
+    for pattern in patterns_date:
+        match = re.search(pattern, texte_upper)
+        if match:
+            date_str = match.group(1).replace(" ", "")
+            resultats["date_naissance"] = re.sub(r"[\-\.]", "/", date_str)
+            break
+
+    # Fallback : chercher une date au format JJ/MM/AAAA
+    if "date_naissance" not in resultats:
+        dates = re.findall(r"(\d{2})\s*[/.\-]\s*(\d{2})\s*[/.\-]\s*(\d{4})", texte)
+        if dates:
+            d = dates[0]
+            aaaa = d[2]
+            if len(aaaa) == 2:
+                aaaa = "19" + aaaa if int(aaaa) > 40 else "20" + aaaa
+            resultats["date_naissance"] = f"{d[0].zfill(2)}/{d[1].zfill(2)}/{aaaa}"
+
+    # ♂️♀️ SEXE - Patterns multiples
+    patterns_sexe = [
+        (r"SEXE\s*[:\-]?\s*(MASCULIN|FEMININ|M|F)\b", lambda x: "M" if x.upper().startswith("M") else "F"),
+        (r"SEX\s*[:\-]?\s*(MALE|FEMALE|M|F)\b", lambda x: "M" if x.upper() in ("MALE", "M") else "F"),
+        (r"\b(MASCULIN)\b", lambda x: "M"),
+        (r"\b(FEMININ)\b", lambda x: "F"),
+        (r"\b(MALE)\b", lambda x: "M"),
+        (r"\b(FEMALE)\b", lambda x: "F"),
+    ]
+
+    for pattern, transform in patterns_sexe:
+        match = re.search(pattern, texte_upper)
+        if match:
+            resultats["sexe"] = transform(match.group(1))
+            break
+
+    # Fallback : chercher M ou F isolé près d'un label
+    if "sexe" not in resultats:
+        match_sexe_isole = re.search(r"SEXE\s*[:\-]?\s*([MF])\b", texte_upper)
+        if match_sexe_isole:
+            resultats["sexe"] = match_sexe_isole.group(1)
+
+    # 📏 TAILLE (optionnel)
+    match_taille = re.search(r"(\d{3})\s*cm", texte, re.IGNORECASE)
+    if match_taille:
+        resultats["taille"] = match_taille.group(1)
 
     return resultats
 
@@ -485,12 +536,36 @@ def extraire_donnees_cni(
         if not date_expiration:
             date_expiration = mrz_parse.get("date_expiration_date")
 
+    # ── Debug : Voir ce qui a été extrait ──
+    journal.info(f"DEBUG EXTRACTION - Pays: {pays}")
+    journal.info(f"DEBUG EXTRACTION - Nom: {nom}, Prénoms: {prenoms}")
+    journal.info(f"DEBUG EXTRACTION - Sexe: {sexe_str}, Date naissance: {date_naissance}")
+    journal.info(f"DEBUG EXTRACTION - Numéro: {numero}")
+    journal.info(f"DEBUG EXTRACTION - MRZ lignes: {mrz_lignes}")
+
     # ── Étape 4 : Extraction générique (fallback) ──
-    if not any([nom, prenoms, date_naissance, numero]):
+    # ✅ CORRECTION : Toujours initialiser generique pour éviter NameError
+    generique: dict = {}
+    
+    if not all([nom, prenoms, numero, date_naissance]):
         journal.info("Extraction spécifique infructueuse, tentative générique...")
         generique = _extraire_generique(texte)
+        
+        # Appliquer les résultats génériques si les champs sont vides
         numero = numero or generique.get("numero_cni")
         date_naissance = date_naissance or generique.get("date_naissance")
+        
+        # ✅ Récupérer le sexe s'il n'a pas été détecté
+        if sexe_str == "non_detecte":
+            sexe_gen = generique.get("sexe")
+            if sexe_gen:
+                sexe_str = sexe_gen
+        
+        # Récupérer la taille si manquante
+        if not taille:
+            taille = generique.get("taille")
+        
+        journal.info(f"Fallback générique - Numéro: {numero}, Date: {date_naissance}, Sexe: {sexe_str}")
 
     # ── Construction du résultat ──
     donnees = DonneesCNIExtraites(

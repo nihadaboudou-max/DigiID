@@ -32,9 +32,17 @@ export function GarantieRole({ rolesAutorises, children }: ProprietesGarantie) {
   const dejaRedirige = useRef(false);
 
   const verifierAuth = useCallback(() => {
-    if (chargement) return;
+    // 🔑 CRITIQUE : Si le contexte est encore en train de charger, on attend
+    // Ne pas rediriger tant que le chargement n'est pas terminé
+    if (chargement) {
+      return;
+    }
 
-    if (!estConnecte || !obtenirTokenAcces()) {
+    // Vérifier d'abord si le token existe (plus rapide que d'attendre le profil)
+    const tokenExiste = !!obtenirTokenAcces();
+
+    // Si pas de token ET pas connecté → rediriger vers connexion
+    if (!tokenExiste && !estConnecte) {
       if (pathname !== "/connexion") {
         dejaRedirige.current = true;
         router.push("/connexion");
@@ -42,6 +50,14 @@ export function GarantieRole({ rolesAutorises, children }: ProprietesGarantie) {
       return;
     }
 
+    // Si le token existe mais que l'utilisateur n'est pas encore chargé → attendre
+    // C'est le cas juste après la connexion : le token est là, mais le profil est en cours de chargement
+    if (tokenExiste && !utilisateur) {
+      // Ne pas rediriger, attendre que le contexte finisse de charger le profil
+      return;
+    }
+
+    // Vérifier les rôles
     if (utilisateur && !rolesAutorises.includes(utilisateur.role)) {
       const destination = cheminTableauDeBord(utilisateur.role);
       // 🛑 Évite la boucle : ne redirige pas si on est déjà sur la destination
@@ -101,7 +117,8 @@ export function GarantieRole({ rolesAutorises, children }: ProprietesGarantie) {
     };
   }, [verifierAuth]);
 
-  if (chargement) {
+  // Afficher le chargement tant que le contexte charge OU tant qu'on a un token mais pas encore l'utilisateur
+  if (chargement || (obtenirTokenAcces() && !utilisateur)) {
     return (
       <div className="flex-grow flex items-center justify-center">
         <p className="text-ardoise-clair">Chargement...</p>

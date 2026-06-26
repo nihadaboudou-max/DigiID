@@ -53,16 +53,19 @@ export function stockerJetons(tokenAcces: string, tokenRafraichissement: string)
   // Cookies sécurisés en httponly serait mieux, mais nécessite un middleware
   // Next.js. Pour le prototype, on utilise js-cookie côté navigateur.
   // ⚠️ path: "/" est OBLIGATOIRE — sans ça, le cookie n'est accessible que
-  // sur le chemin où il a été créé (ex: /connexion), pas sur /tableau-de-bord.
+  // En HTTP, secure doit être false sinon les cookies ne sont pas envoyés
+  
+  const estHTTPS = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  
   Cookies.set(NOM_COOKIE_TOKEN, tokenAcces, {
     path: "/",
-    secure: process.env.NODE_ENV === "production",
+    secure: estHTTPS,  // ← true seulement si HTTPS
     sameSite: "strict",
     expires: 1 / 96, // 15 minutes
   });
   Cookies.set(NOM_COOKIE_REFRESH, tokenRafraichissement, {
     path: "/",
-    secure: process.env.NODE_ENV === "production",
+    secure: estHTTPS,  // ← true seulement si HTTPS
     sameSite: "strict",
     expires: 7, // 7 jours
   });

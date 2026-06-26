@@ -2,7 +2,7 @@
 
 /**
  * Page mot de passe oublié — demande d'envoi d'un lien de réinitialisation.
- * Phase 5d : UI prête. Phase 2 : envoi email réel via Celery + SMTP.
+ * Appelle l'API backend /api/v1/auth/mot-de-passe/oublie.
  */
 import Link from "next/link";
 import { useState } from "react";
@@ -12,20 +12,33 @@ import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
 import { EnTete } from "@/composants/layouts/EnTete";
 import { Logo } from "@/composants/commun/Logo";
+import { demanderReinitialisationMotDePasse, ErreurAPI } from "@/services/authentification";
 
 export default function PageMotDePasseOublie() {
   const [email, setEmail] = useState("");
   const [envoye, setEnvoye] = useState(false);
   const [chargement, setChargement] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [destinationMasquee, setDestinationMasquee] = useState<string | null>(null);
 
-  function gererSoumission(evt: React.FormEvent) {
+  async function gererSoumission(evt: React.FormEvent) {
     evt.preventDefault();
+    setErreur(null);
     setChargement(true);
-    // Simulation — Phase 2 fera un vrai appel POST /api/v1/auth/mot-de-passe/reinitialisation
-    setTimeout(() => {
+
+    try {
+      const reponse = await demanderReinitialisationMotDePasse(email);
+      setDestinationMasquee(reponse.destination_masquee ?? null);
       setEnvoye(true);
+    } catch (e) {
+      if (e instanceof ErreurAPI) {
+        setErreur(e.message_utilisateur);
+      } else {
+        setErreur("Erreur inattendue. Réessaie dans un instant.");
+      }
+    } finally {
       setChargement(false);
-    }, 800);
+    }
   }
 
   return (
@@ -42,6 +55,12 @@ export default function PageMotDePasseOublie() {
               Pas de panique, on t'envoie un lien de réinitialisation.
             </p>
           </div>
+
+          {erreur && (
+            <div className="bg-terre/10 border-l-4 border-terre p-4 mb-5 rounded">
+              <p className="text-sm text-terre font-medium">{erreur}</p>
+            </div>
+          )}
 
           {envoye ? (
             <div className="text-center space-y-4">

@@ -179,3 +179,70 @@ class VerificationStatutReponse(BaseModel):
     """Statut de vérification actuel."""
     est_email_verifie: bool
     doit_verifier: bool
+
+
+# =============================================================================
+# MOT DE PASSE OUBLIÉ / RÉINITIALISATION
+# =============================================================================
+
+class MotDePasseOublieRequete(BaseModel):
+    """Requête pour demander un lien de réinitialisation de mot de passe."""
+    email: EmailStr = Field(..., description="Adresse email du compte")
+    frontend_url: Optional[str] = Field(
+        default=None,
+        description="URL du frontend pour construire le lien de réinitialisation. "
+        "Si non fourni, utilise la valeur configurée côté serveur.",
+    )
+
+
+class MotDePasseOublieReponse(BaseModel):
+    """Réponse après demande de réinitialisation.
+    
+    Le message est identique que l'email existe ou non pour
+    éviter l'énumération de comptes.
+    """
+    succes: bool
+    message: str
+    destination_masquee: Optional[str] = Field(
+        default=None,
+        description="Email partiellement masqué si le compte existe",
+    )
+    duree_validite_minutes: int = Field(
+        default=30,
+        description="Durée de validité du lien en minutes",
+    )
+    token_dev: Optional[str] = Field(
+        default=None,
+        description="Token visible uniquement en mode développement",
+    )
+
+
+class MotDePasseReinitialisationRequete(BaseModel):
+    """Requête pour réinitialiser le mot de passe avec un token."""
+    token: str = Field(..., description="Token de réinitialisation reçu par email")
+    nouveau_mot_de_passe: str = Field(
+        ...,
+        min_length=12,
+        max_length=128,
+        description="Minimum 12 caractères, avec majuscule, minuscule, chiffre et caractère spécial"
+    )
+
+    @field_validator("nouveau_mot_de_passe")
+    @classmethod
+    def valider_complexite_mot_de_passe(cls, valeur: str) -> str:
+        """Vérifie la complexité minimale du mot de passe."""
+        if not any(c.islower() for c in valeur):
+            raise ValueError("Le mot de passe doit contenir au moins une minuscule")
+        if not any(c.isupper() for c in valeur):
+            raise ValueError("Le mot de passe doit contenir au moins une majuscule")
+        if not any(c.isdigit() for c in valeur):
+            raise ValueError("Le mot de passe doit contenir au moins un chiffre")
+        if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?/~`" for c in valeur):
+            raise ValueError("Le mot de passe doit contenir au moins un caractère spécial")
+        return valeur
+
+
+class MotDePasseReinitialisationReponse(BaseModel):
+    """Réponse après réinitialisation réussie du mot de passe."""
+    succes: bool
+    message: str

@@ -17,12 +17,12 @@ const nextConfig = {
   // Priorité de résolution :
   //   1. NEXT_PUBLIC_URL_BACKEND (variable Render recommandée)
   //   2. URL_BACKEND             (fallback Render)
-  //   3. http://localhost:8000   (développement local)
+  //   3. http://backend:8000   (développement local)
   async rewrites() {
-    let backendUrl =
-      process.env.NEXT_PUBLIC_URL_BACKEND ||
-      process.env.URL_BACKEND ||
-      "http://localhost:8000";
+    const backendUrl =
+      process.env.URL_BACKEND ||              // ← priorité 1 (Docker interne : http://backend:8000)
+      process.env.NEXT_PUBLIC_URL_BACKEND ||  // ← priorité 2 (IP publique OVH)
+      "http://backend:8000";
 
     // Ajouter https:// si l'URL est fournie sans protocole
     // (ex: "digiid-backend-h99s.onrender.com" → "https://digiid-backend-h99s.onrender.com")

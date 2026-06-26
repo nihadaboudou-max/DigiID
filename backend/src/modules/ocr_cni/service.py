@@ -21,6 +21,7 @@ from src.modeles import Utilisateur
 from src.modeles.verification_cni import VerificationCNI
 from src.modules.ocr_cni.extraction_cni import extraire_donnees_cni
 from src.modules.ocr_cni.ocr_engine import analyser_image_cni
+from src.modules.ocr_cni.mrz_parser import parser_mrz_complet
 from src.modules.ocr_cni.schemas import (
     DonneesCNIExtraites,
     ListeVerificationsCNI,
@@ -96,7 +97,77 @@ def _compter_champs_extraits(donnees: DonneesCNIExtraites) -> int:
         donnees.autorite_delivrance,
         donnees.taille,
     ]
-    return sum(1 for c in champs_pertinents if c is not None and c != "non_detecte")
+    return sum(1 for c in champs_pertinents if c is not None and c != "non_detecte" and c != "N/A")
+
+
+def _fusionner_donnees_mrz(
+    donnees_ocr: DonneesCNIExtraites,
+    mrz_lignes: tuple,
+) -> DonneesCNIExtraites:
+    """
+    Fusionne les données OCR avec les données MRZ.
+    Les données MRZ sont prioritaires car plus fiables.
+    
+    Args:
+        donnees_ocr: Données extraites par OCR
+        mrz_lignes: Tuple (l1, l2, l3) de la MRZ
+    
+    Retour:
+        DonneesCNIExtraites avec les données MRZ prioritaires
+    """
+    # Si pas de MRZ, retourner les données OCR telles quelles
+    if not mrz_lignes or not mrz_lignes[0]:
+        return donnees_ocr
+    
+    l1, l2, l3 = mrz_lignes
+    
+    # Parser la MRZ selon le format détecté
+    try:
+        resultat_mrz = parser_mrz_complet(l1, l2, l3)
+        
+        # Créer une copie des données OCR
+        donnees_finales = donnees_ocr.model_copy()
+        
+        # Priorité MRZ sur OCR pour chaque champ
+        if resultat_mrz.get("numero_document"):
+            donnees_finales.numero_cni = resultat_mrz["numero_document"]
+            journal.debug(f"MRZ: numéro_cni = {resultat_mrz['numero_document']}")
+        
+        if resultat_mrz.get("nom_famille"):
+            donnees_finales.nom_famille = resultat_mrz["nom_famille"]
+            journal.debug(f"MRZ: nom_famille = {resultat_mrz['nom_famille']}")
+        
+        if resultat_mrz.get("prenoms"):
+            donnees_finales.prenoms = resultat_mrz["prenoms"]
+            journal.debug(f"MRZ: prenoms = {resultat_mrz['prenoms']}")
+        
+        if resultat_mrz.get("date_naissance_date"):
+            donnees_finales.date_naissance = resultat_mrz["date_naissance_date"]
+            journal.debug(f"MRZ: date_naissance = {resultat_mrz['date_naissance_date']}")
+        
+        if resultat_mrz.get("date_expiration_date"):
+            donnees_finales.date_expiration = resultat_mrz["date_expiration_date"]
+            journal.debug(f"MRZ: date_expiration = {resultat_mrz['date_expiration_date']}")
+        
+        if resultat_mrz.get("sexe") and resultat_mrz["sexe"] in ("M", "F"):
+            donnees_finales.sexe = resultat_mrz["sexe"]
+            journal.debug(f"MRZ: sexe = {resultat_mrz['sexe']}")
+        
+        if resultat_mrz.get("pays_emetteur_nom"):
+            donnees_finales.autorite_delivrance = resultat_mrz["pays_emetteur_nom"]
+            journal.debug(f"MRZ: pays = {resultat_mrz['pays_emetteur_nom']}")
+        
+        journal.info(
+            f"Fusion MRZ réussie : format={resultat_mrz.get('format')}, "
+            f"numero={donnees_finales.numero_cni}, "
+            f"nom={donnees_finales.nom_famille}"
+        )
+        
+        return donnees_finales
+        
+    except Exception as e:
+        journal.warning(f"Erreur lors du parsing MRZ : {e}")
+        return donnees_ocr
 
 
 async def _enregistrer_verification(
@@ -177,8 +248,9 @@ async def traiter_upload_cni(
       1. Validation du fichier (format, taille)
       2. Analyse OCR de l'image
       3. Extraction structurée des champs
-      4. Validation des données extraites
-      5. Enregistrement en base de données
+      4. Fusion avec les données MRZ (priorité MRZ)
+      5. Validation des données extraites
+      6. Enregistrement en base de données
 
     Args :
         session : Session SQLAlchemy
@@ -203,20 +275,29 @@ async def traiter_upload_cni(
     temps_ms = resultat_analyse["temps_analyse_ms"]
     erreurs = resultat_analyse["erreurs"]
 
-    # 3. Extraire les données structurées
-    donnees = extraire_donnees_cni(
+    journal.info(
+        f"OCR terminé : {len(texte_brut)} caractères, "
+        f"confiance={confiance:.1f}%, "
+        f"MRZ={'OK' if mrz_lignes and mrz_lignes[0] else 'NON'}"
+    )
+
+    # 3. Extraire les données structurées depuis le texte OCR
+    donnees_ocr = extraire_donnees_cni(
         texte_brut=texte_brut,
         confiance=confiance,
         mrz_lignes=mrz_lignes,
     )
 
-    # 4. Compter les champs extraits
+    # 4. Fusionner avec les données MRZ (priorité MRZ)
+    donnees = _fusionner_donnees_mrz(donnees_ocr, mrz_lignes)
+
+    # 5. Compter les champs extraits
     nb_champs = _compter_champs_extraits(donnees)
 
-    # 5. Valider les données
+    # 6. Valider les données
     validation = valider_donnees_cni(donnees) if succes_ocr else None
 
-    # 6. Enregistrer en base
+    # 7. Enregistrer en base
     verification = await _enregistrer_verification(
         session=session,
         utilisateur=utilisateur,
@@ -235,7 +316,7 @@ async def traiter_upload_cni(
         ),
     )
 
-    # 7. Journaliser
+    # 8. Journaliser
     journal.info(
         f"OCR CNI ({face}) : utilisateur={utilisateur.id}, "
         f"statut={verification.statut}, "
@@ -303,6 +384,7 @@ async def obtenir_synthese_verification(
     donnees_verso = None
     validation_globale = None
     statut = "en_attente"
+    message = ""
 
     if dernier_recto:
         donnees_recto = DonneesCNIExtraites(
@@ -360,7 +442,7 @@ async def obtenir_synthese_verification(
             donnees_combinees = DonneesCNIExtraites(
                 nom_famille=donnees_recto.nom_famille or donnees_verso.nom_famille,
                 prenoms=donnees_recto.prenoms or donnees_verso.prenoms,
-                sexe=donnees_recto.sexe if donnees_recto.sexe != "non_detecte" else donnees_verso.sexe,
+                sexe=donnees_recto.sexe if donnees_recto.sexe not in ("non_detecte", "N/A") else donnees_verso.sexe,
                 date_naissance=donnees_recto.date_naissance or donnees_verso.date_naissance,
                 lieu_naissance=donnees_recto.lieu_naissance or donnees_verso.lieu_naissance,
                 numero_cni=donnees_recto.numero_cni or donnees_verso.numero_cni,

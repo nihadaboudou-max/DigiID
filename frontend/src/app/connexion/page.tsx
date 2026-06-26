@@ -111,6 +111,14 @@ export default function PageConnexion() {
                   onChange={(e) => setMotDePasse(e.target.value)}
                   autoComplete="current-password"
                 />
+                <div className="text-right -mt-2">
+                  <Link
+                    href="/mot-de-passe-oublie"
+                    className="text-xs text-ardoise-clair hover:text-lagune transition-colors"
+                  >
+                    Mot de passe oublié ?
+                  </Link>
+                </div>
               </>
             ) : (
               // En mode 2FA, afficher les champs en lecture seule + le champ code

@@ -32,6 +32,7 @@ from src.modeles import (  # noqa: F401
     enrolement,
     verification_police,
     ong,
+    token_reinitialisation,
 )
 from src.config import parametres
 
