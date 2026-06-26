@@ -17,8 +17,10 @@ from fastapi import UploadFile
 from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from datetime import date as date_type
 from src.modeles import Utilisateur
 from src.modeles.verification_cni import VerificationCNI
+from src.modeles.document_identite import DocumentIdentite
 from src.modules.ocr_cni.extraction_cni import extraire_donnees_cni
 from src.modules.ocr_cni.ocr_engine import analyser_image_cni
 from src.modules.ocr_cni.mrz_parser import parser_mrz_complet
@@ -32,6 +34,7 @@ from src.modules.ocr_cni.schemas import (
     SuppressionCNI,
     RestaurationCNI,
 )
+from src.modules.ocr_cni.mrz_parser import CODES_PAYS_ICAO
 from src.modules.ocr_cni.validation_cni import (
     valider_donnees_cni,
     verifier_coherence_recto_verso,
@@ -170,6 +173,84 @@ def _fusionner_donnees_mrz(
         return donnees_ocr
 
 
+async def _creer_ou_mettre_a_jour_document_identite(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    donnees: DonneesCNIExtraites,
+    verification: VerificationCNI,
+) -> None:
+    """Crée ou met à jour un DocumentIdentite à partir des données OCR validées.
+    
+    Action :
+      - Si un DocumentIdentite (cni) avec le même verification_id existe → mise à jour
+      - Sinon → création d'un nouveau document avec source="ocr"
+    
+    Cela assure le lien entre le scan OCR et la section "Documents d'identité"
+    de l'utilisateur, empêchant les incohérences (fraude par saisie manuelle).
+    """
+    if not donnees.numero_cni:
+        journal.debug("Pas de numéro CNI extrait — création DocumentIdentite ignorée")
+        return
+
+    # Vérifier si un document existe déjà pour cette vérification
+    from sqlalchemy import select
+    resultat = await session.execute(
+        select(DocumentIdentite).where(
+            DocumentIdentite.utilisateur_id == utilisateur.id,
+            DocumentIdentite.type_document == "cni",
+            DocumentIdentite.verification_id == verification.id,
+        )
+    )
+    doc_existant = resultat.scalar_one_or_none()
+
+    if doc_existant:
+        # Mise à jour : ne pas écraser les corrections manuelles
+        if not doc_existant.a_ete_corrige:
+            doc_existant.numero_document = donnees.numero_cni
+            doc_existant.nom_complet = f"{donnees.prenoms or ''} {donnees.nom_famille or ''}".strip() or None
+            if donnees.sexe and donnees.sexe in ("M", "F"):
+                doc_existant.sexe = donnees.sexe
+            journal.info(f"DocumentIdentite mis à jour depuis OCR : id={doc_existant.id}")
+            await session.commit()
+        return
+
+    # Créer le document source=ocr lié à la vérification
+    def _parser_date(d: Optional[str]) -> Optional[date_type]:
+        if not d: return None
+        import re
+        m = re.match(r'(\d{2})/(\d{2})/(\d{4})', d)
+        if m: return date_type(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        return None
+
+    doc = DocumentIdentite(
+        utilisateur_id=utilisateur.id,
+        type_document="cni",
+        est_actif=True,
+        source="ocr",
+        a_ete_corrige=False,
+        verification_id=verification.id,
+        numero_document=donnees.numero_cni,
+        nom_complet=f"{donnees.prenoms or ''} {donnees.nom_famille or ''}".strip() or None,
+        date_naissance=_parser_date(donnees.date_naissance),
+        lieu_naissance=donnees.lieu_naissance,
+        sexe=donnees.sexe if donnees.sexe in ("M", "F") else None,
+        date_delivrance=_parser_date(donnees.date_delivrance),
+        date_expiration=_parser_date(donnees.date_expiration),
+        autorite_delivrance=donnees.autorite_delivrance,
+        taille_cm=int(donnees.taille) if donnees.taille and donnees.taille.isdigit() else None,
+        pays_emetteur=CODES_PAYS_ICAO.get(
+            donnees.mrz_ligne_1[2:5] if donnees.mrz_ligne_1 and len(donnees.mrz_ligne_1) >= 5 else "",
+            "Sénégal"
+        ),
+    )
+    session.add(doc)
+    await session.commit()
+    journal.info(
+        f"DocumentIdentite créé depuis OCR : id={doc.id}, "
+        f"numero={donnees.numero_cni}, source=ocr, verification_id={verification.id}"
+    )
+
+
 async def _enregistrer_verification(
     session: AsyncSession,
     utilisateur: Utilisateur,
@@ -189,7 +270,6 @@ async def _enregistrer_verification(
         type_mime=type_mime,
         taille_octets=taille_octets,
         statut="en_attente",
-        # Données extraites
         nom_famille=donnees.nom_famille,
         prenoms=donnees.prenoms,
         sexe=donnees.sexe,
@@ -209,7 +289,6 @@ async def _enregistrer_verification(
         erreurs_ocr=resultat_ocr.erreurs if resultat_ocr else [],
     )
 
-    # Si validation fournie, mettre à jour le statut
     if validation:
         verification.est_valide = validation.est_valide
         verification.scores_validation = validation.scores_validation
@@ -221,12 +300,13 @@ async def _enregistrer_verification(
     await session.commit()
     await session.refresh(verification)
 
-    # --- Mettre à jour le statut de l'utilisateur si la CNI est approuvée ---
+    # Vérification validée → créer/lier le DocumentIdentite
     if validation and validation.est_valide:
         utilisateur.est_cni_verifiee = True
         utilisateur.date_verification_cni = datetime.now(timezone.utc)
         utilisateur.date_derniere_mise_a_jour_verifications = datetime.now(timezone.utc)
         await session.commit()
+        await _creer_ou_mettre_a_jour_document_identite(session, utilisateur, donnees, verification)
 
     return verification
 

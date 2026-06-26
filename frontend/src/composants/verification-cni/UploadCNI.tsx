@@ -19,7 +19,7 @@ interface UploadCNIProps {
   face: "recto" | "verso";
   label: string;
   description: string;
-  onSucces: (resultat: ReponseUploadCNI) => void;
+  onSucces: (resultat: ReponseUploadCNI, imageUrl?: string) => void;
   onErreur: (erreur: string) => void;
   desactive?: boolean;
 }
@@ -114,7 +114,7 @@ export default function UploadCNI({
     setChargement(true);
     try {
       const resultat = await uploaderCNI(fichier, face);
-      onSucces(resultat);
+      onSucces(resultat, previsualisation || undefined);
     } catch (erreur: unknown) {
       const message =
         erreur instanceof Error

@@ -32,10 +32,10 @@ type OngletType = "scan" | "resultats" | "historique";
 export default function PageVerificationCNI() {
   // --- État ---
   const [ongletActif, setOngletActif] = useState<OngletType>("scan");
-  const [dernierResultatRecto, setDernierResultatRecto] =
-    useState<ReponseUploadCNI | null>(null);
-  const [dernierResultatVerso, setDernierResultatVerso] =
-    useState<ReponseUploadCNI | null>(null);
+  const [dernierResultatRecto, setDernierResultatRecto] = useState<ReponseUploadCNI | null>(null);
+  const [dernierResultatVerso, setDernierResultatVerso] = useState<ReponseUploadCNI | null>(null);
+  const [imageRecto, setImageRecto] = useState<string | null>(null);
+  const [imageVerso, setImageVerso] = useState<string | null>(null);
   const [synthese, setSynthese] = useState<SyntheseVerificationCNI | null>(
     null
   );
@@ -65,26 +65,17 @@ export default function PageVerificationCNI() {
 
   // --- Gestion des succès d'upload ---
   const handleSuccesRecto = useCallback(
-    (resultat: ReponseUploadCNI) => {
-      setDernierResultatRecto(resultat);
-      setErreur(null);
-      // Recharger la synthèse
-      obtenirSynthese()
-        .then(setSynthese)
-        .catch(() => {});
-    },
-    []
+    (resultat: ReponseUploadCNI, imageUrl?: string) => {
+      setDernierResultatRecto(resultat); setErreur(null); if (imageUrl) setImageRecto(imageUrl);
+      obtenirSynthese().then(setSynthese).catch(() => {});
+    }, []
   );
 
   const handleSuccesVerso = useCallback(
-    (resultat: ReponseUploadCNI) => {
-      setDernierResultatVerso(resultat);
-      setErreur(null);
-      obtenirSynthese()
-        .then(setSynthese)
-        .catch(() => {});
-    },
-    []
+    (resultat: ReponseUploadCNI, imageUrl?: string) => {
+      setDernierResultatVerso(resultat); setErreur(null); if (imageUrl) setImageVerso(imageUrl);
+      obtenirSynthese().then(setSynthese).catch(() => {});
+    }, []
   );
 
   const handleErreur = useCallback((msg: string) => {
@@ -233,22 +224,12 @@ export default function PageVerificationCNI() {
       {ongletActif === "resultats" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
-              Résultat Recto
-            </h3>
-            <ResultatCNI
-              resultat={dernierResultatRecto}
-              synthese={synthese}
-            />
+            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">Résultat Recto</h3>
+            <ResultatCNI resultat={dernierResultatRecto} synthese={synthese} imageUrl={imageRecto} face="recto" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
-              Résultat Verso
-            </h3>
-            <ResultatCNI
-              resultat={dernierResultatVerso}
-              synthese={null}
-            />
+            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">Résultat Verso</h3>
+            <ResultatCNI resultat={dernierResultatVerso} synthese={null} imageUrl={imageVerso} face="verso" />
           </div>
         </div>
       )}

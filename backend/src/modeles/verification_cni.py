@@ -102,7 +102,7 @@ class VerificationCNI(Base, MelangeTracabilite):
 
     # --- Carte ---
     numero_cni: Mapped[Optional[str]] = mapped_column(
-        String(30), nullable=True, doc="Numéro de la carte extrait"
+        String(30), nullable=True, index=True, doc="Numéro de la carte extrait"
     )
     date_delivrance: Mapped[Optional[str]] = mapped_column(
         String(15), nullable=True, doc="Date de délivrance extraite (JJ/MM/AAAA)"

@@ -18,6 +18,8 @@ import {
 interface ResultatCNIProps {
   resultat: ReponseUploadCNI | null;
   synthese: SyntheseVerificationCNI | null;
+  imageUrl?: string | null;
+  face?: "recto" | "verso";
 }
 
 /**
@@ -122,6 +124,8 @@ function TexteBrut({ texte }: { texte: string | null | undefined }) {
 export function ResultatOCR({
   resultat,
   synthese,
+  imageUrl,
+  face = "recto",
 }: ResultatCNIProps) {
   if (!resultat && !synthese) {
     return (
@@ -137,6 +141,13 @@ export function ResultatOCR({
 
   return (
     <div className="space-y-6">
+      {/* Image scannée */}
+      {imageUrl && (
+        <div className="rounded-lg border border-gray-200 overflow-hidden">
+          <img src={imageUrl} alt={`CNI ${face} scannée`} className="w-full object-contain max-h-64 bg-gray-50" />
+          <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-200 text-xs text-gray-500 uppercase tracking-wide font-semibold">{face === "recto" ? "Recto" : "Verso"} scanné</div>
+        </div>
+      )}
       {/* Bannière de statut */}
       <div
         className={`p-4 rounded-lg border ${classeStatutCNI(statut)}`}
