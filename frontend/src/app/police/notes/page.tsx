@@ -183,7 +183,7 @@ function Contenu() {
       {(afficherFormulaire || noteEdition) && (
         <Modal
           titre={noteEdition ? "Modifier la note" : "Nouvelle note"}
-          onFermer={() => setAfficherFormulaire(false)}
+          surFermeture={() => setAfficherFormulaire(false)}
         >
           <div className="space-y-4">
             <ChampSaisie
