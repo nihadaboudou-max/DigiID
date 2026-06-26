@@ -1,11 +1,12 @@
 "use client";
 
 /**
- * Page Partage — génération d'un QR code visuel et partage par lien.
- * Phase 5b : QR factice (grille) + copie du DigiID.
- * Phase 2  : vrai QR code via une lib (qrcode.react ou via API backend).
+ * Page Partage — QR code réel via API externe, téléchargement PNG, partage.
+ * Sans dépendance npm : QR généré via qrserver.com,
+ * téléchargement via Canvas, partage via Web Share API.
  */
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
+import Link from "next/link";
 
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
@@ -26,38 +27,153 @@ export default function PagePartage() {
 function Contenu() {
   const { utilisateur } = useAuthentification();
   const [copie, setCopie] = useState(false);
+  const [qrCharge, setQrCharge] = useState(true);
+  const [qrErreur, setQrErreur] = useState(false);
+  const refImageQR = useRef<HTMLImageElement>(null);
+  const refCanvas = useRef<HTMLCanvasElement>(null);
 
   if (!utilisateur || !utilisateur.digiid_public) return null;
   const digiId = utilisateur.digiid_public;
 
+  // QR code via API gratuite (aucune dépendance npm)
+  const urlQR = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(
+    JSON.stringify({ digiid: digiId })
+  )}&bgcolor=ffffff&color=1e293b&margin=10`;
+
+  const urlProfil = typeof window !== "undefined" 
+    ? `${window.location.origin}/profil/${digiId}`
+    : `https://digiid.africa/profil/${digiId}`;
+
   async function copier() {
-    await navigator.clipboard.writeText(digiId);
+    try {
+      await navigator.clipboard.writeText(digiId);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = digiId;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
     setCopie(true);
     setTimeout(() => setCopie(false), 2000);
   }
 
+  async function copierLien() {
+    try {
+      await navigator.clipboard.writeText(urlProfil);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = urlProfil;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setCopie(true);
+    setTimeout(() => setCopie(false), 2000);
+  }
+
+  const telechargerQR = useCallback(() => {
+    const img = refImageQR.current;
+    const canvas = refCanvas.current;
+    if (!img || !canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    canvas.width = 400;
+    canvas.height = 430;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, 400, 430);
+    ctx.drawImage(img, 0, 0, 400, 400);
+    ctx.fillStyle = "#1e293b";
+    ctx.font = "bold 14px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(digiId, 200, 420);
+
+    const lien = document.createElement("a");
+    lien.download = `digiid-${digiId}-qr.png`;
+    lien.href = canvas.toDataURL("image/png");
+    lien.click();
+  }, [digiId]);
+
+  async function partager() {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Mon identité numérique DigiID",
+          text: `Voici mon identifiant DigiID : ${digiId}`,
+          url: urlProfil,
+        });
+      } catch { /* Annulé */ }
+    } else {
+      copierLien();
+    }
+  }
+
   return (
     <div className="space-y-8 apparition">
+      <nav className="text-sm text-ardoise-clair flex gap-2 flex-wrap">
+        <Link href="/profil" className="hover:text-ocre">Mon profil</Link>
+        <span>/</span>
+        <span className="text-ardoise font-semibold">Partager mon DigiID</span>
+      </nav>
+
       <header>
         <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
-          Partager mon DigiID
+          Partager mon identité numérique
         </p>
-        <h1 className="mt-1">Mon identifiant numérique</h1>
-        <p className="text-ardoise-clair mt-2">
-          Présente ce code à une banque, à un hôpital, ou à toute institution
-          qui demande à vérifier ton identité.
+        <h1 className="mt-1">Mon identifiant DigiID</h1>
+        <p className="text-ardoise-clair mt-2 max-w-2xl">
+          Présente ce QR code ou partage ton identifiant avec une institution de confiance
+          (banque, hôpital, administration) pour vérifier ton identité instantanément.
         </p>
       </header>
 
-      {/* QR code + identifiant */}
       <div className="grid md:grid-cols-2 gap-6">
         <Carte className="flex flex-col items-center text-center">
           <p className="text-xs uppercase text-ocre font-bold mb-4 tracking-wider">
-            Code à scanner
+            Code QR à scanner
           </p>
-          <FauxQrCode contenu={digiId} />
+          <div className="relative bg-white p-4 border-2 border-ardoise/10 rounded-2xl shadow-sm">
+            {qrCharge && (
+              <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-2xl">
+                <p className="text-ardoise-clair text-sm">Génération du QR...</p>
+              </div>
+            )}
+            {qrErreur ? (
+              <div className="w-[240px] h-[240px] flex items-center justify-center bg-sable rounded-lg">
+                <div className="text-center">
+                  <p className="text-4xl mb-2">📱</p>
+                  <p className="text-xs text-ardoise-clair">QR non disponible</p>
+                  <p className="text-xs text-ardoise-clair/60 mt-1">DigiID: {digiId}</p>
+                </div>
+              </div>
+            ) : (
+              <img
+                ref={refImageQR}
+                src={urlQR}
+                alt={`QR Code ${digiId}`}
+                width={240}
+                height={240}
+                className="mx-auto"
+                onLoad={() => setQrCharge(false)}
+                onError={() => { setQrCharge(false); setQrErreur(true); }}
+              />
+            )}
+            <canvas ref={refCanvas} className="hidden" />
+            <p className="text-center text-xs text-ardoise-clair/60 mt-3 font-mono">{digiId}</p>
+          </div>
+          <div className="flex gap-2 mt-4">
+            <Bouton variante="secondaire" taille="petit" onClick={telechargerQR}>
+              📥 Télécharger le QR
+            </Bouton>
+            <Bouton variante="ghost" taille="petit" onClick={() => window.print()}>
+              🖨️ Imprimer
+            </Bouton>
+          </div>
           <p className="text-xs text-ardoise-clair italic mt-4">
-            La banque scanne ce code, interroge notre API et reçoit ton score et tes facteurs.
+            L'institution scanne ce code et consulte ton profil vérifié.
           </p>
         </Carte>
 
@@ -65,58 +181,95 @@ function Contenu() {
           <p className="text-xs uppercase text-ocre font-bold mb-3 tracking-wider">
             Mon identifiant
           </p>
-          <p className="text-2xl font-mono font-bold text-lagune break-all mb-6">
+          <p className="text-3xl font-mono font-bold text-lagune break-all mb-6 tracking-wider">
             {digiId}
           </p>
-
-          <Bouton variante="secondaire" onClick={copier} className="w-full mb-3">
-            {copie ? (
-              <>
-                <IconeCheck className="w-4 h-4" />
-                Copié !
-              </>
+          <div className="space-y-3">
+            <Bouton variante="secondaire" onClick={copier} className="w-full">
+              {copie ? (
+                <><IconeCheck className="w-4 h-4" /> Copié !</>
+              ) : (
+                <><IconeCopier className="w-4 h-4" /> Copier mon DigiID</>
+              )}
+            </Bouton>
+            {navigator.share ? (
+              <Bouton variante="primaire" onClick={partager} className="w-full">
+                📤 Partager
+              </Bouton>
             ) : (
-              <>
-                <IconeCopier className="w-4 h-4" />
-                Copier mon DigiID
-              </>
+              <Bouton variante="primaire" onClick={copierLien} className="w-full">
+                🔗 Copier le lien
+              </Bouton>
             )}
-          </Bouton>
-
-          <Bouton variante="ghost" disabled className="w-full mb-3">
-            Envoyer par SMS
-          </Bouton>
-          <Bouton variante="ghost" disabled className="w-full">
-            Télécharger en PDF
-          </Bouton>
-
-          <p className="text-xs text-ardoise-clair italic mt-4">
-            Les options d'envoi SMS et PDF arrivent en Phase 2.
-          </p>
+            <Link href="/profil/telecharger" className="block">
+              <Bouton variante="ghost" className="w-full">
+                📋 Télécharger mon profil numérique
+              </Bouton>
+            </Link>
+          </div>
+          <div className="mt-6 pt-4 border-t border-ardoise-clair/10">
+            <p className="text-xs text-ardoise-clair font-semibold mb-2">Statut du profil</p>
+            <div className="flex flex-wrap gap-2">
+              <Badge variante={utilisateur.est_email_verifie ? "succes" : "terre"} taille="petit">
+                ✉️ {utilisateur.est_email_verifie ? "Vérifié" : "Non vérifié"}
+              </Badge>
+              <Badge variante={utilisateur.est_visage_verifie ? "succes" : "terre"} taille="petit">
+                👤 Visage {utilisateur.est_visage_verifie ? "✓" : "✗"}
+              </Badge>
+              <Badge variante={utilisateur.est_cni_verifiee ? "succes" : "terre"} taille="petit">
+                🆔 CNI {utilisateur.est_cni_verifiee ? "✓" : "✗"}
+              </Badge>
+            </div>
+          </div>
         </Carte>
       </div>
 
-      {/* Conseils sécurité */}
-      <Alerte variante="avertissement" titre="Conseils de sécurité">
-        Ne partage ton DigiID qu'avec des institutions de confiance. Si quelqu'un te demande
-        ton code par téléphone sans raison claire, c'est probablement une tentative de fraude.
-        DigiID ne te contactera jamais pour te demander ton code.
-      </Alerte>
-
-      {/* Qui peut utiliser mon DigiID */}
-      <Carte titre="Qui peut interroger mon DigiID ?">
-        <div className="grid sm:grid-cols-3 gap-4">
-          <BlocUsage titre="Banques" detail="Pour vérifier ton identité avant ouverture de compte ou demande de crédit." statut="actif" />
-          <BlocUsage titre="Hôpitaux" detail="Pour accéder à ton dossier médical aux urgences." statut="phase-3" />
-          <BlocUsage titre="Administration" detail="Pour recevoir des aides ou voter électroniquement." statut="phase-4" />
+      <Carte titre="Partages récents">
+        <div className="flex items-center gap-4 p-4 bg-sable rounded-lg">
+          <span className="text-3xl">🔒</span>
+          <div>
+            <p className="text-sm font-semibold text-ardoise">Tes partages sont tracés</p>
+            <p className="text-xs text-ardoise-clair">
+              Chaque scan ou consultation de ton profil par un tiers est enregistré.
+              Voir qui a consulté tes données.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4">
+          <Link href="/autorisations">
+            <Bouton variante="secondaire">Voir qui a accédé à mes données →</Bouton>
+          </Link>
         </div>
       </Carte>
+
+      <Alerte variante="avertissement" titre="🔐 Conseils de sécurité">
+        <ul className="space-y-1 text-sm">
+          <li>✓ Ne partage ton DigiID qu'avec des institutions de confiance.</li>
+          <li>✓ DigiID ne te contactera jamais pour te demander ton code.</li>
+          <li>✓ Chaque consultation est tracée — vérifie qui accède à tes données.</li>
+          <li>✓ Tu peux révoquer un accès depuis <Link href="/autorisations" className="text-lagune hover:underline">Mes autorisations</Link>.</li>
+        </ul>
+      </Alerte>
+
+      <Carte titre="Qui peut interroger mon DigiID ?">
+        <div className="grid sm:grid-cols-3 gap-4">
+          <BlocUsage titre="Banques" detail="Vérification d'identité avant ouverture de compte." statut="actif" />
+          <BlocUsage titre="Hôpitaux" detail="Accès au dossier médical, ordonnances." statut="actif" />
+          <BlocUsage titre="Administration" detail="Aides sociales, certificats." statut="phase-4" />
+        </div>
+      </Carte>
+
+      <div className="flex gap-3 flex-wrap">
+        <Link href="/profil"><Bouton variante="primaire">← Retour à mon profil</Bouton></Link>
+        <Link href="/autorisations"><Bouton variante="secondaire">Mes autorisations</Bouton></Link>
+        <Link href="/profil/telecharger"><Bouton variante="ghost">📥 Télécharger mon profil</Bouton></Link>
+      </div>
     </div>
   );
 }
 
 function BlocUsage({ titre, detail, statut }: {
-  titre: string; detail: string; statut: "actif" | "phase-3" | "phase-4";
+  titre: string; detail: string; statut: "actif" | "phase-4";
 }) {
   return (
     <div className="bg-sable-clair rounded-xl p-4">
@@ -125,76 +278,10 @@ function BlocUsage({ titre, detail, statut }: {
         {statut === "actif" ? (
           <Badge variante="succes">Actif</Badge>
         ) : (
-          <Badge variante="ocre">{statut === "phase-3" ? "Phase 3" : "Phase 4"}</Badge>
+          <Badge variante="ocre">À venir</Badge>
         )}
       </div>
       <p className="text-xs text-ardoise-clair">{detail}</p>
-    </div>
-  );
-}
-
-/**
- * Faux QR code visuel généré à partir d'une chaîne.
- * En Phase 2 on remplace par un vrai QR via une lib.
- */
-function FauxQrCode({ contenu }: { contenu: string }) {
-  // Génère une grille pseudo-aléatoire stable à partir du contenu
-  const taille = 21;
-  const cellules: boolean[][] = [];
-
-  // Hash simple de la chaîne pour réutiliser comme graine
-  let graine = 0;
-  for (let i = 0; i < contenu.length; i++) graine = (graine * 31 + contenu.charCodeAt(i)) >>> 0;
-
-  function rng() {
-    graine = (graine * 1664525 + 1013904223) >>> 0;
-    return graine / 4294967296;
-  }
-
-  for (let i = 0; i < taille; i++) {
-    const ligne: boolean[] = [];
-    for (let j = 0; j < taille; j++) {
-      // Coins de positionnement (3 carrés 7x7 dans les angles)
-      const coin =
-        (i < 7 && j < 7) ||
-        (i < 7 && j >= taille - 7) ||
-        (i >= taille - 7 && j < 7);
-      if (coin) {
-        const dans = (k: number) => k === 0 || k === 6;
-        const ii = i < 7 ? i : i - (taille - 7);
-        const jj = j < 7 ? j : j - (taille - 7);
-        if (dans(ii) || dans(jj)) ligne.push(true);
-        else if (ii >= 2 && ii <= 4 && jj >= 2 && jj <= 4) ligne.push(true);
-        else ligne.push(false);
-      } else {
-        ligne.push(rng() > 0.5);
-      }
-    }
-    cellules.push(ligne);
-  }
-
-  return (
-    <div className="bg-white p-4 border-2 border-ardoise/10 rounded-2xl shadow-sm">
-      <div
-        className="grid gap-0 mx-auto"
-        style={{
-          gridTemplateColumns: `repeat(${taille}, 1fr)`,
-          width: "240px",
-          height: "240px",
-        }}
-      >
-        {cellules.map((ligne, i) =>
-          ligne.map((c, j) => (
-            <div
-              key={`${i}-${j}`}
-              className={c ? "bg-ardoise" : "bg-white"}
-            />
-          ))
-        )}
-      </div>
-      <p className="text-center text-xs text-ardoise-clair italic mt-3">
-        QR de démonstration · vrai QR généré en Phase 2
-      </p>
     </div>
   );
 }

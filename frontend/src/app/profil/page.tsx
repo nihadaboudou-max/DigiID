@@ -11,11 +11,15 @@ import { Carte } from "@/composants/commun/Carte";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
+import { BarreProgression } from "@/composants/commun/BarreProgression";
 import { Alerte } from "@/composants/commun/Alerte";
 import { Gestion2FA } from "@/composants/commun/Gestion2FA";
 import { useAuthentification } from "@/contextes/authentification";
 import { clientAPI, ErreurAPI } from "@/services/client_api";
-import { exporterMesDonnees } from "@/services/profil";
+import { exporterMesDonnees, obtenirMonActivite } from "@/services/profil";
+import { obtenirMonScore } from "@/services/score";
+import type { ActiviteUtilisateur } from "@/services/profil";
+import type { ScoreDetail } from "@/services/score";
 import { ModalConfirmation } from "@/composants/commun/ModalConfirmation";
 
 export default function PageProfil() {
@@ -38,13 +42,30 @@ function Contenu() {
   const [exportEnCours, setExportEnCours] = useState(false);
   const [suppressionEnCours, setSuppressionEnCours] = useState(false);
   const [montrerConfirmationSuppression, setMontrerConfirmationSuppression] = useState(false);
+  const [scoreData, setScoreData] = useState<ScoreDetail | null>(null);
+  const [activites, setActivites] = useState<ActiviteUtilisateur[]>([]);
+  const [chargementDonnees, setChargementDonnees] = useState(true);
 
   useEffect(() => {
     if (utilisateur) {
       setTelephone(utilisateur.telephone || "");
       setVille(utilisateur.ville || "");
+      chargerDonnees();
     }
   }, [utilisateur]);
+
+  async function chargerDonnees() {
+    setChargementDonnees(true);
+    try {
+      const [score, activite] = await Promise.allSettled([
+        obtenirMonScore(),
+        obtenirMonActivite(10),
+      ]);
+      if (score.status === "fulfilled") setScoreData(score.value);
+      if (activite.status === "fulfilled") setActivites(activite.value);
+    } catch { /* silencieux */ }
+    setChargementDonnees(false);
+  }
 
   if (!utilisateur) return null;
 
@@ -248,6 +269,86 @@ function Contenu() {
         </Link>
       </Carte>
 
+      {/* Score de confiance */}
+      {scoreData && (
+        <Carte titre="🎯 Mon score de confiance">
+          <div className="flex items-center gap-6">
+            <div className="text-center flex-shrink-0">
+              <p className="text-5xl font-bold text-lagune">{scoreData.score_total}</p>
+              <p className="text-xs text-ardoise-clair font-semibold uppercase">/100</p>
+            </div>
+            <div className="flex-1">
+              <BarreProgression valeur={Math.min(scoreData.score_total, 100)} couleur="lagune" />
+              <div className="flex justify-between mt-2 text-sm">
+                <span className="text-ardoise-clair">Niveau: <strong>{scoreData.niveau || "—"}</strong></span>
+                <Link href="/score" className="text-ocre hover:underline">Détails →</Link>
+              </div>
+            </div>
+          </div>
+        </Carte>
+      )}
+
+      {/* Activité récente */}
+      <Carte titre="🕐 Activité récente">
+        {chargementDonnees ? (
+          <p className="text-ardoise-clair italic text-sm">Chargement...</p>
+        ) : activites.length > 0 ? (
+          <div className="space-y-2">
+            {activites.slice(0, 5).map((a, i) => (
+              <div key={a.id || i} className="flex items-center gap-3 text-sm p-2 rounded hover:bg-sable transition-colors">
+                <span className="text-lg">
+                  {a.type === "connexion_reussie" ? "🔑"
+                  : a.type === "modification_profil" ? "✏️"
+                  : a.type === "partage_digiid" ? "📤"
+                  : "📋"}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-ardoise truncate">{a.description || a.type.replace(/_/g, " ")}</p>
+                </div>
+                <span className="text-xs text-ardoise-clair/60 whitespace-nowrap">
+                  {new Date(a.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </div>
+            ))}
+            <Link href="/autorisations" className="block text-sm text-ocre hover:underline mt-2">
+              Voir tout l'historique →
+            </Link>
+          </div>
+        ) : (
+          <p className="text-ardoise-clair italic text-sm">Aucune activité récente.</p>
+        )}
+      </Carte>
+
+      {/* Accès rapide */}
+      <Carte titre="🔗 Accès rapide">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <Link href="/partage" className="p-3 bg-sable rounded-lg hover:bg-sable/80 transition-colors text-center">
+            <p className="text-2xl mb-1">📱</p>
+            <p className="text-xs font-semibold text-ardoise">Partager mon DigiID</p>
+          </Link>
+          <Link href="/autorisations" className="p-3 bg-sable rounded-lg hover:bg-sable/80 transition-colors text-center">
+            <p className="text-2xl mb-1">🔒</p>
+            <p className="text-xs font-semibold text-ardoise">Mes autorisations</p>
+          </Link>
+          <Link href="/profil/telecharger" className="p-3 bg-sable rounded-lg hover:bg-sable/80 transition-colors text-center">
+            <p className="text-2xl mb-1">📥</p>
+            <p className="text-xs font-semibold text-ardoise">Télécharger mon profil</p>
+          </Link>
+          <Link href="/consentements" className="p-3 bg-sable rounded-lg hover:bg-sable/80 transition-colors text-center">
+            <p className="text-2xl mb-1">✅</p>
+            <p className="text-xs font-semibold text-ardoise">Mes consentements</p>
+          </Link>
+          <Link href="/score" className="p-3 bg-sable rounded-lg hover:bg-sable/80 transition-colors text-center">
+            <p className="text-2xl mb-1">📊</p>
+            <p className="text-xs font-semibold text-ardoise">Mon score</p>
+          </Link>
+          <Link href="/badges" className="p-3 bg-sable rounded-lg hover:bg-sable/80 transition-colors text-center">
+            <p className="text-2xl mb-1">🏆</p>
+            <p className="text-xs font-semibold text-ardoise">Mes badges</p>
+          </Link>
+        </div>
+      </Carte>
+
       {/* Actions */}
       <Carte titre="Actions sur mes données" description="Conformément à la loi 2008-12 (Sénégal)">
         <div className="grid sm:grid-cols-2 gap-3">
@@ -260,6 +361,11 @@ function Contenu() {
           <Link href="/consentements">
             <Bouton variante="ghost">
               Gérer mes consentements
+            </Bouton>
+          </Link>
+          <Link href="/profil/telecharger">
+            <Bouton variante="ghost">
+              📥 Télécharger mon profil
             </Bouton>
           </Link>
           <Bouton variante="ghost" onClick={() => setMontrerConfirmationSuppression(true)} className="!border-terre !text-terre hover:!bg-terre hover:!text-white">

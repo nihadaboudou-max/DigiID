@@ -152,12 +152,15 @@ function Contenu() {
         <CarteAction titre="Vérifier ma CNI" description="Scanner ta carte d'identité" href="/identite/verification-cni" icone="🪪" />
         <CarteAction titre="Vérification faciale" description="Reconnaissance biométrique" href="/identite/verification-visuelle" icone="📸" />
         <CarteAction titre="Mes consentements" description="Gérer les accès autorisés" href="/consentements" icone="✅" />
+        <CarteAction titre="Mes autorisations" description="Qui a accès à mes données" href="/autorisations" icone="🔒" />
+        <CarteAction titre="Partager mon DigiID" description="QR code et lien de partage" href="/partage" icone="📱" />
         <CarteAction titre="Mes documents" description="Documents et justificatifs" href="/documents" icone="📄" />
         <CarteAction titre="Parrainage" description="Invite tes proches" href="/parrainage" icone="📨" />
         <CarteAction titre="Mes badges" description="Gamification et récompenses" href="/badges" icone="🏆" />
         <CarteAction titre="Mes ordonnances" description="Consultez et signalez vos prescriptions" href="/citoyen/mes-ordonnances" icone="💊" />
         <CarteAction titre="Mon dossier médical" description="Historique complet : consultations, prescriptions, contrôles" href="/citoyen/mon-dossier-medical" icone="🏥" />
         <CarteAction titre="Mon score" description="Suis ton score de confiance" href="/score" icone="📊" />
+        <CarteAction titre="Mon profil" description="Gère ton profil et télécharge-le" href="/profil" icone="👤" />
         <CarteAction titre="Assistant DigiID" description="Pose tes questions" href="/chatbot" icone="🤖" />
       </div>
 
