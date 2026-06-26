@@ -178,7 +178,7 @@ function Contenu() {
                 <><IconeCopier className="w-4 h-4" /> Copier mon DigiID</>
               )}
             </Bouton>
-            {navigator.share ? (
+            {typeof navigator?.share === 'function' ? (
               <Bouton variante="primaire" onClick={partager} className="w-full">
                 📤 Partager
               </Bouton>
