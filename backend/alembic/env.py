@@ -72,8 +72,8 @@ def appliquer_migrations(connexion) -> None:
         target_metadata=target_metadata,
         compare_type=True,
         compare_server_default=True,
+        transaction_per_migration=True,
     )
-    with context.begin_transaction():
         context.run_migrations()
 
 
