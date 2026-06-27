@@ -39,6 +39,7 @@ const LIENS_UTILISATEUR: Lien[] = [
   { href: "/documents-identite",    libelle: "Documents d'identité", Icone: IconeIdentite },
   { href: "/documents",             libelle: "Mes documents",         Icone: IconeJournal },
   { href: "/historique",            libelle: "Historique d'accès",    Icone: IconeAlerte },
+  { href: "/notifications",         libelle: "Notifications",          Icone: IconeAlerte },
   { href: "/chatbot",               libelle: "Assistant",             Icone: IconeChat },
   { href: "/parametres",            libelle: "Paramètres",            Icone: IconeParametres },
 ];
@@ -53,6 +54,7 @@ const SOUS_MENUS_SCORE: SousMenu[] = [
       { href: "/score/facteurs", libelle: "Facteurs d'impact", Icone: IconeStatistique },
       { href: "/score/amelioration", libelle: "Conseils d'amélioration", Icone: IconeAlerte },
       { href: "/parrainage", libelle: "Parrainage (bonus)", Icone: IconePartage },
+      { href: "/badges", libelle: "Badges", Icone: IconeCheck },
     ],
   },
 ];
@@ -76,6 +78,15 @@ const SOUS_MENUS_IDENTITE: SousMenu[] = [
       { href: "/identite/2fa",      libelle: "Double authentification", Icone: IconeCadenas },
       { href: "/identite/mot-de-passe", libelle: "Mot de passe",        Icone: IconeCle },
       { href: "/identite/role",     libelle: "Rôle & permissions",    Icone: IconeBouclier },
+    ],
+  },
+  {
+    titre: "Partage & accès",
+    icone: IconePartage,
+    liens: [
+      { href: "/partage",      libelle: "Partager mon DigiID",  Icone: IconePartage },
+      { href: "/autorisations", libelle: "Autorisations",        Icone: IconeBouclier },
+      { href: "/consentements", libelle: "Consentements",        Icone: IconeCheck },
     ],
   },
 ];
@@ -421,12 +432,17 @@ export function BarreLaterale() {
     pathname === "/documents" ||
     pathname === "/documents-identite" ||
     pathname === "/historique" ||
+    pathname === "/notifications" ||
     pathname === "/chatbot" ||
     pathname === "/parametres" ||
     pathname.startsWith("/score") ||
+    pathname === "/badges" ||
     pathname === "/parrainage" ||
     pathname.startsWith("/attestations-communautaires") ||
     pathname.startsWith("/identite") ||
+    pathname.startsWith("/partage") ||
+    pathname.startsWith("/autorisations") ||
+    pathname.startsWith("/consentements") ||
     pathname === "/verification-visuelle";
 
   let liens: Lien[];
@@ -641,7 +657,9 @@ export function BarreLaterale() {
                     { href: "/documents-identite",    libelle: "Documents d'identité", Icone: IconeIdentite },
                     { href: "/documents",             libelle: "Mes documents",         Icone: IconeJournal },
                     { href: "/historique",            libelle: "Historique d'accès",    Icone: IconeAlerte },
+                    { href: "/notifications",         libelle: "Notifications",          Icone: IconeAlerte },
                     { href: "/citoyen/mes-ordonnances", libelle: "Mes ordonnances",     Icone: IconeJournal },
+                    { href: "/citoyen/mon-dossier-medical", libelle: "Mon dossier médical", Icone: IconeStatistique },
                     { href: "/chatbot",               libelle: "Assistant",             Icone: IconeChat },
                     { href: "/parametres",            libelle: "Paramètres",            Icone: IconeParametres },
                 ].map((lien) => {
@@ -674,7 +692,7 @@ export function BarreLaterale() {
               <>
                 {/* Mon espace personnel */}
                 <GroupePlie
-                  estActif={pathname === "/tableau-de-bord" || pathname === "/profil" || pathname === "/documents" || pathname === "/historique"}
+                  estActif={pathname === "/tableau-de-bord" || pathname === "/profil" || pathname === "/documents" || pathname === "/historique" || pathname === "/notifications" || pathname.startsWith("/citoyen")}
                   icone={IconeAccueil}
                   titre="Mon espace"
                   initialOuvert={true}
@@ -686,6 +704,7 @@ export function BarreLaterale() {
                       { href: "/documents-identite",    libelle: "Documents d'identité", Icone: IconeIdentite },
                       { href: "/documents",             libelle: "Mes documents",         Icone: IconeJournal },
                       { href: "/historique",            libelle: "Historique d'accès",    Icone: IconeAlerte },
+                      { href: "/notifications",         libelle: "Notifications",          Icone: IconeAlerte },
                     ].map((lien) => {
                       const actif = pathname === lien.href;
                       return (
@@ -713,6 +732,7 @@ export function BarreLaterale() {
                     </p>
                     {[
                       { href: "/citoyen/mes-ordonnances", libelle: "Mes ordonnances", Icone: IconeJournal },
+                      { href: "/citoyen/mon-dossier-medical", libelle: "Mon dossier médical", Icone: IconeStatistique },
                     ].map((lien) => {
                       const actif = pathname === lien.href;
                       return (
@@ -747,6 +767,7 @@ export function BarreLaterale() {
                     {[
                       { href: "/chatbot",    libelle: "Assistant",  Icone: IconeChat },
                       { href: "/parametres", libelle: "Paramètres", Icone: IconeParametres },
+                      { href: "/aide",       libelle: "Aide",       Icone: IconeChat },
                     ].map((lien) => {
                       const actif = pathname === lien.href;
                       return (
