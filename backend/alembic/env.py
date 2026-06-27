@@ -10,11 +10,9 @@ est assurée par scripts/migrer.py AVANT d'appeler alembic upgrade head.
 Ce script nettoie et stamp alembic_version avec TEXT comme type de colonne
 pour accepter les révisions longues (>32 chars).
 """
-import asyncio
 from logging.config import fileConfig
 
-from sqlalchemy import pool
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy import create_engine, pool
 
 from alembic import context
 
@@ -41,8 +39,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Remplacer l'URL par celle de nos paramètres
-config.set_main_option("sqlalchemy.url", parametres.url_base_donnees)
+# Remplacer l'URL par celle de nos paramètres (version SYNC pour Alembic)
+config.set_main_option("sqlalchemy.url", parametres.url_base_donnees_sync)
 
 # Métadonnées cible pour autogénération
 target_metadata = Base.metadata
@@ -79,24 +77,20 @@ def appliquer_migrations(connexion) -> None:
         context.run_migrations()
 
 
-async def lancer_migrations_en_ligne() -> None:
+def lancer_migrations_en_ligne() -> None:
     """Mode en ligne : connexion réelle et application des migrations."""
-    configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = parametres.url_base_donnees
-
-    moteur = async_engine_from_config(
-        configuration,
-        prefix="sqlalchemy.",
+    moteur = create_engine(
+        parametres.url_base_donnees_sync,
         poolclass=pool.NullPool,
     )
 
-    async with moteur.connect() as connexion:
-        await connexion.run_sync(appliquer_migrations)
+    with moteur.connect() as connexion:
+        appliquer_migrations(connexion)
 
-    await moteur.dispose()
+    moteur.dispose()
 
 
 if context.is_offline_mode():
     lancer_migrations_hors_ligne()
 else:
-    asyncio.run(lancer_migrations_en_ligne())
+    lancer_migrations_en_ligne()
