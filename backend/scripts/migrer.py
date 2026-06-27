@@ -335,8 +335,18 @@ def executer_migrations():
 
         # Étape 3 : décision
         if etat == "VIERGE":
-            logger.info("Base vierge → upgrade crée toutes les tables...")
-            _upgrade_alembic()
+            logger.info("Base vierge → création via metadata.create_all...")
+            from src.base_donnees.base import Base
+            moteur = create_engine(url_sync)
+            try:
+                Base.metadata.create_all(moteur)
+                logger.info("✅ Toutes les tables créées via metadata.create_all")
+            finally:
+                moteur.dispose()
+            # Stamp avec la HEAD
+            revision = _obtenir_revision_head()
+            _stamp_sync(url_sync, revision)
+            logger.info("✅ Base créée et stampée avec %s", revision)
         else:
             # 3a. Colonnes manquantes
             moteur = create_engine(url_sync)
@@ -360,11 +370,10 @@ def executer_migrations():
             finally:
                 moteur.dispose()
 
-            # 3c. Stamp HEAD puis upgrade (no-op)
+            # 3c. Stamp HEAD uniquement (pas d'upgrade Alembic = no-op inutile)
             revision = _obtenir_revision_head()
-            logger.info("Tables existantes → stamp %s puis upgrade...", revision)
+            logger.info("Tables existantes → stamp %s (sans upgrade, inutile)...", revision)
             _stamp_sync(url_sync, revision)
-            _upgrade_alembic()
 
         logger.info("✅ Migration terminée avec succès")
 
