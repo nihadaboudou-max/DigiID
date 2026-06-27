@@ -85,7 +85,6 @@ def lancer_migrations_en_ligne() -> None:
     moteur = create_engine(
         parametres.url_base_donnees_sync,
         poolclass=pool.NullPool,
-        echo=True,
     )
     logger.info("Engine créé, connexion...")
     try:
