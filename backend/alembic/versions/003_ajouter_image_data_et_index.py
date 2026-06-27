@@ -41,9 +41,9 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "ix_verification_visuelle_officier_date",
+        "ix_verification_visuelle_utilisateur_date",
         "verification_visuelle",
-        ["officier_id", "date_verification"],
+        ["utilisateur_id", "date_verification"],
     )
 
     # --- Table verification_cni ---
@@ -135,6 +135,6 @@ def downgrade() -> None:
     op.drop_column("verification_cni", "image_data_verso")
     op.drop_column("verification_cni", "image_data_recto")
 
-    op.drop_index("ix_verification_visuelle_officier_date", table_name="verification_visuelle")
+    op.drop_index("ix_verification_visuelle_utilisateur_date", table_name="verification_visuelle")
     op.drop_column("verification_visuelle", "type_mime")
     op.drop_column("verification_visuelle", "image_data")
