@@ -1,9 +1,9 @@
-"use client";
+n"use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
-import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { BarreProgression } from "@/composants/commun/BarreProgression";
@@ -26,25 +26,20 @@ export default function PageProfil() {
 }
 
 function Contenu() {
-  const { utilisateur, rafraichirProfil } = useAuthentification();
+  const router = useRouter();
+  const { utilisateur } = useAuthentification();
 
-  const [modeEdition, setModeEdition] = useState(false);
-  const [telephone, setTelephone] = useState("");
-  const [ville, setVille] = useState("");
-  const [chargement, setChargement] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [erreur, setErreur] = useState<string | null>(null);
   const [exportEnCours, setExportEnCours] = useState(false);
   const [suppressionEnCours, setSuppressionEnCours] = useState(false);
   const [montrerConfirmationSuppression, setMontrerConfirmationSuppression] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [erreur, setErreur] = useState<string | null>(null);
   const [scoreData, setScoreData] = useState<ScoreDetail | null>(null);
   const [activites, setActivites] = useState<ActiviteUtilisateur[]>([]);
   const [chargementDonnees, setChargementDonnees] = useState(true);
 
   useEffect(() => {
     if (utilisateur) {
-      setTelephone(utilisateur.telephone || "");
-      setVille(utilisateur.ville || "");
       chargerDonnees();
     }
   }, [utilisateur]);
@@ -90,7 +85,6 @@ function Contenu() {
     setErreur(null);
     try {
       await clientAPI.delete("/api/v1/utilisateur/compte", { authentifie: true });
-      // Déconnecter l'utilisateur
       window.location.href = "/";
     } catch (e) {
       setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la suppression.");
@@ -100,190 +94,129 @@ function Contenu() {
     }
   }
 
-  async function sauvegarder() {
-    setChargement(true);
-    setMessage(null);
-    setErreur(null);
-    try {
-      await clientAPI.patch(
-        "/api/v1/utilisateur/profil",
-        { telephone: telephone || null, ville: ville || null },
-        { authentifie: true },
-      );
-      await rafraichirProfil();
-      setMessage("Profil mis à jour avec succès !");
-      setModeEdition(false);
-    } catch (e) {
-      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la mise à jour.");
-    } finally {
-      setChargement(false);
-    }
-  }
-
   return (
     <div className="space-y-8 apparition">
       <div>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Mes informations</p>
+        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Mon espace</p>
         <h1 className="mt-1">Mon profil</h1>
+        <p className="text-ardoise-clair mt-2">Bienvenue, {[utilisateur.prenom, utilisateur.nom].filter(Boolean).join(" ") || utilisateur.email}.</p>
       </div>
-      {message && <p className="text-sm text-succes bg-succes/10 p-3 rounded">{message}</p>}
-      {erreur && <p className="text-sm text-terre bg-terre/10 p-3 rounded">{erreur}</p>}
-      <Carte titre="Identité civile">
-        {modeEdition ? (
-          <div className="space-y-4">
-            <ChampSaisie
-              libelle="Téléphone"
-              type="tel"
-              value={telephone}
-              onChange={(e) => setTelephone(e.target.value)}
-              placeholder="+221 77 123 45 67"
-              aide="Format international recommandé pour recevoir les codes de vérification."
-            />
-            <ChampSaisie
-              libelle="Ville"
-              value={ville}
-              onChange={(e) => setVille(e.target.value)}
-              placeholder="Dakar"
-            />
-            <div className="flex gap-3 pt-2">
-              <Bouton variante="primaire" chargement={chargement} onClick={sauvegarder}>
-                Enregistrer
-              </Bouton>
-              <Bouton variante="ghost" onClick={() => setModeEdition(false)}>
-                Annuler
-              </Bouton>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Champ libelle="Prénom" valeur={utilisateur.prenom} />
-              <Champ libelle="Nom" valeur={utilisateur.nom} />
-              <Champ libelle="Email" valeur={utilisateur.email} />
-              <Champ libelle="Téléphone" valeur={utilisateur.telephone || "—"} />
-              <Champ libelle="Ville" valeur={utilisateur.ville} />
-            </div>
-            <div className="mt-4 pt-4 border-t border-ardoise-clair/10">
-              <Bouton variante="ghost" onClick={() => setModeEdition(true)}>
-                Modifier mon profil
-              </Bouton>
-            </div>
-          </>
-        )}
-      </Carte>
 
-      <Carte titre="Mon identifiant DigiID">
-        <p className="text-3xl font-mono font-bold text-lagune break-all">{utilisateur.digiid_public}</p>
-      </Carte>
+      {message && <Alerte variante="succes">{message}</Alerte>}
+      {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
 
-      <Carte titre="État du compte">
-        <div className="space-y-3">
-          <LigneÉtat libelle="Statut" valeur={<Badge variante="succes">Actif</Badge>} />
-          <LigneÉtat libelle="Rôle" valeur={<Badge variante="lagune">{utilisateur.role.replace(/_/g, " ")}</Badge>} />
-          <LigneÉtat
-            libelle="Email vérifié"
-            valeur={
-              utilisateur.est_email_verifie
-                ? <Badge variante="succes">Vérifié</Badge>
-                : <Link href="/identite/email" className="text-sm text-lagune hover:underline">Vérifier maintenant</Link>
-            }
-          />
-          <LigneÉtat libelle="2FA activée" valeur={utilisateur.deux_fa_active ? <Badge variante="succes">Activée</Badge> : <Badge variante="neutre">Désactivée</Badge>} />
-        </div>
-        {!utilisateur.deux_fa_active && (
-          <div className="mt-4 pt-4 border-t border-ardoise-clair/10">
-            <p className="text-sm text-ardoise-clair mb-3">
-              Protège ton compte avec un code à 6 chiffres en plus de ton mot de passe.
-            </p>
-            <Gestion2FA varianteBouton="secondaire" />
-          </div>
-        )}
-      </Carte>
-
-      {(utilisateur.attestations_recues?.length ?? 0) > 0 && (
-        <Carte titre="Attestations reçues">
-          <div className="space-y-2">
-            {utilisateur.attestations_recues?.map((a) => (
-              <div key={a.id} className="flex items-center justify-between p-2 rounded border border-ardoise-clair/10">
-                <div className="flex items-center gap-2">
-                  <Badge variante={a.statut === "APPROUVEE" ? "succes" : a.statut === "EN_ATTENTE" ? "info" : "neutre"} taille="petit">{a.statut}</Badge>
-                  <span className="text-sm font-medium text-ardoise">{a.titre}</span>
-                </div>
-                <span className="text-xs text-ardoise-clair">{a.poids_score} pts</span>
-              </div>
-            ))}
-          </div>
-        </Carte>
-      )}
-
-      <Carte titre="Vérifications d'identité">
-        <Link href="/identite"><Bouton variante="primaire">Accéder au menu Identité →</Bouton></Link>
-      </Carte>
-
-      {scoreData && (
-        <Carte titre="🎯 Score">
+      {/* === Résumé identité + Score === */}
+      <div className="grid sm:grid-cols-2 gap-4">
+        <Carte>
           <div className="flex items-center gap-4">
-            <p className="text-4xl font-bold text-lagune">{scoreData.score_total}<span className="text-sm text-ardoise-clair">/100</span></p>
-            <div className="flex-1">
-              <BarreProgression valeur={Math.min(scoreData.score_total, 100)} couleur="lagune" />
-              <div className="flex justify-between mt-1 text-xs"><span className="text-ardoise-clair">Niveau: <strong>{scoreData.niveau||"—"}</strong></span><Link href="/score" className="text-ocre">Détails →</Link></div>
+            <div className="w-14 h-14 rounded-full bg-ocre/10 flex items-center justify-center text-ocre text-xl font-bold flex-shrink-0">
+              {((utilisateur.prenom?.[0] || "") + (utilisateur.nom?.[0] || "")).toUpperCase() || "?"}
+            </div>
+            <div className="min-w-0">
+              <p className="font-bold text-ardoise truncate">{([utilisateur.prenom, utilisateur.nom].filter(Boolean).join(" ") || utilisateur.email)}</p>
+              <p className="text-xs text-ardoise-clair font-mono truncate">{utilisateur.digiid_public || "—"}</p>
+              <Badge variante="lagune" taille="petit" className="mt-1">{utilisateur.role.replace(/_/g, " ")}</Badge>
             </div>
           </div>
         </Carte>
+        {scoreData && (
+          <Link href="/score" className="block group">
+            <Carte className="cursor-pointer hover:shadow-lg transition-all h-full">
+              <p className="text-xs uppercase text-ardoise-clair font-semibold mb-1">Score de confiance</p>
+              <div className="flex items-center gap-3">
+                <span className="text-3xl font-bold text-lagune">{scoreData.score_total}<span className="text-sm text-ardoise-clair">/100</span></span>
+                <div className="flex-1">
+                  <BarreProgression valeur={Math.min(scoreData.score_total, 100)} couleur="lagune" />
+                </div>
+              </div>
+              <div className="flex justify-between mt-1 text-xs">
+                <span className="text-ardoise-clair">Niveau: <strong>{scoreData.niveau || "—"}</strong></span>
+                <span className="text-ocre group-hover:translate-x-1 transition-transform">Détails →</span>
+              </div>
+            </Carte>
+          </Link>
+        )}
+      </div>
+
+      {/* === MENU 1 : Navigation === */}
+      <section>
+        <h2 className="text-lg font-bold text-ardoise mb-3 flex items-center gap-2">
+          <span className="text-ocre">🧭</span> Navigation
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <TuileMenu href="/citoyen/dashboard" icone="📊" label="Tableau de bord" />
+          <TuileMenu href="/parametres" icone="⚙️" label="Paramètres" />
+          <TuileMenu href="/notifications" icone="🔔" label="Notifications" />
+          <TuileMenu href="/chatbot" icone="🤖" label="Assistant DigiID" />
+          <TuileMenu href="/aide" icone="❓" label="Aide" />
+        </div>
+      </section>
+
+      {/* === MENU 2 : Suivi & Attestation === */}
+      <section>
+        <h2 className="text-lg font-bold text-ardoise mb-3 flex items-center gap-2">
+          <span className="text-lagune">📈</span> Suivi &amp; Attestation
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <TuileMenu href="/score" icone="🎯" label="Mon score" />
+          <TuileMenu href="/badges" icone="🏆" label="Mes badges" />
+          <TuileMenu href="/parrainage" icone="📨" label="Parrainage" />
+          <TuileMenu href="/historique" icone="🕐" label="Activité" />
+          <TuileMenu href="/citoyen/mes-ordonnances" icone="💊" label="Ordonnances" />
+          <TuileMenu href="/citoyen/mon-dossier-medical" icone="🏥" label="Dossier médical" />
+        </div>
+      </section>
+
+      {/* === MENU 3 : Attestation === */}
+      <section>
+        <h2 className="text-lg font-bold text-ardoise mb-3 flex items-center gap-2">
+          <span className="text-succes">📜</span> Attestation
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <TuileMenu href="/attestations-communautaires" icone="🤝" label="Attestations communautaires" />
+          <TuileMenu href="/documents" icone="📄" label="Mes documents" />
+          <TuileMenu href="/profil/telecharger" icone="📥" label="Télécharger mon profil" />
+        </div>
+      </section>
+
+      {/* === MENU 4 : Identité === */}
+      <section>
+        <h2 className="text-lg font-bold text-ardoise mb-3 flex items-center gap-2">
+          <span className="text-terre">🆔</span> Identité
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <TuileMenu href="/documents-identite" icone="🆔" label="Documents d'identité" />
+          <TuileMenu href="/identite/email" icone="📧" label="Vérification email" />
+          <TuileMenu href="/identite/verification-cni" icone="🪪" label="Scan CNI" />
+          <TuileMenu href="/identite/verification-visuelle" icone="📸" label="Reconnaissance faciale" />
+          <TuileMenu href="/identite/role" icone="🔑" label="Rôle &amp; permissions" />
+          <TuileMenu href="/identite/2fa" icone="🔐" label="2FA" />
+          <TuileMenu href="/partage" icone="📱" label="Partager mon DigiID" />
+          <TuileMenu href="/autorisations" icone="🔒" label="Autorisations" />
+          <TuileMenu href="/consentements" icone="✅" label="Consentements" />
+        </div>
+      </section>
+
+      {/* === 2FA si pas activée === */}
+      {!utilisateur.deux_fa_active && (
+        <Carte titre="🔐 Double authentification">
+          <p className="text-sm text-ardoise-clair mb-3">
+            Protège ton compte avec un code à 6 chiffres en plus de ton mot de passe.
+          </p>
+          <Gestion2FA varianteBouton="secondaire" />
+        </Carte>
       )}
 
-      <Carte titre="🕐 Activité récente">
-        {chargementDonnees ? <p className="text-ardoise-clair italic text-sm">Chargement...</p>
-        : activites.length > 0 ? <div className="space-y-1">
-            {activites.slice(0, 5).map((a,i) => (
-              <div key={a.id||i} className="flex items-center gap-2 text-sm p-1.5 rounded hover:bg-sable">
-                <span>{a.type==="connexion_reussie"?"🔑":a.type==="modification_profil"?"✏️":"📋"}</span>
-                <p className="flex-1 text-ardoise truncate text-xs">{a.description||a.type.replace(/_/g," ")}</p>
-                <span className="text-[10px] text-ardoise-clair/60 whitespace-nowrap">{new Date(a.date).toLocaleDateString("fr-FR",{day:"numeric",month:"short"})}</span>
-              </div>
-            ))}
-            <Link href="/autorisations" className="text-xs text-ocre">Tout l'historique →</Link>
-          </div>
-        : <p className="text-ardoise-clair italic text-sm">Aucune.</p>}
-      </Carte>
-
-      <Carte titre="🔗 Accès rapide">
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-          <Link href="/partage" className="p-2 bg-sable rounded-lg hover:bg-sable/80 text-center"><p className="text-xl">📱</p><p className="text-[10px] font-semibold text-ardoise">Partage</p></Link>
-          <Link href="/autorisations" className="p-2 bg-sable rounded-lg hover:bg-sable/80 text-center"><p className="text-xl">🔒</p><p className="text-[10px] font-semibold text-ardoise">Accès</p></Link>
-          <Link href="/profil/telecharger" className="p-2 bg-sable rounded-lg hover:bg-sable/80 text-center"><p className="text-xl">📥</p><p className="text-[10px] font-semibold text-ardoise">Export</p></Link>
-          <Link href="/consentements" className="p-2 bg-sable rounded-lg hover:bg-sable/80 text-center"><p className="text-xl">✅</p><p className="text-[10px] font-semibold text-ardoise">Consentements</p></Link>
-          <Link href="/score" className="p-2 bg-sable rounded-lg hover:bg-sable/80 text-center"><p className="text-xl">📊</p><p className="text-[10px] font-semibold text-ardoise">Score</p></Link>
-          <Link href="/badges" className="p-2 bg-sable rounded-lg hover:bg-sable/80 text-center"><p className="text-xl">🏆</p><p className="text-[10px] font-semibold text-ardoise">Badges</p></Link>
+      {/* === Actions === */}
+      <Carte titre="Actions" description="Gère ton compte DigiID">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <Bouton variante="ghost" onClick={() => router.push("/parametres")}>⚙️ Paramètres</Bouton>
+          <Bouton variante="ghost" chargement={exportEnCours} onClick={handleExporterDonnees}>📤 Exporter mes données</Bouton>
+          <Link href="/profil/telecharger"><Bouton variante="ghost">📥 Télécharger mon profil</Bouton></Link>
+          <Bouton variante="ghost" onClick={() => setMontrerConfirmationSuppression(true)} className="!border-terre !text-terre hover:!bg-terre hover:!text-white">🗑️ Supprimer mon compte</Bouton>
         </div>
       </Carte>
 
-      {/* Actions */}
-      <Carte titre="Actions sur mes données" description="Conformément à la loi 2008-12 (Sénégal)">
-        <div className="grid sm:grid-cols-2 gap-3">
-          <Bouton variante="ghost" onClick={() => setModeEdition(true)}>
-            Modifier mon profil
-          </Bouton>
-          <Bouton variante="ghost" chargement={exportEnCours} onClick={handleExporterDonnees}>
-            Exporter mes données
-          </Bouton>
-          <Link href="/consentements">
-            <Bouton variante="ghost">
-              Gérer mes consentements
-            </Bouton>
-          </Link>
-          <Link href="/profil/telecharger">
-            <Bouton variante="ghost">
-              📥 Télécharger mon profil
-            </Bouton>
-          </Link>
-          <Bouton variante="ghost" onClick={() => setMontrerConfirmationSuppression(true)} className="!border-terre !text-terre hover:!bg-terre hover:!text-white">
-            Supprimer mon compte
-          </Bouton>
-        </div>
-      </Carte>
-
-      {/* Modale de confirmation pour la suppression du compte */}
       <ModalConfirmation
         ouvert={montrerConfirmationSuppression}
         titre="Supprimer mon compte"
@@ -298,6 +231,18 @@ function Contenu() {
         surConfirmation={handleSupprimerCompte}
       />
     </div>
+  );
+}
+
+/** Tuile de lien pour les menus */
+function TuileMenu({ href, icone, label }: { href: string; icone: string; label: string }) {
+  return (
+    <Link href={href} className="block group">
+      <div className="carte cursor-pointer hover:shadow-lg transition-all text-center p-4 h-full">
+        <p className="text-2xl mb-1">{icone}</p>
+        <p className="text-xs font-semibold text-ardoise group-hover:text-ocre transition-colors leading-tight">{label}</p>
+      </div>
+    </Link>
   );
 }
 
