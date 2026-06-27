@@ -14,6 +14,7 @@ tables une par une → DuplicateTableError sur CHAQUE migration.
 """
 import logging
 import sys
+import traceback
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -64,9 +65,26 @@ def _stamp_sync(url_sync: str, revision: str):
 
 
 def _upgrade_alembic():
+    import traceback
     alembic_cfg_path = Path(__file__).resolve().parent.parent / "alembic.ini"
     config = AlembicConfig(str(alembic_cfg_path))
-    alembic_command.upgrade(config, "head")
+    logger.info("Alembic config chargée depuis %s", alembic_cfg_path)
+    try:
+        # Lister les têtes de révision
+        from alembic.script import ScriptDirectory
+        repertoire = ScriptDirectory.from_config(config)
+        tetes = repertoire.get_heads()
+        logger.info("Têtes de révision trouvées : %s", tetes)
+        if len(tetes) > 1:
+            logger.error("❌ MULTIPLES TÊTES détectées : %s — la chaîne n'est pas linéaire !", tetes)
+            logger.error("   Utiliser : alembic merge -m 'merge' %s", ' '.join(tetes))
+        logger.info("Lancement de alembic upgrade head...")
+        alembic_command.upgrade(config, "head")
+        logger.info("✅ alembic upgrade head terminé avec succès")
+    except Exception as e:
+        logger.error("❌ Échec de alembic upgrade head: %s", str(e)[:500])
+        logger.error("Traceback:\n%s", traceback.format_exc())
+        raise
 
 
 # ===========================================================================

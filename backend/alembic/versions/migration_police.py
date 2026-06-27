@@ -1,7 +1,7 @@
 """migration police
 
 Revision ID: police_001
-Revises: 003_ajouter_image_data_et_index
+Revises: 20260626_1200_ajout_colonnes_verifications_police
 Create Date: 2026-06-27 12:00:00.000000
 """
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'police_001'
-down_revision = '003_ajouter_image_data_et_index'
+down_revision = '20260626_1200_ajout_colonnes_verifications_police'
 branch_labels = None
 depends_on = None
 
