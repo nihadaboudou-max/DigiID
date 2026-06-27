@@ -74,7 +74,7 @@ def appliquer_migrations(connexion) -> None:
         compare_server_default=True,
         transaction_per_migration=True,
     )
-        context.run_migrations()
+    context.run_migrations()
 
 
 def lancer_migrations_en_ligne() -> None:
