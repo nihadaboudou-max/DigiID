@@ -79,15 +79,28 @@ def appliquer_migrations(connexion) -> None:
 
 def lancer_migrations_en_ligne() -> None:
     """Mode en ligne : connexion réelle et application des migrations."""
+    import logging
+    logger = logging.getLogger("migrer")
+    logger.info("Création de l'engine SYNC vers %s...", parametres.url_base_donnees_sync.split('@')[1] if '@' in parametres.url_base_donnees_sync else parametres.url_base_donnees_sync)
     moteur = create_engine(
         parametres.url_base_donnees_sync,
         poolclass=pool.NullPool,
+        echo=True,
     )
-
-    with moteur.connect() as connexion:
-        appliquer_migrations(connexion)
-
-    moteur.dispose()
+    logger.info("Engine créé, connexion...")
+    try:
+        with moteur.connect() as connexion:
+            logger.info("Connexion établie, application des migrations...")
+            appliquer_migrations(connexion)
+            logger.info("✅ Migrations appliquées avec succès")
+    except Exception as e:
+        logger.error("❌ Erreur pendant les migrations: %s", str(e)[:500])
+        import traceback
+        logger.error("Traceback:\n%s", traceback.format_exc())
+        raise
+    finally:
+        moteur.dispose()
+        logger.info("Engine disposé")
 
 
 if context.is_offline_mode():
