@@ -93,26 +93,28 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
 
 
 # ─── Fonctions de vérification ───────────────────────────────────────
-
 def a_permission(role: str, permission: str) -> bool:
     """
     Vérifie si un rôle a une permission spécifique.
-    
+
     Args:
-        role: Rôle de l'utilisateur
-        permission: Permission demandée (ex: "police.ecrire")
-    
+        role: Rôle de l'utilisateur (ex: "super_administrateur")
+        permission: Permission demandée (ex: "domaine.lire")
+
     Returns:
         True si l'utilisateur a la permission, False sinon
     """
+    # ✅ Bypass total pour Super Admin (évite les problèmes de correspondance Enum/String)
+    if role in ROLES_SUPER_ADMIN:
+        return True
+
     permissions_role = PERMISSIONS_PAR_ROLE.get(role, frozenset())
-    
-    # Super Admin a toutes les permissions
+
+    # Super Admin a toutes les permissions (fallback si la liste ci-dessus échoue)
     if "*" in permissions_role:
         return True
-    
-    return permission in permissions_role
 
+    return permission in permissions_role
 
 def peut_acceder_a(
     role_utilisateur: str,
