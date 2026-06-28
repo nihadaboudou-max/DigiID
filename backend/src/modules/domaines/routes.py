@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.src.modeles.domaine import Domaine
+from src.modeles.domaine import Domaine
 from src.base_donnees.session import obtenir_session_async
 from src.modules.domaines.schemas import (
     DomaineCreate, DomaineUpdate, DomaineResponse, DomaineListResponse

@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.src.modeles.departement import Departement
+from src.modeles.departement import Departement
 from src.base_donnees.session import obtenir_session_async
 from src.modules.departements.schemas import (
     DepartementCreate, DepartementUpdate, DepartementResponse, DepartementListResponse
