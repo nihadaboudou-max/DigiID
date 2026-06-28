@@ -17,7 +17,7 @@ from src.modules.domaines.service import (
 from src.modules.domaines.dependances import obtenir_domaine_ou_404
 from src.noyau.permissions import require_permission
 
-routeur_domaines = APIRouter(prefix="/domaines", tags=["Domaines"])
+routeur_domaines = APIRouter(prefix="/api/v1/domaines", tags=["Domaines"])
 
 
 @routeur_domaines.post(

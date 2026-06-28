@@ -17,7 +17,7 @@ from src.modules.departements.service import (
 from src.modules.departements.dependances import obtenir_departement_ou_404
 from src.noyau.permissions import require_permission
 
-routeur_departements = APIRouter(prefix="/departements", tags=["Départements"])
+routeur_departements = APIRouter(prefix="/api/v1/departements", tags=["Départements"])
 
 
 @routeur_departements.post(
