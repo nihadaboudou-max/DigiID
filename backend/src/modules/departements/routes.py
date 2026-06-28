@@ -5,6 +5,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.authentification.dependances import utilisateur_courant
+from src.modeles.utilisateur import Utilisateur
+
 from src.modeles.departement import Departement
 from src.base_donnees.session import obtenir_session
 from src.modules.departements.schemas import (
@@ -29,6 +32,7 @@ routeur_departements = APIRouter(prefix="/api/v1/departements", tags=["Départem
 @require_permission("departement.ecrire")
 async def creer(
     donnees: DepartementCreate,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Crée un nouveau département dans un domaine."""
@@ -42,6 +46,7 @@ async def creer(
 )
 @require_permission("departement.lire")
 async def lister(
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     domaine_id: UUID | None = Query(None, description="Filtrer par domaine"),
     type_departement: str | None = Query(None, description="Filtrer par type"),
     page: int = Query(1, ge=1),
@@ -66,7 +71,10 @@ async def lister(
     summary="Obtenir un département",
 )
 @require_permission("departement.lire")
-async def obtenir(departement: Departement = Depends(obtenir_departement_ou_404)):
+async def obtenir(
+    departement: Departement = Depends(obtenir_departement_ou_404),
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+):
     """Récupère les détails d'un département."""
     return departement
 
@@ -80,6 +88,7 @@ async def obtenir(departement: Departement = Depends(obtenir_departement_ou_404)
 async def modifier(
     donnees: DepartementUpdate,
     departement: Departement = Depends(obtenir_departement_ou_404),
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Modifie un département existant."""
@@ -94,6 +103,7 @@ async def modifier(
 @require_permission("departement.supprimer")
 async def supprimer(
     departement: Departement = Depends(obtenir_departement_ou_404),
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Supprime un département."""

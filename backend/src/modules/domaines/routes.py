@@ -5,6 +5,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.authentification.dependances import utilisateur_courant
+from src.modeles.utilisateur import Utilisateur
+
 from src.modeles.domaine import Domaine
 from src.base_donnees.session import obtenir_session
 from src.modules.domaines.schemas import (
@@ -29,6 +32,7 @@ routeur_domaines = APIRouter(prefix="/api/v1/domaines", tags=["Domaines"])
 @require_permission("domaine.ecrire")
 async def creer(
     donnees: DomaineCreate,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Crée un nouveau domaine organisationnel."""
@@ -42,6 +46,7 @@ async def creer(
 )
 @require_permission("domaine.lire")
 async def lister(
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     page: int = Query(1, ge=1, description="Numéro de page"),
     par_page: int = Query(20, ge=1, le=100, description="Éléments par page"),
     est_actif: bool | None = Query(None, description="Filtrer par statut actif"),
@@ -63,7 +68,10 @@ async def lister(
     summary="Obtenir un domaine",
 )
 @require_permission("domaine.lire")
-async def obtenir(domaine: Domaine = Depends(obtenir_domaine_ou_404)):
+async def obtenir(
+    domaine: Domaine = Depends(obtenir_domaine_ou_404),
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+):
     """Récupère les détails d'un domaine."""
     return domaine
 
@@ -77,6 +85,7 @@ async def obtenir(domaine: Domaine = Depends(obtenir_domaine_ou_404)):
 async def modifier(
     donnees: DomaineUpdate,
     domaine: Domaine = Depends(obtenir_domaine_ou_404),
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Modifie un domaine existant."""
@@ -91,6 +100,7 @@ async def modifier(
 @require_permission("domaine.supprimer")
 async def supprimer(
     domaine: Domaine = Depends(obtenir_domaine_ou_404),
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Supprime un domaine."""
@@ -106,6 +116,7 @@ async def supprimer(
 async def suspendre(
     motif: str = Query(..., min_length=10, description="Motif de suspension"),
     domaine: Domaine = Depends(obtenir_domaine_ou_404),
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Suspend un domaine avec un motif."""
@@ -120,6 +131,7 @@ async def suspendre(
 @require_permission("domaine.ecrire")
 async def reactiver(
     domaine: Domaine = Depends(obtenir_domaine_ou_404),
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Réactive un domaine suspendu."""
