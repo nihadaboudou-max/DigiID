@@ -209,8 +209,9 @@ class Utilisateur(Base, MelangeTracabilite):
         cascade="all, delete-orphan",
     )
 
-    # --- Relations multi-niveaux (forward references pour éviter imports circulaires) ---
     # --- Relations multi-niveaux ---
+    # ⚠️ Les noms des relations et back_populates DOIVENT correspondre EXACTEMENT
+    # aux noms dans domaine.py et departement.py
     domaine = relationship(
         "Domaine",
         foreign_keys=[domaine_id],
@@ -223,28 +224,23 @@ class Utilisateur(Base, MelangeTracabilite):
         back_populates="utilisateurs",
         lazy="selectin",
     )
-
+    # Relation self-referential : backref crée automatiquement "subordonnes"
     superieur = relationship(
         "Utilisateur",
         foreign_keys=[superieur_id],
         remote_side=[id],
-        back_populates="subordonnes",
+        backref="subordonnes",
         lazy="selectin",
     )
-    
-    subordonnes = relationship(
-        "Utilisateur",
-        foreign_keys=[superieur_id],
-        back_populates="superieur",
-        lazy="selectin",
-    )
-    domaines_administres_domaine = relationship(
+    # ⚠️ NOM EXACT : "domaines_administres" (pas "domaines_administres_domaine")
+    domaines_administres = relationship(
         "Domaine",
         foreign_keys="Domaine.admin_id",
         back_populates="admin",
         lazy="selectin",
     )
-    departements_diriges_departement = relationship(
+    # ⚠️ NOM EXACT : "departements_diriges" (pas "departements_diriges_departement")
+    departements_diriges = relationship(
         "Departement",
         foreign_keys="Departement.chef_id",
         back_populates="chef",
