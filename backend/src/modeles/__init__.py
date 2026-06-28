@@ -24,6 +24,10 @@ from src.modeles.verification_police import VerificationPolice, SignalementFraud
 from src.modeles.document_identite import DocumentIdentite
 from src.modeles.ong import BeneficiaireONG, ProgrammeONG, MissionTerrain
 from src.modeles.token_reinitialisation import TokenReinitialisation
+# Ajouter à la fin du fichier
+from src.modeles.domaine import Domaine
+from src.modeles.departement import Departement
+from src.modeles.invitation import Invitation
 
 __all__ = [
     "Utilisateur",
