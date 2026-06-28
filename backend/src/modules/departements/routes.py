@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles.departement import Departement
-from src.base_donnees.session import obtenir_session_async
+from src.base_donnees.session import obtenir_session
 from src.modules.departements.schemas import (
     DepartementCreate, DepartementUpdate, DepartementResponse, DepartementListResponse
 )
@@ -29,7 +29,7 @@ routeur_departements = APIRouter(prefix="/departements", tags=["Départements"])
 @require_permission("departement.ecrire")
 async def creer(
     donnees: DepartementCreate,
-    session: AsyncSession = Depends(obtenir_session_async),
+    session: AsyncSession = Depends(obtenir_session),
 ):
     """Crée un nouveau département dans un domaine."""
     return await creer_departement(session, donnees)
@@ -46,7 +46,7 @@ async def lister(
     type_departement: str | None = Query(None, description="Filtrer par type"),
     page: int = Query(1, ge=1),
     par_page: int = Query(20, ge=1, le=100),
-    session: AsyncSession = Depends(obtenir_session_async),
+    session: AsyncSession = Depends(obtenir_session),
 ):
     """Liste les départements avec filtres."""
     departements, total = await lister_departements(
@@ -80,7 +80,7 @@ async def obtenir(departement: Departement = Depends(obtenir_departement_ou_404)
 async def modifier(
     donnees: DepartementUpdate,
     departement: Departement = Depends(obtenir_departement_ou_404),
-    session: AsyncSession = Depends(obtenir_session_async),
+    session: AsyncSession = Depends(obtenir_session),
 ):
     """Modifie un département existant."""
     return await modifier_departement(session, departement.id, donnees)
@@ -94,7 +94,7 @@ async def modifier(
 @require_permission("departement.supprimer")
 async def supprimer(
     departement: Departement = Depends(obtenir_departement_ou_404),
-    session: AsyncSession = Depends(obtenir_session_async),
+    session: AsyncSession = Depends(obtenir_session),
 ):
     """Supprime un département."""
     await supprimer_departement(session, departement.id)
