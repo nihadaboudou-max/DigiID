@@ -246,6 +246,13 @@ class Utilisateur(Base, MelangeTracabilite):
         back_populates="chef",
         lazy="selectin",
     )
+    
+    invitations_creees = relationship(
+        "Invitation",
+        foreign_keys="Invitation.cree_par",
+        back_populates="createur",
+        lazy="selectin",
+    )    
 
     # --- Index composites pour requêtes fréquentes ---
     __table_args__ = (

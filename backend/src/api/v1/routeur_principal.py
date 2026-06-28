@@ -73,6 +73,8 @@ from src.modules.ong import routeur_ong
 from src.modules.domaines import routeur_domaines
 from src.modules.departements import routeur_departements
 
+# --- Modules invitations ---
+from src.modules.invitations import routeur_invitations
 
 # Routeur racine — préfixe et tag globaux gérés au montage
 routeur_v1 = APIRouter()
@@ -140,3 +142,6 @@ routeur_v1.include_router(routeur_patient)
 # Module domaines et departements -  créer les routeurs pour gérer les domaines et départements
 routeur_v1.include_router(routeur_domaines)
 routeur_v1.include_router(routeur_departements)
+
+# Module invitations -  créer les routeurs pour gérer les invitations d'utilisateurs
+routeur_v1.include_router(routeur_invitations)

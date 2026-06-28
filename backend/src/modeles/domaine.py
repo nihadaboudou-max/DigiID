@@ -145,6 +145,14 @@ class Domaine(Base):
         foreign_keys="Utilisateur.domaine_id",
         lazy="selectin",
     )
+    
+    invitations = relationship(
+        "Invitation",
+        back_populates="domaine",
+        foreign_keys="Invitation.domaine_id",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+    )    
 
     def __repr__(self) -> str:
         return f"<Domaine {self.code}: {self.nom}>"

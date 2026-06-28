@@ -157,6 +157,14 @@ class Departement(Base):
         foreign_keys="Utilisateur.departement_id",
         lazy="selectin",
     )
+    
+    invitations = relationship(
+        "Invitation",
+        back_populates="departement",
+        foreign_keys="Invitation.departement_id",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+    )    
 
     def __repr__(self) -> str:
         return f"<Departement {self.type_departement}: {self.nom}>"

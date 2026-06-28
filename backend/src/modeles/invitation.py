@@ -1,13 +1,8 @@
 # -*- coding: utf-8 -*-
-"""
-Modèle Invitation — Système d'invitation sécurisé pour admins/chefs.
-
-Permet d'inviter des utilisateurs à rejoindre un domaine ou département
-via un lien sécurisé avec token à usage unique.
-"""
+"""Modèle Invitation — Invitation par email pour rejoindre la plateforme."""
 import secrets
-from datetime import datetime, timedelta
-from uuid import uuid4
+from datetime import datetime, timedelta, timezone
+from uuid import UUID, uuid4
 
 from sqlalchemy import (
     Boolean, Column, DateTime, ForeignKey, String, Text, Index, func
@@ -20,28 +15,27 @@ from src.base_donnees.base import Base
 
 class Invitation(Base):
     """
-    Invitation à rejoindre un domaine/département.
+    Invitation par email — permet à un admin d'inviter un nouvel utilisateur.
     
     Attributs:
-        id: UUID unique
-        token: Token sécurisé (URL-safe, 32 bytes)
-        email_destinataire: Email de la personne invitée
-        role_propose: Rôle proposé (admin_domaine, chef_police, etc.)
-        domaine_id: Domaine cible
-        departement_id: Département cible (optionnel)
-        invite_par_id: UUID de l'utilisateur qui invite
-        est_acceptee: Invitation acceptée ou non
-        est_expiree: Invitation expirée
-        date_expiration: Date d'expiration (par défaut 7 jours)
-        date_acceptation: Date d'acceptation
-        utilisateur_cree_id: UUID de l'utilisateur créé après acceptation
+        id: Identifiant unique UUID
+        email: Email du destinataire (en clair, car nécessaire pour l'envoi)
+        token: Token sécurisé unique (usage unique)
+        role: Rôle proposé (admin_domaine, chef_police, agent, etc.)
+        domaine_id: Domaine d'affectation (optionnel pour citoyen)
+        departement_id: Département d'affectation (optionnel)
+        statut: en_attente | acceptee | expiree | annulee
+        cree_par: UUID de l'utilisateur qui a créé l'invitation
+        message: Message personnalisé (optionnel)
+        date_expiration: Date d'expiration (7 jours par défaut)
     """
     __tablename__ = "invitations"
     __table_args__ = (
-        Index("ix_invitations_token", "token", unique=True),
-        Index("ix_invitations_email", "email_destinataire"),
+        Index("ix_invitations_token_unique", "token", unique=True),
+        Index("ix_invitations_email", "email"),
+        Index("ix_invitations_statut", "statut"),
         Index("ix_invitations_domaine", "domaine_id"),
-        Index("ix_invitations_expiree", "date_expiration"),
+        Index("ix_invitations_cree_par", "cree_par"),
     )
 
     # ─── Identifiants ────────────────────────────────────────────────
@@ -51,128 +45,123 @@ class Invitation(Base):
         default=uuid4,
         nullable=False,
     )
-    
+
+    email = Column(
+        String(255),
+        nullable=False,
+        comment="Email du destinataire",
+    )
+
     token = Column(
         String(64),
         nullable=False,
         unique=True,
-        default=lambda: secrets.token_urlsafe(32),
+        default=lambda: secrets.token_urlsafe(48),
         comment="Token sécurisé unique",
     )
-    
-    email_destinataire = Column(
-        String(255),
-        nullable=False,
-        index=True,
-        comment="Email de la personne invitée",
-    )
 
-    # ─── Rôle et ciblage ─────────────────────────────────────────────
-    role_propose = Column(
+    role = Column(
         String(50),
         nullable=False,
-        comment="Rôle proposé: admin_domaine, chef_police, chef_medical, etc.",
+        comment="Rôle proposé (admin_domaine, chef_police, agent, etc.)",
     )
-    
+
+    # ─── Affectation ─────────────────────────────────────────────────
     domaine_id = Column(
         PG_UUID(as_uuid=True),
         ForeignKey("domaines.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
+        comment="Domaine d'affectation",
     )
-    
+
     departement_id = Column(
         PG_UUID(as_uuid=True),
         ForeignKey("departements.id", ondelete="CASCADE"),
         nullable=True,
-        comment="Requis si role = chef_*",
-    )
-
-    # ─── Métadonnées ─────────────────────────────────────────────────
-    invite_par_id = Column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("utilisateur.id", ondelete="SET NULL"),
-        nullable=False,
-        comment="Utilisateur qui a envoyé l'invitation",
-    )
-    
-    message_personnalise = Column(
-        Text,
-        nullable=True,
-        comment="Message personnalisé avec l'invitation",
+        index=True,
+        comment="Département d'affectation",
     )
 
     # ─── Statut ──────────────────────────────────────────────────────
-    est_acceptee = Column(
-        Boolean,
+    statut = Column(
+        String(20),
         nullable=False,
-        default=False,
-        server_default="false",
+        default="en_attente",
+        server_default="en_attente",
+        comment="en_attente | acceptee | expiree | annulee",
     )
-    
-    date_expiration = Column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.utcnow() + timedelta(days=7),
-        comment="Expiration par défaut: 7 jours",
-    )
-    
-    date_acceptation = Column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
-    
-    utilisateur_cree_id = Column(
+
+    cree_par = Column(
         PG_UUID(as_uuid=True),
         ForeignKey("utilisateur.id", ondelete="SET NULL"),
-        nullable=True,
-        comment="Utilisateur créé après acceptation",
+        nullable=False,
+        index=True,
+        comment="Utilisateur qui a créé l'invitation",
     )
-    
+
+    message = Column(
+        Text,
+        nullable=True,
+        comment="Message personnalisé optionnel",
+    )
+
+    # ─── Dates ───────────────────────────────────────────────────────
     date_creation = Column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
     )
 
-    # ─── Relations ───────────────────────────────────────────────────
-    domaine = relationship("Domaine", backref="invitations")
-    departement = relationship("Departement", backref="invitations")
-    inviteur = relationship(
-        "Utilisateur",
-        foreign_keys=[invite_par_id],
-        backref="invitations_envoyees",
+    date_expiration = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        comment="Date d'expiration (7 jours par défaut)",
     )
-    utilisateur_cree = relationship(
+
+    date_acceptation = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Date à laquelle l'invitation a été acceptée",
+    )
+
+    # ─── Relations (back_populates cohérents) ────────────────────────
+    domaine = relationship(
+        "Domaine",
+        foreign_keys=[domaine_id],
+        back_populates="invitations",
+        lazy="selectin",
+    )
+
+    departement = relationship(
+        "Departement",
+        foreign_keys=[departement_id],
+        back_populates="invitations",
+        lazy="selectin",
+    )
+
+    createur = relationship(
         "Utilisateur",
-        foreign_keys=[utilisateur_cree_id],
-        backref="invitation_recue",
+        foreign_keys=[cree_par],
+        back_populates="invitations_creees",
+        lazy="selectin",
     )
 
     def __repr__(self) -> str:
-        return f"<Invitation {self.email_destinataire} → {self.role_propose}>"
+        return f"<Invitation {self.email} role={self.role} statut={self.statut}>"
 
     @property
     def est_expiree(self) -> bool:
         """Vérifie si l'invitation est expirée."""
-        return datetime.utcnow() > self.date_expiration
+        if self.statut != "en_attente":
+            return False
+        return datetime.now(timezone.utc) > self.date_expiration
 
-    @property
-    def est_valide(self) -> bool:
-        """Vérifie si l'invitation peut encore être acceptée."""
-        return (
-            not self.est_acceptee
-            and not self.est_expiree
-            and self.utilisateur_cree_id is None
-        )
-
-    def accepter(self, utilisateur_id) -> None:
+    def marquer_acceptee(self) -> None:
         """Marque l'invitation comme acceptée."""
-        self.est_acceptee = True
-        self.date_acceptation = datetime.utcnow()
-        self.utilisateur_cree_id = utilisateur_id
+        self.statut = "acceptee"
+        self.date_acceptation = datetime.now(timezone.utc)
 
-    def generer_lien_invitation(self, base_url: str) -> str:
-        """Génère le lien d'invitation complet."""
-        return f"{base_url}/invitations/{self.token}"
-     
+    def annuler(self) -> None:
+        """Annule l'invitation."""
+        self.statut = "annulee"

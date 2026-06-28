@@ -89,6 +89,7 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
         "documents.lire", "documents.ecrire",
         "attestations.lire",
     }),
+    
 }
 
 
