@@ -141,7 +141,7 @@ class Domaine(Base):
     
     utilisateurs = relationship(
         "Utilisateur",
-        backref="domaine",
+        back_populates="domaine",
         foreign_keys="Utilisateur.domaine_id",
         lazy="selectin",
     )

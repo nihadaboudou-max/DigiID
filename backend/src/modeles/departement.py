@@ -147,7 +147,7 @@ class Departement(Base):
     
     utilisateurs = relationship(
         "Utilisateur",
-        backref="departement",
+        back_populates="departement",
         foreign_keys="Utilisateur.departement_id",
         lazy="selectin",
     )
