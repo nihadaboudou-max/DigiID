@@ -227,7 +227,7 @@ class Utilisateur(Base, MelangeTracabilite):
         "Utilisateur",
         foreign_keys=[superieur_id],
         remote_side=[id],
-        backref="subordonnes",
+        back_populates="subordonnes",
         lazy="selectin",
     )
     domaines_administres_domaine = relationship(
