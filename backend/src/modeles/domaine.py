@@ -128,13 +128,13 @@ class Domaine(Base):
     admin = relationship(
         "Utilisateur",
         foreign_keys=[admin_id],
-        backref="domaines_administres",
+        back_populates="domaines_administres",
         lazy="selectin",
     )
     
     departements = relationship(
         "Departement",
-        backref="domaine",
+        back_populates="domaine",
         lazy="selectin",
         cascade="all, delete-orphan",
     )

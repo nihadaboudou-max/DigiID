@@ -210,16 +210,17 @@ class Utilisateur(Base, MelangeTracabilite):
     )
 
     # --- Relations multi-niveaux (forward references pour éviter imports circulaires) ---
+    # --- Relations multi-niveaux ---
     domaine = relationship(
         "Domaine",
         foreign_keys=[domaine_id],
-        backref="utilisateurs",
+        back_populates="utilisateurs",
         lazy="selectin",
     )
     departement = relationship(
         "Departement",
         foreign_keys=[departement_id],
-        backref="utilisateurs",
+        back_populates="utilisateurs",
         lazy="selectin",
     )
     superieur = relationship(
@@ -227,6 +228,18 @@ class Utilisateur(Base, MelangeTracabilite):
         foreign_keys=[superieur_id],
         remote_side=[id],
         backref="subordonnes",
+        lazy="selectin",
+    )
+    domaines_administres = relationship(
+        "Domaine",
+        foreign_keys="Domaine.admin_id",
+        back_populates="admin",
+        lazy="selectin",
+    )
+    departements_diriges = relationship(
+        "Departement",
+        foreign_keys="Departement.chef_id",
+        back_populates="chef",
         lazy="selectin",
     )
 

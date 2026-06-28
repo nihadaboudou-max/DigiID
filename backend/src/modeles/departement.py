@@ -141,7 +141,7 @@ class Departement(Base):
     chef = relationship(
         "Utilisateur",
         foreign_keys=[chef_id],
-        backref="departements_diriges",
+        back_populates="departements_diriges",
         lazy="selectin",
     )
     
