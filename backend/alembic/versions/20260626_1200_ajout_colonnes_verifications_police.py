@@ -24,75 +24,43 @@ def upgrade() -> None:
     # --- Table verifications_police ---
     op.add_column(
         "verifications_police",
-        sa.Column(
-            "personne_email",
-            sa.String(255),
-            nullable=True,
-            comment="Email de la personne verifiee (cache)",
-        ),
+        sa.Column("personne_email", sa.String(255), nullable=True,
+                  comment="Email de la personne verifiee (cache)"),
     )
     op.add_column(
         "verifications_police",
-        sa.Column(
-            "personne_telephone",
-            sa.String(50),
-            nullable=True,
-            comment="Telephone de la personne verifiee (cache)",
-        ),
+        sa.Column("personne_telephone", sa.String(50), nullable=True,
+                  comment="Telephone de la personne verifiee (cache)"),
     )
     op.add_column(
         "verifications_police",
-        sa.Column(
-            "motif_verification",
-            sa.String(500),
-            nullable=True,
-            comment="Motif de la verification (controle routier, enquete, etc.)",
-        ),
+        sa.Column("motif_verification", sa.String(500), nullable=True,
+                  comment="Motif de la verification"),
     )
     op.add_column(
         "verifications_police",
-        sa.Column(
-            "localisation_lat",
-            sa.Float(),
-            nullable=True,
-            comment="Latitude GPS du lieu de verification",
-        ),
+        sa.Column("localisation_lat", sa.Float(), nullable=True,
+                  comment="Latitude GPS du lieu de verification"),
     )
     op.add_column(
         "verifications_police",
-        sa.Column(
-            "localisation_lng",
-            sa.Float(),
-            nullable=True,
-            comment="Longitude GPS du lieu de verification",
-        ),
+        sa.Column("localisation_lng", sa.Float(), nullable=True,
+                  comment="Longitude GPS du lieu de verification"),
     )
     op.add_column(
         "verifications_police",
-        sa.Column(
-            "localisation_adresse",
-            sa.String(500),
-            nullable=True,
-            comment="Adresse textuelle du lieu de verification",
-        ),
+        sa.Column("localisation_adresse", sa.String(500), nullable=True,
+                  comment="Adresse textuelle du lieu de verification"),
     )
     op.add_column(
         "verifications_police",
-        sa.Column(
-            "officier_nom",
-            sa.String(255),
-            nullable=True,
-            comment="Cache du nom de l'officier pour l'audit",
-        ),
+        sa.Column("officier_nom", sa.String(255), nullable=True,
+                  comment="Cache du nom de l'officier pour l'audit"),
     )
 
-    # Index pour les recherches geo
-    op.create_index(
-        "ix_verifications_police_localisation",
-        "verifications_police",
-        ["localisation_lat", "localisation_lng"],
-        postgresql_using="gist",
-    )
+    # Index B-tree simples pour les recherches geo (plus performants que GiST pour Float)
+    op.create_index("ix_verifications_police_lat", "verifications_police", ["localisation_lat"])
+    op.create_index("ix_verifications_police_lng", "verifications_police", ["localisation_lng"])
 
     # --- Table alertes_police ---
     op.create_table(
@@ -102,12 +70,10 @@ def upgrade() -> None:
         sa.Column("officier_id", postgresql.UUID(as_uuid=True),
                   sa.ForeignKey("utilisateur.id", ondelete="CASCADE"),
                   nullable=False, index=True),
-        sa.Column("type_alerte", sa.String(50), nullable=False,
-                  comment="Type: verification, signalement, note, systeme"),
+        sa.Column("type_alerte", sa.String(50), nullable=False),
         sa.Column("titre", sa.String(200), nullable=False),
         sa.Column("message", sa.Text(), nullable=False),
-        sa.Column("niveau", sa.String(20), nullable=False, server_default="info",
-                  comment="info, avertissement, critique"),
+        sa.Column("niveau", sa.String(20), nullable=False, server_default="info"),
         sa.Column("est_lue", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("est_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         sa.Column("donnees_liees", postgresql.JSON(), nullable=True),
@@ -115,31 +81,19 @@ def upgrade() -> None:
                   server_default=sa.func.now(), nullable=False, index=True),
         sa.Column("date_lecture", sa.DateTime(timezone=True), nullable=True),
     )
-    op.create_index(
-        "ix_alertes_police_officier_non_lues",
-        "alertes_police",
-        ["officier_id", "est_lue"],
-    )
+    op.create_index("ix_alertes_police_officier_non_lues", "alertes_police",
+                    ["officier_id", "est_lue"])
 
-    # --- Ajout d'une table pour les signalements police enrichie ---
-    # Ajouter les colonnes manquantes à signalements_fraude
+    # --- Signalements police ---
     op.add_column(
         "signalements_fraude",
-        sa.Column(
-            "notes_traitement",
-            sa.Text(),
-            nullable=True,
-            comment="Notes de l'officier lors du traitement",
-        ),
+        sa.Column("notes_traitement", sa.Text(), nullable=True),
     )
     op.add_column(
         "signalements_fraude",
-        sa.Column(
-            "traite_par_id",
-            postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("utilisateur.id", ondelete="SET NULL"),
-            nullable=True,
-        ),
+        sa.Column("traite_par_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("utilisateur.id", ondelete="SET NULL"),
+                  nullable=True),
     )
 
     # --- Table enrolement ---
@@ -170,7 +124,8 @@ def downgrade() -> None:
     op.drop_column("signalements_fraude", "notes_traitement")
     op.drop_index("ix_alertes_police_officier_non_lues", table_name="alertes_police")
     op.drop_table("alertes_police")
-    op.drop_index("ix_verifications_police_localisation", table_name="verifications_police")
+    op.drop_index("ix_verifications_police_lng", table_name="verifications_police")
+    op.drop_index("ix_verifications_police_lat", table_name="verifications_police")
     op.drop_column("verifications_police", "officier_nom")
     op.drop_column("verifications_police", "localisation_adresse")
     op.drop_column("verifications_police", "localisation_lng")
