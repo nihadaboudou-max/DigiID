@@ -230,13 +230,13 @@ class Utilisateur(Base, MelangeTracabilite):
         backref="subordonnes",
         lazy="selectin",
     )
-    domaines_administres = relationship(
+    domaines_administres_domaine = relationship(
         "Domaine",
         foreign_keys="Domaine.admin_id",
         back_populates="admin",
         lazy="selectin",
     )
-    departements_diriges = relationship(
+    departements_diriges_departement = relationship(
         "Departement",
         foreign_keys="Departement.chef_id",
         back_populates="chef",
