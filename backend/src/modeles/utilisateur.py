@@ -223,11 +223,19 @@ class Utilisateur(Base, MelangeTracabilite):
         back_populates="utilisateurs",
         lazy="selectin",
     )
+
     superieur = relationship(
         "Utilisateur",
         foreign_keys=[superieur_id],
         remote_side=[id],
         back_populates="subordonnes",
+        lazy="selectin",
+    )
+    
+    subordonnes = relationship(
+        "Utilisateur",
+        foreign_keys=[superieur_id],
+        back_populates="superieur",
         lazy="selectin",
     )
     domaines_administres_domaine = relationship(
