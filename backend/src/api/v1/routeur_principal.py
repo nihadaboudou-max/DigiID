@@ -73,6 +73,7 @@ from src.modules.ong import routeur_ong
 from src.modules.domaines import routeur_domaines
 from src.modules.departements import routeur_departements
 
+
 # Routeur racine — préfixe et tag globaux gérés au montage
 routeur_v1 = APIRouter()
 

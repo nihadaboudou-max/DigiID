@@ -24,6 +24,8 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from src.modeles.consentement import Consentement
+from src.modeles.session_authentification import SessionAuthentification
 from src.base_donnees.base import Base, MelangeTracabilite
 from src.config.constantes import RolesUtilisateur
 
@@ -167,6 +169,36 @@ class Utilisateur(Base, MelangeTracabilite):
     date_derniere_connexion: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     ip_derniere_connexion: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
 
+    # --- Cloisonnement multi-niveaux (Domaines & Départements) ---
+    domaine_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        doc="Domaine organisationnel auquel appartient l'utilisateur"
+    )
+    departement_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        doc="Département fonctionnel auquel appartient l'utilisateur"
+    )
+    est_chef_departement: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        server_default="false",
+        doc="Indique si l'utilisateur est chef de département"
+    )
+    superieur_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("utilisateur.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        doc="Supérieur hiérarchique direct (pour la chaîne de commandement)"
+    )
+
     # --- Relations ---
     sessions_authentification: Mapped[list["SessionAuthentification"]] = relationship(
         back_populates="utilisateur",
@@ -177,10 +209,34 @@ class Utilisateur(Base, MelangeTracabilite):
         cascade="all, delete-orphan",
     )
 
+    # --- Relations multi-niveaux (forward references pour éviter imports circulaires) ---
+    domaine = relationship(
+        "Domaine",
+        foreign_keys=[domaine_id],
+        backref="utilisateurs",
+        lazy="selectin",
+    )
+    departement = relationship(
+        "Departement",
+        foreign_keys=[departement_id],
+        backref="utilisateurs",
+        lazy="selectin",
+    )
+    superieur = relationship(
+        "Utilisateur",
+        foreign_keys=[superieur_id],
+        remote_side=[id],
+        backref="subordonnes",
+        lazy="selectin",
+    )
+
     # --- Index composites pour requêtes fréquentes ---
     __table_args__ = (
         Index("ix_utilisateur_role_actif", "role", "est_actif"),
         Index("ix_utilisateur_role_supprime", "role", "est_supprime"),
+        Index("ix_utilisateur_domaine", "domaine_id"),
+        Index("ix_utilisateur_departement", "departement_id"),
+        Index("ix_utilisateur_chef", "est_chef_departement"),
     )
 
     def __repr__(self) -> str:
