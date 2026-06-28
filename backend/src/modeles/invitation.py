@@ -15,7 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship
 
-from src.noyau.base import Base
+from src.base_donnees.base import Base
 
 
 class Invitation(Base):
