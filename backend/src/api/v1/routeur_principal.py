@@ -69,6 +69,9 @@ from src.modules.enrolement import routeur_enrolement
 from src.modules.police import routeur_police
 from src.modules.ong import routeur_ong
 
+# --- Modules domaines et departements ---
+from src.modules.domaines import routeur_domaines
+from src.modules.departements import routeur_departements
 
 # Routeur racine — préfixe et tag globaux gérés au montage
 routeur_v1 = APIRouter()
@@ -132,3 +135,7 @@ routeur_v1.include_router(routeur_ong)
 
 # Module Patient — accès citoyen à ses informations médicales
 routeur_v1.include_router(routeur_patient)
+
+# Module domaines et departements -  créer les routeurs pour gérer les domaines et départements
+routeur_v1.include_router(routeur_domaines)
+routeur_v1.include_router(routeur_departements)
