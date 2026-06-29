@@ -1,8 +1,8 @@
-"""Schémas Pydantic pour le module d'enrôlement."""
+# -*- coding: utf-8 -*-
+"""Schémas Pydantic pour le module d'enrôlement — avec cloisonnement."""
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
-
 from pydantic import BaseModel, Field
 
 
@@ -35,5 +35,8 @@ class EnrolementResponse(BaseModel):
     capture_biometrique: bool
     date_enrolement: datetime
     date_validation: Optional[datetime] = None
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id: Optional[UUID] = None
+    departement_id: Optional[UUID] = None
 
     model_config = {"from_attributes": True}

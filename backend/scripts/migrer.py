@@ -149,6 +149,10 @@ COLONNES_A_VERIFIER = [
     ("consultations", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
     ("ordonnances", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
     ("ordonnances", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),    
+    
+    # ─── Module Enrôlement : Cloisonnement ──────────────────────────
+    ("enrolements", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("enrolements", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
 ]
 
 

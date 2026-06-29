@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 Modèle Enrôlement citoyen — Géré par les agents terrain.
+Avec cloisonnement par domaine et département.
 """
 import uuid
 from datetime import datetime
-
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-
 from src.base_donnees.base import Base
 
 
@@ -28,5 +27,21 @@ class Enrolement(Base):
     capture_biometrique = Column(Boolean, default=False)
     date_enrolement = Column(DateTime, default=datetime.utcnow, nullable=False)
     date_validation = Column(DateTime, nullable=True)
+
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Domaine de rattachement"
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Département de rattachement"
+    )
 
     agent = relationship("Utilisateur", backref="enrolements")
