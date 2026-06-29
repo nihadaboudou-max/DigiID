@@ -1,10 +1,9 @@
-"""Routes API pour le module Police — version complète."""
+# -*- coding: utf-8 -*-
+"""Routes API pour le module Police — version complète avec cloisonnement."""
 from typing import Annotated
 from uuid import UUID
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.base_donnees.session import obtenir_session
 from src.config.constantes import PREFIXE_API_UTILISATEUR
 from src.modeles import Utilisateur
@@ -49,7 +48,7 @@ async def verifier_identite(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     """Crée une vérification d'identité."""
-    v = await service.creer_verification(session, officier.id, data.model_dump())
+    v = await service.creer_verification(session, officier, data.model_dump())
     await enregistrer_evenement_audit(
         session=session,
         type_evenement="police_verification_identite",
@@ -67,8 +66,8 @@ async def lister_verifications(
     limite: int = Query(50, ge=1, le=200),
     page: int = Query(1, ge=1),
 ):
-    """Liste les vérifications avec pagination."""
-    verifications, total = await service.obtenir_verifications(session, officier.id, limite, page)
+    """Liste les vérifications avec pagination et cloisonnement."""
+    verifications, total = await service.obtenir_verifications(session, officier, limite, page)
     return verifications
 
 
@@ -95,11 +94,11 @@ async def rechercher_personnes(
     officier: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    """Recherche avancée de personnes avec filtres."""
+    """Recherche avancée de personnes avec filtres et cloisonnement."""
     resultats, total, temps = await service.rechercher_personne(
         session, data.query, data.type_recherche,
         data.filtre_statut, data.filtre_score_min, data.filtre_score_max,
-        data.filtre_ville, data.limite, data.page, officier.id,
+        data.filtre_ville, data.limite, data.page, officier,
     )
     return {
         "resultats": resultats,
@@ -120,8 +119,8 @@ async def obtenir_profil(
     officier: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    """Obtient le profil détaillé d'une personne."""
-    return await service.obtenir_profil_personne(session, digiid, officier.id)
+    """Obtient le profil détaillé d'une personne avec cloisonnement."""
+    return await service.obtenir_profil_personne(session, digiid, officier)
 
 
 # =============================================================================
@@ -135,7 +134,7 @@ async def creer_signalement(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     """Crée un signalement de fraude."""
-    s = await service.creer_signalement(session, officier.id, data.model_dump())
+    s = await service.creer_signalement(session, officier, data.model_dump())
     await enregistrer_evenement_audit(
         session=session,
         type_evenement="police_signalement_fraude",
@@ -154,8 +153,8 @@ async def lister_signalements(
     limite: int = Query(50, ge=1, le=200),
     page: int = Query(1, ge=1),
 ):
-    """Liste les signalements avec pagination et filtre par statut."""
-    signalements, total = await service.obtenir_signalements(session, officier.id, statut, limite, page)
+    """Liste les signalements avec pagination, filtre et cloisonnement."""
+    signalements, total = await service.obtenir_signalements(session, officier, statut, limite, page)
     return signalements
 
 
@@ -166,8 +165,8 @@ async def traiter_signalement(
     officier: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    """Traite un signalement (changer statut, ajouter notes)."""
-    return await service.traiter_signalement(session, signalement_id, officier.id, data.model_dump())
+    """Traite un signalement."""
+    return await service.traiter_signalement(session, signalement_id, officier, data.model_dump())
 
 
 # =============================================================================
@@ -181,7 +180,7 @@ async def creer_note(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     """Crée une note interne."""
-    return await service.creer_note(session, officier.id, data.model_dump())
+    return await service.creer_note(session, officier, data.model_dump())
 
 
 @routeur_police.get("/notes", response_model=list[NoteInterneResponse])
@@ -192,8 +191,8 @@ async def lister_notes(
     categorie: str = Query(None),
     limite: int = Query(50, ge=1, le=200),
 ):
-    """Liste les notes internes."""
-    notes, total = await service.obtenir_notes(session, officier.id, personne_digiid, categorie, limite)
+    """Liste les notes internes avec cloisonnement."""
+    notes, total = await service.obtenir_notes(session, officier, personne_digiid, categorie, limite)
     return notes
 
 
@@ -205,7 +204,7 @@ async def modifier_note(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     """Modifie une note interne."""
-    return await service.modifier_note(session, note_id, officier.id, data.model_dump())
+    return await service.modifier_note(session, note_id, officier, data.model_dump())
 
 
 @routeur_police.delete("/notes/{note_id}", status_code=204)
@@ -215,7 +214,7 @@ async def supprimer_note(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     """Supprime une note interne."""
-    await service.supprimer_note(session, note_id, officier.id)
+    await service.supprimer_note(session, note_id, officier)
 
 
 # =============================================================================
@@ -229,8 +228,8 @@ async def lister_alertes(
     non_lues_seulement: bool = Query(False),
     limite: int = Query(50, ge=1, le=200),
 ):
-    """Liste les alertes de l'officier."""
-    alertes, total, non_lues = await service.obtenir_alertes(session, officier.id, non_lues_seulement, limite)
+    """Liste les alertes avec cloisonnement."""
+    alertes, total, non_lues = await service.obtenir_alertes(session, officier, non_lues_seulement, limite)
     return {"alertes": alertes, "total": total, "non_lues": non_lues}
 
 
@@ -241,7 +240,7 @@ async def marquer_alerte_lue(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     """Marque une alerte comme lue."""
-    return await service.marquer_alerte_lue(session, alerte_id, officier.id)
+    return await service.marquer_alerte_lue(session, alerte_id, officier)
 
 
 # =============================================================================
@@ -253,8 +252,8 @@ async def obtenir_statistiques(
     officier: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    """Obtient les statistiques pour le dashboard."""
-    return await service.obtenir_statistiques(session, officier.id)
+    """Obtient les statistiques avec cloisonnement."""
+    return await service.obtenir_statistiques(session, officier)
 
 
 # =============================================================================
@@ -267,8 +266,8 @@ async def obtenir_points_carte(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     limite: int = Query(100, ge=1, le=500),
 ):
-    """Obtient les points pour la carte géographique."""
-    return await service.obtenir_points_carte(session, officier.id, limite)
+    """Obtient les points pour la carte avec cloisonnement."""
+    return await service.obtenir_points_carte(session, officier, limite)
 
 
 # =============================================================================
@@ -281,8 +280,8 @@ async def scanner_qr(
     officier: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    """Traite un scan de QR code citoyen."""
-    return await service.scanner_qr(session, digiid, officier.id)
+    """Traite un scan de QR code avec cloisonnement."""
+    return await service.scanner_qr(session, digiid, officier)
 
 
 # =============================================================================
@@ -296,8 +295,8 @@ async def obtenir_historique(
     type_historique: str = Query(None),
     limite: int = Query(50, ge=1, le=200),
 ):
-    """Obtient l'historique complet des activités."""
-    return await service.obtenir_historique_complet(session, officier.id, type_historique, limite)
+    """Obtient l'historique avec cloisonnement."""
+    return await service.obtenir_historique_complet(session, officier, type_historique, limite)
 
 
 # =============================================================================
@@ -313,11 +312,11 @@ async def generer_rapport(
     format: str = Query("json"),
     type_donnees: list[str] = Query(["verifications", "signalements"]),
 ):
-    """Génère un rapport exportable."""
+    """Génère un rapport exportable avec cloisonnement."""
     from datetime import datetime
     debut = datetime.fromisoformat(date_debut) if date_debut else None
     fin = datetime.fromisoformat(date_fin) if date_fin else None
-    return await service.generer_rapport(session, officier.id, debut, fin, format, type_donnees)
+    return await service.generer_rapport(session, officier, debut, fin, format, type_donnees)
 
 
 # =============================================================================

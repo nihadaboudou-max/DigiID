@@ -1,10 +1,8 @@
 """Schémas Pydantic pour le module Police — version complète."""
 from __future__ import annotations
-
 from datetime import datetime
 from typing import Any, Optional
 from uuid import UUID
-
 from pydantic import BaseModel, Field
 
 
@@ -37,6 +35,9 @@ class VerificationPoliceResponse(BaseModel):
     localisation_lat: Optional[float] = None
     localisation_lng: Optional[float] = None
     localisation_adresse: Optional[str] = None
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id: Optional[UUID] = None
+    departement_id: Optional[UUID] = None
 
     model_config = {"from_attributes": True}
 
@@ -147,6 +148,9 @@ class SignalementFraudeResponse(BaseModel):
     traite_par_id: Optional[UUID] = None
     date_signalement: datetime
     date_traitement: Optional[datetime] = None
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id: Optional[UUID] = None
+    departement_id: Optional[UUID] = None
 
     model_config = {"from_attributes": True}
 
@@ -179,6 +183,9 @@ class NoteInterneResponse(BaseModel):
     est_partagee: bool = False
     date_creation: datetime
     date_modification: Optional[datetime] = None
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id: Optional[UUID] = None
+    departement_id: Optional[UUID] = None
 
     model_config = {"from_attributes": True}
 
@@ -203,6 +210,9 @@ class AlertePoliceResponse(BaseModel):
     donnees_liees: Optional[dict[str, Any]] = None
     date_creation: datetime
     date_lecture: Optional[datetime] = None
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id: Optional[UUID] = None
+    departement_id: Optional[UUID] = None
 
     model_config = {"from_attributes": True}
 

@@ -4,11 +4,9 @@ Modèle Vérification Police — Tracé des vérifications d'identité.
 """
 import uuid
 from datetime import datetime
-
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship
-
 from src.base_donnees.base import Base
 
 
@@ -27,6 +25,22 @@ class AlertePolice(Base):
     date_creation = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     date_lecture = Column(DateTime(timezone=True), nullable=True)
 
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Domaine de rattachement"
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Département de rattachement"
+    )
+
     officier = relationship("Utilisateur", backref="alertes_police")
 
 
@@ -44,6 +58,22 @@ class NoteInternePolice(Base):
     date_creation = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     date_modification = Column(DateTime(timezone=True), nullable=True)
 
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Domaine de rattachement"
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Département de rattachement"
+    )
+
     officier = relationship("Utilisateur", backref="notes_internes")
 
 
@@ -58,6 +88,22 @@ class HistoriqueRecherchePolice(Base):
     criteres_recherche = Column(JSON, nullable=True)
     resultats_trouves = Column(Text, nullable=True)
     date_recherche = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Domaine de rattachement"
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Département de rattachement"
+    )
 
     officier = relationship("Utilisateur", backref="historique_recherches")
 
@@ -77,6 +123,22 @@ class EnrolementPolice(Base):
     date_enrolement = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     date_completion = Column(DateTime(timezone=True), nullable=True)
 
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Domaine de rattachement"
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Département de rattachement"
+    )
+
     officier = relationship("Utilisateur", backref="enrolements_police")
 
 
@@ -93,6 +155,22 @@ class VerificationPolice(Base):
     date_verification = Column(DateTime, default=datetime.utcnow, nullable=False)
     est_signalement_fraude = Column(Boolean, default=False)
 
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Domaine de rattachement"
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Département de rattachement"
+    )
+
     officier = relationship("Utilisateur", backref="verifications_police")
 
 
@@ -107,5 +185,21 @@ class SignalementFraude(Base):
     statut = Column(String(20), default="en_cours")
     date_signalement = Column(DateTime, default=datetime.utcnow, nullable=False)
     date_traitement = Column(DateTime, nullable=True)
+
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Domaine de rattachement"
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Département de rattachement"
+    )
 
     officier = relationship("Utilisateur", backref="signalements_fraude")
