@@ -1,23 +1,23 @@
-"""Routes API pour le module ONG."""
+# -*- coding: utf-8 -*-
+"""Routes API pour le module ONG — avec cloisonnement."""
 from typing import Annotated
 from uuid import UUID
-
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.base_donnees.session import obtenir_session
-from src.config.constantes import PREFIXE_API_UTILISATEUR
 from src.modeles import Utilisateur
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.ong.schemas import (
     BeneficiaireCreate, BeneficiaireResponse,
     ProgrammeCreate, ProgrammeResponse,
     MissionCreate, MissionResponse,
+    StatsONGResponse,
 )
 from src.noyau.journal import enregistrer_evenement_audit
 from src.modules.ong import service
 
-routeur_ong = APIRouter(prefix=f"{PREFIXE_API_UTILISATEUR}/ong", tags=["ONG"])
+# Préfixe cohérent avec les autres modules
+routeur_ong = APIRouter(prefix="/api/v1/ong", tags=["ONG"])
 
 
 @routeur_ong.get("/beneficiaires", response_model=list[BeneficiaireResponse])
@@ -25,12 +25,14 @@ async def lister_beneficiaires(
     ong: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    beneficiaires = await service.obtenir_beneficiaires(session, ong.id)
+    """Liste les bénéficiaires avec cloisonnement."""
+    beneficiaires = await service.obtenir_beneficiaires(session, ong)
     return [
         BeneficiaireResponse(
             id=b.id, ong_id=b.ong_id, nom=b.nom, digiid=b.digiid,
             programme=b.programme, zone=b.zone,
             date_inscription=b.date_inscription, statut=b.statut, notes=b.notes,
+            domaine_id=b.domaine_id, departement_id=b.departement_id,
         )
         for b in beneficiaires
     ]
@@ -42,7 +44,8 @@ async def creer_beneficiaire(
     ong: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    b = await service.creer_beneficiaire(session, ong.id, data.model_dump())
+    """Crée un bénéficiaire avec cloisonnement automatique."""
+    b = await service.creer_beneficiaire(session, ong, data.model_dump())
     await enregistrer_evenement_audit(
         session=session,
         type_evenement="ong_beneficiaire_creation",
@@ -54,6 +57,7 @@ async def creer_beneficiaire(
         id=b.id, ong_id=b.ong_id, nom=b.nom, digiid=b.digiid,
         programme=b.programme, zone=b.zone,
         date_inscription=b.date_inscription, statut=b.statut, notes=b.notes,
+        domaine_id=b.domaine_id, departement_id=b.departement_id,
     )
 
 
@@ -62,12 +66,14 @@ async def lister_programmes(
     ong: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    programmes = await service.obtenir_programmes(session, ong.id)
+    """Liste les programmes avec cloisonnement."""
+    programmes = await service.obtenir_programmes(session, ong)
     return [
         ProgrammeResponse(
             id=p.id, ong_id=p.ong_id, nom=p.nom, description=p.description,
             zone=p.zone, budget=p.budget, date_debut=p.date_debut,
             date_fin=p.date_fin, statut=p.statut,
+            domaine_id=p.domaine_id, departement_id=p.departement_id,
         )
         for p in programmes
     ]
@@ -79,7 +85,8 @@ async def creer_programme(
     ong: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    p = await service.creer_programme(session, ong.id, data.model_dump())
+    """Crée un programme avec cloisonnement automatique."""
+    p = await service.creer_programme(session, ong, data.model_dump())
     await enregistrer_evenement_audit(
         session=session,
         type_evenement="ong_programme_creation",
@@ -91,6 +98,7 @@ async def creer_programme(
         id=p.id, ong_id=p.ong_id, nom=p.nom, description=p.description,
         zone=p.zone, budget=p.budget, date_debut=p.date_debut,
         date_fin=p.date_fin, statut=p.statut,
+        domaine_id=p.domaine_id, departement_id=p.departement_id,
     )
 
 
@@ -99,12 +107,14 @@ async def lister_missions(
     ong: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    missions = await service.obtenir_missions(session, ong.id)
+    """Liste les missions avec cloisonnement."""
+    missions = await service.obtenir_missions(session, ong)
     return [
         MissionResponse(
             id=m.id, ong_id=m.ong_id, programme_id=m.programme_id,
             titre=m.titre, zone=m.zone, date_depart=m.date_depart,
             date_retour=m.date_retour, objectifs=m.objectifs, statut=m.statut,
+            domaine_id=m.domaine_id, departement_id=m.departement_id,
         )
         for m in missions
     ]
@@ -116,7 +126,8 @@ async def creer_mission(
     ong: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    m = await service.creer_mission(session, ong.id, data.model_dump())
+    """Crée une mission avec cloisonnement automatique."""
+    m = await service.creer_mission(session, ong, data.model_dump())
     await enregistrer_evenement_audit(
         session=session,
         type_evenement="ong_mission_creation",
@@ -128,20 +139,22 @@ async def creer_mission(
         id=m.id, ong_id=m.ong_id, programme_id=m.programme_id,
         titre=m.titre, zone=m.zone, date_depart=m.date_depart,
         date_retour=m.date_retour, objectifs=m.objectifs, statut=m.statut,
+        domaine_id=m.domaine_id, departement_id=m.departement_id,
     )
 
 
-@routeur_ong.get("/stats")
+@routeur_ong.get("/stats", response_model=StatsONGResponse)
 async def stats_ong(
     ong: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    nb_beneficiaires = await service.compter_beneficiaires(session, ong.id)
-    programmes = await service.obtenir_programmes(session, ong.id)
-    missions = await service.obtenir_missions(session, ong.id)
-    return {
-        "nb_beneficiaires": nb_beneficiaires,
-        "nb_programmes": len(programmes),
-        "nb_missions": len(missions),
-        "zones": list(set(p.zone for p in programmes if p.zone)),
-    }
+    """Statistiques du module ONG avec cloisonnement."""
+    nb_beneficiaires = await service.compter_beneficiaires(session, ong)
+    programmes = await service.obtenir_programmes(session, ong)
+    missions = await service.obtenir_missions(session, ong)
+    return StatsONGResponse(
+        nb_beneficiaires=nb_beneficiaires,
+        nb_programmes=len(programmes),
+        nb_missions=len(missions),
+        zones=list(set(p.zone for p in programmes if p.zone)),
+    )

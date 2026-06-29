@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 Modèles ONG — Bénéficiaires, programmes, missions terrain.
+Avec cloisonnement par domaine et département.
 """
 import uuid
 from datetime import date, datetime
-
-from sqlalchemy import Column, String, Text, Date, DateTime, ForeignKey, Integer, Float
+from sqlalchemy import Column, String, Text, Date, DateTime, ForeignKey, Integer, Float, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-
 from src.base_donnees.base import Base
 
 
@@ -24,6 +23,22 @@ class BeneficiaireONG(Base):
     date_inscription = Column(DateTime, default=datetime.utcnow, nullable=False)
     statut = Column(String(20), default="actif")
     notes = Column(Text, nullable=True)
+
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Domaine de rattachement"
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Département de rattachement"
+    )
 
     ong = relationship("Utilisateur", backref="beneficiaires_ong")
 
@@ -41,6 +56,22 @@ class ProgrammeONG(Base):
     date_fin = Column(Date, nullable=True)
     statut = Column(String(20), default="actif")
 
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Domaine de rattachement"
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Département de rattachement"
+    )
+
     ong = relationship("Utilisateur", backref="programmes_ong")
 
 
@@ -56,6 +87,22 @@ class MissionTerrain(Base):
     date_retour = Column(Date, nullable=True)
     objectifs = Column(Text, nullable=True)
     statut = Column(String(20), default="planifiee")
+
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Domaine de rattachement"
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Département de rattachement"
+    )
 
     ong = relationship("Utilisateur", backref="missions_terrain")
     programme = relationship("ProgrammeONG", backref="missions")

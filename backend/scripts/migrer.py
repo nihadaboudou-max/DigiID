@@ -133,6 +133,14 @@ COLONNES_A_VERIFIER = [
     ("signalements_fraude", "priorite", "VARCHAR(20) DEFAULT 'moyenne'"),
     ("signalements_fraude", "notes_traitement", "TEXT"),
     ("signalements_fraude", "traite_par_id", "UUID REFERENCES utilisateur(id) ON DELETE SET NULL"),
+    
+    # ─── Module ONG : Cloisonnement ─────────────────────────────────
+    ("beneficiaires_ong", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("beneficiaires_ong", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("programmes_ong", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("programmes_ong", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("missions_terrain", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("missions_terrain", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),    
 ]
 
 

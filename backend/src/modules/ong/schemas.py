@@ -1,8 +1,7 @@
-"""Schémas Pydantic pour le module ONG."""
+"""Schémas Pydantic pour le module ONG — avec cloisonnement."""
 from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
-
 from pydantic import BaseModel
 
 
@@ -24,6 +23,9 @@ class BeneficiaireResponse(BaseModel):
     date_inscription: datetime
     statut: str
     notes: Optional[str] = None
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id: Optional[UUID] = None
+    departement_id: Optional[UUID] = None
 
     model_config = {"from_attributes": True}
 
@@ -47,6 +49,9 @@ class ProgrammeResponse(BaseModel):
     date_debut: date
     date_fin: Optional[date] = None
     statut: str
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id: Optional[UUID] = None
+    departement_id: Optional[UUID] = None
 
     model_config = {"from_attributes": True}
 
@@ -70,5 +75,15 @@ class MissionResponse(BaseModel):
     date_retour: Optional[date] = None
     objectifs: Optional[str] = None
     statut: str
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id: Optional[UUID] = None
+    departement_id: Optional[UUID] = None
 
     model_config = {"from_attributes": True}
+
+
+class StatsONGResponse(BaseModel):
+    nb_beneficiaires: int = 0
+    nb_programmes: int = 0
+    nb_missions: int = 0
+    zones: list[str] = []
