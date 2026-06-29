@@ -5,7 +5,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.base_donnees.session import obtenir_session
-from src.config.constantes import PREFIXE_API_UTILISATEUR
 from src.modeles import Utilisateur
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.police.schemas import (
@@ -34,7 +33,7 @@ from src.modules.police.schemas import (
 from src.noyau.journal import enregistrer_evenement_audit
 from src.modules.police import service
 
-routeur_police = APIRouter(prefix=f"{PREFIXE_API_UTILISATEUR}/police", tags=["Police"])
+routeur_police = APIRouter(prefix="/api/v1/police", tags=["Police"])
 
 
 # =============================================================================
