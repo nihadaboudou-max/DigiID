@@ -3,11 +3,11 @@
 from sqlalchemy import Column, DateTime, ForeignKey, Table
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
-from src.base_donnees.base import metadata
+from src.base_donnees.base import Base
 
 equipe_membres = Table(
     "equipe_membres",
-    metadata,
+    Base.metadata,  # ✅ Utilisation correcte de Base.metadata
     Column(
         "equipe_id",
         PG_UUID(as_uuid=True),
