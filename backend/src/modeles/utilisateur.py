@@ -253,6 +253,20 @@ class Utilisateur(Base, MelangeTracabilite):
         back_populates="createur",
         lazy="selectin",
     )    
+    
+    equipes_dirigees = relationship(
+        "Equipe",
+        foreign_keys="Equipe.chef_id",
+        back_populates="chef",
+        lazy="selectin",
+    )
+
+    equipes = relationship(
+        "Equipe",
+        secondary="equipe_membres",
+        back_populates="membres",
+        lazy="selectin",
+    )    
 
     # --- Index composites pour requêtes fréquentes ---
     __table_args__ = (

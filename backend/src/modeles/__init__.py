@@ -28,6 +28,8 @@ from src.modeles.token_reinitialisation import TokenReinitialisation
 from src.modeles.domaine import Domaine
 from src.modeles.departement import Departement
 from src.modeles.invitation import Invitation
+from src.modeles.equipe import Equipe
+from src.modeles.equipe_membre import equipe_membres
 
 __all__ = [
     "Utilisateur",

@@ -76,6 +76,10 @@ from src.modules.departements import routeur_departements
 # --- Modules invitations ---
 from src.modules.invitations import routeur_invitations
 
+# --- Modules équipes ---
+from src.modules.equipes import routeur_equipes
+
+
 # Routeur racine — préfixe et tag globaux gérés au montage
 routeur_v1 = APIRouter()
 
@@ -145,3 +149,6 @@ routeur_v1.include_router(routeur_departements)
 
 # Module invitations -  créer les routeurs pour gérer les invitations d'utilisateurs
 routeur_v1.include_router(routeur_invitations)
+
+# Module équipes -  créer les routeurs pour gérer les équipes et leurs membres
+routeur_v1.include_router(routeur_equipes)

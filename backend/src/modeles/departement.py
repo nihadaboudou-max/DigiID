@@ -166,6 +166,14 @@ class Departement(Base):
         cascade="all, delete-orphan",
     )    
 
+    equipes = relationship(
+        "Equipe",
+        back_populates="departement",
+        foreign_keys="Equipe.departement_id",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+    )
+
     def __repr__(self) -> str:
         return f"<Departement {self.type_departement}: {self.nom}>"
 

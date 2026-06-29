@@ -36,6 +36,7 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
         "utilisateur.lire", "utilisateur.ecrire", "utilisateur.supprimer",
         "invitation.envoyer", "invitation.lire",
         "audit.lire", "statistiques.lire",
+        "equipe.lire", "equipe.ecrire", "equipe.supprimer",
     }),
     
     # Chefs de Département — accès dans leur département
@@ -45,24 +46,28 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
         "verification.lire", "verification.ecrire",
         "signalement.lire", "signalement.ecrire",
         "statistiques.departement",
+        "equipe.lire", "equipe.ecrire", "equipe.supprimer",
     }),
     RoleUtilisateur.CHEF_MEDICAL: frozenset({
         "equipe.lire", "equipe.ecrire", "equipe.supprimer",
         "medical.lire", "medical.ecrire",
         "dossier.lire", "dossier.ecrire",
         "statistiques.departement",
+        "equipe.lire", "equipe.ecrire", "equipe.supprimer", 
     }),
     RoleUtilisateur.CHEF_ONG: frozenset({
         "equipe.lire", "equipe.ecrire", "equipe.supprimer",
         "ong.lire", "ong.ecrire",
         "beneficiaire.lire", "beneficiaire.ecrire",
         "statistiques.departement",
+        "equipe.lire", "equipe.ecrire", "equipe.supprimer",
     }),
     RoleUtilisateur.CHEF_AGENT: frozenset({
         "equipe.lire", "equipe.ecrire", "equipe.supprimer",
         "agent.lire", "agent.ecrire",
         "enrolement.lire", "enrolement.ecrire",
         "statistiques.departement",
+        "equipe.lire", "equipe.ecrire", "equipe.supprimer",
     }),
     
     # Agents Terrain — accès limité
