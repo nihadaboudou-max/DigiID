@@ -91,6 +91,7 @@ def _upgrade_alembic():
 # Correcteur de colonnes manquantes
 # ===========================================================================
 COLONNES_A_VERIFIER = [
+    # Colonnes existantes
     ("score_historique", "facteur_attestations", "FLOAT NOT NULL DEFAULT 0.0"),
     ("dossiers_medicaux", "patient_prenom", "VARCHAR(255)"),
     ("dossiers_medicaux", "hopital", "VARCHAR(255)"),
@@ -105,9 +106,22 @@ COLONNES_A_VERIFIER = [
     ("ordonnances", "hopital", "VARCHAR(255)"),
     ("ordonnances", "medecin_nom", "VARCHAR(255)"),
     ("ordonnances", "statut", "VARCHAR(20) NOT NULL DEFAULT 'active'"),
-    # Colonnes soft-delete verification_visuelle
     ("verification_visuelle", "est_supprime", "BOOLEAN NOT NULL DEFAULT false"),
     ("verification_visuelle", "date_suppression", "TIMESTAMP WITH TIME ZONE"),
+    
+    # --- NOUVEAU : Colonnes de cloisonnement pour le module Police ---
+    ("alertes_police", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("alertes_police", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("notes_internes", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("notes_internes", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("historique_recherches_police", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("historique_recherches_police", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("enrolements_police", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("enrolements_police", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("verifications_police", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("verifications_police", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("signalements_fraude", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("signalements_fraude", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
 ]
 
 
