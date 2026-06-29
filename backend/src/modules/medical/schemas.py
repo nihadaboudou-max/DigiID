@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Schémas Pydantic pour le module médical."""
+"""Schémas Pydantic pour le module médical — avec cloisonnement."""
 from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
-
 from pydantic import BaseModel, Field
 
 
@@ -39,7 +38,9 @@ class DossierMedicalResponse(BaseModel):
     ordonnances_count: int = 0
     date_creation: datetime
     date_modification: datetime
-
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id: Optional[UUID] = None
+    departement_id: Optional[UUID] = None
     model_config = {"from_attributes": True}
 
 
@@ -50,12 +51,12 @@ class ConsultationCreate(BaseModel):
     type_consultation: Optional[str] = Field(None, description="consultation, suivi, urgence, controle")
     poids: Optional[int] = Field(None, description="Poids en kg")
     taille: Optional[int] = Field(None, description="Taille en cm")
-    temperature: Optional[int] = Field(None, description="Température en dixièmes de degré (ex: 375 = 37.5°C)")
-    pression_arterielle: Optional[str] = Field(None, description="Tension artérielle (ex: 120/80)")
+    temperature: Optional[int] = Field(None, description="Température en dixièmes de degré")
+    pression_arterielle: Optional[str] = Field(None, description="Tension artérielle")
     observations: Optional[str] = None
     diagnostic: Optional[str] = None
     conclusion: Optional[str] = None
-    date_controle: Optional[date] = Field(None, description="Date recommandée pour le contrôle de suivi")
+    date_controle: Optional[date] = Field(None, description="Date recommandée pour le contrôle")
 
 
 class ConsultationResponse(BaseModel):
@@ -74,6 +75,9 @@ class ConsultationResponse(BaseModel):
     conclusion: Optional[str] = None
     date_controle: Optional[date] = None
     date_consultation: datetime
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id: Optional[UUID] = None
+    departement_id: Optional[UUID] = None
 
     model_config = {"from_attributes": True}
 
@@ -104,12 +108,15 @@ class OrdonnanceResponse(BaseModel):
     statut: str = "active"
     date_prescription: datetime
     date_expiration: Optional[date] = None
+    # --- Cloisonnement (NOUVEAU) ---
+    domaine_id: Optional[UUID] = None
+    departement_id: Optional[UUID] = None
 
     model_config = {"from_attributes": True}
 
 
 class VerificationDigiIDResponse(BaseModel):
-    trouvé: bool = Field(..., description="True si le DigiID correspond à un citoyen existant")
+    trouvé: bool = Field(..., description="True si le DigiID correspond à un citoyen")
     digiid: str = Field(..., description="Le DigiID recherché")
     nom: Optional[str] = Field(None, description="Nom du citoyen")
     prenom: Optional[str] = Field(None, description="Prénom du citoyen")
@@ -117,36 +124,13 @@ class VerificationDigiIDResponse(BaseModel):
 
 
 class SignalementCreate(BaseModel):
-    motif: str = Field(..., min_length=10, max_length=500, description="Description du problème (min 10 car.)")
-
-
-class OrdonnancePatientResponse(BaseModel):
-    id: UUID
-    dossier_id: UUID
-    numero_ordonnance: str
-    hopital: Optional[str] = None
-    medecin_nom: Optional[str] = None
-    medicaments: str
-    instructions: Optional[str] = None
-    statut: str = "active"
-    date_prescription: datetime
-    date_expiration: Optional[date] = None
-
-    model_config = {"from_attributes": True}
+    motif: str = Field(..., min_length=10, max_length=500, description="Description du problème")
 
 
 class DossierCompletResponse(BaseModel):
-    """Dossier médical complet du patient avec toutes ses informations."""
+    """Dossier médical complet du patient."""
     dossier: DossierMedicalResponse
     consultations: list[ConsultationResponse]
     ordonnances: list[OrdonnanceResponse]
 
     model_config = {"from_attributes": True}
-
-
-class PatientSearchResponse(BaseModel):
-    digiid: str
-    nom: str
-    email: Optional[str] = None
-    telephone: Optional[str] = None
-    score: Optional[int] = None

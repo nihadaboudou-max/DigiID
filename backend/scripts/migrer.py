@@ -140,7 +140,15 @@ COLONNES_A_VERIFIER = [
     ("programmes_ong", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
     ("programmes_ong", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
     ("missions_terrain", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
-    ("missions_terrain", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),    
+    ("missions_terrain", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    
+    # ─── Module Médical : Cloisonnement ─────────────────────────────
+    ("dossiers_medicaux", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("dossiers_medicaux", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("consultations", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("consultations", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("ordonnances", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("ordonnances", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),    
 ]
 
 
