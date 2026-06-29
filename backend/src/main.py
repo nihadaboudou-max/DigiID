@@ -20,7 +20,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from src.api.v1 import routeur_v1
-from src.base_donnees.session import fermer_moteur, moteur_async, FabriqueSession
+from src.base_donnees.session import fermer_moteur, moteur_async, FabriqueSession, obtenir_session
 from src.config import parametres
 from src.middleware.gestionnaires_erreurs import enregistrer_gestionnaires_erreurs
 from src.middleware.headers_securite import MiddlewareHeadersSecurite
