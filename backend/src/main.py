@@ -27,6 +27,7 @@ from src.middleware.headers_securite import MiddlewareHeadersSecurite
 from src.middleware.journal_requetes import MiddlewareJournalRequetes
 from src.noyau import journal
 from src.noyau.journal import configurer_journal
+from src.base_donnees.sync_schema import synchroniser_schema
 
 
 # -----------------------------------------------------------------------------
@@ -73,6 +74,11 @@ async def _initialiser_base_en_arriere_plan():
 
         initialisation_terminee = True
         journal.info("=== Initialisation terminée ===")
+        
+        # Synchroniser le schéma de base de données
+        async for session in obtenir_session():
+            await synchroniser_schema(session)
+            break            
     except Exception as erreur:
         journal.error(f"Initialisation base échouée : {erreur}", exc_info=True)
         initialisation_terminee = False

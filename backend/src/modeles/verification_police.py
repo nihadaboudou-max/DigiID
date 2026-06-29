@@ -41,6 +41,20 @@ class AlertePolice(Base):
         comment="Département de rattachement"
     )
 
+    # Ajoute après les colonnes existantes :
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     officier = relationship("Utilisateur", backref="alertes_police")
 
 
@@ -74,6 +88,20 @@ class NoteInternePolice(Base):
         comment="Département de rattachement"
     )
 
+    # Ajoute après les colonnes existantes :
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     officier = relationship("Utilisateur", backref="notes_internes")
 
 
@@ -104,6 +132,20 @@ class HistoriqueRecherchePolice(Base):
         index=True,
         comment="Département de rattachement"
     )
+    
+    # Ajoute après les colonnes existantes :
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )    
 
     officier = relationship("Utilisateur", backref="historique_recherches")
 
@@ -139,6 +181,20 @@ class EnrolementPolice(Base):
         comment="Département de rattachement"
     )
 
+    # Ajoute après les colonnes existantes :
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     officier = relationship("Utilisateur", backref="enrolements_police")
 
 
@@ -171,6 +227,20 @@ class VerificationPolice(Base):
         comment="Département de rattachement"
     )
 
+    # Ajoute après les colonnes existantes :
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     officier = relationship("Utilisateur", backref="verifications_police")
 
 
@@ -200,6 +270,20 @@ class SignalementFraude(Base):
         nullable=True,
         index=True,
         comment="Département de rattachement"
+    )
+
+    # Ajoute après les colonnes existantes :
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
 
     officier = relationship("Utilisateur", backref="signalements_fraude")
