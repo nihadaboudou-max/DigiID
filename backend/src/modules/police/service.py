@@ -649,25 +649,24 @@ async def creer_alerte_pour_tous(
 # =============================================================================
 # STATISTIQUES / DASHBOARD
 # =============================================================================
-# Suite du fichier service.py - Reprend depuis obtenir_statistiques
-
-async def obtenir_statistiques(session: AsyncSession, utilisateur: Utilisateur) -> dict:
-    """Obtient les statistiques pour le dashboard avec cloisonnement."""
-    aujourdhui = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+async def obtenir_statistiques(session: AsyncSession, officier: Utilisateur) -> dict:
+    """Obtient les statistiques pour le dashboard."""
+    # Utiliser datetime.utcnow() pour être cohérent avec les colonnes DateTime sans timezone
+    aujourdhui = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     
-    # --- Cloisonnement : base queries (NOUVEAU) ---
+    # --- Cloisonnement : base queries ---
     base_query_verif = select(VerificationPolice)
     base_query_signalement = select(SignalementFraude)
     base_query_alerte = select(AlertePolice)
     base_query_note = select(NoteInternePolice)
     base_query_historique = select(HistoriqueRecherchePolice)
     
-    if not _est_super_admin(utilisateur):
-        base_query_verif = base_query_verif.where(VerificationPolice.officier_id == utilisateur.id)
-        base_query_signalement = base_query_signalement.where(SignalementFraude.officier_id == utilisateur.id)
-        base_query_alerte = base_query_alerte.where(AlertePolice.officier_id == utilisateur.id)
-        base_query_note = base_query_note.where(NoteInternePolice.officier_id == utilisateur.id)
-        base_query_historique = base_query_historique.where(HistoriqueRecherchePolice.officier_id == utilisateur.id)
+    if not _est_super_admin(officier):
+        base_query_verif = base_query_verif.where(VerificationPolice.officier_id == officier.id)
+        base_query_signalement = base_query_signalement.where(SignalementFraude.officier_id == officier.id)
+        base_query_alerte = base_query_alerte.where(AlertePolice.officier_id == officier.id)
+        base_query_note = base_query_note.where(NoteInternePolice.officier_id == officier.id)
+        base_query_historique = base_query_historique.where(HistoriqueRecherchePolice.officier_id == officier.id)
 
     result = await session.execute(select(func.count()).select_from(base_query_verif.subquery()))
     total_verifs = result.scalar() or 0
@@ -722,7 +721,6 @@ async def obtenir_statistiques(session: AsyncSession, utilisateur: Utilisateur) 
         "alertes_recents": [{"id": a.id, "type_alerte": a.type_alerte, "titre": a.titre, "message": a.message, "niveau": a.niveau, "est_lue": a.est_lue, "date_creation": a.date_creation} for a in alertes],
         "activite_dernieres_heures": [],
     }
-
 
 # =============================================================================
 # CARTE GÉOGRAPHIQUE
