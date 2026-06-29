@@ -109,7 +109,7 @@ COLONNES_A_VERIFIER = [
     ("verification_visuelle", "est_supprime", "BOOLEAN NOT NULL DEFAULT false"),
     ("verification_visuelle", "date_suppression", "TIMESTAMP WITH TIME ZONE"),
     
-    # --- NOUVEAU : Colonnes de cloisonnement pour le module Police ---
+    # ─── Module Police : Cloisonnement ───────────────────────────────
     ("alertes_police", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
     ("alertes_police", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
     ("notes_internes", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
@@ -122,6 +122,17 @@ COLONNES_A_VERIFIER = [
     ("verifications_police", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
     ("signalements_fraude", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
     ("signalements_fraude", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    
+    # ─── Module Police : Colonnes supplémentaires ────────────────────
+    ("verifications_police", "localisation_lat", "FLOAT"),
+    ("verifications_police", "localisation_lng", "FLOAT"),
+    ("verifications_police", "localisation_adresse", "TEXT"),
+    ("verifications_police", "motif_verification", "TEXT"),
+    ("verifications_police", "personne_email", "VARCHAR(255)"),
+    ("verifications_police", "personne_telephone", "VARCHAR(50)"),
+    ("signalements_fraude", "priorite", "VARCHAR(20) DEFAULT 'moyenne'"),
+    ("signalements_fraude", "notes_traitement", "TEXT"),
+    ("signalements_fraude", "traite_par_id", "UUID REFERENCES utilisateur(id) ON DELETE SET NULL"),
 ]
 
 
@@ -276,6 +287,34 @@ def _creer_table_code_verification(engine):
         ))
     logger.info("✅ Table code_verification créée avec succès")
 
+# ===========================================================================
+# Synchronisation automatique des tables manquantes
+# ===========================================================================
+def _synchroniser_tables_manquantes(engine):
+    """Crée automatiquement toutes les tables manquantes à partir des modèles SQLAlchemy."""
+    from src.base_donnees.base import Base
+    from sqlalchemy import inspect
+    
+    with engine.connect() as conn:
+        tables_existantes = set(inspect(conn).get_table_names())
+    
+    tables_modeles = set(Base.metadata.tables.keys())
+    tables_manquantes = tables_modeles - tables_existantes
+    
+    if not tables_manquantes:
+        logger.info("✓ Toutes les tables sont synchronisées")
+        return
+    
+    logger.warning("⚠️  Tables manquantes détectées : %s", tables_manquantes)
+    
+    # Créer les tables manquantes une par une
+    for table_name in tables_manquantes:
+        table = Base.metadata.tables[table_name]
+        try:
+            table.create(engine)
+            logger.info("✅ Table créée : %s", table_name)
+        except Exception as e:
+            logger.error("❌ Erreur lors de la création de %s : %s", table_name, str(e)[:200])
 
 def _recreer_alembic_version_texte(url_sync: str) -> str | None:
     engine = create_engine(url_sync)
@@ -369,18 +408,10 @@ def executer_migrations():
             finally:
                 moteur.dispose()
 
-            # 3b. Tables manquantes
+            # 3b. Synchronisation automatique des tables
             moteur = create_engine(url_sync)
             try:
-                manquantes = _tables_manquantes(moteur)
-                if manquantes:
-                    logger.warning("⚠️  Tables critiques manquantes : %s", manquantes)
-                    if "document_identite" in manquantes:
-                        _creer_table_document_identite(moteur)
-                    if "code_verification" in manquantes:
-                        _creer_table_code_verification(moteur)
-                else:
-                    logger.info("✓ Toutes les tables critiques sont présentes")
+                _synchroniser_tables_manquantes(moteur)
             finally:
                 moteur.dispose()
 
