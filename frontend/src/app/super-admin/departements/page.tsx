@@ -62,8 +62,8 @@ function Contenu() {
     setErreur(null);
     try {
       const [deps, doms] = await Promise.all([
-        clientAPI.get<{ departements: Departement[] }>("/api/v1/super-admin/departements", { authentifie: true }),
-        clientAPI.get<{ domaines: DomaineSimple[] }>("/api/v1/super-admin/domaines", { authentifie: true }),
+        clientAPI.get<{ departements: Departement[] }>("/api/v1/departements", { authentifie: true }),
+        clientAPI.get<{ domaines: DomaineSimple[] }>("/api/v1/domaines", { authentifie: true }),
       ]);
       setDepartements(deps.departements || []);
       setDomaines(doms.domaines || []);
@@ -87,7 +87,7 @@ function Contenu() {
     setErreurCreation(null);
     setCreationEnCours(true);
     try {
-      await clientAPI.post("/api/v1/super-admin/departements", formCreation, { authentifie: true });
+      await clientAPI.post("/api/v1/departements", formCreation, { authentifie: true });
       notifier("Département créé avec succès !", "succes");
       setModaleOuverte(false);
       setFormCreation({ nom: "", type_departement: "police", domaine_id: "", description: "", capacite_max: 50 });
@@ -105,7 +105,7 @@ function Contenu() {
     setErreurEdition(null);
     setEditionEnCours(true);
     try {
-      await clientAPI.patch(`/api/v1/super-admin/departements/${departementSelectionne.id}`, formEdition, { authentifie: true });
+      await clientAPI.patch(`/api/v1/departements/${departementSelectionne.id}`, formEdition, { authentifie: true });
       notifier("Département modifié avec succès !", "succes");
       setModaleEdition(false);
       charger();
@@ -119,7 +119,7 @@ function Contenu() {
   const gererSuppression = async (id: string) => {
     if (!confirm("Supprimer ce département ?")) return;
     try {
-      await clientAPI.delete(`/api/v1/super-admin/departements/${id}`, { authentifie: true });
+      await clientAPI.delete(`/api/v1/departements/${id}`, { authentifie: true });
       notifier("Département supprimé", "succes");
       charger();
     } catch (e) {

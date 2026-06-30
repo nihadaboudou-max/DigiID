@@ -60,8 +60,8 @@ function Contenu() {
     setErreur(null);
     try {
       const [eqs, deps] = await Promise.all([
-        clientAPI.get<{ equipes: Equipe[] }>("/api/v1/super-admin/equipes", { authentifie: true }),
-        clientAPI.get<{ departements: DepartementSimple[] }>("/api/v1/super-admin/departements", { authentifie: true }),
+        clientAPI.get<{ equipes: Equipe[] }>("/api/v1/equipes", { authentifie: true }),
+        clientAPI.get<{ departements: DepartementSimple[] }>("/api/v1/departements", { authentifie: true }),
       ]);
       setEquipes(eqs.equipes || []);
       setDepartements(deps.departements || []);
@@ -85,7 +85,7 @@ function Contenu() {
     setErreurCreation(null);
     setCreationEnCours(true);
     try {
-      await clientAPI.post("/api/v1/super-admin/equipes", formCreation, { authentifie: true });
+      await clientAPI.post("/api/v1/equipes", formCreation, { authentifie: true });
       notifier("Équipe créée avec succès !", "succes");
       setModaleOuverte(false);
       setFormCreation({ nom: "", departement_id: "", description: "" });
@@ -103,7 +103,7 @@ function Contenu() {
     setErreurEdition(null);
     setEditionEnCours(true);
     try {
-      await clientAPI.patch(`/api/v1/super-admin/equipes/${equipeSelectionnee.id}`, formEdition, { authentifie: true });
+      await clientAPI.patch(`/api/v1/equipes/${equipeSelectionnee.id}`, formEdition, { authentifie: true });
       notifier("Équipe modifiée avec succès !", "succes");
       setModaleEdition(false);
       charger();
@@ -117,7 +117,7 @@ function Contenu() {
   const gererSuppression = async (id: string) => {
     if (!confirm("Supprimer cette équipe ?")) return;
     try {
-      await clientAPI.delete(`/api/v1/super-admin/equipes/${id}`, { authentifie: true });
+      await clientAPI.delete(`/api/v1/equipes/${id}`, { authentifie: true });
       notifier("Équipe supprimée", "succes");
       charger();
     } catch (e) {

@@ -49,7 +49,7 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      const data = await clientAPI.get<{ invitations: Invitation[] }>("/api/v1/super-admin/invitations", { authentifie: true });
+      const data = await clientAPI.get<{ invitations: Invitation[] }>("/api/v1/invitations", { authentifie: true });
       setInvitations(data.invitations || []);
     } catch (e) {
       setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
@@ -71,7 +71,7 @@ function Contenu() {
     setErreurCreation(null);
     setCreationEnCours(true);
     try {
-      await clientAPI.post("/api/v1/super-admin/invitations", formCreation, { authentifie: true });
+      await clientAPI.post("/api/v1/invitations", formCreation, { authentifie: true });
       notifier("Invitation envoyée avec succès !", "succes");
       setModaleOuverte(false);
       setFormCreation({ email: "", role: "admin_domaine", message: "" });
@@ -86,7 +86,7 @@ function Contenu() {
   const gererRenvoi = async (id: string) => {
     if (!confirm("Renvoyer cette invitation ?")) return;
     try {
-      await clientAPI.post(`/api/v1/super-admin/invitations/${id}/renvoyer`, {}, { authentifie: true });
+      await clientAPI.post(`/api/v1/invitations/${id}/renvoyer`, {}, { authentifie: true });
       notifier("Invitation renvoyée", "succes");
       charger();
     } catch (e) {
@@ -97,7 +97,7 @@ function Contenu() {
   const gererAnnulation = async (id: string) => {
     if (!confirm("Annuler cette invitation ?")) return;
     try {
-      await clientAPI.delete(`/api/v1/super-admin/invitations/${id}`, { authentifie: true });
+      await clientAPI.delete(`/api/v1/invitations/${id}`, { authentifie: true });
       notifier("Invitation annulée", "succes");
       charger();
     } catch (e) {

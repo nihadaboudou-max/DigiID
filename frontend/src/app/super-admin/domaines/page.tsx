@@ -53,7 +53,7 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      const data = await clientAPI.get<{ domaines: Domaine[] }>("/api/v1/super-admin/domaines", { authentifie: true });
+      const data = await clientAPI.get<{ domaines: Domaine[] }>("/api/v1/domaines", { authentifie: true });
       setDomaines(data.domaines || []);
     } catch (e) {
       setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
@@ -75,7 +75,7 @@ function Contenu() {
     setErreurCreation(null);
     setCreationEnCours(true);
     try {
-      await clientAPI.post("/api/v1/super-admin/domaines", formCreation, { authentifie: true });
+      await clientAPI.post("/api/v1/domaines", formCreation, { authentifie: true });
       notifier("Domaine créé avec succès !", "succes");
       setModaleOuverte(false);
       setFormCreation({ nom: "", code: "", region: "", description: "" });
@@ -93,7 +93,7 @@ function Contenu() {
     setErreurEdition(null);
     setEditionEnCours(true);
     try {
-      await clientAPI.patch(`/api/v1/super-admin/domaines/${domaineSelectionne.id}`, formEdition, { authentifie: true });
+      await clientAPI.patch(`/api/v1/domaines/${domaineSelectionne.id}`, formEdition, { authentifie: true });
       notifier("Domaine modifié avec succès !", "succes");
       setModaleEdition(false);
       charger();
@@ -107,7 +107,7 @@ function Contenu() {
   const gererSuppression = async (id: string) => {
     if (!confirm("Supprimer ce domaine ? Cette action est irréversible.")) return;
     try {
-      await clientAPI.delete(`/api/v1/super-admin/domaines/${id}`, { authentifie: true });
+      await clientAPI.delete(`/api/v1/domaines/${id}`, { authentifie: true });
       notifier("Domaine supprimé", "succes");
       charger();
     } catch (e) {
