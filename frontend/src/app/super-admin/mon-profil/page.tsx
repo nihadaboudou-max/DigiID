@@ -173,46 +173,46 @@ function Contenu() {
 
   if (!utilisateur) {
     return (
-      <div className="space-y-6 apparition">
+      <div className="space-y-4">
         <header>
-          <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
+          <p className="text-ocre font-semibold text-xs uppercase tracking-wider">
             Super administration
           </p>
-          <h1 className="mt-1">Mon profil</h1>
+          <h1 className="mt-1 text-2xl">Mon profil</h1>
         </header>
-        <p className="text-ardoise-clair italic text-center py-12">Chargement...</p>
+        <p className="text-ardoise-clair italic text-center py-6">Chargement...</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 apparition">
-      {/* En-tête */}
+    <div className="space-y-4">
+      {/* En-tête compact */}
       <header>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
+        <p className="text-ocre font-semibold text-xs uppercase tracking-wider">
           Super administration
         </p>
-        <h1 className="mt-1">Mon profil</h1>
-        <p className="text-ardoise-clair mt-2 max-w-2xl">
+        <h1 className="mt-1 text-2xl">Mon profil</h1>
+        <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
           Modifie tes informations personnelles et gère la sécurité de ton compte.
           Toutes les modifications sont tracées dans le journal d'audit.
         </p>
       </header>
 
       {/* Informations du compte */}
-      <div className="grid md:grid-cols-3 gap-6">
+      <div className="grid md:grid-cols-3 gap-3">
         <Carte>
-          <p className="text-xs uppercase text-ardoise-clair mb-2">Rôle</p>
+          <p className="text-[10px] uppercase text-ardoise-clair mb-1 font-semibold">Rôle</p>
           <Badge variante="ocre">Super administrateur</Badge>
         </Carte>
 
         <Carte>
-          <p className="text-xs uppercase text-ardoise-clair mb-2">Email</p>
-          <p className="text-sm font-semibold text-ardoise font-mono">{utilisateur.email}</p>
+          <p className="text-[10px] uppercase text-ardoise-clair mb-1 font-semibold">Email</p>
+          <p className="text-sm font-semibold text-ardoise font-mono truncate">{utilisateur.email}</p>
         </Carte>
 
         <Carte>
-          <p className="text-xs uppercase text-ardoise-clair mb-2">2FA</p>
+          <p className="text-[10px] uppercase text-ardoise-clair mb-1 font-semibold">2FA</p>
           <Badge variante={(utilisateur as any).deux_fa_active ? "succes" : "terre"}>
             {(utilisateur as any).deux_fa_active ? "Activée" : "Désactivée"}
           </Badge>
@@ -221,8 +221,8 @@ function Contenu() {
 
       {/* Formulaire de modification du profil */}
       <Carte titre="Informations personnelles" description="Prénom, nom, ville et pays">
-        <form onSubmit={gererSauvegarde} className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
+        <form onSubmit={gererSauvegarde} className="space-y-3">
+          <div className="grid md:grid-cols-2 gap-3">
             <ChampSaisie
               libelle="Prénom"
               value={formulaire.prenom}
@@ -239,7 +239,7 @@ function Contenu() {
             />
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid md:grid-cols-2 gap-3">
             <ChampSaisie
               libelle="Ville"
               value={formulaire.ville}
@@ -254,7 +254,7 @@ function Contenu() {
             />
           </div>
 
-          <div className="flex gap-3 pt-4 border-t border-ardoise-clair/10">
+          <div className="flex gap-2 pt-3 border-t border-ardoise-clair/10">
             {!enEdition ? (
               <>
                 <Bouton type="button" variante="primaire" onClick={() => setEnEdition(true)}>
@@ -284,10 +284,10 @@ function Contenu() {
 
       {/* Sécurité */}
       <Carte titre="Sécurité" description="Mot de passe et double authentification">
-        <div className="space-y-4">
-          <div className="p-4 bg-sable rounded-lg">
-            <p className="text-sm font-semibold text-ardoise mb-2">Mot de passe</p>
-            <p className="text-xs text-ardoise-clair mb-3">
+        <div className="space-y-3">
+          <div className="p-3 bg-sable rounded-lg">
+            <p className="text-sm font-semibold text-ardoise mb-1">Mot de passe</p>
+            <p className="text-xs text-ardoise-clair mb-2">
               Change régulièrement ton mot de passe. Minimum 12 caractères avec majuscule,
               minuscule, chiffre et caractère spécial.
             </p>
@@ -296,11 +296,11 @@ function Contenu() {
             </Bouton>
           </div>
 
-          <div className="p-4 bg-sable rounded-lg">
-            <p className="text-sm font-semibold text-ardoise mb-2">
+          <div className="p-3 bg-sable rounded-lg">
+            <p className="text-sm font-semibold text-ardoise mb-1">
               Double authentification (2FA)
             </p>
-            <p className="text-xs text-ardoise-clair mb-3">
+            <p className="text-xs text-ardoise-clair mb-2">
               Le 2FA est obligatoire pour les super administrateurs.
             </p>
             <Badge variante="succes">✓ Actif</Badge>
@@ -310,12 +310,12 @@ function Contenu() {
 
       {/* Export RGPD */}
       <Carte titre="Portabilité des données (RGPD/CDP)" description="Télécharge toutes tes données personnelles">
-        <div className="space-y-3">
+        <div className="space-y-2">
           <p className="text-sm text-ardoise-clair">
             Conformément au RGPD et à la CDP, tu peux exporter toutes les données liées
             à ton compte. Fichier au format JSON structuré.
           </p>
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <Bouton
               variante="ghost"
               onClick={() => setModaleExportOuverte(true)}
@@ -357,9 +357,9 @@ function Contenu() {
         }}
         surConfirmation={gererChangementMotDePasse as any}
         contenuCorps={
-          <form onSubmit={gererChangementMotDePasse} className="space-y-4">
+          <form onSubmit={gererChangementMotDePasse} className="space-y-3">
             <div>
-              <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
+              <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
                 Mot de passe actuel
               </label>
               <input
@@ -371,7 +371,7 @@ function Contenu() {
               />
             </div>
             <div>
-              <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
+              <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
                 Nouveau mot de passe
               </label>
               <input
@@ -385,7 +385,7 @@ function Contenu() {
               />
             </div>
             <div>
-              <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
+              <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
                 Confirmer le nouveau mot de passe
               </label>
               <input
