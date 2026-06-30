@@ -530,7 +530,7 @@ export function BarreLaterale() {
 
 
   return (
-    <aside className="hidden md:flex md:flex-col w-60 h-screen sticky top-0 bg-white border-r border-ardoise-clair/10">
+    <aside className="flex flex-col w-60 h-screen sticky top-0 bg-white border-r border-ardoise-clair/10 shadow-sm">
       {/* En-tête section — profil utilisateur */}
       <div className="px-4 pt-5 pb-4 border-b border-ardoise-clair/10">
         <div className="flex items-center gap-3">
