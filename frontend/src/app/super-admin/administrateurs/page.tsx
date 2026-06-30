@@ -1,5 +1,4 @@
 "use client";
-
 /**
  * Page super-admin — gestion complète des administrateurs.
  * Création, consultation, édition, suspension, réactivation.
@@ -269,13 +268,14 @@ function Contenu() {
   ];
 
   return (
-    <div className="space-y-6 apparition">
+    <div className="space-y-4">
+      {/* En-tête compact */}
       <header>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
+        <p className="text-ocre font-semibold text-xs uppercase tracking-wider">
           Super administration
         </p>
-        <h1 className="mt-1">Administrateurs</h1>
-        <p className="text-ardoise-clair mt-2 max-w-2xl">
+        <h1 className="mt-1 text-2xl">Administrateurs</h1>
+        <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
           Crée, suspends ou réactive les comptes administrateurs.
           Toute action est tracée dans le journal d'audit avec ton identité.
         </p>
@@ -287,12 +287,12 @@ function Contenu() {
       </Alerte>
 
       <Carte>
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <p className="text-sm text-ardoise-clair">
             <strong className="text-lagune">{adminsFiltres.length}</strong> compte
             {adminsFiltres.length > 1 ? "s" : ""}
           </p>
-          <div className="flex gap-3 items-center w-full sm:w-auto">
+          <div className="flex gap-2 items-center w-full sm:w-auto">
             <div className="flex-grow sm:w-64">
               <ChampRecherche
                 placeholder="Rechercher email, prénom, nom..."
@@ -314,7 +314,7 @@ function Contenu() {
         </div>
 
         {chargement ? (
-          <p className="text-center text-ardoise-clair italic py-8">Chargement...</p>
+          <p className="text-center text-ardoise-clair italic py-6">Chargement...</p>
         ) : (
           <Tableau
             colonnes={colonnes}
@@ -333,12 +333,12 @@ function Contenu() {
         description="Ce compte aura les pleins droits d'administration."
         taille="grand"
       >
-        <form onSubmit={gererCreation} className="space-y-4">
+        <form onSubmit={gererCreation} className="space-y-3">
           {erreurCreation && (
             <Alerte variante="erreur">{erreurCreation}</Alerte>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <ChampSaisie
               libelle="Prénom"
               required
@@ -381,7 +381,7 @@ function Contenu() {
             placeholder="Dakar"
           />
 
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-2 pt-2">
             <Bouton
               type="button"
               variante="ghost"
