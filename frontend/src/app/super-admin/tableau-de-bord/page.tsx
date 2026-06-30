@@ -27,6 +27,44 @@ interface TechnologieCard {
 }
 
 const CARTES_TECHNOLOGIES: TechnologieCard[] = [
+  // ─── NOUVEAU : Gestion organisationnelle ───
+  {
+    id: "domaines",
+    titre: "Domaines",
+    description: "Créer et gérer les domaines organisationnels",
+    icone: "🏢",
+    href: "/super-admin/domaines",
+    statut: "actif",
+    technologies: ["CRUD", "Organisation", "Multi-tenant"],
+  },
+  {
+    id: "departements",
+    titre: "Départements",
+    description: "Structurer les départements par domaine",
+    icone: "🏛️",
+    href: "/super-admin/departements",
+    statut: "actif",
+    technologies: ["Hiérarchie", "Cloisonnement", "Rôles"],
+  },
+  {
+    id: "invitations",
+    titre: "Invitations",
+    description: "Inviter des administrateurs et chefs de département",
+    icone: "✉️",
+    href: "/super-admin/invitations",
+    statut: "actif",
+    technologies: ["Email", "Tokens", "Sécurité"],
+  },
+  {
+    id: "equipes",
+    titre: "Équipes",
+    description: "Créer et gérer les équipes par département",
+    icone: "👥",
+    href: "/super-admin/equipes",
+    statut: "actif",
+    technologies: ["Membres", "Rôles", "Collaboration"],
+  },
+  // ─── EXISTANT : Administration ───
   {
     id: "administrateurs",
     titre: "Administrateurs",
@@ -62,6 +100,15 @@ const CARTES_TECHNOLOGIES: TechnologieCard[] = [
     href: "/super-admin/statistiques",
     statut: "actif",
     technologies: ["Métriques", "Analyse", "CSV"],
+  },
+  {
+    id: "monitoring",
+    titre: "Monitoring temps réel",
+    description: "Sessions actives, déconnexion forcée, alertes sécurité",
+    icone: "📡",
+    href: "/super-admin/monitoring",
+    statut: "actif",
+    technologies: ["Temps réel", "Sessions", "Alertes"],
   },
   {
     id: "audit",
@@ -149,24 +196,24 @@ function Contenu() {
 
   if (chargement) {
     return (
-      <div className="space-y-8 apparition">
+      <div className="space-y-4">
         <header>
-          <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Super administration</p>
-          <h1 className="mt-1">Tableau de bord</h1>
+          <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Super administration</p>
+          <h1 className="mt-1 text-2xl">Tableau de bord</h1>
         </header>
-        <p className="text-ardoise-clair italic text-center py-12">Chargement du système...</p>
+        <p className="text-ardoise-clair italic text-center py-6">Chargement du système...</p>
       </div>
     );
   }
 
   if (erreur) {
     return (
-      <div className="space-y-8 apparition">
+      <div className="space-y-4">
         <header>
-          <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Super administration</p>
-          <h1 className="mt-1">Tableau de bord</h1>
+          <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Super administration</p>
+          <h1 className="mt-1 text-2xl">Tableau de bord</h1>
         </header>
-        <div className="bg-terre/10 border-l-4 border-terre p-4 rounded">
+        <div className="bg-terre/10 border-l-4 border-terre p-3 rounded">
           <p className="text-sm text-terre">{erreur}</p>
         </div>
       </div>
@@ -178,31 +225,31 @@ function Contenu() {
   const { utilisateurs, sessions, scores } = stats;
 
   return (
-    <div className="space-y-8 apparition">
-      {/* En-tête */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div className="space-y-4">
+      {/* En-tête compact */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
+          <p className="text-ocre font-semibold text-xs uppercase tracking-wider">
             Super administration
           </p>
-          <h1 className="mt-1">Vue système</h1>
-          <p className="text-ardoise-clair mt-2 max-w-2xl">
+          <h1 className="mt-1 text-2xl">Vue système</h1>
+          <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
             Accès maximum au système DigiID. Chaque technologie est accessible
             via les cartes ci-dessous.
           </p>
         </div>
-        <div className="flex gap-3 flex-wrap">
+        <div className="flex gap-2 flex-wrap">
           <Link href="/super-admin/droits">
-            <Bouton variante="primaire">Gestion des droits</Bouton>
+            <Bouton variante="primaire" taille="petit">Gestion des droits</Bouton>
           </Link>
           <Link href="/super-admin/audit">
-            <Bouton variante="ghost">Journal d'audit</Bouton>
+            <Bouton variante="ghost" taille="petit">Journal d'audit</Bouton>
           </Link>
         </div>
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
         <KPI libelle="Utilisateurs" valeur={utilisateurs.total_utilisateurs} couleur="lagune" />
         <KPI libelle="Actifs" valeur={utilisateurs.total_actifs} couleur="succes" />
         <KPI libelle="2FA activée" valeur={utilisateurs.total_2fa_actif} couleur="ocre" />
@@ -211,15 +258,15 @@ function Contenu() {
       </div>
 
       {/* Cartes technologies */}
-      <section className="space-y-4">
-        <h2 className="text-lg font-bold text-ardoise">Gestion des technologies</h2>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="space-y-2">
+        <h2 className="text-base font-bold text-ardoise">Gestion des technologies</h2>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {CARTES_TECHNOLOGIES.map((tech) => (
             <Link key={tech.id} href={tech.href} className="block group">
-              <div className="carte cursor-pointer hover:shadow-lg transition-all duration-200 h-full flex flex-col">
-                <div className="flex items-start justify-between mb-3">
-                  <span className="text-3xl">{tech.icone}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              <div className="carte cursor-pointer hover:shadow-doux transition-all duration-200 h-full flex flex-col p-3">
+                <div className="flex items-start justify-between mb-2">
+                  <span className="text-2xl">{tech.icone}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                     tech.statut === "actif"
                       ? "bg-green-100 text-green-700"
                       : tech.statut === "attention"
@@ -229,18 +276,18 @@ function Contenu() {
                     {tech.statut === "actif" ? "✓ Actif" : tech.statut === "attention" ? "⚠ Attention" : "— Inactif"}
                   </span>
                 </div>
-                <h3 className="font-bold text-ardoise mb-1 group-hover:text-ocre transition-colors">
+                <h3 className="font-bold text-ardoise text-sm mb-0.5 group-hover:text-ocre transition-colors">
                   {tech.titre}
                 </h3>
-                <p className="text-sm text-ardoise-clair flex-1">{tech.description}</p>
-                <div className="flex flex-wrap gap-1.5 mt-4 pt-3 border-t border-ardoise-clair/10">
+                <p className="text-xs text-ardoise-clair flex-1">{tech.description}</p>
+                <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-ardoise-clair/10">
                   {tech.technologies.map((t) => (
-                    <span key={t} className="text-xs px-2 py-0.5 bg-sable rounded-full text-ardoise-clair">
+                    <span key={t} className="text-[10px] px-1.5 py-0.5 bg-sable rounded-full text-ardoise-clair">
                       {t}
                     </span>
                   ))}
                 </div>
-                <p className="text-xs text-ocre font-semibold mt-3 group-hover:translate-x-1 transition-transform">
+                <p className="text-[10px] text-ocre font-semibold mt-2 group-hover:translate-x-1 transition-transform">
                   Accéder →
                 </p>
               </div>
@@ -259,11 +306,11 @@ function KPI({ libelle, valeur, couleur }: { libelle: string; valeur: number | s
     lagune: "var(--couleur-lagune)", succes: "#22c55e", ocre: "var(--couleur-ocre)", terre: "var(--couleur-terre)"
   };
   return (
-    <div className="carte text-center hover:shadow-lg transition-shadow">
-      <p className="text-3xl md:text-4xl font-bold mb-2" style={{ color: couleurVars[couleur] || "var(--couleur-lagune)" }}>
+    <div className="carte text-center hover:shadow-doux transition-shadow p-3">
+      <p className="text-2xl md:text-3xl font-bold mb-1" style={{ color: couleurVars[couleur] || "var(--couleur-lagune)" }}>
         {valeur}
       </p>
-      <p className="text-xs uppercase text-ardoise-clair font-semibold tracking-wide">{libelle}</p>
+      <p className="text-[10px] uppercase text-ardoise-clair font-semibold tracking-wide">{libelle}</p>
     </div>
   );
 }
