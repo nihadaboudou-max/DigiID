@@ -428,26 +428,17 @@ function Contenu() {
   );
 
   return (
-    <div className="space-y-8 apparition">
-      {/* Fil d'Ariane */}
-      <nav className="flex items-center gap-2 text-sm text-ardoise-clair flex-wrap">
-        <Link href="/super-admin/tableau-de-bord" className="hover:text-ocre transition-colors">
-          Tableau de bord
-        </Link>
-        <span>/</span>
-        <span className="text-ardoise font-semibold">Droits &amp; permissions</span>
-      </nav>
-
-      {/* En-tête */}
-      <div>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Super administration</p>
-        <h1 className="mt-1">Attribution des droits aux personnes</h1>
-        <p className="text-ardoise-clair mt-2 max-w-3xl">
+    <div className="space-y-4">
+      {/* En-tête compact */}
+      <header>
+        <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Super administration</p>
+        <h1 className="mt-1 text-2xl">Attribution des droits aux personnes</h1>
+        <p className="text-ardoise-clair mt-1 text-sm max-w-3xl">
           Recherche un utilisateur, consulte ses permissions actuelles et
           assigne-lui des droits spécifiques module par module,
           ou applique-lui un profil de permissions prédéfini.
         </p>
-      </div>
+      </header>
 
       {/* Messages */}
       {succesMessage && <Alerte variante="succes" titre="✓ Succès">{succesMessage}</Alerte>}
@@ -455,7 +446,7 @@ function Contenu() {
 
       {/* ========== RECHERCHE ========== */}
       <Carte titre="👤 Rechercher un utilisateur">
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           <input
             type="text"
             value={recherche}
@@ -470,18 +461,18 @@ function Contenu() {
         </div>
 
         {utilisateurs.length > 0 && (
-          <div className="mt-4 space-y-2 max-h-80 overflow-y-auto">
+          <div className="mt-3 space-y-1.5 max-h-80 overflow-y-auto">
             {utilisateurs.map((user) => (
               <button
                 key={user.id}
                 onClick={() => selectionnerUtilisateur(user)}
-                className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all text-left ${
+                className={`w-full flex items-center justify-between p-2.5 rounded-lg border transition-all text-left ${
                   selectedUser?.id === user.id
                     ? "bg-lagune/5 border-lagune"
                     : "bg-white border-ardoise-clair/10 hover:bg-sable"
                 }`}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5">
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold ${
                     user.est_actif ? "bg-lagune" : "bg-gray-400"
                   }`}>
@@ -510,20 +501,20 @@ function Contenu() {
       {selectedUser && (
         <>
           {/* Carte info utilisateur */}
-          <div className={`rounded-xl border-2 p-5 ${COULEURS_ROLE[selectedUser.role] || "border-gray-200 bg-white"}`}>
-            <div className="flex items-start justify-between flex-wrap gap-4">
-              <div className="flex items-center gap-3">
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-bold ${
+          <div className={`rounded-xl border-2 p-4 ${COULEURS_ROLE[selectedUser.role] || "border-gray-200 bg-white"}`}>
+            <div className="flex items-start justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-11 h-11 rounded-full flex items-center justify-center text-white text-base font-bold ${
                   selectedUser.est_actif ? "bg-lagune" : "bg-gray-400"
                 }`}>
                   {(selectedUser.prenom?.charAt(0) || selectedUser.email.charAt(0)).toUpperCase()}
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-ardoise">
+                  <h2 className="text-lg font-bold text-ardoise">
                     {selectedUser.prenom ? `${selectedUser.prenom} ${selectedUser.nom || ""}` : selectedUser.email}
                   </h2>
-                  <p className="text-sm text-ardoise-clair">{selectedUser.email}</p>
-                  <div className="flex items-center gap-2 mt-1">
+                  <p className="text-xs text-ardoise-clair">{selectedUser.email}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
                     <span className={`text-xs uppercase font-bold px-2 py-0.5 rounded-full border ${COULEURS_ROLE[selectedUser.role] || ""}`}>
                       {LIBELLES_ROLE[selectedUser.role] || selectedUser.role}
                     </span>
@@ -552,7 +543,7 @@ function Contenu() {
               titre="🎭 Changer le rôle de l'utilisateur"
               sous-titre={`Rôle actuel : ${LIBELLES_ROLE[selectedUser.role] || selectedUser.role} → Nouveau rôle`}
             >
-              <div className="space-y-4 max-w-lg">
+              <div className="space-y-3 max-w-lg">
                 <div>
                   <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
                     Nouveau rôle
@@ -586,7 +577,7 @@ function Contenu() {
                 {/* Profil spécifique (si le rôle choisi en a) */}
                 {profilsPourNouveauRole.length > 0 && (
                   <div>
-                    <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
+                    <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1.5">
                       Profil spécifique
                     </label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -595,15 +586,15 @@ function Contenu() {
                           key={profil.id}
                           type="button"
                           onClick={() => setProfilChoisi(profilChoisi === profil.id ? "" : profil.id)}
-                          className={`p-3 rounded-xl border-2 text-left transition-all ${
+                          className={`p-2.5 rounded-xl border-2 text-left transition-all ${
                             profilChoisi === profil.id
                               ? "border-lagune bg-lagune/5 ring-2 ring-lagune/20"
                               : "border-ardoise-clair/10 hover:border-lagune/30"
                           }`}
                         >
                           <p className="font-bold text-sm text-ardoise">{profil.nom}</p>
-                          <p className="text-xs text-ardoise-clair mt-1">{profil.description}</p>
-                          <div className="flex gap-1 mt-2 flex-wrap">
+                          <p className="text-xs text-ardoise-clair mt-0.5">{profil.description}</p>
+                          <div className="flex gap-1 mt-1.5 flex-wrap">
                             {profil.modules.filter((m) => m.is_enabled).slice(0, 3).map((m) => (
                               <span key={m.module_key} className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">
                                 ✓ {m.module_label || m.module_key}
@@ -621,7 +612,7 @@ function Contenu() {
                   </div>
                 )}
 
-                <div className="flex gap-3">
+                <div className="flex gap-2">
                   <Bouton
                     variante="primaire"
                     taille="petit"
@@ -639,9 +630,9 @@ function Contenu() {
                     Annuler
                   </Bouton>
                 </div>
-                <div className="bg-ocre/5 border border-ocre/20 rounded-lg p-3">
+                <div className="bg-ocre/5 border border-ocre/20 rounded-lg p-2.5">
                   <p className="text-xs text-ocre font-semibold">⚠️ Action sensible</p>
-                  <p className="text-xs text-ardoise-clair mt-1">
+                  <p className="text-xs text-ardoise-clair mt-0.5">
                     Changer le rôle d&apos;un utilisateur est une action critique tracée
                     dans le journal d&apos;audit. Toutes les sessions actives de
                     l&apos;utilisateur seront révoquées.
@@ -654,10 +645,10 @@ function Contenu() {
           {/* ===== PROFILS DE PROFIL ===== */}
           {profilsDisponibles.length > 0 && (
             <Carte
-              titre="📋 Profils de permissions (profil de profil)"
+              titre="📋 Profils de permissions"
               sous-titre={`Sélectionne un profil pour appliquer une configuration prédéfinie au rôle "${LIBELLES_ROLE[selectedUser.role]}"`}
             >
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 {profilsDisponibles.map((profil) => {
                   const actif = profilSelectionne === profil.id;
                   const nbActifs = profil.modules.filter((m) => m.is_enabled).length;
@@ -666,19 +657,19 @@ function Contenu() {
                     <button
                       key={profil.id}
                       onClick={() => appliquerProfil(profil.id)}
-                      className={`p-4 rounded-xl border-2 text-left transition-all ${
+                      className={`p-3 rounded-xl border-2 text-left transition-all ${
                         actif
                           ? "border-lagune bg-lagune/5 ring-2 ring-lagune/20"
                           : "border-ardoise-clair/10 hover:border-lagune/30 hover:bg-sable"
                       }`}
                     >
                       <p className="font-bold text-sm text-ardoise">{profil.nom}</p>
-                      <p className="text-xs text-ardoise-clair mt-1">{profil.description}</p>
-                      <div className="flex gap-2 mt-2 text-xs">
+                      <p className="text-xs text-ardoise-clair mt-0.5">{profil.description}</p>
+                      <div className="flex gap-2 mt-1.5 text-xs">
                         <span className="text-green-600">{nbActifs} activés</span>
                         {nbDesactives > 0 && <span className="text-red-500">{nbDesactives} désactivés</span>}
                       </div>
-                      <div className="flex flex-wrap gap-1 mt-2">
+                      <div className="flex flex-wrap gap-1 mt-1.5">
                         {profil.modules.filter((m) => m.is_enabled).slice(0, 3).map((m) => (
                           <span key={m.module_key} className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">
                             ✓ {m.module_label || m.module_key}
@@ -696,7 +687,7 @@ function Contenu() {
                         )}
                       </div>
                       {actif && (
-                        <p className="text-xs text-lagune font-semibold mt-2">✓ Profil actif</p>
+                        <p className="text-xs text-lagune font-semibold mt-1.5">✓ Profil actif</p>
                       )}
                     </button>
                   );
@@ -711,24 +702,24 @@ function Contenu() {
             sous-titre={`Modules UI pour "${LIBELLES_ROLE[selectedUser.role] || selectedUser.role}" — active/désactive pour cet utilisateur`}
           >
             {chargementModules ? (
-              <p className="text-ardoise-clair italic text-center py-8">Chargement des modules...</p>
+              <p className="text-ardoise-clair italic text-center py-6">Chargement des modules...</p>
             ) : modulesUtilisateur.length === 0 ? (
-              <p className="text-ardoise-clair italic text-center py-8">Aucun module configuré pour ce rôle.</p>
+              <p className="text-ardoise-clair italic text-center py-6">Aucun module configuré pour ce rôle.</p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {modulesUtilisateur.map((mod) => {
                   const enSauvegarde = sauvegardeEnCours === `${mod.module_key}:is_enabled` ||
                     sauvegardeEnCours === `${mod.module_key}:is_read_only`;
 
                   return (
-                    <div key={mod.module_key} className="flex items-center justify-between p-3 bg-sable rounded-lg hover:bg-sable/80 transition-colors">
+                    <div key={mod.module_key} className="flex items-center justify-between p-2.5 bg-sable rounded-lg hover:bg-sable/80 transition-colors">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-ardoise truncate">
                           {mod.module_label || mod.module_key}
                         </p>
                         <p className="text-xs text-ardoise-clair truncate">{mod.module_key}</p>
                       </div>
-                      <div className="flex items-center gap-4 flex-shrink-0 ml-4">
+                      <div className="flex items-center gap-3 flex-shrink-0 ml-3">
                         <label className="flex items-center gap-2 cursor-pointer">
                           <span className={`text-xs font-semibold ${mod.is_enabled ? "text-green-600" : "text-red-500"}`}>
                             {mod.is_enabled ? "Activé" : "Désactivé"}
@@ -775,7 +766,7 @@ function Contenu() {
       )}
 
       {/* Navigation */}
-      <div className="flex gap-3 flex-wrap pt-4 border-t border-ardoise-clair/10">
+      <div className="flex gap-2 flex-wrap pt-3 border-t border-ardoise-clair/10">
         <Link href="/super-admin/droits-ui">
           <Bouton variante="primaire" taille="petit">🎛️ Configurer les modules par rôle</Bouton>
         </Link>
