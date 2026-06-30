@@ -157,6 +157,16 @@ export function FournisseurAuthentification({
   async function seConnecter(donnees: DonneesConnexion) {
     setChargement(true);
     try {
+      // 🔒 Nettoyage préalable pour éviter les fuites de données entre sessions
+      // Efface tous les jetons et données utilisateur avant la nouvelle connexion
+      effacerJetons();
+      setUtilisateur(null);
+      
+      // Nettoyer le sessionStorage pour éviter les données résiduelles
+      if (typeof window !== "undefined") {
+        sessionStorage.clear();
+      }
+      
       const reponse = await seConnecterAPI(donnees);
       setUtilisateur(reponse.utilisateur);
     } finally {
@@ -171,8 +181,23 @@ export function FournisseurAuthentification({
     } catch {
       // Même si la requête échoue, on efface tout localement
     } finally {
+      // 🔒 Nettoyage complet pour éviter les fuites de données
       setUtilisateur(null);
+      effacerJetons();
+      
+      // Nettoyer toutes les données de session
+      if (typeof window !== "undefined") {
+        sessionStorage.clear();
+        localStorage.removeItem("digiid_utilisateur");
+      }
+      
       setChargement(false);
+      
+      // 🔄 Forcer le rechargement de la page pour vider tous les caches
+      // et garantir que le prochain utilisateur ne verra pas les données précédentes
+      if (typeof window !== "undefined") {
+        window.location.href = "/connexion";
+      }
     }
   }
 
