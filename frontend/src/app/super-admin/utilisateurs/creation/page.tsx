@@ -96,24 +96,24 @@ export default function PageCreationProfil() {
   if (succes) {
     return (
       <EnvelopperEspaceProtege rolesAutorises={["super_administrateur"]}>
-        <div className="max-w-lg mx-auto py-12 apparition">
-          <div className="carte text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-3xl text-green-700">✓</span>
+        <div className="max-w-lg mx-auto py-6">
+          <div className="carte text-center p-6">
+            <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <span className="text-2xl text-green-700">✓</span>
             </div>
-            <h1 className="text-2xl mb-2">Profil créé avec succès !</h1>
-            <p className="text-ardoise-clair mb-6">
+            <h1 className="text-xl mb-2">Profil créé avec succès !</h1>
+            <p className="text-ardoise-clair mb-4 text-sm">
               Le profil <strong>{succes.prenom} {succes.nom}</strong> ({succes.email}) est prêt.
             </p>
-            <p className="text-xs text-ardoise-clair mb-6">
+            <p className="text-xs text-ardoise-clair mb-4">
               L&apos;utilisateur recevra ses identifiants par email (en production).
               En mode démo, note les identifiants pour les lui communiquer.
             </p>
-            <div className="flex flex-wrap justify-center gap-3">
-              <Bouton variante="primaire" onClick={() => router.push("/super-admin/utilisateurs")}>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Bouton variante="primaire" taille="petit" onClick={() => router.push("/super-admin/utilisateurs")}>
                 ← Retour à la liste
               </Bouton>
-              <Bouton variante="secondaire" onClick={() => { setSucces(null); setEmail(""); setMotDePasse(""); setPrenom(""); setNom(""); setRole("agent"); setVille("Dakar"); }}>
+              <Bouton variante="secondaire" taille="petit" onClick={() => { setSucces(null); setEmail(""); setMotDePasse(""); setPrenom(""); setNom(""); setRole("agent"); setVille("Dakar"); }}>
                 + Créer un autre
               </Bouton>
             </div>
@@ -126,69 +126,56 @@ export default function PageCreationProfil() {
   // --- Formulaire ---
   return (
     <EnvelopperEspaceProtege rolesAutorises={["super_administrateur"]}>
-      <div className="max-w-2xl mx-auto py-6 apparition">
-        {/* Fil d'Ariane */}
-        <nav className="flex items-center gap-2 text-sm text-ardoise-clair mb-6">
-          <Link href="/super-admin/tableau-de-bord" className="hover:text-ocre transition-colors">
-            Tableau de bord
-          </Link>
-          <span>/</span>
-          <Link href="/super-admin/utilisateurs" className="hover:text-ocre transition-colors">
-            Utilisateurs
-          </Link>
-          <span>/</span>
-          <span className="text-ardoise font-semibold">Créer un profil</span>
-        </nav>
-
-        {/* En-tête */}
-        <header className="mb-6">
-          <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
+      <div className="max-w-2xl mx-auto">
+        {/* En-tête compact */}
+        <header className="mb-4">
+          <p className="text-ocre font-semibold text-xs uppercase tracking-wider">
             Super administration
           </p>
-          <h1 className="mt-1">Créer un profil</h1>
-          <p className="text-ardoise-clair mt-2">
+          <h1 className="mt-1 text-2xl">Créer un profil</h1>
+          <p className="text-ardoise-clair mt-1 text-sm">
             Crée un compte pour un agent, médecin, policier ou ONG. 
             Le formulaire reste stable — pas de risque de perte si tu cliques à côté.
           </p>
         </header>
 
-        {erreur && <Alerte variante="erreur" titre="Erreur" className="mb-4">{erreur}</Alerte>}
+        {erreur && <Alerte variante="erreur" titre="Erreur" className="mb-3">{erreur}</Alerte>}
 
         <form onSubmit={handleSubmit}>
           <Carte>
             {/* Sélection du rôle */}
-            <div className="mb-6">
-              <label className="text-xs uppercase text-ardoise-clair font-semibold mb-3 block">
+            <div className="mb-4">
+              <label className="text-[10px] uppercase text-ardoise-clair font-semibold mb-2 block">
                 Rôle du profil
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {ROLES_CREATION.map((r) => (
                   <button
                     key={r.role}
                     type="button"
                     onClick={() => setRole(r.role)}
-                    className={`p-4 rounded-xl border-2 text-center transition-all ${
+                    className={`p-3 rounded-xl border-2 text-center transition-all ${
                       role === r.role
                         ? "bg-ocre text-white border-ocre shadow-md"
                         : "bg-white text-ardoise border-ardoise-clair/20 hover:border-ocre hover:text-ocre hover:bg-ocre/5"
                     }`}
                   >
-                    <span className="text-2xl block mb-1">{r.icone}</span>
-                    <span className="text-sm font-medium">{r.libelle}</span>
+                    <span className="text-xl block mb-0.5">{r.icone}</span>
+                    <span className="text-xs font-medium">{r.libelle}</span>
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-ardoise-clair mt-2 italic">
+              <p className="text-xs text-ardoise-clair mt-1.5 italic">
                 {ROLES_CREATION.find((r) => r.role === role)?.description}
               </p>
             </div>
 
-            <hr className="border-ardoise-clair/10 my-6" />
+            <hr className="border-ardoise-clair/10 my-4" />
 
             {/* Identité */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
               <div>
-                <label className="text-xs uppercase text-ardoise-clair font-semibold">
+                <label className="text-[10px] uppercase text-ardoise-clair font-semibold">
                   Prénom <span className="text-terre">*</span>
                 </label>
                 <input
@@ -197,12 +184,12 @@ export default function PageCreationProfil() {
                   onChange={(e) => setPrenom(e.target.value)}
                   required
                   minLength={2}
-                  className="w-full mt-1 px-4 py-2.5 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ocre/30 focus:border-ocre transition-all"
+                  className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ocre/30 focus:border-ocre transition-all"
                   placeholder="Amadou"
                 />
               </div>
               <div>
-                <label className="text-xs uppercase text-ardoise-clair font-semibold">
+                <label className="text-[10px] uppercase text-ardoise-clair font-semibold">
                   Nom <span className="text-terre">*</span>
                 </label>
                 <input
@@ -211,15 +198,15 @@ export default function PageCreationProfil() {
                   onChange={(e) => setNom(e.target.value)}
                   required
                   minLength={2}
-                  className="w-full mt-1 px-4 py-2.5 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ocre/30 focus:border-ocre transition-all"
+                  className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ocre/30 focus:border-ocre transition-all"
                   placeholder="Diallo"
                 />
               </div>
             </div>
 
             {/* Email */}
-            <div className="mb-4">
-              <label className="text-xs uppercase text-ardoise-clair font-semibold">
+            <div className="mb-3">
+              <label className="text-[10px] uppercase text-ardoise-clair font-semibold">
                 Email <span className="text-terre">*</span>
               </label>
               <input
@@ -227,14 +214,14 @@ export default function PageCreationProfil() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full mt-1 px-4 py-2.5 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ocre/30 focus:border-ocre transition-all"
+                className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ocre/30 focus:border-ocre transition-all"
                 placeholder="agent@mairie-dakar.sn"
               />
             </div>
 
             {/* Mot de passe */}
-            <div className="mb-4">
-              <label className="text-xs uppercase text-ardoise-clair font-semibold">
+            <div className="mb-3">
+              <label className="text-[10px] uppercase text-ardoise-clair font-semibold">
                 Mot de passe <span className="text-terre">*</span>
               </label>
               <input
@@ -243,41 +230,41 @@ export default function PageCreationProfil() {
                 onChange={(e) => setMotDePasse(e.target.value)}
                 required
                 minLength={12}
-                className="w-full mt-1 px-4 py-2.5 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ocre/30 focus:border-ocre transition-all"
+                className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ocre/30 focus:border-ocre transition-all"
                 placeholder="Au moins 12 caractères"
               />
-              <p className="text-xs text-ardoise-clair mt-1.5">
+              <p className="text-xs text-ardoise-clair mt-1">
                 Minimum 12 caractères, avec majuscule, minuscule, chiffre et caractère spécial.
               </p>
             </div>
 
             {/* Ville */}
-            <div className="mb-4">
-              <label className="text-xs uppercase text-ardoise-clair font-semibold">Ville</label>
+            <div className="mb-3">
+              <label className="text-[10px] uppercase text-ardoise-clair font-semibold">Ville</label>
               <input
                 type="text"
                 value={ville}
                 onChange={(e) => setVille(e.target.value)}
-                className="w-full mt-1 px-4 py-2.5 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ocre/30 focus:border-ocre transition-all"
+                className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ocre/30 focus:border-ocre transition-all"
                 placeholder="Dakar"
               />
             </div>
           </Carte>
 
           {/* Boutons d'action */}
-          <div className="flex flex-wrap justify-between gap-3 mt-6">
+          <div className="flex flex-wrap justify-between gap-2 mt-4">
             <Link href="/super-admin/utilisateurs">
-              <Bouton type="button" variante="ghost">← Annuler et retourner à la liste</Bouton>
+              <Bouton type="button" variante="ghost" taille="petit">← Annuler</Bouton>
             </Link>
-            <Bouton type="submit" variante="primaire" chargement={chargement}>
+            <Bouton type="submit" variante="primaire" taille="petit" chargement={chargement}>
               Créer le profil
             </Bouton>
           </div>
         </form>
 
         {/* Aide */}
-        <Carte variante="pointilles" titre="À propos de la création de profils" className="mt-8">
-          <ul className="space-y-2 text-sm text-ardoise">
+        <Carte variante="pointilles" titre="À propos de la création de profils" className="mt-4">
+          <ul className="space-y-1.5 text-xs text-ardoise">
             <li>✓ Le profil créé aura un accès immédiat au système.</li>
             <li>✓ Un email sera envoyé à l&apos;utilisateur avec ses identifiants (en production).</li>
             <li>✓ Le rôle peut être modifié ultérieurement depuis la liste des utilisateurs.</li>
