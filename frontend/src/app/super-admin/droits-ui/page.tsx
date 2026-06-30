@@ -197,28 +197,19 @@ function Contenu() {
     modulesFiltres.filter((m) => m.role_name === role);
 
   return (
-    <div className="space-y-8 apparition">
-      {/* Fil d'Ariane */}
-      <nav className="flex items-center gap-2 text-sm text-ardoise-clair">
-        <Link href="/super-admin/tableau-de-bord" className="hover:text-ocre transition-colors">
-          Tableau de bord
-        </Link>
-        <span>/</span>
-        <span className="text-ardoise font-semibold">Droits UI</span>
-      </nav>
-
-      {/* En-tête */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div className="space-y-4">
+      {/* En-tête compact */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Super administration</p>
-          <h1 className="mt-1">Configuration des droits UI</h1>
-          <p className="text-ardoise-clair mt-2 max-w-2xl">
+          <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Super administration</p>
+          <h1 className="mt-1 text-2xl">Configuration des droits UI</h1>
+          <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
             Configure les modules UI accessibles par chaque rôle.
             Un module peut être <strong>activé/désactivé</strong> ou en <strong>lecture seule</strong>.
             Les modifications sont prises en compte immédiatement.
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           <Bouton
             variante={vue === "matrice" ? "primaire" : "ghost"}
             taille="petit"
@@ -237,7 +228,7 @@ function Contenu() {
       </div>
 
       {chargement ? (
-        <p className="text-ardoise-clair italic text-center py-12">Chargement de la matrice des droits UI...</p>
+        <p className="text-ardoise-clair italic text-center py-6">Chargement de la matrice des droits UI...</p>
       ) : (
         <>
           {erreur && (
@@ -260,7 +251,7 @@ function Contenu() {
           {vue === "matrice" && (
             <>
               {/* Filtres */}
-              <div className="flex gap-4 flex-wrap">
+              <div className="flex gap-3 flex-wrap">
                 <div className="flex-1 min-w-[200px]">
                   <ChampRecherche
                     placeholder="Filtrer par rôle..."
@@ -282,10 +273,10 @@ function Contenu() {
 
                 return (
                   <section key={role}>
-                    <div className={`inline-block px-3 py-1 rounded-lg border text-xs font-bold uppercase mb-3 ${COULEURS_ROLES[role] || "bg-gray-100"}`}>
+                    <div className={`inline-block px-3 py-1 rounded-lg border text-xs font-bold uppercase mb-2 ${COULEURS_ROLES[role] || "bg-gray-100"}`}>
                       {role.replace("_", " ")}
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       {roleModules.map((mod) => {
                         const cle = `${mod.role_name}:${mod.module_key}`;
                         const enSauvegarde = sauvegardeEnCours === cle;
@@ -309,12 +300,12 @@ function Contenu() {
           {/* ============ VUE OVERRIDES ============ */}
           {vue === "overrides" && (
             <Carte titre="Overrides individuels">
-              <p className="text-sm text-ardoise-clair mb-4">
+              <p className="text-sm text-ardoise-clair mb-3">
                 Permet de définir des permissions UI spécifiques pour un utilisateur donné,
                 en dérogation de la configuration de son rôle.
               </p>
 
-              <div className="space-y-4 max-w-lg">
+              <div className="space-y-3 max-w-lg">
                 <div>
                   <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
                     ID de l'utilisateur
@@ -329,7 +320,7 @@ function Contenu() {
                 </div>
 
                 <div>
-                  <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
+                  <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
                     Modules (JSON)
                   </label>
                   <textarea
@@ -351,7 +342,7 @@ function Contenu() {
                 </div>
 
                 {overrideResultat && (
-                  <div className={`p-3 rounded-lg text-sm ${
+                  <div className={`p-2.5 rounded-lg text-sm ${
                     overrideResultat.includes("succès") || overrideResultat.includes("Succès")
                       ? "bg-green-50 text-green-700 border border-green-300"
                       : "bg-red-50 text-red-700 border border-red-300"
@@ -375,7 +366,7 @@ function Contenu() {
       )}
 
       {/* Navigation */}
-      <div className="flex gap-3 pt-4 border-t border-ardoise-clair/10">
+      <div className="flex gap-2 pt-3 border-t border-ardoise-clair/10">
         <Link href="/super-admin/droits">
           <Bouton variante="primaire" taille="petit">← Retour à la gestion des droits</Bouton>
         </Link>
@@ -399,14 +390,14 @@ function ModuleLigne({
   onToggle: (champ: "is_enabled" | "is_read_only") => void;
 }) {
   return (
-    <div className="flex items-center justify-between p-3 bg-sable rounded-lg hover:bg-sable/80 transition-colors">
+    <div className="flex items-center justify-between p-2.5 bg-sable rounded-lg hover:bg-sable/80 transition-colors">
       <div className="flex-1">
         <p className="text-sm font-semibold text-ardoise">
           {mod.module_label || mod.module_key}
         </p>
         <p className="text-xs text-ardoise-clair">{mod.module_key}</p>
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         {/* Toggle Activé/Désactivé */}
         <label className="flex items-center gap-2 cursor-pointer">
           <span className={`text-xs ${mod.is_enabled ? "text-succes" : "text-terre"} font-semibold`}>
