@@ -79,9 +79,6 @@ from src.modules.invitations import routeur_invitations
 # --- Modules équipes ---
 from src.modules.equipes import routeur_equipes
 
-# --- Modules Super Admin Organisationnel ---
-from src.modules.super_admin_organisationnel.routes import routeur as routeur_super_admin_organisationnel
-
 
 # Routeur racine — préfixe et tag globaux gérés au montage
 routeur_v1 = APIRouter()
@@ -155,6 +152,3 @@ routeur_v1.include_router(routeur_invitations)
 
 # Module équipes -  créer les routeurs pour gérer les équipes et leurs membres
 routeur_v1.include_router(routeur_equipes)
-
-# Module Super Admin Organisationnel -  créer les routeurs pour gérer les domaines, départements, invitations et équipes
-routeur_v1.include_router(routeur_super_admin_organisationnel)

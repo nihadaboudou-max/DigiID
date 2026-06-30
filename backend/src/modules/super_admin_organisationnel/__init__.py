@@ -1,1 +1,0 @@
-"""Module Super Admin Organisationnel — Domaines, Départements, Invitations, Équipes."""
