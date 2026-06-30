@@ -25,16 +25,20 @@ function Contenu() {
   useEffect(() => { charger(); }, []);
 
   async function charger() {
-    setChargement(true); setErreur("");
+    setChargement(true);
+    setErreur("");
     try {
       const [v, s] = await Promise.all([
         clientAPI.get<any[]>("/api/v1/admin/police/verifications", { authentifie: true }),
         clientAPI.get<any[]>("/api/v1/admin/police/signalements", { authentifie: true }),
       ]);
-      setVerifications(v || []); setSignalements(s || []);
+      setVerifications(v || []);
+      setSignalements(s || []);
     } catch (e: any) {
       setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur");
-    } finally { setChargement(false); }
+    } finally {
+      setChargement(false);
+    }
   }
 
   const badgeResultat = (r: string) => {
@@ -44,42 +48,43 @@ function Contenu() {
   };
 
   return (
-    <div className="space-y-8 apparition">
+    <div className="space-y-4">
+      {/* En-tête compact */}
       <div>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Super administration</p>
-        <h1 className="mt-1">Activites Police</h1>
-        <p className="text-ardoise-clair mt-2">Verifications d identite et signalements de fraude.</p>
+        <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Super administration</p>
+        <h1 className="mt-1 text-2xl">Activités Police</h1>
+        <p className="text-ardoise-clair mt-1 text-sm">Vérifications d'identité et signalements de fraude.</p>
       </div>
 
       <NavigationActivites active="police" prefixe="/super-admin/activites" />
 
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
 
-      <Carte titre="Verifications recentes">
+      <Carte titre="Vérifications récentes">
         {chargement ? (
-          <p className="text-ardoise-clair italic py-8 text-center">Chargement...</p>
+          <p className="text-ardoise-clair italic py-6 text-center">Chargement...</p>
         ) : verifications.length === 0 ? (
-          <p className="text-ardoise-clair italic py-8 text-center">Aucune verification.</p>
+          <p className="text-ardoise-clair italic py-6 text-center">Aucune vérification.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-ardoise-clair text-xs uppercase tracking-wider">
-                  <th className="pb-3 pr-4">Officier</th>
-                  <th className="pb-3 pr-4">Personne</th>
-                  <th className="pb-3 pr-4">Type</th>
-                  <th className="pb-3 pr-4">Resultat</th>
-                  <th className="pb-3">Date</th>
+                  <th className="pb-2 pr-3">Officier</th>
+                  <th className="pb-2 pr-3">Personne</th>
+                  <th className="pb-2 pr-3">Type</th>
+                  <th className="pb-2 pr-3">Résultat</th>
+                  <th className="pb-2">Date</th>
                 </tr>
               </thead>
               <tbody>
                 {verifications.map((v: any) => (
                   <tr key={v.id} className="border-t border-ardoise-clair/10 hover:bg-sable/40">
-                    <td className="py-3 pr-4 text-ardoise-clair">{v.officier_nom || "—"}</td>
-                    <td className="py-3 pr-4 font-semibold text-ardoise">{v.personne_nom || v.personne_digiid || "—"}</td>
-                    <td className="py-3 pr-4 text-ardoise">{v.type_verification}</td>
-                    <td className="py-3 pr-4">{badgeResultat(v.resultat)}</td>
-                    <td className="py-3 text-xs text-ardoise-clair">
+                    <td className="py-2 pr-3 text-ardoise-clair text-xs">{v.officier_nom || "—"}</td>
+                    <td className="py-2 pr-3 font-semibold text-ardoise text-sm">{v.personne_nom || v.personne_digiid || "—"}</td>
+                    <td className="py-2 pr-3 text-ardoise text-xs">{v.type_verification}</td>
+                    <td className="py-2 pr-3">{badgeResultat(v.resultat)}</td>
+                    <td className="py-2 text-xs text-ardoise-clair">
                       {new Date(v.date_verification).toLocaleDateString("fr-FR")}
                     </td>
                   </tr>
@@ -92,31 +97,31 @@ function Contenu() {
 
       <Carte titre="Signalements de fraude">
         {chargement ? (
-          <p className="text-ardoise-clair italic py-8 text-center">Chargement...</p>
+          <p className="text-ardoise-clair italic py-6 text-center">Chargement...</p>
         ) : signalements.length === 0 ? (
-          <p className="text-ardoise-clair italic py-8 text-center">Aucun signalement.</p>
+          <p className="text-ardoise-clair italic py-6 text-center">Aucun signalement.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-ardoise-clair text-xs uppercase tracking-wider">
-                  <th className="pb-3 pr-4">Officier</th>
-                  <th className="pb-3 pr-4">Motif</th>
-                  <th className="pb-3 pr-4">Statut</th>
-                  <th className="pb-3">Date</th>
+                  <th className="pb-2 pr-3">Officier</th>
+                  <th className="pb-2 pr-3">Motif</th>
+                  <th className="pb-2 pr-3">Statut</th>
+                  <th className="pb-2">Date</th>
                 </tr>
               </thead>
               <tbody>
                 {signalements.map((s: any) => (
                   <tr key={s.id} className="border-t border-ardoise-clair/10 hover:bg-sable/40">
-                    <td className="py-3 pr-4 text-ardoise-clair">{s.officier_nom || "—"}</td>
-                    <td className="py-3 pr-4 text-ardoise">{s.motif}</td>
-                    <td className="py-3 pr-4">
+                    <td className="py-2 pr-3 text-ardoise-clair text-xs">{s.officier_nom || "—"}</td>
+                    <td className="py-2 pr-3 text-ardoise text-xs">{s.motif}</td>
+                    <td className="py-2 pr-3">
                       <Badge variante={s.statut === "traite" ? "succes" : s.statut === "rejete" ? "terre" : "ocre"}>
                         {s.statut || "en_attente"}
                       </Badge>
                     </td>
-                    <td className="py-3 text-xs text-ardoise-clair">
+                    <td className="py-2 text-xs text-ardoise-clair">
                       {new Date(s.date_signalement).toLocaleDateString("fr-FR")}
                     </td>
                   </tr>
