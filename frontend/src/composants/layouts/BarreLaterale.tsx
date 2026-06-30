@@ -117,23 +117,24 @@ const LIENS_SUPER_ADMIN_ACTIVITES: Lien[] = [
 ];
 
 const LIENS_SUPER_ADMIN: Lien[] = [
-  { href: "/super-admin/tableau-de-bord", libelle: "Tableau de bord",  Icone: IconeAccueil },
-  { href: "/super-admin/monitoring",      libelle: "Monitoring",       Icone: IconeStatistique },
-  { href: "/super-admin/statistiques",    libelle: "Statistiques",     Icone: IconeStatistique },
-  { href: "/super-admin/utilisateurs",    libelle: "Utilisateurs",     Icone: IconeUtilisateur },
-    // ← NOUVEAUX LIENS À AJOUTER ICI
-  { href:  "/super-admin/domaines ",        libelle:  "Domaines ",         Icone: IconeAccueil },
-  { href:  "/super-admin/departements ",    libelle:  "Départements ",     Icone: IconeStatistique },
-  { href:  "/super-admin/invitations ",     libelle:  "Invitations ",      Icone: IconeEnvoyer },
-  { href:  "/super-admin/equipes ",         libelle:  "Équipes ",          Icone: IconeUtilisateur },
-  { href: "/super-admin/activites",       libelle: "Activités",       Icone: IconeStatistique },
-  { href: "/super-admin/administrateurs", libelle: "Administrateurs",  Icone: IconeBouclier },
-  { href: "/attestations-communautaires",          libelle: "Attestations",     Icone: IconeCheck },
-  { href: "/super-admin/droits-ui",       libelle: "Droits UI",        Icone: IconeBouclier },
-  { href: "/super-admin/droits",          libelle: "Droits",           Icone: IconeCle },
-  { href: "/super-admin/audit",           libelle: "Journal d'audit",  Icone: IconeJournal },
-  { href: "/super-admin/configuration",   libelle: "Configuration",    Icone: IconeParametres },
-  { href: "/super-admin/mon-profil",      libelle: "Mon profil",       Icone: IconeUtilisateur },
+  { href: "/super-admin/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
+  { href: "/super-admin/monitoring", libelle: "Monitoring", Icone: IconeStatistique },
+  { href: "/super-admin/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
+  { href: "/super-admin/utilisateurs", libelle: "Utilisateurs", Icone: IconeUtilisateur },
+  // ← NOUVEAUX LIENS AJOUTÉS
+  { href: "/super-admin/domaines", libelle: "Domaines", Icone: IconeAccueil },
+  { href: "/super-admin/departements", libelle: "Départements", Icone: IconeStatistique },
+  { href: "/super-admin/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
+  { href: "/super-admin/equipes", libelle: "Équipes", Icone: IconeUtilisateur },
+  // ← FIN NOUVEAUX LIENS
+  { href: "/super-admin/activites", libelle: "Activités", Icone: IconeStatistique },
+  { href: "/super-admin/administrateurs", libelle: "Administrateurs", Icone: IconeBouclier },
+  { href: "/attestations-communautaires", libelle: "Attestations", Icone: IconeCheck },
+  { href: "/super-admin/droits-ui", libelle: "Droits UI", Icone: IconeBouclier },
+  { href: "/super-admin/droits", libelle: "Droits", Icone: IconeCle },
+  { href: "/super-admin/audit", libelle: "Journal d'audit", Icone: IconeJournal },
+  { href: "/super-admin/configuration", libelle: "Configuration", Icone: IconeParametres },
+  { href: "/super-admin/mon-profil", libelle: "Mon profil", Icone: IconeUtilisateur },
 ];
 
 // ---- Composant LienNav ----
