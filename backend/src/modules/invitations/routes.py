@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.src.noyau import journal
+from src.noyau import journal
 from src.base_donnees.session import obtenir_session
 from src.modeles import Utilisateur, Domaine, Departement
 from src.modules.authentification.dependances import utilisateur_courant
