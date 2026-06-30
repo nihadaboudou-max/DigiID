@@ -116,7 +116,7 @@ function Contenu() {
     }
 
     setEvenementsFiltres(resultat);
-    setPage(1); // Réinitialiser à la première page
+    setPage(1);
   };
 
   // Gestionnaires de changement de filtre
@@ -161,7 +161,6 @@ function Contenu() {
   const gererExportCSV = async () => {
     const donneesAExporter = evenementsFiltres;
     
-    // En-têtes CSV
     const enTetes = ["ID", "Date", "Type", "Description", "Utilisateur", "Nom", "IP", "Rôle"];
     const lignes = donneesAExporter.map((e) => [
       e.id,
@@ -179,7 +178,7 @@ function Contenu() {
       ...lignes.map((l) => l.join(",")),
     ].join("\n");
 
-    const bom = "\uFEFF"; // UTF-8 BOM pour Excel
+    const bom = "\uFEFF";
     const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -192,21 +191,22 @@ function Contenu() {
   };
 
   return (
-    <div className="space-y-6 apparition">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div className="space-y-4">
+      {/* En-tête compact */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <header>
-          <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
+          <p className="text-ocre font-semibold text-xs uppercase tracking-wider">
             Super administration
           </p>
-          <h1 className="mt-1">Journal d'audit immuable</h1>
-          <p className="text-ardoise-clair mt-2 max-w-2xl">
-            Toutes les actions sensibles du système. Conservation 1 an minimum conformément à la CDP.
+          <h1 className="mt-1 text-2xl">Journal d'audit immuable</h1>
+          <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
+            Toutes les actions sensibles du système. Conservation 1 an minimum (CDP).
             Immuable : aucune suppression ni modification autorisée.
           </p>
         </header>
         <div className="flex gap-2 flex-wrap">
           <Bouton variante="ghost" taille="petit" onClick={gererExportCSV}>
-            Exporter en CSV
+            Exporter CSV
           </Bouton>
         </div>
       </div>
@@ -218,10 +218,10 @@ function Contenu() {
       )}
 
       <Carte titre="Filtrage avancé">
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* Ligne 1 : Recherche */}
           <div>
-            <label className="block text-xs uppercase text-ardoise-clair mb-2 font-semibold">
+            <label className="block text-xs uppercase text-ardoise-clair mb-1 font-semibold">
               Recherche textuelle
             </label>
             <ChampRecherche
@@ -232,9 +232,9 @@ function Contenu() {
           </div>
 
           {/* Ligne 2 : Type et dates */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs uppercase text-ardoise-clair mb-2 font-semibold">
+              <label className="block text-xs uppercase text-ardoise-clair mb-1 font-semibold">
                 Type d'événement
               </label>
               <select
@@ -252,7 +252,7 @@ function Contenu() {
             </div>
 
             <div>
-              <label className="block text-xs uppercase text-ardoise-clair mb-2 font-semibold">
+              <label className="block text-xs uppercase text-ardoise-clair mb-1 font-semibold">
                 Du
               </label>
               <input
@@ -264,7 +264,7 @@ function Contenu() {
             </div>
 
             <div>
-              <label className="block text-xs uppercase text-ardoise-clair mb-2 font-semibold">
+              <label className="block text-xs uppercase text-ardoise-clair mb-1 font-semibold">
                 Au
               </label>
               <input
@@ -278,7 +278,7 @@ function Contenu() {
 
           {/* Réinitialiser */}
           {avezFiltres && (
-            <div className="pt-2 text-right">
+            <div className="pt-1 text-right">
               <Bouton variante="ghost" taille="petit" onClick={reinitialiserFiltres}>
                 ↻ Réinitialiser tous les filtres
               </Bouton>
@@ -289,8 +289,8 @@ function Contenu() {
 
       <Carte>
         {/* Statistiques */}
-        <div className="mb-6 pb-6 border-b border-ardoise-clair/10">
-          <div className="flex flex-wrap justify-between items-center gap-4">
+        <div className="mb-4 pb-4 border-b border-ardoise-clair/10">
+          <div className="flex flex-wrap justify-between items-center gap-3">
             <div>
               <p className="text-sm text-ardoise-clair">
                 <strong className="text-lagune">{evenementsFiltres.length}</strong> événement
@@ -304,25 +304,25 @@ function Contenu() {
               </p>
             </div>
             <div className="text-xs text-ardoise-clair">
-              <strong>{allEvenements.length}</strong> événements au total en base
+              <strong>{allEvenements.length}</strong> événements au total
             </div>
           </div>
         </div>
 
         {/* Résultats */}
         {chargement ? (
-          <p className="text-center text-ardoise-clair italic py-12">
+          <p className="text-center text-ardoise-clair italic py-6">
             Chargement des événements...
           </p>
         ) : evenementsPagines.length === 0 ? (
-          <p className="text-center text-ardoise-clair italic py-12">
+          <p className="text-center text-ardoise-clair italic py-6">
             {avezFiltres
               ? "Aucun événement ne correspond à tes critères de recherche."
               : "Aucun événement enregistré pour l'instant."}
           </p>
         ) : (
           <>
-            <div className="space-y-3 mb-6">
+            <div className="space-y-2 mb-4">
               {evenementsPagines.map((e) => (
                 <LigneEvenement key={e.id} evenement={e} />
               ))}
@@ -330,7 +330,7 @@ function Contenu() {
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="flex flex-wrap justify-center gap-2 pt-4 border-t border-ardoise-clair/10">
+              <div className="flex flex-wrap justify-center gap-2 pt-3 border-t border-ardoise-clair/10">
                 <Bouton
                   variante="ghost"
                   taille="petit"
@@ -419,21 +419,21 @@ function LigneEvenement({ evenement }: { evenement: EvenementAudit }) {
 
   return (
     <div
-      className={`border-l-4 border-ocre rounded-r-md pl-4 pr-3 py-3 transition-colors cursor-pointer ${
+      className={`border-l-4 border-ocre rounded-r-md pl-4 pr-3 py-2 transition-colors cursor-pointer ${
         deplie ? "bg-sable" : "bg-sable-clair hover:bg-sable"
       }`}
       onClick={() => setDeplie(!deplie)}
     >
-      <div className="flex justify-between gap-4 items-start mb-2 flex-wrap">
-        <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex justify-between gap-3 items-start mb-1 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <Badge variante={variant} taille="petit">
             {typeNet}
           </Badge>
-          <span className="text-xs text-ardoise-clair font-mono bg-blanc px-2 py-1 rounded border border-ardoise-clair/20">
+          <span className="text-xs text-ardoise-clair font-mono bg-blanc px-2 py-0.5 rounded border border-ardoise-clair/20">
             {evenement.id.substring(0, 8)}
           </span>
           {evenement.score_risque !== null && evenement.score_risque !== undefined && evenement.score_risque > 50 && (
-            <span className="text-xs font-semibold text-terre bg-terre/10 px-2 py-1 rounded">
+            <span className="text-xs font-semibold text-terre bg-terre/10 px-2 py-0.5 rounded">
               Risque {evenement.score_risque}/100
             </span>
           )}
@@ -443,13 +443,13 @@ function LigneEvenement({ evenement }: { evenement: EvenementAudit }) {
         </time>
       </div>
 
-      <p className="text-sm text-ardoise mb-2 leading-relaxed">
+      <p className="text-sm text-ardoise mb-1 leading-relaxed">
         {evenement.description}
       </p>
 
       <div className="flex flex-wrap gap-2 text-xs">
         {evenement.utilisateur_id && (
-          <span className="font-mono bg-blanc border border-ardoise-clair/20 px-2 py-1 rounded text-ardoise-clair flex items-center gap-1">
+          <span className="font-mono bg-blanc border border-ardoise-clair/20 px-2 py-0.5 rounded text-ardoise-clair flex items-center gap-1">
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
@@ -458,12 +458,12 @@ function LigneEvenement({ evenement }: { evenement: EvenementAudit }) {
           </span>
         )}
         {evenement.adresse_ip && (
-          <span className="font-mono bg-blanc border border-ardoise-clair/20 px-2 py-1 rounded text-ardoise-clair">
+          <span className="font-mono bg-blanc border border-ardoise-clair/20 px-2 py-0.5 rounded text-ardoise-clair">
             <strong>IP :</strong> {evenement.adresse_ip}
           </span>
         )}
         {evenement.role_acteur && (
-          <span className="bg-blanc border border-ardoise-clair/20 px-2 py-1 rounded text-ardoise-clair">
+          <span className="bg-blanc border border-ardoise-clair/20 px-2 py-0.5 rounded text-ardoise-clair">
             <strong>Rôle :</strong> {evenement.role_acteur}
           </span>
         )}
@@ -476,7 +476,7 @@ function LigneEvenement({ evenement }: { evenement: EvenementAudit }) {
 
       {/* Section dépliée : détails complets */}
       {deplie && aDetails && (
-        <div className="mt-3 pt-3 border-t border-ardoise-clair/10 space-y-3">
+        <div className="mt-2 pt-2 border-t border-ardoise-clair/10 space-y-2">
           {evenement.agent_utilisateur && (
             <div className="text-xs">
               <span className="font-semibold text-ardoise-clair">User-Agent :</span>
