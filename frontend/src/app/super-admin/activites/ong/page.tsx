@@ -26,60 +26,66 @@ function Contenu() {
   useEffect(() => { charger(); }, []);
 
   async function charger() {
-    setChargement(true); setErreur("");
+    setChargement(true);
+    setErreur("");
     try {
       const [b, p, m] = await Promise.all([
         clientAPI.get<any[]>("/api/v1/admin/ong/beneficiaires", { authentifie: true }),
         clientAPI.get<any[]>("/api/v1/admin/ong/programmes", { authentifie: true }),
         clientAPI.get<any[]>("/api/v1/admin/ong/missions", { authentifie: true }),
       ]);
-      setBeneficiaires(b || []); setProgrammes(p || []); setMissions(m || []);
+      setBeneficiaires(b || []);
+      setProgrammes(p || []);
+      setMissions(m || []);
     } catch (e: any) {
       setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur");
-    } finally { setChargement(false); }
+    } finally {
+      setChargement(false);
+    }
   }
 
   return (
-    <div className="space-y-8 apparition">
+    <div className="space-y-4">
+      {/* En-tête compact */}
       <div>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Super administration</p>
-        <h1 className="mt-1">Activites ONG</h1>
-        <p className="text-ardoise-clair mt-2">Beneficiaires, programmes et missions terrain.</p>
+        <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Super administration</p>
+        <h1 className="mt-1 text-2xl">Activités ONG</h1>
+        <p className="text-ardoise-clair mt-1 text-sm">Bénéficiaires, programmes et missions terrain.</p>
       </div>
 
       <NavigationActivites active="ong" prefixe="/super-admin/activites" />
 
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
 
-      <Carte titre="Beneficiaires">
+      <Carte titre="Bénéficiaires">
         {chargement ? (
-          <p className="text-ardoise-clair italic py-8 text-center">Chargement...</p>
+          <p className="text-ardoise-clair italic py-6 text-center">Chargement...</p>
         ) : beneficiaires.length === 0 ? (
-          <p className="text-ardoise-clair italic py-8 text-center">Aucun beneficiaire.</p>
+          <p className="text-ardoise-clair italic py-6 text-center">Aucun bénéficiaire.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-ardoise-clair text-xs uppercase tracking-wider">
-                  <th className="pb-3 pr-4">Nom</th>
-                  <th className="pb-3 pr-4">ONG</th>
-                  <th className="pb-3 pr-4">Programme</th>
-                  <th className="pb-3 pr-4">Zone</th>
-                  <th className="pb-3 pr-4">Statut</th>
-                  <th className="pb-3">Inscription</th>
+                  <th className="pb-2 pr-3">Nom</th>
+                  <th className="pb-2 pr-3">ONG</th>
+                  <th className="pb-2 pr-3">Programme</th>
+                  <th className="pb-2 pr-3">Zone</th>
+                  <th className="pb-2 pr-3">Statut</th>
+                  <th className="pb-2">Inscription</th>
                 </tr>
               </thead>
               <tbody>
                 {beneficiaires.map((b: any) => (
                   <tr key={b.id} className="border-t border-ardoise-clair/10 hover:bg-sable/40">
-                    <td className="py-3 pr-4 font-semibold text-ardoise">{b.nom}</td>
-                    <td className="py-3 pr-4 text-ardoise-clair">{b.ong_nom || "—"}</td>
-                    <td className="py-3 pr-4 text-ardoise">{b.programme || "—"}</td>
-                    <td className="py-3 pr-4 text-ardoise-clair">{b.zone || "—"}</td>
-                    <td className="py-3 pr-4">
+                    <td className="py-2 pr-3 font-semibold text-ardoise text-sm">{b.nom}</td>
+                    <td className="py-2 pr-3 text-ardoise-clair text-xs">{b.ong_nom || "—"}</td>
+                    <td className="py-2 pr-3 text-ardoise text-xs">{b.programme || "—"}</td>
+                    <td className="py-2 pr-3 text-ardoise-clair text-xs">{b.zone || "—"}</td>
+                    <td className="py-2 pr-3">
                       <Badge variante={b.statut === "actif" ? "succes" : "neutre"}>{b.statut || "actif"}</Badge>
                     </td>
-                    <td className="py-3 text-xs text-ardoise-clair">
+                    <td className="py-2 text-xs text-ardoise-clair">
                       {new Date(b.date_inscription).toLocaleDateString("fr-FR")}
                     </td>
                   </tr>
@@ -90,14 +96,14 @@ function Contenu() {
         )}
       </Carte>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid md:grid-cols-2 gap-3">
         <Carte titre="Programmes">
           {chargement ? (
             <p className="text-ardoise-clair italic py-4 text-center">...</p>
           ) : programmes.length === 0 ? (
             <p className="text-ardoise-clair italic py-4 text-center">Aucun programme.</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {programmes.map((p: any) => (
                 <div key={p.id} className="flex items-center justify-between p-2 bg-sable rounded-lg">
                   <div>
@@ -117,7 +123,7 @@ function Contenu() {
           ) : missions.length === 0 ? (
             <p className="text-ardoise-clair italic py-4 text-center">Aucune mission.</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {missions.map((m: any) => (
                 <div key={m.id} className="flex items-center justify-between p-2 bg-sable rounded-lg">
                   <div>
