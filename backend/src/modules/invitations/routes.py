@@ -1,26 +1,36 @@
 # -*- coding: utf-8 -*-
 """Routes API pour les invitations."""
+from datetime import datetime
 from uuid import UUID
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.authentification.dependances import utilisateur_courant
-from src.modeles.utilisateur import Utilisateur
 from src.base_donnees.session import obtenir_session
+from src.modeles import Utilisateur, Domaine, Departement
+from src.modules.authentification.dependances import utilisateur_courant
+from src.modules.invitations.dependances import obtenir_invitation_ou_404
 from src.modules.invitations.schemas import (
-    InvitationCreate, InvitationResponse, InvitationListResponse,
+    InvitationCreate,
+    InvitationResponse,
+    InvitationListResponse,
     InvitationValiderResponse,
+    InvitationAcceptationSchema,
 )
 from src.modules.invitations.service import (
-    creer_invitation, lister_invitations, annuler_invitation,
+    creer_invitation,
+    lister_invitations,
+    annuler_invitation,
     valider_invitation,
+    obtenir_invitation_par_token,
+    accepter_invitation_service,
 )
-from src.modules.invitations.dependances import obtenir_invitation_ou_404
 from src.noyau.permissions import require_permission
 
 routeur_invitations = APIRouter(prefix="/api/v1/invitations", tags=["Invitations"])
 
+
+# ============ CRUD INVITATIONS ============
 
 @routeur_invitations.post(
     "",
@@ -83,7 +93,7 @@ async def lister(
 )
 @require_permission("invitation.lire")
 async def obtenir(
-    invitation = Depends(obtenir_invitation_ou_404),
+    invitation=Depends(obtenir_invitation_ou_404),
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
 ):
     """Récupère les détails d'une invitation."""
@@ -97,7 +107,7 @@ async def obtenir(
 )
 @require_permission("invitation.envoyer")
 async def annuler(
-    invitation = Depends(obtenir_invitation_ou_404),
+    invitation=Depends(obtenir_invitation_ou_404),
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
@@ -112,29 +122,120 @@ async def annuler(
 
 
 @routeur_invitations.post(
-    "/valider/{token}",
-    response_model=InvitationValiderResponse,
-    summary="Valider une invitation (endpoint public)",
+    "/{invitation_id}/renvoyer",
+    response_model=InvitationResponse,
+    summary="Renvoyer une invitation",
 )
-async def valider(
+@require_permission("invitation.envoyer")
+async def renvoyer(
+    invitation=Depends(obtenir_invitation_ou_404),
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    """Renvoie une invitation en prolongeant sa date d'expiration."""
+    import secrets
+    from datetime import timedelta
+
+    if invitation.statut != "en_attente":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Impossible de renvoyer une invitation au statut '{invitation.statut}'",
+        )
+
+    invitation.token = secrets.token_urlsafe(48)
+    invitation.date_expiration = datetime.utcnow() + timedelta(days=7)
+    await session.commit()
+    await session.refresh(invitation)
+    return invitation
+
+
+# ============ ACCEPTATION PUBLIQUE (sans auth) ============
+
+@routeur_invitations.get(
+    "/verifier/{token}",
+    summary="Vérifier une invitation (public)",
+)
+async def verifier_invitation(
     token: str,
     session: AsyncSession = Depends(obtenir_session),
 ):
     """
-    Valide une invitation à partir du token reçu par email.
-    Retourne un token d'inscription pour compléter l'inscription.
-    
-    ⚠️ Endpoint PUBLIC — pas d'authentification requise.
+    Vérifie qu'un token d'invitation est valide et retourne les infos.
+    Endpoint PUBLIC — pas d'authentification requise.
     """
-    try:
-        invitation, token_inscription = await valider_invitation(session, token)
-        return InvitationValiderResponse(
-            message="Invitation validée avec succès",
-            invitation=invitation,
-            token_inscription=token_inscription,
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+    invitation = await obtenir_invitation_par_token(session, token)
+    if not invitation:
+        raise HTTPException(404, "Invitation introuvable ou expirée")
+
+    if invitation.statut != "en_attente":
+        raise HTTPException(400, f"Invitation déjà {invitation.statut}")
+
+    if invitation.date_expiration < datetime.utcnow():
+        invitation.statut = "expiree"
+        await session.commit()
+        raise HTTPException(400, "Invitation expirée")
+
+    # Récupérer les infos liées
+    domaine_nom = None
+    departement_nom = None
+
+    if invitation.domaine_id:
+        domaine = await session.get(Domaine, invitation.domaine_id)
+        if domaine:
+            domaine_nom = domaine.nom
+
+    if invitation.departement_id:
+        departement = await session.get(Departement, invitation.departement_id)
+        if departement:
+            departement_nom = departement.nom
+
+    return {
+        "email": invitation.email,
+        "role": invitation.role,
+        "domaine_nom": domaine_nom,
+        "departement_nom": departement_nom,
+        "date_expiration": invitation.date_expiration.isoformat(),
+    }
+
+
+@routeur_invitations.post(
+    "/accepter/{token}",
+    status_code=201,
+    summary="Accepter une invitation (public)",
+)
+async def accepter_invitation(
+    token: str,
+    donnees: InvitationAcceptationSchema,
+    session: AsyncSession = Depends(obtenir_session),
+):
+    """
+    Accepte une invitation et crée le compte utilisateur.
+    Endpoint PUBLIC — pas d'authentification requise.
+    """
+    invitation = await obtenir_invitation_par_token(session, token)
+    if not invitation:
+        raise HTTPException(404, "Invitation introuvable ou expirée")
+
+    if invitation.statut != "en_attente":
+        raise HTTPException(400, f"Invitation déjà {invitation.statut}")
+
+    if invitation.date_expiration < datetime.utcnow():
+        invitation.statut = "expiree"
+        await session.commit()
+        raise HTTPException(400, "Invitation expirée")
+
+    # Vérifier que l'email n'est pas déjà utilisé
+    result = await session.execute(
+        select(Utilisateur).where(Utilisateur.email == invitation.email)
+    )
+    if result.scalar_one_or_none():
+        raise HTTPException(400, "Un compte avec cet email existe déjà")
+
+    # Créer le compte utilisateur
+    utilisateur = await accepter_invitation_service(session, invitation, donnees)
+
+    return {
+        "message": "Compte créé avec succès",
+        "email": utilisateur.email,
+        "role": utilisateur.role,
+    }

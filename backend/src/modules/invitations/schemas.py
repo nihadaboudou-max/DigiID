@@ -48,3 +48,11 @@ class InvitationValiderResponse(BaseModel):
     message: str
     invitation: InvitationResponse
     token_inscription: str  # Token à utiliser pour compléter l'inscription
+    
+class InvitationAcceptationSchema(BaseModel):
+    """Données pour accepter une invitation."""
+    prenom: str
+    nom: str
+    mot_de_passe: str
+    ville: str | None = None
+    telephone: str | None = None

@@ -4,11 +4,18 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
+from passlib.context import CryptContext
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modeles import Utilisateur
 from src.modeles.invitation import Invitation
-from src.modules.invitations.schemas import InvitationCreate
+from src.modules.invitations.schemas import (
+    InvitationCreate,
+    InvitationAcceptationSchema,
+)
+
+contexte_mdp = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 async def creer_invitation(
@@ -112,8 +119,10 @@ async def annuler_invitation(
 ) -> Invitation:
     """Annule une invitation."""
     if invitation.statut != "en_attente":
-        raise ValueError(f"Impossible d'annuler une invitation au statut '{invitation.statut}'")
-    invitation.annuler()
+        raise ValueError(
+            f"Impossible d'annuler une invitation au statut '{invitation.statut}'"
+        )
+    invitation.statut = "annulee"
     await session.commit()
     await session.refresh(invitation)
     return invitation
@@ -125,7 +134,6 @@ async def valider_invitation(
 ) -> tuple[Invitation, str]:
     """
     Valide une invitation et retourne un token d'inscription.
-    
     Returns:
         Tuple (invitation, token_inscription)
     """
@@ -145,8 +153,41 @@ async def valider_invitation(
     token_inscription = secrets.token_urlsafe(32)
 
     # Marquer comme acceptée
-    invitation.marquer_acceptee()
+    invitation.statut = "acceptee"
+    invitation.date_acceptation = datetime.utcnow()
     await session.commit()
     await session.refresh(invitation)
 
     return invitation, token_inscription
+
+
+async def accepter_invitation_service(
+    session: AsyncSession,
+    invitation: Invitation,
+    donnees: InvitationAcceptationSchema,
+) -> Utilisateur:
+    """Accepte une invitation et crée le compte utilisateur."""
+    # Hasher le mot de passe
+    mot_de_passe_hash = contexte_mdp.hash(donnees.mot_de_passe)
+
+    # Créer l'utilisateur
+    utilisateur = Utilisateur(
+        email=invitation.email,
+        prenom=donnees.prenom,
+        nom=donnees.nom,
+        role=invitation.role,
+        ville=donnees.ville,
+        telephone=donnees.telephone,
+        mot_de_passe=mot_de_passe_hash,
+        email_verifie=True,  # L'email est vérifié via l'invitation
+        est_actif=True,
+    )
+    session.add(utilisateur)
+
+    # Marquer l'invitation comme acceptée
+    invitation.statut = "acceptee"
+    invitation.date_acceptation = datetime.utcnow()
+
+    await session.commit()
+    await session.refresh(utilisateur)
+    return utilisateur
