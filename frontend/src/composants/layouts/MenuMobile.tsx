@@ -1,6 +1,4 @@
-
 "use client";
-
 /**
  * Menu mobile (hamburger) — version mobile de la BarreLaterale.
  * S'affiche sous la forme d'un drawer glissant depuis la gauche.
@@ -10,7 +8,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import clsx from "clsx";
-
 import { useAuthentification } from "@/contextes/authentification";
 import {
   IconeAccueil, IconeUtilisateur, IconeScore, IconeChat,
@@ -27,20 +24,20 @@ interface Lien {
 
 const LIENS_UTILISATEUR: Lien[] = [
   { href: "/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
-  { href: "/profil",          libelle: "Mon profil",      Icone: IconeUtilisateur },
-  { href: "/score",           libelle: "Mon score",       Icone: IconeScore },
-  { href: "/chatbot",         libelle: "Assistant",       Icone: IconeChat },
-  { href: "/parametres",      libelle: "Paramètres",      Icone: IconeParametres },
+  { href: "/profil", libelle: "Mon profil", Icone: IconeUtilisateur },
+  { href: "/score", libelle: "Mon score", Icone: IconeScore },
+  { href: "/chatbot", libelle: "Assistant", Icone: IconeChat },
+  { href: "/parametres", libelle: "Paramètres", Icone: IconeParametres },
 ];
 
 const LIENS_ADMIN: Lien[] = [
   { href: "/admin/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
-  { href: "/admin/utilisateurs",    libelle: "Utilisateurs",     Icone: IconeUtilisateur },
-  { href: "/attestations-communautaires",    libelle: "Attestations",     Icone: IconeCheck },
-  { href: "/admin/droits",          libelle: "Droits",           Icone: IconeBouclier },
-  { href: "/admin/audit",           libelle: "Journal d'audit",  Icone: IconeJournal },
-  { href: "/admin/alertes",         libelle: "Alertes",          Icone: IconeAlerte },
-  { href: "/admin/statistiques",    libelle: "Statistiques",     Icone: IconeStatistique },
+  { href: "/admin/utilisateurs", libelle: "Utilisateurs", Icone: IconeUtilisateur },
+  { href: "/attestations-communautaires", libelle: "Attestations", Icone: IconeCheck },
+  { href: "/admin/droits", libelle: "Droits", Icone: IconeBouclier },
+  { href: "/admin/audit", libelle: "Journal d'audit", Icone: IconeJournal },
+  { href: "/admin/alertes", libelle: "Alertes", Icone: IconeAlerte },
+  { href: "/admin/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
 ];
 
 const LIENS_SUPER_ADMIN: Lien[] = [
@@ -48,12 +45,10 @@ const LIENS_SUPER_ADMIN: Lien[] = [
   { href: "/super-admin/monitoring", libelle: "Monitoring", Icone: IconeStatistique },
   { href: "/super-admin/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
   { href: "/super-admin/utilisateurs", libelle: "Utilisateurs", Icone: IconeUtilisateur },
-  // ← NOUVEAUX LIENS AJOUTÉS
   { href: "/super-admin/domaines", libelle: "Domaines", Icone: IconeAccueil },
   { href: "/super-admin/departements", libelle: "Départements", Icone: IconeStatistique },
   { href: "/super-admin/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
   { href: "/super-admin/equipes", libelle: "Équipes", Icone: IconeUtilisateur },
-  // ← FIN NOUVEAUX LIENS
   { href: "/super-admin/administrateurs", libelle: "Administrateurs", Icone: IconeBouclier },
   { href: "/attestations-communautaires", libelle: "Attestations", Icone: IconeCheck },
   { href: "/super-admin/droits-ui", libelle: "Droits UI", Icone: IconeBouclier },
@@ -63,8 +58,14 @@ const LIENS_SUPER_ADMIN: Lien[] = [
   { href: "/super-admin/mon-profil", libelle: "Mon profil", Icone: IconeUtilisateur },
 ];
 
-// ---- Composant section pliable mobile ----
+const LIENS_SUPER_ADMIN_ACTIVITES: Lien[] = [
+  { href: "/super-admin/activites/enrolements", libelle: "Agent terrain", Icone: IconeUtilisateur },
+  { href: "/super-admin/activites/medical", libelle: "Médical", Icone: IconeStatistique },
+  { href: "/super-admin/activites/police", libelle: "Police", Icone: IconeBouclier },
+  { href: "/super-admin/activites/ong", libelle: "ONG", Icone: IconePartage },
+];
 
+// ---- Composant section pliable mobile ----
 function SectionPlieMobile({
   titre,
   couleur,
@@ -77,7 +78,6 @@ function SectionPlieMobile({
   children: React.ReactNode;
 }) {
   const [ouvert, setOuvert] = useState(initialOuvert);
-
   return (
     <div className="mb-2">
       <button
@@ -97,7 +97,7 @@ function SectionPlieMobile({
       <div
         className={clsx(
           "overflow-hidden transition-all duration-300",
-          ouvert ? "max-h-96 opacity-100" : "max-h-0 opacity-0",
+          ouvert ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0",
         )}
       >
         {children}
@@ -110,7 +110,6 @@ export function BoutonMenuMobile() {
   const [ouvert, setOuvert] = useState(false);
   const pathname = usePathname();
   const { utilisateur } = useAuthentification();
-
   if (!utilisateur) return null;
 
   const estSuperAdminRole = utilisateur.role === "super_administrateur";
@@ -214,13 +213,17 @@ export function BoutonMenuMobile() {
 
             {/* Navigation */}
             <nav className="p-3">
+
+              {/* ============================================================ */}
+              {/* SUPER ADMIN — Menu épuré (PAS de sections citoyen) */}
+              {/* ============================================================ */}
               {estSuperAdminRole && (
                 <>
                   {/* Section super admin */}
                   <SectionPlieMobile
                     titre="Super administration"
                     couleur="text-ocre"
-                    initialOuvert={pathname.startsWith("/super-admin")}
+                    initialOuvert={true}
                   >
                     <div className="pl-2">
                       {LIENS_SUPER_ADMIN.map(({ href, libelle, Icone }) => {
@@ -250,27 +253,22 @@ export function BoutonMenuMobile() {
                     </div>
                   </SectionPlieMobile>
 
-                  {/* Section Score */}
+                  {/* Section Activités (sous-menu) */}
                   <SectionPlieMobile
-                    titre="Suivi &amp; Score"
+                    titre="Activités"
                     couleur="text-ardoise-clair/50"
-                    initialOuvert={pathname.startsWith("/score") || pathname === "/parrainage"}
+                    initialOuvert={pathname.startsWith("/super-admin/activites")}
                   >
                     <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                      {[
-                        { href: "/score", libelle: "Mon score actuel", Icone: IconeScore },
-                        { href: "/score/facteurs", libelle: "Facteurs d'impact", Icone: IconeStatistique },
-                        { href: "/score/amelioration", libelle: "Conseils d'amélioration", Icone: IconeAlerte },
-                        { href: "/parrainage", libelle: "Parrainage (bonus)", Icone: IconePartage },
-                      ].map(({ href, libelle, Icone }) => {
-                        const actif = pathname === href || pathname.startsWith(href);
+                      {LIENS_SUPER_ADMIN_ACTIVITES.map(({ href, libelle, Icone }) => {
+                        const actif = pathname.startsWith(href);
                         return (
                           <Link
                             key={href}
                             href={href}
                             onClick={() => setOuvert(false)}
                             className={clsx(
-                              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
+                              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
                               actif
                                 ? "bg-sable/60 text-lagune font-medium"
                                 : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
@@ -284,127 +282,13 @@ export function BoutonMenuMobile() {
                     </div>
                   </SectionPlieMobile>
 
-                  {/* Section Attestations */}
-                  <SectionPlieMobile
-                    titre="Attestations"
-                    couleur="text-ardoise-clair/50"
-                    initialOuvert={pathname.startsWith("/attestations-communautaires")}
-                  >
-                    <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                      {[
-                        { href: "/attestations-communautaires", libelle: "Tableau de bord", Icone: IconeAccueil },
-                        { href: "/attestations-communautaires/nouvelle", libelle: "Nouvelle attestation", Icone: IconeEnvoyer },
-                        { href: "/attestations-communautaires/recues", libelle: "Reçues", Icone: IconeFlecheBas },
-                        { href: "/attestations-communautaires/envoyees", libelle: "Envoyées", Icone: IconeEnvoyer },
-                        { href: "/attestations-communautaires/en-attente", libelle: "En attente", Icone: IconeAlerte },
-                      ].map(({ href, libelle, Icone }) => {
-                        const actif = pathname === href;
-                        return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                              actif
-                                ? "bg-sable/60 text-lagune font-medium"
-                                : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                            )}
-                          >
-                            <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span className="truncate">{libelle}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  </SectionPlieMobile>
-
-                  {/* Section Identité */}
-                  <SectionPlieMobile
-                    titre="Identité"
-                    couleur="text-ardoise-clair/50"
-                    initialOuvert={pathname.startsWith("/identite")}
-                  >
-                    <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                      {[
-                        { href: "/identite", libelle: "Tableau de bord identité", Icone: IconeAccueil },
-                        { href: "/identite/verification-visuelle", libelle: "Reconnaissance faciale", Icone: IconeVisage },
-                        { href: "/identite/verification-cni", libelle: "Scan CNI", Icone: IconeScan },
-                        { href: "/identite/email", libelle: "Vérification email", Icone: IconeEmail },
-                        { href: "/identite/2fa", libelle: "Double authentification", Icone: IconeCadenas },
-                        { href: "/identite/mot-de-passe", libelle: "Mot de passe", Icone: IconeCle },
-                        { href: "/identite/role", libelle: "Rôle &amp; permissions", Icone: IconeBouclier },
-                      ].map(({ href, libelle, Icone }) => {
-                        const actif = pathname === href || pathname.startsWith(href);
-                        return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                              actif
-                                ? "bg-sable/60 text-lagune font-medium"
-                                : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                            )}
-                          >
-                            <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span className="truncate">{libelle}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  </SectionPlieMobile>
-
-                  {/* Section espace personnel */}
-                  <SectionPlieMobile
-                    titre="Mon espace"
-                    couleur="text-ardoise-clair/50"
-                    initialOuvert={pathname === "/tableau-de-bord" || pathname === "/profil"}
-                  >
-                    <div className="pl-2">
-                      <Link
-                        href="/tableau-de-bord"
-                        onClick={() => setOuvert(false)}
-                        className={clsx(
-                          "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
-                          pathname === "/tableau-de-bord"
-                            ? "bg-sable text-lagune font-semibold"
-                            : "text-ardoise-clair hover:text-ardoise hover:bg-sable/60",
-                        )}
-                      >
-                        <div className={clsx(
-                          "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
-                          pathname === "/tableau-de-bord" ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
-                        )}>
-                          <IconeAccueil className="w-3.5 h-3.5" />
-                        </div>
-                        <span>Accueil utilisateur</span>
-                      </Link>
-                      <Link
-                        href="/profil"
-                        onClick={() => setOuvert(false)}
-                        className={clsx(
-                          "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
-                          pathname === "/profil"
-                            ? "bg-sable text-lagune font-semibold"
-                            : "text-ardoise-clair hover:text-ardoise hover:bg-sable/60",
-                        )}
-                      >
-                        <div className={clsx(
-                          "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
-                          pathname === "/profil" ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
-                        )}>
-                          <IconeUtilisateur className="w-3.5 h-3.5" />
-                        </div>
-                        <span>Mon profil personnel</span>
-                      </Link>
-                    </div>
-                  </SectionPlieMobile>
+                  {/* ✅ FIN DU MENU SUPER ADMIN — PAS de Score/Attestations/Identité/Mon espace */}
                 </>
               )}
 
-              {/* Admin normal */}
+              {/* ============================================================ */}
+              {/* ADMIN NORMAL */}
+              {/* ============================================================ */}
               {estAdminRole && !estSuperAdminRole && (
                 <div>
                   <SectionPlieMobile
@@ -434,112 +318,6 @@ export function BoutonMenuMobile() {
                               <Icone className="w-3.5 h-3.5" />
                             </div>
                             <span>{libelle}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  </SectionPlieMobile>
-
-                  {/* Section Score */}
-                  <SectionPlieMobile
-                    titre="Suivi &amp; Score"
-                    couleur="text-ardoise-clair/50"
-                    initialOuvert={pathname.startsWith("/score") || pathname === "/parrainage"}
-                  >
-                    <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                      {[
-                        { href: "/score", libelle: "Mon score actuel", Icone: IconeScore },
-                        { href: "/score/facteurs", libelle: "Facteurs d'impact", Icone: IconeStatistique },
-                        { href: "/score/amelioration", libelle: "Conseils d'amélioration", Icone: IconeAlerte },
-                        { href: "/parrainage", libelle: "Parrainage (bonus)", Icone: IconePartage },
-                      ].map(({ href, libelle, Icone }) => {
-                        const actif = pathname === href || pathname.startsWith(href);
-                        return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                              actif
-                                ? "bg-sable/60 text-lagune font-medium"
-                                : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                            )}
-                          >
-                            <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span className="truncate">{libelle}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  </SectionPlieMobile>
-
-                  {/* Section Attestations */}
-                  <SectionPlieMobile
-                    titre="Attestations"
-                    couleur="text-ardoise-clair/50"
-                    initialOuvert={pathname.startsWith("/attestations-communautaires")}
-                  >
-                    <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                      {[
-                        { href: "/attestations-communautaires", libelle: "Tableau de bord", Icone: IconeAccueil },
-                        { href: "/attestations-communautaires/nouvelle", libelle: "Nouvelle attestation", Icone: IconeEnvoyer },
-                        { href: "/attestations-communautaires/recues", libelle: "Reçues", Icone: IconeFlecheBas },
-                        { href: "/attestations-communautaires/envoyees", libelle: "Envoyées", Icone: IconeEnvoyer },
-                        { href: "/attestations-communautaires/en-attente", libelle: "En attente", Icone: IconeAlerte },
-                      ].map(({ href, libelle, Icone }) => {
-                        const actif = pathname === href;
-                        return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                              actif
-                                ? "bg-sable/60 text-lagune font-medium"
-                                : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                            )}
-                          >
-                            <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span className="truncate">{libelle}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  </SectionPlieMobile>
-
-                  {/* Section Identité */}
-                  <SectionPlieMobile
-                    titre="Identité"
-                    couleur="text-ardoise-clair/50"
-                    initialOuvert={pathname.startsWith("/identite")}
-                  >
-                    <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                      {[
-                        { href: "/identite", libelle: "Tableau de bord identité", Icone: IconeAccueil },
-                        { href: "/identite/verification-visuelle", libelle: "Reconnaissance faciale", Icone: IconeVisage },
-                        { href: "/identite/verification-cni", libelle: "Scan CNI", Icone: IconeScan },
-                        { href: "/identite/email", libelle: "Vérification email", Icone: IconeEmail },
-                        { href: "/identite/2fa", libelle: "Double authentification", Icone: IconeCadenas },
-                        { href: "/identite/mot-de-passe", libelle: "Mot de passe", Icone: IconeCle },
-                        { href: "/identite/role", libelle: "Rôle &amp; permissions", Icone: IconeBouclier },
-                      ].map(({ href, libelle, Icone }) => {
-                        const actif = pathname === href || pathname.startsWith(href);
-                        return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                              actif
-                                ? "bg-sable/60 text-lagune font-medium"
-                                : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                            )}
-                          >
-                            <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span className="truncate">{libelle}</span>
                           </Link>
                         );
                       })}
@@ -577,14 +355,15 @@ export function BoutonMenuMobile() {
                 </div>
               )}
 
-              {/* Rôles professionnels : Médecin */}
+              {/* ============================================================ */}
+              {/* RÔLES PROFESSIONNELS (Médecin, Agent, Police, ONG) */}
+              {/* Chaque rôle a son menu pro + le menu citoyen complet */}
+              {/* ============================================================ */}
+
+              {/* Médecin */}
               {estMedecin && (
                 <>
-                  <SectionPlieMobile
-                    titre="Espace médical"
-                    couleur="text-lagune"
-                    initialOuvert={true}
-                  >
+                  <SectionPlieMobile titre="Espace médical" couleur="text-lagune" initialOuvert={true}>
                     <div className="pl-2">
                       {[
                         { href: "/medecin/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
@@ -594,24 +373,14 @@ export function BoutonMenuMobile() {
                         { href: "/medecin/attestations", libelle: "Attestations", Icone: IconeCheck },
                         { href: "/medecin/calendrier", libelle: "Calendrier", Icone: IconeParametres },
                         { href: "/medecin/historique", libelle: "Historique", Icone: IconeAlerte },
-                        ].map(({ href, libelle, Icone }) => {
+                      ].map(({ href, libelle, Icone }) => {
                         const actif = pathname === href || pathname.startsWith(href);
                         return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
-                              actif
-                                ? "bg-sable text-lagune font-semibold"
-                                : "text-ardoise hover:bg-sable/60",
-                            )}
-                          >
-                            <div className={clsx(
-                              "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
-                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
-                            )}>
+                          <Link key={href} href={href} onClick={() => setOuvert(false)}
+                            className={clsx("flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                              actif ? "bg-sable text-lagune font-semibold" : "text-ardoise hover:bg-sable/60")}>
+                            <div className={clsx("w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair")}>
                               <Icone className="w-3.5 h-3.5" />
                             </div>
                             <span>{libelle}</span>
@@ -620,153 +389,14 @@ export function BoutonMenuMobile() {
                       })}
                     </div>
                   </SectionPlieMobile>
-
-                  {/* Mon espace personnel — menu citoyen complet */}
-                  <div className="mt-3 pt-2 border-t border-ardoise-clair/10">
-                    <div className="pl-2 space-y-0.5 mb-2">
-                      <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
-                        Mon espace personnel
-                      </p>
-                      {[
-                        { href: "/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
-                        { href: "/profil",          libelle: "Mon profil",      Icone: IconeUtilisateur },
-                        { href: "/chatbot",         libelle: "Assistant",       Icone: IconeChat },
-                        { href: "/parametres",      libelle: "Paramètres",      Icone: IconeParametres },
-                      ].map(({ href, libelle, Icone }) => {
-                        const actif = pathname === href;
-                        return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
-                              actif
-                                ? "bg-sable/60 text-lagune font-medium"
-                                : "text-ardoise-clair/70 hover:text-ardoise hover:bg-sable/40",
-                            )}
-                          >
-                            <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span className="truncate">{libelle}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
-
-                    <SectionPlieMobile
-                      titre="Suivi &amp; Score"
-                      couleur="text-ardoise-clair/50"
-                      initialOuvert={pathname.startsWith("/score") || pathname === "/parrainage"}
-                    >
-                      <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                        {[
-                          { href: "/score", libelle: "Mon score actuel", Icone: IconeScore },
-                          { href: "/score/facteurs", libelle: "Facteurs d'impact", Icone: IconeStatistique },
-                          { href: "/score/amelioration", libelle: "Conseils d'amélioration", Icone: IconeAlerte },
-                          { href: "/parrainage", libelle: "Parrainage (bonus)", Icone: IconePartage },
-                        ].map(({ href, libelle, Icone }) => {
-                          const actif = pathname === href || pathname.startsWith(href);
-                          return (
-                            <Link
-                              key={href}
-                              href={href}
-                              onClick={() => setOuvert(false)}
-                              className={clsx(
-                                "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                                actif
-                                  ? "bg-sable/60 text-lagune font-medium"
-                                  : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                              )}
-                            >
-                              <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="truncate">{libelle}</span>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </SectionPlieMobile>
-
-                    <SectionPlieMobile
-                      titre="Attestations"
-                      couleur="text-ardoise-clair/50"
-                      initialOuvert={pathname.startsWith("/attestations-communautaires")}
-                    >
-                      <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                        {[
-                          { href: "/attestations-communautaires", libelle: "Tableau de bord", Icone: IconeAccueil },
-                          { href: "/attestations-communautaires/nouvelle", libelle: "Nouvelle attestation", Icone: IconeEnvoyer },
-                          { href: "/attestations-communautaires/recues", libelle: "Reçues", Icone: IconeFlecheBas },
-                          { href: "/attestations-communautaires/envoyees", libelle: "Envoyées", Icone: IconeEnvoyer },
-                          { href: "/attestations-communautaires/en-attente", libelle: "En attente", Icone: IconeAlerte },
-                        ].map(({ href, libelle, Icone }) => {
-                          const actif = pathname === href;
-                          return (
-                            <Link
-                              key={href}
-                              href={href}
-                              onClick={() => setOuvert(false)}
-                              className={clsx(
-                                "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                                actif
-                                  ? "bg-sable/60 text-lagune font-medium"
-                                  : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                              )}
-                            >
-                              <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="truncate">{libelle}</span>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </SectionPlieMobile>
-
-                    <SectionPlieMobile
-                      titre="Identité"
-                      couleur="text-ardoise-clair/50"
-                      initialOuvert={pathname.startsWith("/identite")}
-                    >
-                      <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                        {[
-                          { href: "/identite", libelle: "Tableau de bord identité", Icone: IconeAccueil },
-                          { href: "/identite/verification-visuelle", libelle: "Reconnaissance faciale", Icone: IconeVisage },
-                          { href: "/identite/verification-cni", libelle: "Scan CNI", Icone: IconeScan },
-                          { href: "/identite/email", libelle: "Vérification email", Icone: IconeEmail },
-                          { href: "/identite/2fa", libelle: "Double authentification", Icone: IconeCadenas },
-                          { href: "/identite/mot-de-passe", libelle: "Mot de passe", Icone: IconeCle },
-                          { href: "/identite/role", libelle: "Rôle &amp; permissions", Icone: IconeBouclier },
-                        ].map(({ href, libelle, Icone }) => {
-                          const actif = pathname === href || pathname.startsWith(href);
-                          return (
-                            <Link
-                              key={href}
-                              href={href}
-                              onClick={() => setOuvert(false)}
-                              className={clsx(
-                                "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                                actif
-                                  ? "bg-sable/60 text-lagune font-medium"
-                                  : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                              )}
-                            >
-                              <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="truncate">{libelle}</span>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </SectionPlieMobile>
-                  </div>
+                  <MenuCitoyenComplet pathname={pathname} setOuvert={setOuvert} />
                 </>
               )}
 
-              {/* Rôles professionnels : Agent */}
+              {/* Agent */}
               {estAgent && (
                 <>
-                  <SectionPlieMobile
-                    titre="Agent terrain"
-                    couleur="text-lagune"
-                    initialOuvert={true}
-                  >
+                  <SectionPlieMobile titre="Agent terrain" couleur="text-lagune" initialOuvert={true}>
                     <div className="pl-2">
                       {[
                         { href: "/agent/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
@@ -776,21 +406,11 @@ export function BoutonMenuMobile() {
                       ].map(({ href, libelle, Icone }) => {
                         const actif = pathname === href || pathname.startsWith(href);
                         return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
-                              actif
-                                ? "bg-sable text-lagune font-semibold"
-                                : "text-ardoise hover:bg-sable/60",
-                            )}
-                          >
-                            <div className={clsx(
-                              "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
-                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
-                            )}>
+                          <Link key={href} href={href} onClick={() => setOuvert(false)}
+                            className={clsx("flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                              actif ? "bg-sable text-lagune font-semibold" : "text-ardoise hover:bg-sable/60")}>
+                            <div className={clsx("w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair")}>
                               <Icone className="w-3.5 h-3.5" />
                             </div>
                             <span>{libelle}</span>
@@ -799,153 +419,14 @@ export function BoutonMenuMobile() {
                       })}
                     </div>
                   </SectionPlieMobile>
-
-                  {/* Mon espace personnel — menu citoyen complet */}
-                  <div className="mt-3 pt-2 border-t border-ardoise-clair/10">
-                    <div className="pl-2 space-y-0.5 mb-2">
-                      <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
-                        Mon espace personnel
-                      </p>
-                      {[
-                        { href: "/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
-                        { href: "/profil",          libelle: "Mon profil",      Icone: IconeUtilisateur },
-                        { href: "/chatbot",         libelle: "Assistant",       Icone: IconeChat },
-                        { href: "/parametres",      libelle: "Paramètres",      Icone: IconeParametres },
-                      ].map(({ href, libelle, Icone }) => {
-                        const actif = pathname === href;
-                        return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
-                              actif
-                                ? "bg-sable/60 text-lagune font-medium"
-                                : "text-ardoise-clair/70 hover:text-ardoise hover:bg-sable/40",
-                            )}
-                          >
-                            <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span className="truncate">{libelle}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
-
-                    <SectionPlieMobile
-                      titre="Suivi &amp; Score"
-                      couleur="text-ardoise-clair/50"
-                      initialOuvert={pathname.startsWith("/score") || pathname === "/parrainage"}
-                    >
-                      <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                        {[
-                          { href: "/score", libelle: "Mon score actuel", Icone: IconeScore },
-                          { href: "/score/facteurs", libelle: "Facteurs d'impact", Icone: IconeStatistique },
-                          { href: "/score/amelioration", libelle: "Conseils d'amélioration", Icone: IconeAlerte },
-                          { href: "/parrainage", libelle: "Parrainage (bonus)", Icone: IconePartage },
-                        ].map(({ href, libelle, Icone }) => {
-                          const actif = pathname === href || pathname.startsWith(href);
-                          return (
-                            <Link
-                              key={href}
-                              href={href}
-                              onClick={() => setOuvert(false)}
-                              className={clsx(
-                                "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                                actif
-                                  ? "bg-sable/60 text-lagune font-medium"
-                                  : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                              )}
-                            >
-                              <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="truncate">{libelle}</span>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </SectionPlieMobile>
-
-                    <SectionPlieMobile
-                      titre="Attestations"
-                      couleur="text-ardoise-clair/50"
-                      initialOuvert={pathname.startsWith("/attestations-communautaires")}
-                    >
-                      <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                        {[
-                          { href: "/attestations-communautaires", libelle: "Tableau de bord", Icone: IconeAccueil },
-                          { href: "/attestations-communautaires/nouvelle", libelle: "Nouvelle attestation", Icone: IconeEnvoyer },
-                          { href: "/attestations-communautaires/recues", libelle: "Reçues", Icone: IconeFlecheBas },
-                          { href: "/attestations-communautaires/envoyees", libelle: "Envoyées", Icone: IconeEnvoyer },
-                          { href: "/attestations-communautaires/en-attente", libelle: "En attente", Icone: IconeAlerte },
-                        ].map(({ href, libelle, Icone }) => {
-                          const actif = pathname === href;
-                          return (
-                            <Link
-                              key={href}
-                              href={href}
-                              onClick={() => setOuvert(false)}
-                              className={clsx(
-                                "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                                actif
-                                  ? "bg-sable/60 text-lagune font-medium"
-                                  : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                              )}
-                            >
-                              <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="truncate">{libelle}</span>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </SectionPlieMobile>
-
-                    <SectionPlieMobile
-                      titre="Identité"
-                      couleur="text-ardoise-clair/50"
-                      initialOuvert={pathname.startsWith("/identite")}
-                    >
-                      <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                        {[
-                          { href: "/identite", libelle: "Tableau de bord identité", Icone: IconeAccueil },
-                          { href: "/identite/verification-visuelle", libelle: "Reconnaissance faciale", Icone: IconeVisage },
-                          { href: "/identite/verification-cni", libelle: "Scan CNI", Icone: IconeScan },
-                          { href: "/identite/email", libelle: "Vérification email", Icone: IconeEmail },
-                          { href: "/identite/2fa", libelle: "Double authentification", Icone: IconeCadenas },
-                          { href: "/identite/mot-de-passe", libelle: "Mot de passe", Icone: IconeCle },
-                          { href: "/identite/role", libelle: "Rôle &amp; permissions", Icone: IconeBouclier },
-                        ].map(({ href, libelle, Icone }) => {
-                          const actif = pathname === href || pathname.startsWith(href);
-                          return (
-                            <Link
-                              key={href}
-                              href={href}
-                              onClick={() => setOuvert(false)}
-                              className={clsx(
-                                "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                                actif
-                                  ? "bg-sable/60 text-lagune font-medium"
-                                  : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                              )}
-                            >
-                              <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="truncate">{libelle}</span>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </SectionPlieMobile>
-                  </div>
+                  <MenuCitoyenComplet pathname={pathname} setOuvert={setOuvert} />
                 </>
               )}
 
-              {/* Rôles professionnels : Police */}
+              {/* Police */}
               {estPolice && (
                 <>
-                  <SectionPlieMobile
-                    titre="Forces de l'ordre"
-                    couleur="text-terre"
-                    initialOuvert={true}
-                  >
+                  <SectionPlieMobile titre="Forces de l'ordre" couleur="text-terre" initialOuvert={true}>
                     <div className="pl-2">
                       {[
                         { href: "/police/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
@@ -956,21 +437,11 @@ export function BoutonMenuMobile() {
                       ].map(({ href, libelle, Icone }) => {
                         const actif = pathname === href || pathname.startsWith(href);
                         return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
-                              actif
-                                ? "bg-sable text-lagune font-semibold"
-                                : "text-ardoise hover:bg-sable/60",
-                            )}
-                          >
-                            <div className={clsx(
-                              "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
-                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
-                            )}>
+                          <Link key={href} href={href} onClick={() => setOuvert(false)}
+                            className={clsx("flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                              actif ? "bg-sable text-lagune font-semibold" : "text-ardoise hover:bg-sable/60")}>
+                            <div className={clsx("w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair")}>
                               <Icone className="w-3.5 h-3.5" />
                             </div>
                             <span>{libelle}</span>
@@ -979,153 +450,14 @@ export function BoutonMenuMobile() {
                       })}
                     </div>
                   </SectionPlieMobile>
-
-                  {/* Mon espace personnel — menu citoyen complet */}
-                  <div className="mt-3 pt-2 border-t border-ardoise-clair/10">
-                    <div className="pl-2 space-y-0.5 mb-2">
-                      <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
-                        Mon espace personnel
-                      </p>
-                      {[
-                        { href: "/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
-                        { href: "/profil",          libelle: "Mon profil",      Icone: IconeUtilisateur },
-                        { href: "/chatbot",         libelle: "Assistant",       Icone: IconeChat },
-                        { href: "/parametres",      libelle: "Paramètres",      Icone: IconeParametres },
-                      ].map(({ href, libelle, Icone }) => {
-                        const actif = pathname === href;
-                        return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
-                              actif
-                                ? "bg-sable/60 text-lagune font-medium"
-                                : "text-ardoise-clair/70 hover:text-ardoise hover:bg-sable/40",
-                            )}
-                          >
-                            <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span className="truncate">{libelle}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
-
-                    <SectionPlieMobile
-                      titre="Suivi &amp; Score"
-                      couleur="text-ardoise-clair/50"
-                      initialOuvert={pathname.startsWith("/score") || pathname === "/parrainage"}
-                    >
-                      <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                        {[
-                          { href: "/score", libelle: "Mon score actuel", Icone: IconeScore },
-                          { href: "/score/facteurs", libelle: "Facteurs d'impact", Icone: IconeStatistique },
-                          { href: "/score/amelioration", libelle: "Conseils d'amélioration", Icone: IconeAlerte },
-                          { href: "/parrainage", libelle: "Parrainage (bonus)", Icone: IconePartage },
-                        ].map(({ href, libelle, Icone }) => {
-                          const actif = pathname === href || pathname.startsWith(href);
-                          return (
-                            <Link
-                              key={href}
-                              href={href}
-                              onClick={() => setOuvert(false)}
-                              className={clsx(
-                                "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                                actif
-                                  ? "bg-sable/60 text-lagune font-medium"
-                                  : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                              )}
-                            >
-                              <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="truncate">{libelle}</span>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </SectionPlieMobile>
-
-                    <SectionPlieMobile
-                      titre="Attestations"
-                      couleur="text-ardoise-clair/50"
-                      initialOuvert={pathname.startsWith("/attestations-communautaires")}
-                    >
-                      <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                        {[
-                          { href: "/attestations-communautaires", libelle: "Tableau de bord", Icone: IconeAccueil },
-                          { href: "/attestations-communautaires/nouvelle", libelle: "Nouvelle attestation", Icone: IconeEnvoyer },
-                          { href: "/attestations-communautaires/recues", libelle: "Reçues", Icone: IconeFlecheBas },
-                          { href: "/attestations-communautaires/envoyees", libelle: "Envoyées", Icone: IconeEnvoyer },
-                          { href: "/attestations-communautaires/en-attente", libelle: "En attente", Icone: IconeAlerte },
-                        ].map(({ href, libelle, Icone }) => {
-                          const actif = pathname === href;
-                          return (
-                            <Link
-                              key={href}
-                              href={href}
-                              onClick={() => setOuvert(false)}
-                              className={clsx(
-                                "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                                actif
-                                  ? "bg-sable/60 text-lagune font-medium"
-                                  : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                              )}
-                            >
-                              <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="truncate">{libelle}</span>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </SectionPlieMobile>
-
-                    <SectionPlieMobile
-                      titre="Identité"
-                      couleur="text-ardoise-clair/50"
-                      initialOuvert={pathname.startsWith("/identite")}
-                    >
-                      <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                        {[
-                          { href: "/identite", libelle: "Tableau de bord identité", Icone: IconeAccueil },
-                          { href: "/identite/verification-visuelle", libelle: "Reconnaissance faciale", Icone: IconeVisage },
-                          { href: "/identite/verification-cni", libelle: "Scan CNI", Icone: IconeScan },
-                          { href: "/identite/email", libelle: "Vérification email", Icone: IconeEmail },
-                          { href: "/identite/2fa", libelle: "Double authentification", Icone: IconeCadenas },
-                          { href: "/identite/mot-de-passe", libelle: "Mot de passe", Icone: IconeCle },
-                          { href: "/identite/role", libelle: "Rôle &amp; permissions", Icone: IconeBouclier },
-                        ].map(({ href, libelle, Icone }) => {
-                          const actif = pathname === href || pathname.startsWith(href);
-                          return (
-                            <Link
-                              key={href}
-                              href={href}
-                              onClick={() => setOuvert(false)}
-                              className={clsx(
-                                "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                                actif
-                                  ? "bg-sable/60 text-lagune font-medium"
-                                  : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                              )}
-                            >
-                              <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="truncate">{libelle}</span>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </SectionPlieMobile>
-                  </div>
+                  <MenuCitoyenComplet pathname={pathname} setOuvert={setOuvert} />
                 </>
               )}
 
-              {/* Rôles professionnels : ONG */}
+              {/* ONG */}
               {estOng && (
                 <>
-                  <SectionPlieMobile
-                    titre="ONG Partenaire"
-                    couleur="text-ocre"
-                    initialOuvert={true}
-                  >
+                  <SectionPlieMobile titre="ONG Partenaire" couleur="text-ocre" initialOuvert={true}>
                     <div className="pl-2">
                       {[
                         { href: "/ong/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
@@ -1136,21 +468,11 @@ export function BoutonMenuMobile() {
                       ].map(({ href, libelle, Icone }) => {
                         const actif = pathname === href || pathname.startsWith(href);
                         return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
-                              actif
-                                ? "bg-sable text-lagune font-semibold"
-                                : "text-ardoise hover:bg-sable/60",
-                            )}
-                          >
-                            <div className={clsx(
-                              "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
-                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
-                            )}>
+                          <Link key={href} href={href} onClick={() => setOuvert(false)}
+                            className={clsx("flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                              actif ? "bg-sable text-lagune font-semibold" : "text-ardoise hover:bg-sable/60")}>
+                            <div className={clsx("w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair")}>
                               <Icone className="w-3.5 h-3.5" />
                             </div>
                             <span>{libelle}</span>
@@ -1159,172 +481,25 @@ export function BoutonMenuMobile() {
                       })}
                     </div>
                   </SectionPlieMobile>
-
-                  {/* Mon espace personnel — menu citoyen complet */}
-                  <div className="mt-3 pt-2 border-t border-ardoise-clair/10">
-                    <div className="pl-2 space-y-0.5 mb-2">
-                      <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
-                        Mon espace personnel
-                      </p>
-                      {[
-                        { href: "/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
-                        { href: "/profil",          libelle: "Mon profil",      Icone: IconeUtilisateur },
-                        { href: "/chatbot",         libelle: "Assistant",       Icone: IconeChat },
-                        { href: "/parametres",      libelle: "Paramètres",      Icone: IconeParametres },
-                      ].map(({ href, libelle, Icone }) => {
-                        const actif = pathname === href;
-                        return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
-                              actif
-                                ? "bg-sable/60 text-lagune font-medium"
-                                : "text-ardoise-clair/70 hover:text-ardoise hover:bg-sable/40",
-                            )}
-                          >
-                            <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span className="truncate">{libelle}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
-
-                    <SectionPlieMobile
-                      titre="Suivi &amp; Score"
-                      couleur="text-ardoise-clair/50"
-                      initialOuvert={pathname.startsWith("/score") || pathname === "/parrainage"}
-                    >
-                      <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                        {[
-                          { href: "/score", libelle: "Mon score actuel", Icone: IconeScore },
-                          { href: "/score/facteurs", libelle: "Facteurs d'impact", Icone: IconeStatistique },
-                          { href: "/score/amelioration", libelle: "Conseils d'amélioration", Icone: IconeAlerte },
-                          { href: "/parrainage", libelle: "Parrainage (bonus)", Icone: IconePartage },
-                        ].map(({ href, libelle, Icone }) => {
-                          const actif = pathname === href || pathname.startsWith(href);
-                          return (
-                            <Link
-                              key={href}
-                              href={href}
-                              onClick={() => setOuvert(false)}
-                              className={clsx(
-                                "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                                actif
-                                  ? "bg-sable/60 text-lagune font-medium"
-                                  : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                              )}
-                            >
-                              <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="truncate">{libelle}</span>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </SectionPlieMobile>
-
-                    <SectionPlieMobile
-                      titre="Attestations"
-                      couleur="text-ardoise-clair/50"
-                      initialOuvert={pathname.startsWith("/attestations-communautaires")}
-                    >
-                      <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                        {[
-                          { href: "/attestations-communautaires", libelle: "Tableau de bord", Icone: IconeAccueil },
-                          { href: "/attestations-communautaires/nouvelle", libelle: "Nouvelle attestation", Icone: IconeEnvoyer },
-                          { href: "/attestations-communautaires/recues", libelle: "Reçues", Icone: IconeFlecheBas },
-                          { href: "/attestations-communautaires/envoyees", libelle: "Envoyées", Icone: IconeEnvoyer },
-                          { href: "/attestations-communautaires/en-attente", libelle: "En attente", Icone: IconeAlerte },
-                        ].map(({ href, libelle, Icone }) => {
-                          const actif = pathname === href;
-                          return (
-                            <Link
-                              key={href}
-                              href={href}
-                              onClick={() => setOuvert(false)}
-                              className={clsx(
-                                "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                                actif
-                                  ? "bg-sable/60 text-lagune font-medium"
-                                  : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                              )}
-                            >
-                              <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="truncate">{libelle}</span>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </SectionPlieMobile>
-
-                    <SectionPlieMobile
-                      titre="Identité"
-                      couleur="text-ardoise-clair/50"
-                      initialOuvert={pathname.startsWith("/identite")}
-                    >
-                      <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                        {[
-                          { href: "/identite", libelle: "Tableau de bord identité", Icone: IconeAccueil },
-                          { href: "/identite/verification-visuelle", libelle: "Reconnaissance faciale", Icone: IconeVisage },
-                          { href: "/identite/verification-cni", libelle: "Scan CNI", Icone: IconeScan },
-                          { href: "/identite/email", libelle: "Vérification email", Icone: IconeEmail },
-                          { href: "/identite/2fa", libelle: "Double authentification", Icone: IconeCadenas },
-                          { href: "/identite/mot-de-passe", libelle: "Mot de passe", Icone: IconeCle },
-                          { href: "/identite/role", libelle: "Rôle &amp; permissions", Icone: IconeBouclier },
-                        ].map(({ href, libelle, Icone }) => {
-                          const actif = pathname === href || pathname.startsWith(href);
-                          return (
-                            <Link
-                              key={href}
-                              href={href}
-                              onClick={() => setOuvert(false)}
-                              className={clsx(
-                                "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                                actif
-                                  ? "bg-sable/60 text-lagune font-medium"
-                                  : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                              )}
-                            >
-                              <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="truncate">{libelle}</span>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </SectionPlieMobile>
-                  </div>
+                  <MenuCitoyenComplet pathname={pathname} setOuvert={setOuvert} />
                 </>
               )}
 
-              {/* Citoyen — utilisateur normal */}
+              {/* ============================================================ */}
+              {/* CITOYEN — utilisateur normal */}
+              {/* ============================================================ */}
               {!estSuperAdminRole && !estAdminRole && !estProfessionnel && (
                 <div>
-                  <SectionPlieMobile
-                    titre="Navigation"
-                    couleur="text-lagune"
-                    initialOuvert={true}
-                  >
+                  <SectionPlieMobile titre="Navigation" couleur="text-lagune" initialOuvert={true}>
                     <div className="pl-2">
                       {LIENS_UTILISATEUR.map(({ href, libelle, Icone }) => {
                         const actif = pathname === href;
                         return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
-                              actif
-                                ? "bg-sable text-lagune font-semibold"
-                                : "text-ardoise hover:bg-sable/60",
-                            )}
-                          >
-                            <div className={clsx(
-                              "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
-                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
-                            )}>
+                          <Link key={href} href={href} onClick={() => setOuvert(false)}
+                            className={clsx("flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                              actif ? "bg-sable text-lagune font-semibold" : "text-ardoise hover:bg-sable/60")}>
+                            <div className={clsx("w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair")}>
                               <Icone className="w-3.5 h-3.5" />
                             </div>
                             <span>{libelle}</span>
@@ -1334,12 +509,8 @@ export function BoutonMenuMobile() {
                     </div>
                   </SectionPlieMobile>
 
-                  {/* Section Score */}
-                  <SectionPlieMobile
-                    titre="Suivi &amp; Score"
-                    couleur="text-ardoise-clair/50"
-                    initialOuvert={pathname.startsWith("/score") || pathname === "/parrainage"}
-                  >
+                  <SectionPlieMobile titre="Suivi & Score" couleur="text-ardoise-clair/50"
+                    initialOuvert={pathname.startsWith("/score") || pathname === "/parrainage"}>
                     <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
                       {[
                         { href: "/score", libelle: "Mon score actuel", Icone: IconeScore },
@@ -1349,17 +520,9 @@ export function BoutonMenuMobile() {
                       ].map(({ href, libelle, Icone }) => {
                         const actif = pathname === href || pathname.startsWith(href);
                         return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                              actif
-                                ? "bg-sable/60 text-lagune font-medium"
-                                : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                            )}
-                          >
+                          <Link key={href} href={href} onClick={() => setOuvert(false)}
+                            className={clsx("flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
+                              actif ? "bg-sable/60 text-lagune font-medium" : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise")}>
                             <Icone className="w-3.5 h-3.5 flex-shrink-0" />
                             <span className="truncate">{libelle}</span>
                           </Link>
@@ -1368,12 +531,8 @@ export function BoutonMenuMobile() {
                     </div>
                   </SectionPlieMobile>
 
-                  {/* Section Attestations */}
-                  <SectionPlieMobile
-                    titre="Attestations"
-                    couleur="text-ardoise-clair/50"
-                    initialOuvert={pathname.startsWith("/attestations-communautaires")}
-                  >
+                  <SectionPlieMobile titre="Attestations" couleur="text-ardoise-clair/50"
+                    initialOuvert={pathname.startsWith("/attestations-communautaires")}>
                     <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
                       {[
                         { href: "/attestations-communautaires", libelle: "Tableau de bord", Icone: IconeAccueil },
@@ -1384,17 +543,9 @@ export function BoutonMenuMobile() {
                       ].map(({ href, libelle, Icone }) => {
                         const actif = pathname === href;
                         return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                              actif
-                                ? "bg-sable/60 text-lagune font-medium"
-                                : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                            )}
-                          >
+                          <Link key={href} href={href} onClick={() => setOuvert(false)}
+                            className={clsx("flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
+                              actif ? "bg-sable/60 text-lagune font-medium" : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise")}>
                             <Icone className="w-3.5 h-3.5 flex-shrink-0" />
                             <span className="truncate">{libelle}</span>
                           </Link>
@@ -1403,12 +554,8 @@ export function BoutonMenuMobile() {
                     </div>
                   </SectionPlieMobile>
 
-                  {/* Section Identité */}
-                  <SectionPlieMobile
-                    titre="Identité"
-                    couleur="text-ardoise-clair/50"
-                    initialOuvert={pathname.startsWith("/identite")}
-                  >
+                  <SectionPlieMobile titre="Identité" couleur="text-ardoise-clair/50"
+                    initialOuvert={pathname.startsWith("/identite")}>
                     <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
                       {[
                         { href: "/identite", libelle: "Tableau de bord identité", Icone: IconeAccueil },
@@ -1417,21 +564,13 @@ export function BoutonMenuMobile() {
                         { href: "/identite/email", libelle: "Vérification email", Icone: IconeEmail },
                         { href: "/identite/2fa", libelle: "Double authentification", Icone: IconeCadenas },
                         { href: "/identite/mot-de-passe", libelle: "Mot de passe", Icone: IconeCle },
-                        { href: "/identite/role", libelle: "Rôle &amp; permissions", Icone: IconeBouclier },
+                        { href: "/identite/role", libelle: "Rôle & permissions", Icone: IconeBouclier },
                       ].map(({ href, libelle, Icone }) => {
                         const actif = pathname === href || pathname.startsWith(href);
                         return (
-                          <Link
-                            key={href}
-                            href={href}
-                            onClick={() => setOuvert(false)}
-                            className={clsx(
-                              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                              actif
-                                ? "bg-sable/60 text-lagune font-medium"
-                                : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                            )}
-                          >
+                          <Link key={href} href={href} onClick={() => setOuvert(false)}
+                            className={clsx("flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
+                              actif ? "bg-sable/60 text-lagune font-medium" : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise")}>
                             <Icone className="w-3.5 h-3.5 flex-shrink-0" />
                             <span className="truncate">{libelle}</span>
                           </Link>
@@ -1446,5 +585,112 @@ export function BoutonMenuMobile() {
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Sous-composant : menu citoyen complet (réutilisé par les rôles professionnels)
+ */
+function MenuCitoyenComplet({
+  pathname,
+  setOuvert,
+}: {
+  pathname: string;
+  setOuvert: (v: boolean) => void;
+}) {
+  return (
+    <div className="mt-3 pt-2 border-t border-ardoise-clair/10">
+      <div className="pl-2 space-y-0.5 mb-2">
+        <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
+          Mon espace personnel
+        </p>
+        {[
+          { href: "/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
+          { href: "/profil", libelle: "Mon profil", Icone: IconeUtilisateur },
+          { href: "/chatbot", libelle: "Assistant", Icone: IconeChat },
+          { href: "/parametres", libelle: "Paramètres", Icone: IconeParametres },
+        ].map(({ href, libelle, Icone }) => {
+          const actif = pathname === href;
+          return (
+            <Link key={href} href={href} onClick={() => setOuvert(false)}
+              className={clsx("flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
+                actif ? "bg-sable/60 text-lagune font-medium" : "text-ardoise-clair/70 hover:text-ardoise hover:bg-sable/40")}>
+              <Icone className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="truncate">{libelle}</span>
+            </Link>
+          );
+        })}
+      </div>
+
+      <SectionPlieMobile titre="Suivi & Score" couleur="text-ardoise-clair/50"
+        initialOuvert={pathname.startsWith("/score") || pathname === "/parrainage"}>
+        <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
+          {[
+            { href: "/score", libelle: "Mon score actuel", Icone: IconeScore },
+            { href: "/score/facteurs", libelle: "Facteurs d'impact", Icone: IconeStatistique },
+            { href: "/score/amelioration", libelle: "Conseils d'amélioration", Icone: IconeAlerte },
+            { href: "/parrainage", libelle: "Parrainage (bonus)", Icone: IconePartage },
+          ].map(({ href, libelle, Icone }) => {
+            const actif = pathname === href || pathname.startsWith(href);
+            return (
+              <Link key={href} href={href} onClick={() => setOuvert(false)}
+                className={clsx("flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
+                  actif ? "bg-sable/60 text-lagune font-medium" : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise")}>
+                <Icone className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate">{libelle}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </SectionPlieMobile>
+
+      <SectionPlieMobile titre="Attestations" couleur="text-ardoise-clair/50"
+        initialOuvert={pathname.startsWith("/attestations-communautaires")}>
+        <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
+          {[
+            { href: "/attestations-communautaires", libelle: "Tableau de bord", Icone: IconeAccueil },
+            { href: "/attestations-communautaires/nouvelle", libelle: "Nouvelle attestation", Icone: IconeEnvoyer },
+            { href: "/attestations-communautaires/recues", libelle: "Reçues", Icone: IconeFlecheBas },
+            { href: "/attestations-communautaires/envoyees", libelle: "Envoyées", Icone: IconeEnvoyer },
+            { href: "/attestations-communautaires/en-attente", libelle: "En attente", Icone: IconeAlerte },
+          ].map(({ href, libelle, Icone }) => {
+            const actif = pathname === href;
+            return (
+              <Link key={href} href={href} onClick={() => setOuvert(false)}
+                className={clsx("flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
+                  actif ? "bg-sable/60 text-lagune font-medium" : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise")}>
+                <Icone className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate">{libelle}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </SectionPlieMobile>
+
+      <SectionPlieMobile titre="Identité" couleur="text-ardoise-clair/50"
+        initialOuvert={pathname.startsWith("/identite")}>
+        <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
+          {[
+            { href: "/identite", libelle: "Tableau de bord identité", Icone: IconeAccueil },
+            { href: "/identite/verification-visuelle", libelle: "Reconnaissance faciale", Icone: IconeVisage },
+            { href: "/identite/verification-cni", libelle: "Scan CNI", Icone: IconeScan },
+            { href: "/identite/email", libelle: "Vérification email", Icone: IconeEmail },
+            { href: "/identite/2fa", libelle: "Double authentification", Icone: IconeCadenas },
+            { href: "/identite/mot-de-passe", libelle: "Mot de passe", Icone: IconeCle },
+            { href: "/identite/role", libelle: "Rôle & permissions", Icone: IconeBouclier },
+          ].map(({ href, libelle, Icone }) => {
+            const actif = pathname === href || pathname.startsWith(href);
+            return (
+              <Link key={href} href={href} onClick={() => setOuvert(false)}
+                className={clsx("flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
+                  actif ? "bg-sable/60 text-lagune font-medium" : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise")}>
+                <Icone className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate">{libelle}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </SectionPlieMobile>
+    </div>
   );
 }
