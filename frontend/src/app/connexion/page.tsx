@@ -1,12 +1,12 @@
 "use client";
-
 /**
  * Page de connexion.
  * Appelle l'API backend /api/v1/auth/connexion et stocke les jetons.
+ * Redirige vers l'interface appropriée selon le rôle.
  */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import { Bouton } from "@/composants/commun/Bouton";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
@@ -17,7 +17,7 @@ import { ErreurAPI } from "@/services/client_api";
 
 export default function PageConnexion() {
   const router = useRouter();
-  const { seConnecter } = useAuthentification();
+  const { seConnecter, utilisateur } = useAuthentification();
 
   const [email, setEmail] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
@@ -27,6 +27,20 @@ export default function PageConnexion() {
   const [chargement, setChargement] = useState(false);
   const [info2fa, setInfo2fa] = useState<string | null>(null);
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
+
+  // Redirection automatique après connexion réussie
+  useEffect(() => {
+    if (utilisateur) {
+      // Déjà connecté, rediriger selon le rôle
+      if (utilisateur.role === "super_administrateur") {
+        router.push("/super-admin/tableau-de-bord");
+      } else if (utilisateur.role === "administrateur") {
+        router.push("/admin/tableau-de-bord");
+      } else {
+        router.push("/tableau-de-bord");
+      }
+    }
+  }, [utilisateur, router]);
 
   async function gererSoumission(evt: React.FormEvent) {
     evt.preventDefault();
@@ -39,16 +53,17 @@ export default function PageConnexion() {
         mot_de_passe: motDePasse,
         ...(afficher2fa && code2fa ? { code_2fa: code2fa } : {}),
       });
-      router.push("/tableau-de-bord");
+      
+      // La redirection se fera via le useEffect ci-dessus
+      // quand l'utilisateur sera mis à jour dans le contexte
     } catch (e) {
       if (e instanceof ErreurAPI) {
         if (e.code_erreur === "AUTH_004") {
           // 2FA requise — afficher le champ 2FA sans effacer les champs déjà remplis
           setAfficher2fa(true);
           setInfo2fa("🔐 Un code supplémentaire est requis. Saisis le code à 6 chiffres de ton application d'authentification.");
-          // Remettre le focus sur le code 2FA
           setChargement(false);
-          return; // Ne pas effacer les champs
+          return;
         } else {
           setErreur(e.message_utilisateur);
         }
