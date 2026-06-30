@@ -2,14 +2,19 @@
 """Routes API pour les invitations."""
 from datetime import datetime
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.src.noyau import journal
 from src.base_donnees.session import obtenir_session
 from src.modeles import Utilisateur, Domaine, Departement
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.invitations.dependances import obtenir_invitation_ou_404
+
+from src.services.email import envoyer_email, template_invitation
+from src.modeles import Domaine, Departement
+
 from src.modules.invitations.schemas import (
     InvitationCreate,
     InvitationResponse,
@@ -31,7 +36,7 @@ routeur_invitations = APIRouter(prefix="/api/v1/invitations", tags=["Invitations
 
 
 # ============ CRUD INVITATIONS ============
-
+# Modifie la fonction creer :
 @routeur_invitations.post(
     "",
     response_model=InvitationResponse,
@@ -43,17 +48,55 @@ async def creer(
     donnees: InvitationCreate,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
+    request: Request = None,
 ):
     """Crée une nouvelle invitation par email."""
     try:
         invitation = await creer_invitation(session, donnees, utilisateur_courant.id)
+        
+        # Envoyer l'email d'invitation
+        try:
+            # Récupérer les infos pour le template
+            domaine_nom = None
+            departement_nom = None
+            
+            if invitation.domaine_id:
+                domaine = await session.get(Domaine, invitation.domaine_id)
+                if domaine:
+                    domaine_nom = domaine.nom
+            
+            if invitation.departement_id:
+                departement = await session.get(Departement, invitation.departement_id)
+                if departement:
+                    departement_nom = departement.nom
+            
+            # Construire le lien d'invitation
+            base_url = request.base_url if request else "http://localhost:3000/"
+            lien_invitation = f"{base_url}accepter-invitation/{invitation.token}"
+            
+            # Envoyer l'email
+            sujet, contenu_html = template_invitation(
+                lien_invitation=lien_invitation,
+                role=invitation.role,
+                domaine_nom=domaine_nom,
+                departement_nom=departement_nom,
+            )
+            
+            await envoyer_email(
+                destinataire=invitation.email,
+                sujet=sujet,
+                contenu_html=contenu_html,
+            )
+        except Exception as e:
+            # L'invitation est créée même si l'email échoue
+            journal.warning(f"⚠️ Email non envoyé : {e}")
+        
         return invitation
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
-
 
 @routeur_invitations.get(
     "",
