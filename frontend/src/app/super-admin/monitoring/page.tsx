@@ -26,9 +26,7 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Alerte } from "@/composants/commun/Alerte";
 import { Modal } from "@/composants/commun/Modal";
 import { useNotifications } from "@/contextes/notifications";
-import {
-  IconeUtilisateur, IconeBouclier, IconeAlerte, IconeStatistique,
-} from "@/composants/commun/Icones";
+import { IconeAlerte } from "@/composants/commun/Icones";
 import { clientAPI, ErreurAPI } from "@/services/client_api";
 
 // ============================================================================
@@ -165,7 +163,7 @@ function Contenu() {
       );
       notifier(`✅ ${resultat.message}`, "succes");
       setDeconnexionModal(null);
-      charger(); // Recharger immédiatement
+      charger();
     } catch (e) {
       notifier(
         e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la déconnexion",
@@ -178,11 +176,14 @@ function Contenu() {
 
   if (chargement) {
     return (
-      <div className="space-y-6 apparition">
-        <EnTetePage />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="space-y-4">
+        <header>
+          <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Super administration</p>
+          <h1 className="mt-1 text-2xl">Monitoring en temps réel</h1>
+        </header>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-24 bg-sable-clair/50 rounded-xl animate-pulse" />
+            <div key={i} className="h-20 bg-sable-clair/50 rounded-xl animate-pulse" />
           ))}
         </div>
       </div>
@@ -190,22 +191,25 @@ function Contenu() {
   }
 
   return (
-    <div className="space-y-6 apparition">
-      {/* Fil d'Ariane */}
-      <nav className="flex items-center gap-2 text-sm text-ardoise-clair">
-        <Link href="/super-admin" className="hover:text-lagune">Dashboard</Link>
-        <span className="text-ardoise-clair/30">/</span>
-        <span className="text-ardoise font-semibold">Monitoring temps réel</span>
-      </nav>
-
-      <EnTetePage />
+    <div className="space-y-4">
+      {/* En-tête compact */}
+      <header>
+        <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Super administration</p>
+        <h1 className="mt-1 text-2xl">Monitoring en temps réel</h1>
+        <p className="text-ardoise-clair/70 text-sm mt-1 max-w-3xl">
+          Supervisez tous les utilisateurs connectés en temps réel.
+          <span className="block mt-0.5 text-xs text-ocre font-semibold">
+            🔒 Toutes les actions sont tracées dans le journal d'audit.
+          </span>
+        </p>
+      </header>
 
       {erreur && <Alerte variante="erreur" titre="Erreur">{erreur}</Alerte>}
 
       {donnees && (
         <>
           {/* KPIs Temps réel */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <CarteKPI libelle="Utilisateurs connectés" valeur={donnees.resume.utilisateurs_connectes} icone="🟢" couleur="succes" />
             <CarteKPI libelle="Sessions actives" valeur={donnees.resume.sessions_actives} icone="🔵" couleur="lagune" />
             <CarteKPI libelle="Admins connectés" valeur={donnees.resume.administrateurs_connectes} icone="🛡️" couleur="ocre" />
@@ -214,19 +218,18 @@ function Contenu() {
 
           {/* Alertes d'anomalies */}
           {(donnees.resume.utilisateurs_avec_sessions_multiples > 0 || donnees.resume.alerts_recents > 0) && (
-            <div className="bg-terre/10 border border-terre/30 rounded-xl p-4">
-              <div className="flex items-center gap-3">
-                <IconeAlerte className="w-5 h-5 text-terre" />
+            <div className="bg-terre/10 border border-terre/30 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <IconeAlerte className="w-4 h-4 text-terre flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-semibold text-terre">⚠️ Actions recommandées</p>
-                  <p className="text-sm text-terre/80 mt-1">
+                  <p className="font-semibold text-terre text-sm">⚠️ Actions recommandées</p>
+                  <p className="text-xs text-terre/80 mt-0.5">
                     {donnees.resume.utilisateurs_avec_sessions_multiples > 0 && (
-                      <>{donnees.resume.utilisateurs_avec_sessions_multiples} utilisateur(s) ont plus de 5 sessions simultanées (suspicion de partage de compte). </>
+                      <>{donnees.resume.utilisateurs_avec_sessions_multiples} utilisateur(s) avec +5 sessions simultanées. </>
                     )}
                     {donnees.resume.alerts_recents > 0 && (
                       <>{donnees.resume.alerts_recents} alerte(s) de sécurité non résolue(s). </>
                     )}
-                    Utilisez les actions ci-dessous pour investiguer.
                   </p>
                 </div>
               </div>
@@ -234,8 +237,8 @@ function Contenu() {
           )}
 
           {/* Filtres */}
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-xs uppercase text-ardoise-clair font-semibold tracking-wider">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] uppercase text-ardoise-clair font-semibold tracking-wider">
               Filtrer par rôle :
             </span>
             {["", "citoyen", "administrateur", "super_administrateur", "agent", "medecin", "police"].map(
@@ -244,7 +247,7 @@ function Contenu() {
                   key={role}
                   type="button"
                   onClick={() => setFiltreRole(role)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
                     filtreRole === role
                       ? "bg-lagune text-white"
                       : "bg-white border border-ardoise-clair/20 text-ardoise hover:bg-sable"
@@ -256,18 +259,18 @@ function Contenu() {
             )}
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-6">
+          <div className="grid lg:grid-cols-2 gap-3">
             {/* Utilisateurs connectés avec contrôle */}
             <Carte
               titre="Utilisateurs connectés"
-              description={`${utilisateursFiltres.length} en ligne — cliquez sur "Déconnecter" pour forcer la déconnexion`}
+              description={`${utilisateursFiltres.length} en ligne`}
             >
               {utilisateursFiltres.length === 0 ? (
                 <p className="text-sm text-ardoise-clair italic py-4 text-center">
                   Aucun utilisateur connecté
                 </p>
               ) : (
-                <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                <div className="space-y-1.5 max-h-[500px] overflow-y-auto">
                   {utilisateursFiltres.slice(0, 30).map((u) => {
                     const badgeVariant = u.role === "super_administrateur" ? "terre"
                       : u.role === "administrateur" ? "ocre"
@@ -275,20 +278,20 @@ function Contenu() {
                     return (
                       <div
                         key={u.session_id}
-                        className={`p-3 rounded-lg transition-colors ${
+                        className={`p-2.5 rounded-lg transition-colors ${
                           u.nb_sessions_actives > 5 ? "bg-terre/5 border border-terre/20" : "hover:bg-sable"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
                               u.est_active ? "bg-green-500 animate-pulse" : "bg-ardoise-clair/30"
                             }`} />
                             <div className="min-w-0">
                               <p className="text-sm font-medium text-ardoise truncate">
                                 {[u.prenom, u.nom].filter(Boolean).join(" ") || u.email}
                               </p>
-                              <p className="text-[11px] text-ardoise-clair truncate">{u.email}</p>
+                              <p className="text-[10px] text-ardoise-clair truncate">{u.email}</p>
                             </div>
                             <Badge variante={badgeVariant as any} taille="petit">{u.role}</Badge>
                             {u.nb_sessions_actives > 1 && (
@@ -303,12 +306,12 @@ function Contenu() {
                             Déconnecter
                           </Bouton>
                         </div>
-                        <div className="flex flex-wrap gap-3 mt-1.5 text-[10px] text-ardoise-clair/70 ml-6">
+                        <div className="flex flex-wrap gap-2 mt-1 text-[10px] text-ardoise-clair/70 ml-5">
                           <span className="font-mono">{u.adresse_ip}</span>
                           {u.ville_estimee && <span>📍 {u.ville_estimee}</span>}
                           {u.agent_utilisateur && (
                             <span className="truncate max-w-[200px]">
-                              💻 {u.agent_utilisateur.substring(0, 60)}
+                              💻 {u.agent_utilisateur.substring(0, 50)}
                             </span>
                           )}
                         </div>
@@ -316,7 +319,7 @@ function Contenu() {
                     );
                   })}
                   {utilisateursFiltres.length > 30 && (
-                    <p className="text-xs text-ardoise-clair text-center pt-2">
+                    <p className="text-[10px] text-ardoise-clair text-center pt-1">
                       +{utilisateursFiltres.length - 30} autre(s) — utilisez le filtre pour réduire
                     </p>
                   )}
@@ -331,21 +334,21 @@ function Contenu() {
                   Aucune activité récente
                 </p>
               ) : (
-                <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                <div className="space-y-1.5 max-h-[500px] overflow-y-auto">
                   {donnees.activites_recentes.map((a) => {
                     const type = a.type_evenement.toLowerCase();
                     const variant = type.includes("echou") || type.includes("err") ? "terre"
                       : type.includes("connexion") || type.includes("creation") ? "succes"
                       : "lagune";
                     return (
-                      <div key={a.id} className="p-2.5 rounded-lg hover:bg-sable transition-colors border-l-4 border-lagune/30">
+                      <div key={a.id} className="p-2 rounded-lg hover:bg-sable transition-colors border-l-4 border-lagune/30">
                         <div className="flex items-start gap-2">
                           <Badge variante={variant as any} taille="petit" className="flex-shrink-0 mt-0.5">
                             {a.type_evenement.replace(/_/g, " ")}
                           </Badge>
                           <div className="min-w-0 flex-1">
                             <p className="text-xs text-ardoise leading-relaxed">{a.description}</p>
-                            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-ardoise-clair mt-1">
+                            <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-ardoise-clair mt-0.5">
                               {a.email && <span>👤 {a.email}</span>}
                               {a.role && <Badge variante="neutre" taille="petit">{a.role}</Badge>}
                               {a.adresse_ip && <span className="font-mono">🌐 {a.adresse_ip}</span>}
@@ -366,31 +369,31 @@ function Contenu() {
               titre="Alertes de sécurité"
               description={`${donnees.alertes.length} incident(s) détecté(s)`}
             >
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {donnees.alertes.map((a) => {
                   const niveauColor = a.niveau === "critique" ? "terre"
                     : a.niveau === "elevee" ? "ocre"
                     : "lagune";
                   return (
-                    <div key={a.id} className={`border-l-4 border-${niveauColor} bg-sable-clair rounded-r-lg p-4`}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Badge variante={niveauColor as any}>{a.type_incident}</Badge>
-                        <span className={`text-xs font-bold ${
+                    <div key={a.id} className={`border-l-4 border-${niveauColor} bg-sable-clair rounded-r-lg p-3`}>
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <Badge variante={niveauColor as any} taille="petit">{a.type_incident}</Badge>
+                        <span className={`text-[10px] font-bold ${
                           a.niveau === "critique" ? "text-terre" : a.niveau === "elevee" ? "text-ocre" : "text-lagune"
                         }`}>
                           {a.niveau.toUpperCase()}
                         </span>
-                        <span className="text-xs text-ardoise-clair ml-auto">
+                        <span className="text-[10px] text-ardoise-clair ml-auto">
                           Risque: {a.score_risque}/100
                         </span>
                       </div>
                       <p className="text-sm text-ardoise">{a.description}</p>
-                      <div className="flex flex-wrap gap-3 mt-2 text-xs text-ardoise-clair">
+                      <div className="flex flex-wrap gap-2 mt-1.5 text-[10px] text-ardoise-clair">
                         {a.email && <span>👤 {a.email}</span>}
                         {a.adresse_ip && <span className="font-mono">🌐 {a.adresse_ip}</span>}
                       </div>
-                      <div className="flex gap-2 mt-3">
-                        {a.utilisateur_id && (
+                      {a.utilisateur_id && (
+                        <div className="mt-2">
                           <Bouton
                             variante="danger"
                             taille="petit"
@@ -410,8 +413,8 @@ function Contenu() {
                           >
                             🔒 Déconnecter cet utilisateur
                           </Bouton>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -420,7 +423,7 @@ function Contenu() {
           )}
 
           {/* Horodatage */}
-          <p className="text-xs text-ardoise-clair/50 text-right">
+          <p className="text-[10px] text-ardoise-clair/50 text-right">
             Dernière mise à jour : {new Date(donnees.resume.timestamp).toLocaleTimeString("fr-FR")}
             — Rafraîchissement automatique toutes les 10 secondes
           </p>
@@ -435,35 +438,35 @@ function Contenu() {
           titre="Forcer la déconnexion"
           description={`Déconnecter ${deconnexionModal.utilisateur.email} de toutes ses sessions`}
         >
-          <div className="space-y-4">
-            <div className="bg-terre/10 border-l-4 border-terre p-3 rounded">
+          <div className="space-y-3">
+            <div className="bg-terre/10 border-l-4 border-terre p-2.5 rounded">
               <p className="text-sm text-terre font-semibold">Action sensible</p>
-              <p className="text-xs text-terre/80 mt-1">
+              <p className="text-xs text-terre/80 mt-0.5">
                 L'utilisateur sera immédiatement déconnecté de tous ses appareils.
                 Cette action est tracée dans le journal d'audit.
               </p>
             </div>
-            <div className="space-y-2 bg-sable rounded-lg p-3">
-              <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="space-y-1.5 bg-sable rounded-lg p-2.5">
+              <div className="grid grid-cols-2 gap-1.5 text-xs">
                 <span className="text-ardoise-clair">Utilisateur:</span>
                 <span className="text-ardoise font-medium">
                   {[deconnexionModal.utilisateur.prenom, deconnexionModal.utilisateur.nom].filter(Boolean).join(" ") || deconnexionModal.utilisateur.email}
                 </span>
                 <span className="text-ardoise-clair">Email:</span>
-                <span className="text-ardoise">{deconnexionModal.utilisateur.email}</span>
+                <span className="text-ardoise truncate">{deconnexionModal.utilisateur.email}</span>
                 <span className="text-ardoise-clair">Rôle:</span>
                 <span className="text-ardoise">{deconnexionModal.utilisateur.role}</span>
                 <span className="text-ardoise-clair">Sessions actives:</span>
                 <span className="text-ardoise">{deconnexionModal.utilisateur.nb_sessions_actives}</span>
                 <span className="text-ardoise-clair">IP:</span>
-                <span className="text-ardoise font-mono text-xs">{deconnexionModal.utilisateur.adresse_ip}</span>
+                <span className="text-ardoise font-mono text-[10px]">{deconnexionModal.utilisateur.adresse_ip}</span>
               </div>
             </div>
-            <div className="flex justify-end gap-3 pt-4 border-t border-ardoise-clair/10">
+            <div className="flex justify-end gap-2 pt-2 border-t border-ardoise-clair/10">
               <Bouton variante="ghost" onClick={() => setDeconnexionModal(null)}>
                 Annuler
               </Bouton>
-                            <Bouton
+              <Bouton
                 variante="danger"
                 chargement={actionChargement}
                 onClick={() => forcerDeconnexion(
@@ -479,15 +482,12 @@ function Contenu() {
       )}
 
       {/* Navigation */}
-      <div className="flex gap-3 flex-wrap pt-4 border-t border-ardoise-clair/10">
-        <Link href="/super-admin">
+      <div className="flex gap-2 flex-wrap pt-3 border-t border-ardoise-clair/10">
+        <Link href="/super-admin/tableau-de-bord">
           <Bouton variante="ghost" taille="petit">← Dashboard</Bouton>
         </Link>
         <Link href="/super-admin/audit">
           <Bouton variante="secondaire" taille="petit">📋 Journal d'audit</Bouton>
-        </Link>
-        <Link href="/admin/alertes">
-          <Bouton variante="ghost" taille="petit"><IconeAlerte className="w-3.5 h-3.5 mr-1" /> Alertes</Bouton>
         </Link>
       </div>
     </div>
@@ -497,23 +497,6 @@ function Contenu() {
 // ============================================================================
 // SOUS-COMPOSANTS
 // ============================================================================
-
-function EnTetePage() {
-  return (
-    <div className="section-header">
-      <p className="text-ocre">Super administration</p>
-      <h1>Monitoring en temps réel</h1>
-      <p className="text-ardoise-clair/70 text-sm mt-1">
-        Supervisez et contrôlez tous les utilisateurs connectés en temps réel.
-        Actions disponibles : forcer la déconnexion, filtrer par rôle,
-        consulter les activités et alertes de sécurité.
-        <span className="block mt-1 text-xs text-ocre font-semibold">
-          🔒 Toutes les actions sont tracées dans le journal d'audit.
-        </span>
-      </p>
-    </div>
-  );
-}
 
 function CarteKPI({ libelle, valeur, icone, couleur }: {
   libelle: string; valeur: number; icone: string;
@@ -525,15 +508,21 @@ function CarteKPI({ libelle, valeur, icone, couleur }: {
     terre: "text-terre",
     succes: "text-green-600",
   };
+  const couleursBordure: Record<string, string> = {
+    lagune: "border-lagune/30",
+    ocre: "border-ocre/30",
+    terre: "border-terre/30",
+    succes: "border-green-400/30",
+  };
   return (
-    <div className={`carte-${couleur} hover:shadow-md transition-shadow`}>
-      <div className="flex items-start justify-between mb-2">
-        <p className="text-xs uppercase text-ardoise-clair/60 font-semibold tracking-wider">
+    <div className={`carte border-l-4 ${couleursBordure[couleur]} p-3 hover:shadow-doux transition-shadow`}>
+      <div className="flex items-start justify-between mb-1">
+        <p className="text-[10px] uppercase text-ardoise-clair/60 font-semibold tracking-wider">
           {libelle}
         </p>
-        <span className="text-lg">{icone}</span>
+        <span className="text-base">{icone}</span>
       </div>
-      <p className={`text-2xl md:text-3xl font-bold ${couleursTexte[couleur]}`}>{valeur}</p>
+      <p className={`text-xl md:text-2xl font-bold ${couleursTexte[couleur]}`}>{valeur}</p>
     </div>
   );
 }
