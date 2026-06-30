@@ -49,7 +49,11 @@ export default function PageInvitations() {
         <Bouton onClick={() => setModalOuvert(true)}>+ Nouvelle Invitation</Bouton>
       </div>
 
-      {erreur && <Alerte type="erreur" message={erreur} onClose={() => setErreur(null)} />}
+      {erreur && (
+        <Alerte variante="erreur" titre="Erreur">
+          {erreur}
+        </Alerte>
+      )}
 
       <div className="bg-white rounded-xl shadow-doux overflow-hidden">
         <table className="w-full">
@@ -88,14 +92,14 @@ export default function PageInvitations() {
         </table>
       </div>
 
-      <Modal ouvert={modalOuvert} onClose={() => setModalOuvert(false)} titre="Nouvelle Invitation">
+      <Modal ouvert={modalOuvert} surFermeture={() => setModalOuvert(false)} titre="Nouvelle Invitation">
         <form onSubmit={handleSubmit} className="space-y-4">
           <ChampSaisie
-            label="Email"
+            libelle="Email"
             type="email"
             value={nouvelle.email}
             onChange={(e) => setNouvelle({ ...nouvelle, email: e.target.value })}
-            requis
+            required
           />
           <div>
             <label className="block text-sm font-medium mb-1">Rôle</label>
@@ -121,7 +125,7 @@ export default function PageInvitations() {
             />
           </div>
           <div className="flex gap-2 justify-end">
-            <Bouton variant="secondaire" onClick={() => setModalOuvert(false)}>Annuler</Bouton>
+            <Bouton variante="secondaire" onClick={() => setModalOuvert(false)}>Annuler</Bouton>
             <Bouton type="submit">Envoyer</Bouton>
           </div>
         </form>

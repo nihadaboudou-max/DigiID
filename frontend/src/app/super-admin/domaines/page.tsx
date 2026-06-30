@@ -26,9 +26,7 @@ export default function PageDomaines() {
     }
   };
 
-  useEffect(() => {
-    chargerDomaines();
-  }, []);
+  useEffect(() => { chargerDomaines(); }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,7 +59,11 @@ export default function PageDomaines() {
         <Bouton onClick={() => setModalOuvert(true)}>+ Nouveau Domaine</Bouton>
       </div>
 
-      {erreur && <Alerte type="erreur" message={erreur} onClose={() => setErreur(null)} />}
+      {erreur && (
+        <Alerte variante="erreur" titre="Erreur">
+          {erreur}
+        </Alerte>
+      )}
 
       <div className="bg-white rounded-xl shadow-doux overflow-hidden">
         <table className="w-full">
@@ -86,7 +88,7 @@ export default function PageDomaines() {
                   </span>
                 </td>
                 <td className="px-6 py-4">
-                  <Bouton variant="danger" taille="sm" onClick={() => handleSupprimer(d.id)}>
+                  <Bouton variante="danger" taille="petit" onClick={() => handleSupprimer(d.id)}>
                     Supprimer
                   </Bouton>
                 </td>
@@ -96,27 +98,27 @@ export default function PageDomaines() {
         </table>
       </div>
 
-      <Modal ouvert={modalOuvert} onClose={() => setModalOuvert(false)} titre="Nouveau Domaine">
+      <Modal ouvert={modalOuvert} surFermeture={() => setModalOuvert(false)} titre="Nouveau Domaine">
         <form onSubmit={handleSubmit} className="space-y-4">
           <ChampSaisie
-            label="Nom"
+            libelle="Nom"
             value={nouveauDomaine.nom}
             onChange={(e) => setNouveauDomaine({ ...nouveauDomaine, nom: e.target.value })}
-            requis
+            required
           />
           <ChampSaisie
-            label="Code"
+            libelle="Code"
             value={nouveauDomaine.code}
             onChange={(e) => setNouveauDomaine({ ...nouveauDomaine, code: e.target.value.toUpperCase() })}
-            requis
+            required
           />
           <ChampSaisie
-            label="Région"
+            libelle="Région"
             value={nouveauDomaine.region}
             onChange={(e) => setNouveauDomaine({ ...nouveauDomaine, region: e.target.value })}
           />
           <div className="flex gap-2 justify-end">
-            <Bouton variant="secondaire" onClick={() => setModalOuvert(false)}>Annuler</Bouton>
+            <Bouton variante="secondaire" onClick={() => setModalOuvert(false)}>Annuler</Bouton>
             <Bouton type="submit">Créer</Bouton>
           </div>
         </form>

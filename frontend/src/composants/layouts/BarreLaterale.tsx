@@ -121,6 +121,11 @@ const LIENS_SUPER_ADMIN: Lien[] = [
   { href: "/super-admin/monitoring",      libelle: "Monitoring",       Icone: IconeStatistique },
   { href: "/super-admin/statistiques",    libelle: "Statistiques",     Icone: IconeStatistique },
   { href: "/super-admin/utilisateurs",    libelle: "Utilisateurs",     Icone: IconeUtilisateur },
+    // ← NOUVEAUX LIENS À AJOUTER ICI
+  { href:  "/super-admin/domaines ",        libelle:  "Domaines ",         Icone: IconeAccueil },
+  { href:  "/super-admin/departements ",    libelle:  "Départements ",     Icone: IconeStatistique },
+  { href:  "/super-admin/invitations ",     libelle:  "Invitations ",      Icone: IconeEnvoyer },
+  { href:  "/super-admin/equipes ",         libelle:  "Équipes ",          Icone: IconeUtilisateur },
   { href: "/super-admin/activites",       libelle: "Activités",       Icone: IconeStatistique },
   { href: "/super-admin/administrateurs", libelle: "Administrateurs",  Icone: IconeBouclier },
   { href: "/attestations-communautaires",          libelle: "Attestations",     Icone: IconeCheck },

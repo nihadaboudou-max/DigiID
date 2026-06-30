@@ -52,7 +52,11 @@ export default function PageEquipes() {
         <Bouton onClick={() => setModalOuvert(true)}>+ Nouvelle Équipe</Bouton>
       </div>
 
-      {erreur && <Alerte type="erreur" message={erreur} onClose={() => setErreur(null)} />}
+      {erreur && (
+        <Alerte variante="erreur" titre="Erreur">
+          {erreur}
+        </Alerte>
+      )}
 
       <div className="bg-white rounded-xl shadow-doux overflow-hidden">
         <table className="w-full">
@@ -83,13 +87,13 @@ export default function PageEquipes() {
         </table>
       </div>
 
-      <Modal ouvert={modalOuvert} onClose={() => setModalOuvert(false)} titre="Nouvelle Équipe">
+      <Modal ouvert={modalOuvert} surFermeture={() => setModalOuvert(false)} titre="Nouvelle Équipe">
         <form onSubmit={handleSubmit} className="space-y-4">
           <ChampSaisie
-            label="Nom"
+            libelle="Nom"
             value={nouvelle.nom}
             onChange={(e) => setNouvelle({ ...nouvelle, nom: e.target.value })}
-            requis
+            required
           />
           <div>
             <label className="block text-sm font-medium mb-1">Département</label>
@@ -97,7 +101,7 @@ export default function PageEquipes() {
               value={nouvelle.departement_id}
               onChange={(e) => setNouvelle({ ...nouvelle, departement_id: e.target.value })}
               className="w-full px-3 py-2 border rounded-lg"
-              requis
+              required
             >
               <option value="">Sélectionner un département</option>
               {departements.map((d) => (
@@ -115,7 +119,7 @@ export default function PageEquipes() {
             />
           </div>
           <div className="flex gap-2 justify-end">
-            <Bouton variant="secondaire" onClick={() => setModalOuvert(false)}>Annuler</Bouton>
+            <Bouton variante="secondaire" onClick={() => setModalOuvert(false)}>Annuler</Bouton>
             <Bouton type="submit">Créer</Bouton>
           </div>
         </form>
