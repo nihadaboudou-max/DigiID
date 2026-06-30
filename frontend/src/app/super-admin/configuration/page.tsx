@@ -72,26 +72,27 @@ function Contenu() {
 
   if (chargement) {
     return (
-      <div className="space-y-8 apparition">
+      <div className="space-y-4">
         <header>
-          <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
+          <p className="text-ocre font-semibold text-xs uppercase tracking-wider">
             Super administration
           </p>
-          <h1 className="mt-1">Configuration système</h1>
+          <h1 className="mt-1 text-2xl">Configuration système</h1>
         </header>
-        <p className="text-ardoise-clair italic text-center py-12">Chargement des données...</p>
+        <p className="text-ardoise-clair italic text-center py-6">Chargement des données...</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 apparition">
+    <div className="space-y-4">
+      {/* En-tête compact */}
       <header>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
+        <p className="text-ocre font-semibold text-xs uppercase tracking-wider">
           Super administration
         </p>
-        <h1 className="mt-1">Configuration système</h1>
-        <p className="text-ardoise-clair mt-2 max-w-2xl">
+        <h1 className="mt-1 text-2xl">Configuration système</h1>
+        <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
           Feature flags dynamiques — modifiables en ligne, sans redémarrage.
           Toute modification est tracée dans le journal d'audit.
         </p>
@@ -164,7 +165,7 @@ function Contenu() {
               ))}
           </FeatureFlagSection>
 
-          <div className="mt-4 pt-4 border-t border-ardoise-clair/10">
+          <div className="mt-3 pt-3 border-t border-ardoise-clair/10">
             <p className="text-xs text-ardoise-clair/60 italic">
               Les flags de sensibilité <Badge variante="terre" taille="petit">critique</Badge> (niveau 2)
               ont un audit renforcé : chaque modification est tracée avec l&apos;ancienne et la nouvelle valeur.
@@ -179,10 +180,10 @@ function Contenu() {
 function FeatureFlagSection({ titre, children }: { titre: string; children: React.ReactNode }) {
   return (
     <div className="border-b border-ardoise-clair/10 last:border-0">
-      <p className="text-xs uppercase text-ardoise-clair font-bold tracking-wide py-3">
+      <p className="text-xs uppercase text-ardoise-clair font-bold tracking-wide py-2">
         {titre}
       </p>
-      <div className="space-y-2 pb-3">{children}</div>
+      <div className="space-y-1 pb-2">{children}</div>
     </div>
   );
 }
@@ -201,7 +202,7 @@ function FeatureFlagItemRow({
   const libelleSensibilite = flag.niveau_sensibilite >= 2 ? "Critique" : flag.niveau_sensibilite >= 1 ? "Sensible" : "Standard";
 
   return (
-    <div className="flex items-start gap-4 p-3 bg-blanc rounded-lg border border-ardoise-clair/10 hover:border-lagune/30 transition-colors">
+    <div className="flex items-start gap-3 p-2 bg-blanc rounded-lg border border-ardoise-clair/10 hover:border-lagune/30 transition-colors">
       <button
         type="button"
         onClick={surBascule}
@@ -228,7 +229,7 @@ function FeatureFlagItemRow({
             {libelleSensibilite}
           </Badge>
         </div>
-        <p className="text-xs text-ardoise-clair mt-1">{flag.description}</p>
+        <p className="text-xs text-ardoise-clair mt-0.5">{flag.description}</p>
       </div>
       <div className="flex items-center gap-2">
         {modificationEnCours && (
@@ -241,5 +242,3 @@ function FeatureFlagItemRow({
     </div>
   );
 }
-
-
