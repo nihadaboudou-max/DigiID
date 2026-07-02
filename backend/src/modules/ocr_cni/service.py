@@ -2,12 +2,6 @@
 """
 Service OCR CNI — orchestration du scan et de l'authentification
 des Cartes Nationales d'Identité.
-
-Ce service gère :
-  1. L'upload et le traitement OCR d'une face (recto ou verso)
-  2. La combinaison des résultats des deux faces
-  3. La validation complète des données extraites
-  4. La persistance des vérifications en base de données
 """
 from datetime import datetime, timezone
 from typing import Optional
@@ -19,11 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from datetime import date as date_type
 from src.modeles import Utilisateur
-from src.modeles.verification_cni import VerificationCNI
-from src.modeles.document_identite import DocumentIdentite
 from src.modules.ocr_cni.extraction_cni import extraire_donnees_cni
 from src.modules.ocr_cni.ocr_engine import analyser_image_cni
-from src.modules.ocr_cni.mrz_parser import parser_mrz_complet
+from src.modules.ocr_cni.mrz_parser import parser_mrz_complet, CODES_PAYS_ICAO
 from src.modules.ocr_cni.schemas import (
     DonneesCNIExtraites,
     ListeVerificationsCNI,
@@ -34,7 +26,6 @@ from src.modules.ocr_cni.schemas import (
     SuppressionCNI,
     RestaurationCNI,
 )
-from src.modules.ocr_cni.mrz_parser import CODES_PAYS_ICAO
 from src.modules.ocr_cni.validation_cni import (
     valider_donnees_cni,
     verifier_coherence_recto_verso,
@@ -61,7 +52,6 @@ TYPES_MIME_AUTORISES = {
 
 async def _lire_image(fichier: UploadFile) -> bytes:
     """Lit et valide le fichier image uploadé."""
-    # Vérifier le type MIME
     if fichier.content_type not in TYPES_MIME_AUTORISES:
         raise ErreurValidation(
             f"Type MIME refusé : {fichier.content_type}",
@@ -107,64 +97,36 @@ def _fusionner_donnees_mrz(
     donnees_ocr: DonneesCNIExtraites,
     mrz_lignes: tuple,
 ) -> DonneesCNIExtraites:
-    """
-    Fusionne les données OCR avec les données MRZ.
-    Les données MRZ sont prioritaires car plus fiables.
-    
-    Args:
-        donnees_ocr: Données extraites par OCR
-        mrz_lignes: Tuple (l1, l2, l3) de la MRZ
-    
-    Retour:
-        DonneesCNIExtraites avec les données MRZ prioritaires
-    """
-    # Si pas de MRZ, retourner les données OCR telles quelles
+    """Fusionne les données OCR avec les données MRZ (priorité MRZ)."""
     if not mrz_lignes or not mrz_lignes[0]:
         return donnees_ocr
     
     l1, l2, l3 = mrz_lignes
     
-    # Parser la MRZ selon le format détecté
     try:
         resultat_mrz = parser_mrz_complet(l1, l2, l3)
-        
-        # Créer une copie des données OCR
         donnees_finales = donnees_ocr.model_copy()
         
-        # Priorité MRZ sur OCR pour chaque champ
         if resultat_mrz.get("numero_document"):
             donnees_finales.numero_cni = resultat_mrz["numero_document"]
-            journal.debug(f"MRZ: numéro_cni = {resultat_mrz['numero_document']}")
         
         if resultat_mrz.get("nom_famille"):
             donnees_finales.nom_famille = resultat_mrz["nom_famille"]
-            journal.debug(f"MRZ: nom_famille = {resultat_mrz['nom_famille']}")
         
         if resultat_mrz.get("prenoms"):
             donnees_finales.prenoms = resultat_mrz["prenoms"]
-            journal.debug(f"MRZ: prenoms = {resultat_mrz['prenoms']}")
         
         if resultat_mrz.get("date_naissance_date"):
             donnees_finales.date_naissance = resultat_mrz["date_naissance_date"]
-            journal.debug(f"MRZ: date_naissance = {resultat_mrz['date_naissance_date']}")
         
         if resultat_mrz.get("date_expiration_date"):
             donnees_finales.date_expiration = resultat_mrz["date_expiration_date"]
-            journal.debug(f"MRZ: date_expiration = {resultat_mrz['date_expiration_date']}")
         
         if resultat_mrz.get("sexe") and resultat_mrz["sexe"] in ("M", "F"):
             donnees_finales.sexe = resultat_mrz["sexe"]
-            journal.debug(f"MRZ: sexe = {resultat_mrz['sexe']}")
         
         if resultat_mrz.get("pays_emetteur_nom"):
             donnees_finales.autorite_delivrance = resultat_mrz["pays_emetteur_nom"]
-            journal.debug(f"MRZ: pays = {resultat_mrz['pays_emetteur_nom']}")
-        
-        journal.info(
-            f"Fusion MRZ réussie : format={resultat_mrz.get('format')}, "
-            f"numero={donnees_finales.numero_cni}, "
-            f"nom={donnees_finales.nom_famille}"
-        )
         
         return donnees_finales
         
@@ -177,23 +139,15 @@ async def _creer_ou_mettre_a_jour_document_identite(
     session: AsyncSession,
     utilisateur: Utilisateur,
     donnees: DonneesCNIExtraites,
-    verification: VerificationCNI,
+    verification,  # Type VerificationCNI — pas d'import au niveau supérieur
 ) -> None:
-    """Crée ou met à jour un DocumentIdentite à partir des données OCR validées.
-    
-    Action :
-      - Si un DocumentIdentite (cni) avec le même verification_id existe → mise à jour
-      - Sinon → création d'un nouveau document avec source="ocr"
-    
-    Cela assure le lien entre le scan OCR et la section "Documents d'identité"
-    de l'utilisateur, empêchant les incohérences (fraude par saisie manuelle).
-    """
+    """Crée ou met à jour un DocumentIdentite à partir des données OCR validées."""
     if not donnees.numero_cni:
-        journal.debug("Pas de numéro CNI extrait — création DocumentIdentite ignorée")
         return
 
-    # Vérifier si un document existe déjà pour cette vérification
-    from sqlalchemy import select
+    # ✅ Import local pour éviter le circular import
+    from src.modeles.document_identite import DocumentIdentite
+    
     resultat = await session.execute(
         select(DocumentIdentite).where(
             DocumentIdentite.utilisateur_id == utilisateur.id,
@@ -204,17 +158,14 @@ async def _creer_ou_mettre_a_jour_document_identite(
     doc_existant = resultat.scalar_one_or_none()
 
     if doc_existant:
-        # Mise à jour : ne pas écraser les corrections manuelles
         if not doc_existant.a_ete_corrige:
             doc_existant.numero_document = donnees.numero_cni
             doc_existant.nom_complet = f"{donnees.prenoms or ''} {donnees.nom_famille or ''}".strip() or None
             if donnees.sexe and donnees.sexe in ("M", "F"):
                 doc_existant.sexe = donnees.sexe
-            journal.info(f"DocumentIdentite mis à jour depuis OCR : id={doc_existant.id}")
             await session.commit()
         return
 
-    # Créer le document source=ocr lié à la vérification
     def _parser_date(d: Optional[str]) -> Optional[date_type]:
         if not d: return None
         import re
@@ -245,10 +196,6 @@ async def _creer_ou_mettre_a_jour_document_identite(
     )
     session.add(doc)
     await session.commit()
-    journal.info(
-        f"DocumentIdentite créé depuis OCR : id={doc.id}, "
-        f"numero={donnees.numero_cni}, source=ocr, verification_id={verification.id}"
-    )
 
 
 async def _enregistrer_verification(
@@ -261,8 +208,11 @@ async def _enregistrer_verification(
     donnees: DonneesCNIExtraites,
     validation: Optional[ValidationCNIResultat] = None,
     resultat_ocr: Optional[ResultatOCRCNI] = None,
-) -> VerificationCNI:
+):
     """Enregistre une vérification CNI en base de données."""
+    # ✅ Import local pour éviter le circular import
+    from src.modeles.verification_cni import VerificationCNI
+    
     verification = VerificationCNI(
         utilisateur_id=utilisateur.id,
         face=face,
@@ -300,7 +250,6 @@ async def _enregistrer_verification(
     await session.commit()
     await session.refresh(verification)
 
-    # Vérification validée → créer/lier le DocumentIdentite
     if validation and validation.est_valide:
         utilisateur.est_cni_verifiee = True
         utilisateur.date_verification_cni = datetime.now(timezone.utc)
@@ -321,31 +270,10 @@ async def traiter_upload_cni(
     fichier: UploadFile,
     face: str = "recto",
 ) -> dict:
-    """
-    Traite l'upload d'une image de CNI (recto ou verso).
-
-    Pipeline complet :
-      1. Validation du fichier (format, taille)
-      2. Analyse OCR de l'image
-      3. Extraction structurée des champs
-      4. Fusion avec les données MRZ (priorité MRZ)
-      5. Validation des données extraites
-      6. Enregistrement en base de données
-
-    Args :
-        session : Session SQLAlchemy
-        utilisateur : Utilisateur authentifié
-        fichier : Fichier image uploadé
-        face : Face de la carte ("recto" ou "verso")
-
-    Retour :
-        Dictionnaire avec les résultats complets.
-    """
-    # 1. Lire et valider l'image
+    """Traite l'upload d'une image de CNI (recto ou verso)."""
     contenu = await _lire_image(fichier)
     nom_fichier = fichier.filename or f"cni_{face}.jpg"
 
-    # 2. Analyser l'image avec OCR
     resultat_analyse = analyser_image_cni(contenu)
 
     succes_ocr = resultat_analyse["succes"]
@@ -355,29 +283,16 @@ async def traiter_upload_cni(
     temps_ms = resultat_analyse["temps_analyse_ms"]
     erreurs = resultat_analyse["erreurs"]
 
-    journal.info(
-        f"OCR terminé : {len(texte_brut)} caractères, "
-        f"confiance={confiance:.1f}%, "
-        f"MRZ={'OK' if mrz_lignes and mrz_lignes[0] else 'NON'}"
-    )
-
-    # 3. Extraire les données structurées depuis le texte OCR
     donnees_ocr = extraire_donnees_cni(
         texte_brut=texte_brut,
         confiance=confiance,
         mrz_lignes=mrz_lignes,
     )
 
-    # 4. Fusionner avec les données MRZ (priorité MRZ)
     donnees = _fusionner_donnees_mrz(donnees_ocr, mrz_lignes)
-
-    # 5. Compter les champs extraits
     nb_champs = _compter_champs_extraits(donnees)
-
-    # 6. Valider les données
     validation = valider_donnees_cni(donnees) if succes_ocr else None
 
-    # 7. Enregistrer en base
     verification = await _enregistrer_verification(
         session=session,
         utilisateur=utilisateur,
@@ -394,14 +309,6 @@ async def traiter_upload_cni(
             champs_extraits=nb_champs,
             temps_analyse_ms=temps_ms,
         ),
-    )
-
-    # 8. Journaliser
-    journal.info(
-        f"OCR CNI ({face}) : utilisateur={utilisateur.id}, "
-        f"statut={verification.statut}, "
-        f"champs={nb_champs}, confiance={confiance:.1f}%, "
-        f"temps={temps_ms}ms"
     )
 
     return {
@@ -427,12 +334,10 @@ async def obtenir_synthese_verification(
     session: AsyncSession,
     utilisateur: Utilisateur,
 ) -> SyntheseVerificationCNI:
-    """
-    Obtient la synthèse de la dernière vérification CNI complète (recto + verso).
-
-    Retourne les résultats combinés des deux faces avec une validation croisée.
-    """
-    # Récupérer les dernières vérifications recto et verso
+    """Obtient la synthèse de la dernière vérification CNI complète."""
+    # ✅ Import local
+    from src.modeles.verification_cni import VerificationCNI
+    
     resultats = await session.execute(
         select(VerificationCNI)
         .where(
@@ -444,7 +349,6 @@ async def obtenir_synthese_verification(
     )
     toutes_verifs = resultats.scalars().all()
 
-    # Trouver le dernier recto et le dernier verso
     dernier_recto = None
     dernier_verso = None
     for v in toutes_verifs:
@@ -456,10 +360,9 @@ async def obtenir_synthese_verification(
     if not dernier_recto and not dernier_verso:
         return SyntheseVerificationCNI(
             statut="en_attente",
-            message="Aucune vérification CNI trouvée. Scanne d'abord le recto de ta carte.",
+            message="Aucune vérification CNI trouvée.",
         )
 
-    # Construire les données structurées
     donnees_recto = None
     donnees_verso = None
     validation_globale = None
@@ -484,8 +387,6 @@ async def obtenir_synthese_verification(
             format_carte=dernier_recto.format_carte or "non_reconnu",
             taux_confiance_moyen=dernier_recto.taux_confiance_ocr,
         )
-
-        # Statut basé sur le recto (la face principale)
         if dernier_recto.statut == "approuve":
             statut = "approuve"
         elif dernier_recto.statut == "rejete":
@@ -510,15 +411,12 @@ async def obtenir_synthese_verification(
             taux_confiance_moyen=dernier_verso.taux_confiance_ocr,
         )
 
-    # Validation croisée si les deux faces sont disponibles
     if donnees_recto and donnees_verso:
         coherent, msg_coherence = verifier_coherence_recto_verso(donnees_recto, donnees_verso)
-
         if not coherent:
             statut = "rejete"
             message = msg_coherence
         else:
-            # Re-valider avec les données combinées (priorité recto)
             donnees_combinees = DonneesCNIExtraites(
                 nom_famille=donnees_recto.nom_famille or donnees_verso.nom_famille,
                 prenoms=donnees_recto.prenoms or donnees_verso.prenoms,
@@ -543,14 +441,12 @@ async def obtenir_synthese_verification(
             statut = "approuve" if validation_globale.est_valide else "rejete"
             message = validation_globale.message
     else:
-        # Une seule face traitée
         if donnees_recto:
             validation_globale = valider_donnees_cni(donnees_recto)
             message = validation_globale.message
         else:
-            message = "Seul le verso a été scanné. Scanne aussi le recto."
+            message = "Seul le verso a été scanné."
 
-    # Compter les champs vérifiés
     champs_verifies = 0
     if donnees_recto:
         champs_verifies += _compter_champs_extraits(donnees_recto)
@@ -566,7 +462,7 @@ async def obtenir_synthese_verification(
         validation_globale=validation_globale,
         message=message,
         champs_verifies=champs_verifies,
-        champs_total=10,  # Nombre total de champs potentiels
+        champs_total=10,
     )
 
 
@@ -576,6 +472,9 @@ async def obtenir_verifications(
     limite: int = 20,
 ) -> ListeVerificationsCNI:
     """Liste l'historique des vérifications CNI de l'utilisateur."""
+    # ✅ Import local
+    from src.modeles.verification_cni import VerificationCNI
+    
     resultat = await session.execute(
         select(VerificationCNI)
         .where(VerificationCNI.utilisateur_id == utilisateur.id)
@@ -630,6 +529,9 @@ async def supprimer_verification(
     verification_id: UUID,
 ) -> SuppressionCNI:
     """Supprime (soft-delete) une vérification CNI."""
+    # ✅ Import local
+    from src.modeles.verification_cni import VerificationCNI
+    
     resultat = await session.execute(
         select(VerificationCNI).where(
             VerificationCNI.id == verification_id,
@@ -658,9 +560,6 @@ async def supprimer_verification(
     )
     await session.commit()
 
-    journal.info(
-        f"Vérification CNI supprimée : id={verification_id} utilisateur={utilisateur.id}"
-    )
     return SuppressionCNI(id=verification_id)
 
 
@@ -670,6 +569,9 @@ async def restaurer_verification(
     verification_id: UUID,
 ) -> RestaurationCNI:
     """Restaure une vérification CNI depuis la corbeille."""
+    # ✅ Import local
+    from src.modeles.verification_cni import VerificationCNI
+    
     resultat = await session.execute(
         select(VerificationCNI).where(
             VerificationCNI.id == verification_id,
@@ -697,7 +599,4 @@ async def restaurer_verification(
     )
     await session.commit()
 
-    journal.info(
-        f"Vérification CNI restaurée : id={verification_id} utilisateur={utilisateur.id}"
-    )
     return RestaurationCNI(id=verification_id)
