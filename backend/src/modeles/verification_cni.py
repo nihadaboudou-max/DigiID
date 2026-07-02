@@ -1,192 +1,340 @@
 # -*- coding: utf-8 -*-
 """
-Modèle de vérification CNI — enregistrement des résultats d'OCR
-et d'authentification de la Carte Nationale d'Identité.
-
-Stocke pour chaque scan :
-  - Les données brutes extraites par OCR (tous les champs de la CNI)
-  - Les résultats de validation (format, checksum MRZ, cohérence)
-  - Les métadonnées du fichier uploadé
-  - Le statut de la vérification
-
-Sécurité : seul l'utilisateur propriétaire peut accéder à ses données.
-Les données personnelles extraites (nom, prénom, date de naissance, etc.)
-sont stockées en clair dans cette table car elles sont nécessaires
-à la vérification d'identité. La connexion à la base doit être chiffrée (TLS).
+Validation des données extraites de documents d'identité africains.
+Supporte tout type de document (CNI, passeport, carte biométrique)
+avec validation MRZ universelle (ICAO 9303 formats TD1/TD2/TD3).
 """
-import uuid
-from datetime import datetime
-from typing import Optional
+import re
+from datetime import date, datetime
+from typing import Optional, Tuple
+from src.modules.ocr_cni.mrz_parser import (
+    CODES_PAYS_ICAO,
+    parser_mrz_complet,
+    verifier_checksum_mrz,
+)
+from src.modules.ocr_cni.schemas import (
+    DonneesCNIExtraites,
+    ValidationCNIResultat,
+)
+from src.noyau.journal import journal
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+# ==============================================================================
+# Constantes de validation
+# ==============================================================================
 
-from src.base_donnees.base import Base, MelangeTracabilite
+POIDS_MRZ = [7, 3, 1, 7, 3, 1, 7, 3, 1, 7, 3, 1, 7, 3, 1]
+AGE_MINIMUM = 0
 
 
-class VerificationCNI(Base, MelangeTracabilite):
+def _calculer_checksum_mrz(valeur: str) -> int:
+    """Calcule le checksum d'un champ MRZ selon la norme ICAO 9303."""
+    somme = 0
+    for i, char in enumerate(valeur):
+        if i >= len(POIDS_MRZ):
+            break
+        if char == "<":
+            valeur_num = 0
+        elif char.isdigit():
+            valeur_num = int(char)
+        elif char.isalpha():
+            valeur_num = ord(char.upper()) - ord("A") + 10
+        else:
+            valeur_num = 0
+        somme += valeur_num * POIDS_MRZ[i]
+    return somme % 10
+
+
+def _nettoyer_champ_mrz(champ: str, longueur_max: int = 30) -> str:
+    """Nettoie un champ MRZ pour le calcul de checksum."""
+    champ = "".join(c if c.isalnum() else "<" for c in champ.upper())
+    if len(champ) > longueur_max:
+        champ = champ[:longueur_max]
+    else:
+        champ = champ + "<" * (longueur_max - len(champ))
+    return champ
+
+
+def valider_mrz(ligne_1: Optional[str],
+                ligne_2: Optional[str],
+                ligne_3: Optional[str]) -> Tuple[bool, dict[str, bool], str]:
+    """Valide une MRZ de document d'identité (formats TD1/TD2/TD3)."""
+    details: dict[str, bool] = {
+        "structure": False,
+        "code_pays": False,
+        "format_detecte": False,
+        "checksum_numero": False,
+        "checksum_date_naissance": False,
+        "checksum_date_expiration": False,
+    }
+
+    if not all([ligne_1, ligne_2]):
+        return False, details, "MRZ incomplète : les lignes 1 et 2 sont requises."
+
+    mrz = parser_mrz_complet(ligne_1, ligne_2, ligne_3)
+
+    code_pays = mrz.get("pays_emetteur", " ")
+    if code_pays and code_pays in CODES_PAYS_ICAO:
+        details["code_pays"] = True
+        details["structure"] = True
+        details["format_detecte"] = True
+    else:
+        return False, details, f"Code pays non reconnu dans la MRZ : {code_pays}"
+
+    if mrz.get("format") == "TD1" and len(ligne_2) >= 30:
+        l2 = _nettoyer_champ_mrz(ligne_2)
+
+        num_carte = l2[0:9]
+        checksum_num_attendu = l2[9:10]
+        if num_carte and checksum_num_attendu:
+            try:
+                checksum_calcule = _calculer_checksum_mrz(num_carte)
+                if str(checksum_calcule) == checksum_num_attendu:
+                    details["checksum_numero"] = True
+            except Exception:
+                pass
+
+        date_naissance_mrz = l2[13:19]
+        checksum_ddn_attendu = l2[19:20]
+        if date_naissance_mrz and checksum_ddn_attendu:
+            try:
+                checksum_calcule = _calculer_checksum_mrz(date_naissance_mrz)
+                if str(checksum_calcule) == checksum_ddn_attendu:
+                    details["checksum_date_naissance"] = True
+            except Exception:
+                pass
+
+        date_exp_mrz = l2[21:27]
+        checksum_exp_attendu = l2[27:28]
+        if date_exp_mrz and checksum_exp_attendu:
+            try:
+                checksum_calcule = _calculer_checksum_mrz(date_exp_mrz)
+                if str(checksum_calcule) == checksum_exp_attendu:
+                    details["checksum_date_expiration"] = True
+            except Exception:
+                pass
+
+    mrz_valide = details["code_pays"] and details["structure"]
+
+    pays_nom = CODES_PAYS_ICAO.get(code_pays, code_pays)
+    message = f"MRZ valide. Pays : {pays_nom}." if mrz_valide else "MRZ non reconnue."
+
+    return mrz_valide, details, message
+
+
+def valider_numero_cni(numero: Optional[str]) -> Tuple[bool, str]:
+    """Valide le format du numéro de document."""
+    if not numero:
+        return False, "Numéro de carte manquant."
+
+    numero = "".join(c for c in numero.upper() if c.isalnum())
+
+    if len(numero) < 6:
+        return False, f"Numéro trop court ({len(numero)} car.). Minimum 6 caractères."
+
+    if len(numero) > 20:
+        return False, f"Numéro trop long ({len(numero)} car.). Maximum 20 caractères."
+
+    if not numero.isalnum():
+        return False, "Le numéro contient des caractères non autorisés."
+
+    if not any(c.isdigit() for c in numero):
+        return False, "Le numéro doit contenir des chiffres."
+
+    return True, "Format du numéro valide."
+
+
+def _normaliser_date(date_str: Optional[str]) -> Optional[str]:
+    """Normalise une date vers le format JJ/MM/AAAA."""
+    if not date_str:
+        return None
+
+    if re.match(r'^\d{2}/\d{2}/\d{4}$', date_str):
+        return date_str
+
+    match = re.match(r'^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$', date_str)
+    if match:
+        jj, mm, aaaa = match.groups()
+        if len(aaaa) == 2:
+            aaaa = "19" + aaaa if int(aaaa) > 40 else "20" + aaaa
+        return f"{jj.zfill(2)}/{mm.zfill(2)}/{aaaa}"
+
+    if re.match(r'^\d{6}$', date_str):
+        aa = int(date_str[0:2])
+        mm = int(date_str[2:4])
+        jj = int(date_str[4:6])
+        aaaa = 1900 + aa if aa >= 40 else 2000 + aa
+        if 1 <= mm <= 12 and 1 <= jj <= 31:
+            return f"{jj:02d}/{mm:02d}/{aaaa}"
+
+    mois_map = {
+        "JANVIER": "01", "FÉVRIER": "02", "FEVRIER": "02",
+        "MARS": "03", "AVRIL": "04", "MAI": "05",
+        "JUIN": "06", "JUILLET": "07", "AOÛT": "08", "AOUT": "08",
+        "SEPTEMBRE": "09", "OCTOBRE": "10", "NOVEMBRE": "11",
+        "DÉCEMBRE": "12", "DECEMBRE": "12"
+    }
+
+    date_upper = date_str.upper()
+    for mois_nom, mois_num in mois_map.items():
+        if mois_nom in date_upper:
+            match = re.search(r'(\d{1,2})\s+' + mois_nom + r'\s+(\d{4})', date_upper)
+            if match:
+                jj, aaaa = match.groups()
+                return f"{jj.zfill(2)}/{mois_num}/{aaaa}"
+
+    return None
+
+
+def valider_date_naissance(date_naissance: Optional[str],
+                           date_expiration: Optional[str] = None) -> Tuple[bool, str]:
+    """Valide la date de naissance : format et cohérence."""
+    if not date_naissance:
+        return False, "Date de naissance manquante."
+
+    ddn_str = _normaliser_date(date_naissance)
+    if not ddn_str:
+        return False, f"Format de date invalide : {date_naissance}. Attendu : JJ/MM/AAAA ou AAMMJJ."
+
+    try:
+        ddn = datetime.strptime(ddn_str, "%d/%m/%Y").date()
+    except ValueError:
+        return False, f"Date de naissance invalide : {ddn_str}."
+
+    aujourd_hui = date.today()
+    if ddn > aujourd_hui:
+        return False, "La date de naissance ne peut pas être dans le futur."
+
+    if date_expiration:
+        dexp_str = _normaliser_date(date_expiration)
+        if dexp_str:
+            try:
+                dexp = datetime.strptime(dexp_str, "%d/%m/%Y").date()
+                if dexp <= ddn:
+                    return False, "La date d'expiration précède la date de naissance."
+            except ValueError:
+                pass
+
+    return True, f"Date de naissance valide ({ddn_str})."
+
+
+def valider_date_expiration(date_expiration: Optional[str]) -> Tuple[bool, str]:
+    """Valide la date d'expiration : format, non-expirée."""
+    if not date_expiration:
+        return True, "Date d'expiration non fournie (vérification ignorée)."
+
+    date_expiration = date_expiration.strip()
+
+    try:
+        dexp = datetime.strptime(date_expiration, "%d/%m/%Y").date()
+    except ValueError:
+        return False, f"Format de date d'expiration invalide : {date_expiration}."
+
+    aujourd_hui = date.today()
+    if dexp < aujourd_hui:
+        return False, f"Carte expirée depuis le {dexp.strftime('%d/%m/%Y')}."
+
+    return True, f"Carte valide jusqu'au {dexp.strftime('%d/%m/%Y')}."
+
+
+def valider_sexe(sexe: Optional[str]) -> Tuple[bool, str]:
+    """Valide que le sexe est M ou F."""
+    if not sexe or sexe == "non_detecte":
+        return False, "Sexe non détecté."
+    if sexe.upper() in ("M", "F"):
+        return True, f"Sexe : {'Masculin' if sexe.upper() == 'M' else 'Féminin'}."
+    return False, f"Sexe invalide : {sexe}."
+
+
+def valider_donnees_cni(donnees: DonneesCNIExtraites) -> ValidationCNIResultat:
     """
-    Résultat d'une analyse OCR de Carte Nationale d'Identité.
-
-    Chaque enregistrement correspond à une face (recto ou verso)
-    d'une CNI uploadée et analysée.
+    Valide l'ensemble des données extraites d'une CNI.
     """
+    scores: dict[str, bool] = {}
 
-    __tablename__ = "verification_cni"
+    numero_valide, msg_numero = valider_numero_cni(donnees.numero_cni)
+    scores["numero_cni"] = numero_valide
 
-    # --- Identifiants ---
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid4,
+    ddn_valide, msg_ddn = valider_date_naissance(
+        donnees.date_naissance,
+        donnees.date_expiration
     )
-    utilisateur_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("utilisateur.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
+    scores["date_naissance"] = ddn_valide
 
-    # --- Métadonnées fichier ---
-    face: Mapped[str] = mapped_column(
-        String(10),
-        nullable=False,
-        default="recto",
-        doc="Face scannée : 'recto' ou 'verso'",
-    )
-    nom_fichier: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-        doc="Nom original du fichier uploadé",
-    )
-    type_mime: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-        doc="Type MIME de l'image",
-    )
-    taille_octets: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-        doc="Taille du fichier en octets",
-    )
+    dexp_valide, msg_dexp = valider_date_expiration(donnees.date_expiration)
+    scores["date_expiration"] = dexp_valide
 
-    # --- Statut ---
-    statut: Mapped[str] = mapped_column(
-        String(30),
-        nullable=False,
-        default="en_attente",
-        doc="Statut : en_attente, approuve, rejete",
-    )
+    sexe_valide, msg_sexe = valider_sexe(donnees.sexe)
+    scores["sexe"] = sexe_valide
 
-    # =========================================================================
-    # Données extraites par OCR
-    # =========================================================================
+    mrz_valide = None
+    scores["mrz"] = donnees.mrz_ligne_1 is not None
 
-    # --- Identité ---
-    nom_famille: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True, doc="Nom de famille extrait"
-    )
-    prenoms: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True, doc="Prénom(s) extraits"
-    )
-    sexe: Mapped[Optional[str]] = mapped_column(
-        String(20), nullable=True, doc="Sexe extrait (M/F/non_detecte)"
-    )
-    date_naissance: Mapped[Optional[str]] = mapped_column(
-        String(15), nullable=True, doc="Date de naissance extraite (JJ/MM/AAAA)"
-    )
-    lieu_naissance: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True, doc="Lieu de naissance extrait"
-    )
-
-    # --- Carte ---
-    numero_cni: Mapped[Optional[str]] = mapped_column(
-        String(30), nullable=True, index=True, doc="Numéro de la carte extrait"
-    )
-    date_delivrance: Mapped[Optional[str]] = mapped_column(
-        String(15), nullable=True, doc="Date de délivrance extraite (JJ/MM/AAAA)"
-    )
-    date_expiration: Mapped[Optional[str]] = mapped_column(
-        String(15), nullable=True, doc="Date d'expiration extraite (JJ/MM/AAAA)"
-    )
-    autorite_delivrance: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True, doc="Autorité de délivrance extraite"
-    )
-    taille: Mapped[Optional[str]] = mapped_column(
-        String(10), nullable=True, doc="Taille extraite en cm"
-    )
-
-    # --- MRZ ---
-    mrz_ligne_1: Mapped[Optional[str]] = mapped_column(
-        String(30), nullable=True, doc="Ligne 1 de la MRZ (30 car.)"
-    )
-    mrz_ligne_2: Mapped[Optional[str]] = mapped_column(
-        String(30), nullable=True, doc="Ligne 2 de la MRZ (30 car.)"
-    )
-    mrz_ligne_3: Mapped[Optional[str]] = mapped_column(
-        String(30), nullable=True, doc="Ligne 3 de la MRZ (30 car.)"
-    )
-
-    # --- Métadonnées OCR ---
-    format_carte: Mapped[Optional[str]] = mapped_column(
-        String(30), nullable=True,
-        doc="Format détecté : nouveau_2021, ancien, non_reconnu",
-    )
-    texte_brut: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True, doc="Texte OCR brut complet (jusqu'à 5000 car.)"
-    )
-    taux_confiance_ocr: Mapped[Optional[float]] = mapped_column(
-        Float, nullable=True, doc="Taux de confiance moyen de l'OCR (0-100)"
-    )
-    erreurs_ocr: Mapped[Optional[list[str]]] = mapped_column(
-        JSON, nullable=True, doc="Liste des erreurs OCR rencontrées"
-    )
-
-    # =========================================================================
-    # Résultats de validation
-    # =========================================================================
-
-    validation_mrz: Mapped[Optional[bool]] = mapped_column(
-        Boolean, nullable=True, doc="La MRZ est-elle valide (checksums OK) ?"
-    )
-    est_valide: Mapped[Optional[bool]] = mapped_column(
-        Boolean, nullable=True, doc="La CNI est-elle valide (tous critères) ?"
-    )
-    scores_validation: Mapped[Optional[dict]] = mapped_column(
-        JSON, nullable=True, doc="Détail des scores de validation par champ"
-    )
-    date_traitement: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True,
-        doc="Date à laquelle le traitement a été effectué",
-    )
-
-    # =========================================================================
-    # Gestion de la corbeille (soft-delete)
-    # =========================================================================
-
-    est_supprime: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False,
-        doc="Indique si l'enregistrement est dans la corbeille",
-    )
-    date_suppression: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True,
-        doc="Date de mise à la corbeille",
-    )
-
-    # =========================================================================
-    # Métadonnées supplémentaires
-    # =========================================================================
-
-    notes: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True, doc="Notes internes sur la vérification"
-    )
-
-    def __repr__(self) -> str:
-        return (
-            f"<VerificationCNI {self.id} "
-            f"face={self.face} "
-            f"statut={self.statut} "
-            f"numero={self.numero_cni or '?'} "
-            f"user={self.utilisateur_id}>"
+    if donnees.mrz_ligne_1:
+        mrz_valide, details_mrz, msg_mrz = valider_mrz(
+            donnees.mrz_ligne_1,
+            donnees.mrz_ligne_2,
+            donnees.mrz_ligne_3,
         )
+        scores["mrz"] = mrz_valide
+        scores["mrz_checksum_numero"] = details_mrz.get("checksum_numero", False)
+        scores["mrz_checksum_ddn"] = details_mrz.get("checksum_date_naissance", False)
+        scores["mrz_checksum_exp"] = details_mrz.get("checksum_date_expiration", False)
+
+    champs_obligatoires = ["numero_cni"]
+    for champ in champs_obligatoires:
+        if champ not in scores:
+            scores[champ] = False
+
+    scores["identite"] = bool(donnees.nom_famille) or bool(donnees.prenoms)
+
+    est_valide = scores.get("numero_cni", False)
+
+    if est_valide:
+        nb_valides = sum(1 for v in scores.values() if v)
+        nb_total = len(scores)
+        message = f"Document valide : {nb_valides}/{nb_total} vérifications OK."
+        if mrz_valide:
+            message += " MRZ vérifiée avec succès."
+    else:
+        echecs = [k for k, v in scores.items() if not v]
+        message = "Document partiellement valide. Champs manquants : " + ", ".join(echecs[:3]) + "."
+
+    # ✅ CORRECTION FINALE : utiliser str() pour éviter le conflit avec loguru
+    # Loguru interprète { } comme des placeholders → KeyError
+    journal.info("Validation document : est_valide=%s, scores=%s", est_valide, scores)
+
+    return ValidationCNIResultat(
+        est_valide=est_valide,
+        scores_validation=scores,
+        verification_mrz=mrz_valide,
+        message=message,
+    )
+
+
+def verifier_coherence_recto_verso(
+    donnees_recto: Optional[DonneesCNIExtraites],
+    donnees_verso: Optional[DonneesCNIExtraites],
+) -> Tuple[bool, str]:
+    """Vérifie la cohérence entre les données extraites du recto et du verso."""
+    if not donnees_recto or not donnees_verso:
+        return False, "Les deux faces sont nécessaires pour la vérification croisée."
+
+    incoherences = []
+
+    if donnees_recto.numero_cni and donnees_verso.numero_cni:
+        if donnees_recto.numero_cni != donnees_verso.numero_cni:
+            incoherences.append("numéro de carte différent entre recto et verso")
+
+    if donnees_recto.date_naissance and donnees_verso.date_naissance:
+        if donnees_recto.date_naissance != donnees_verso.date_naissance:
+            incoherences.append("date de naissance différente")
+
+    if donnees_recto.nom_famille and donnees_verso.nom_famille:
+        if donnees_recto.nom_famille.upper() != donnees_verso.nom_famille.upper():
+            incoherences.append("nom de famille différent")
+
+    if not incoherences:
+        return True, "Cohérence vérifiée entre recto et verso."
+
+    message = "Incohérences détectées : " + ", ".join(incoherences) + "."
+    return False, message
