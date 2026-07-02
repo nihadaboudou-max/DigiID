@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 Service Scoring — orchestre generation de donnees, calcul, enregistrement.
-
 Modifications v2 :
-  - Integration des attestations communautaires comme 5e facteur (correcteur d'exclusion)
-  - Cooldown par type d'action pour eviter l'exploitation du recalcul temps reel
-  - Utilisation du modele_pondere_v2 (attestations)
+Integration des attestations communautaires comme 5e facteur (correcteur d'exclusion)
+Cooldown par type d'action pour eviter l'exploitation du recalcul temps reel
+Utilisation du modele_pondere_v2 (attestations)
 """
 import time
 from datetime import datetime, timedelta, timezone
@@ -17,10 +16,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.config.constantes import TypesEvenementAudit
-from src.modeles import (
-    AttestationCommunautaire, Consentement, DocumentIdentite, JournalAudit,
-    Parrainage, ScoreHistorique, Utilisateur,
-)
+# ✅ Imports directs depuis les sous-modules (évite le cycle via src.modeles.__init__)
+from src.modeles.consentement import Consentement
+from src.modeles.document_identite import DocumentIdentite
+from src.modeles.journal_audit import JournalAudit
+from src.modeles.parrainage import Parrainage
+from src.modeles.score_historique import ScoreHistorique
+from src.modeles.utilisateur import Utilisateur
+
 from src.modules.gamification import service_badges, service_tracking
 from src.modules.scoring import modele_pondere_v2 as modele_pondere
 from src.modules.scoring.chargeur_modele_ml import (
@@ -36,7 +39,6 @@ from src.modules.scoring.schemas import (
 )
 from src.noyau import journal
 from src.noyau.journal import journal_audit
-
 
 # Combien de temps un score reste valide avant recalcul automatique
 DUREE_VALIDITE_SCORE_JOURS = 30
@@ -55,7 +57,6 @@ async def calculer_et_enregistrer_score(
 ) -> ScoreDetail:
     """
     Calcule le score, le stocke dans l'historique, met a jour l'utilisateur.
-
     Si un score recent (< 30 jours) existe et que forcer_recalcul=False,
     on retourne directement le score existant sans recalcul.
     """
@@ -68,7 +69,6 @@ async def calculer_et_enregistrer_score(
         and utilisateur.date_dernier_calcul_score is not None
         and maintenant - utilisateur.date_dernier_calcul_score < timedelta(days=DUREE_VALIDITE_SCORE_JOURS)
     ):
-        # Recuperer le dernier enregistrement d'historique pour avoir les facteurs
         resultat = await session.execute(
             select(ScoreHistorique)
             .where(ScoreHistorique.utilisateur_id == utilisateur.id)
@@ -92,7 +92,7 @@ async def calculer_et_enregistrer_score(
         signaux=signaux,
     )
 
-        # 2bis. Injecter les vraies donnees d'attestations (remplace la simulation)
+    # 2bis. Injecter les vraies donnees d'attestations (remplace la simulation)
     donnees.attestations_approuvees_recues = stats_attestations["approuvees_recues"]
     donnees.poids_total_attestations = stats_attestations["poids_total"]
     donnees.poids_total_effectif_attestations = stats_attestations["poids_total_effectif"]
@@ -101,8 +101,8 @@ async def calculer_et_enregistrer_score(
     # 3. Calculer le score
     resultat = modele_pondere.calculer(donnees)
     methode_utilisee = modele_pondere.METHODE_VERSION
-
     score_ml = predire_score_ml(donnees)
+
     if score_ml is not None:
         score_combine = round(score_ml * 0.6 + resultat.score_total * 0.4)
         score_combine = max(0, min(100, score_combine))
@@ -157,12 +157,14 @@ async def calculer_et_enregistrer_score(
 
     await session.commit()
     await session.refresh(historique)
-
     await service_tracking.tracker_action(session, utilisateur, "score_calcul")
     await service_badges.verifier_et_debloquer_badges(session, utilisateur)
     await session.commit()
 
-    journal.info(f"Score calcule : utilisateur={utilisateur.id} score={resultat.score_total} (attestations={resultat.sous_score_attestations:.1f})")
+    journal.info(
+        f"Score calcule : utilisateur={utilisateur.id} score={resultat.score_total} "
+        f"(attestations={resultat.sous_score_attestations:.1f})"
+    )
     return _construire_detail(utilisateur, historique)
 
 
@@ -173,10 +175,8 @@ async def obtenir_score_actuel(
 ) -> ScoreDetail:
     """
     Retourne le score actuel — calcule s'il n'existe pas encore.
-
     Trace une consultation dans le journal d'audit.
     """
-    # Si aucun score n'existe, le calculer
     if utilisateur.score_actuel is None:
         return await calculer_et_enregistrer_score(
             session=session,
@@ -184,7 +184,6 @@ async def obtenir_score_actuel(
             adresse_ip=adresse_ip,
         )
 
-    # Recuperer le dernier historique
     resultat = await session.execute(
         select(ScoreHistorique)
         .where(ScoreHistorique.utilisateur_id == utilisateur.id)
@@ -193,7 +192,6 @@ async def obtenir_score_actuel(
     )
     historique = resultat.scalar_one_or_none()
 
-    # Cas limite : score actuel defini mais pas d'historique (compatibilite)
     if historique is None:
         return await calculer_et_enregistrer_score(
             session=session,
@@ -202,7 +200,6 @@ async def obtenir_score_actuel(
             forcer_recalcul=True,
         )
 
-    # Audit de consultation
     entree = JournalAudit(
         date_evenement=datetime.now(timezone.utc),
         utilisateur_id=utilisateur.id,
@@ -213,7 +210,6 @@ async def obtenir_score_actuel(
     )
     session.add(entree)
     await session.commit()
-
     await service_tracking.tracker_action(session, utilisateur, "score_consultation")
     await service_badges.verifier_et_debloquer_badges(session, utilisateur)
     await session.commit()
@@ -257,36 +253,22 @@ async def declencher_recalcul_score(
     """
     Fonction utilitaire appelable depuis d'autres modules pour forcer
     un recalcul immediat du score apres une action utilisateur.
-
     PROTECTION : cooldown de 5 minutes par type d'action.
-    Empeche l'exploitation du recalcul temps reel (ex: upload CNI -> supprimer -> re-upload).
-
-    Exemples d'appel :
-      - apres modification du profil
-      - apres bascule d'un consentement
-      - apres activation 2FA
-      - apres verification email
-      - apres upload CNI ou visage
-
-    Retourne le nouveau ScoreDetail ou None si le calcul a echoue.
     """
-    # --- Cooldown par type d'action ---
     cle_cooldown = (utilisateur.id, raison)
     maintenant_ts = time.time()
     dernier_appel = _cooldown_cache.get(cle_cooldown, 0)
+
     if dernier_appel and (maintenant_ts - dernier_appel) < DUREE_COOLDOWN_SECONDES:
         temps_restant = int(DUREE_COOLDOWN_SECONDES - (maintenant_ts - dernier_appel))
         journal.info(
             f"Cooldown actif pour {raison} (utilisateur={utilisateur.id}) : "
             f"{temps_restant}s restantes"
         )
-        # On ne bloque pas -- on retourne le score actuel sans recalcul
         return None
 
-    # Enregistrer le timestamp pour le cooldown
     _cooldown_cache[cle_cooldown] = maintenant_ts
 
-    # Nettoyer les entrees de cache trop vieilles (tous les 100 appels)
     if len(_cooldown_cache) > 100:
         seuil = maintenant_ts - DUREE_COOLDOWN_SECONDES * 2
         for cle in list(_cooldown_cache.keys()):
@@ -301,7 +283,9 @@ async def declencher_recalcul_score(
             forcer_recalcul=True,
         )
     except Exception as e:
-        journal.warning(f"Echec recalcul score ({raison}) : utilisateur={utilisateur.id} erreur={e}")
+        journal.warning(
+            f"Echec recalcul score ({raison}) : utilisateur={utilisateur.id} erreur={e}"
+        )
         return None
 
 
@@ -311,15 +295,10 @@ async def _collecter_signaux_utilisateur(
 ) -> SignauxUtilisateur:
     """
     Collecte 100% des signaux RÉELS depuis la base de données.
-
-    Plus aucune simulation. Chaque champ vient du profil utilisateur
-    ou de requêtes sur les tables réelles (Parrainage, Consentement, etc.).
     """
     maintenant = datetime.now(timezone.utc)
 
-    # ========================================================================
     # 1. PROFIL & ENGAGEMENT
-    # ========================================================================
     champs_remplis = 0
     if utilisateur.prenom_chiffre: champs_remplis += 1
     if utilisateur.nom_chiffre: champs_remplis += 1
@@ -329,7 +308,6 @@ async def _collecter_signaux_utilisateur(
     if utilisateur.est_cni_verifiee: champs_remplis += 1
     if utilisateur.est_visage_verifie: champs_remplis += 1
 
-    # Consentements facultatifs
     resultat = await session.execute(
         select(Consentement)
         .where(
@@ -342,53 +320,30 @@ async def _collecter_signaux_utilisateur(
     consentements_actifs = resultat.scalars().all()
     nb_consentements_facultatifs = len(consentements_actifs)
 
-        # ========================================================================
-    # 2. ANCIENNETÉ & STABILITÉ (RÉELLES — colonnes existantes uniquement)
-    # ========================================================================
-    # Âge réel du compte
+    # 2. ANCIENNETÉ & STABILITÉ
     age_compte_jours = max(0, (maintenant - utilisateur.cree_le).days)
-
-    # Proxy stabilité téléphone : on utilise l'âge du compte
-    # (pas de colonne date_derniere_modification_telephone en DB)
     age_telephone_mois = age_compte_jours // 30
     nb_changements_telephone = 0
-    operateur = None  # Pas de colonne operateur_telephone en DB
+    operateur = None
 
-    # ========================================================================
-    # 3. GÉOGRAPHIE (RÉELLE — colonne ville existante)
-    # ========================================================================
-    # Proxy : si ville renseignée, stabilité = âge du compte
+    # 3. GÉOGRAPHIE
     mois_stabilite_ville = age_compte_jours // 30 if utilisateur.ville else 0
     nb_changements_ville = 0
     nb_changements_quartier = 0
 
-    # ========================================================================
-    # 4. RÉSEAU & PARRAINAGE (RÉEL — colonnes existantes)
-    # ========================================================================
+    # 4. RÉSEAU & PARRAINAGE
     total_filleuls = await session.scalar(
         select(func.count(Parrainage.id)).where(Parrainage.parrain_id == utilisateur.id)
     ) or 0
     bonus_cumule = utilisateur.bonus_score_cumule or 0
 
-    # ========================================================================
-    # 5. VÉRIFICATIONS FORTES (RÉELLES)
-    # ========================================================================
+    # 5. VÉRIFICATIONS FORTES
     cni_verifiee = utilisateur.est_cni_verifiee
     visage_verifie = utilisateur.est_visage_verifie
+    mois_depuis_cni = max(0, (maintenant - utilisateur.date_verification_cni).days // 30) if utilisateur.date_verification_cni else 999
+    mois_depuis_visage = max(0, (maintenant - utilisateur.date_verification_visage).days // 30) if utilisateur.date_verification_visage else 999
 
-    if utilisateur.date_verification_cni:
-        mois_depuis_cni = max(0, (maintenant - utilisateur.date_verification_cni).days // 30)
-    else:
-        mois_depuis_cni = 999
-
-    if utilisateur.date_verification_visage:
-        mois_depuis_visage = max(0, (maintenant - utilisateur.date_verification_visage).days // 30)
-    else:
-        mois_depuis_visage = 999
-
-    # ========================================================================
-    # 6. DOCUMENTS D'IDENTITÉ (CNI + Permis + Assurance)
-    # ========================================================================
+    # 6. DOCUMENTS D'IDENTITÉ
     docs = await session.execute(
         select(DocumentIdentite).where(
             DocumentIdentite.utilisateur_id == utilisateur.id,
@@ -428,10 +383,7 @@ async def _collecter_signaux_utilisateur(
         if date_derniere_modif_document is None or doc.modifie_le > date_derniere_modif_document:
             date_derniere_modif_document = doc.modifie_le
 
-    if date_derniere_modif_document:
-        mois_depuis_modif_doc = max(0, (maintenant - date_derniere_modif_document).days // 30)
-    else:
-        mois_depuis_modif_doc = 999
+    mois_depuis_modif_doc = max(0, (maintenant - date_derniere_modif_document).days // 30) if date_derniere_modif_document else 999
 
     return SignauxUtilisateur(
         nombre_champs_profil_remplis=champs_remplis,
@@ -451,7 +403,6 @@ async def _collecter_signaux_utilisateur(
         visage_verifie=visage_verifie,
         mois_depuis_verification_cni=mois_depuis_cni,
         mois_depuis_verification_visage=mois_depuis_visage,
-        # Documents d'identité
         document_cni_present=doc_cni_present,
         document_permis_present=doc_permis_present,
         document_assurance_present=doc_assurance_present,
@@ -468,12 +419,11 @@ async def _collecter_attestations(
 ) -> dict:
     """
     Collecte les donnees reelles d'attestations communautaires depuis la base.
-    Remplace les valeurs simulees par les vraies donnees.
-
-    Calcule le POIDS EFFECTIF en ponderant chaque attestation par la
-    credibilite de l'attestant (son role, son score, sa reussite).
-    Un agent d'etat atteste plus fort qu'un citoyen lambda.
+    ✅ Import LOCAL de AttestationCommunautaire pour éviter le cycle d'import.
     """
+    # ✅ Import local — C'EST ICI QUE LE CYCLE EST CASSÉ
+    from src.modeles.attestation_communautaire import AttestationCommunautaire
+
     # 1. Compter les attestations approuvees
     resultat = await session.execute(
         select(
@@ -492,24 +442,19 @@ async def _collecter_attestations(
     attestants_uniques = ligne.attestants or 0
 
     # 2. Calculer le poids effectif pondéré par la crédibilité de chaque attestant
-    #    Facteurs de crédibilité :
-    #      - Role : admin/super_admin → +50%, agent/medecin/police/ong → +25%
-    #      - Score de l'attestant : >70 → +20%, >50 → +10%, >30 → +5%
-    #      - Type d'attestation : competence → +10%, personnalise → -10%
     poids_effectif_total = 0.0
+
     if nb_attestations > 0:
-                # Récupérer chaque attestation avec l'attestant pour pondérer
         attestations = await session.execute(
             select(AttestationCommunautaire)
-            .options(
-                joinedload(AttestationCommunautaire.attestant)
-            )
+            .options(joinedload(AttestationCommunautaire.attestant))
             .where(
                 AttestationCommunautaire.atteste_id == utilisateur.id,
                 AttestationCommunautaire.statut == "APPROUVEE",
                 AttestationCommunautaire.est_active.is_(True),
             )
         )
+
         for att in attestations.scalars().all():
             credibilite = _calculer_credibilite_attestant(
                 attestant=att.attestant,
@@ -517,7 +462,6 @@ async def _collecter_attestations(
             )
             poids_effectif = att.poids_score * credibilite
             poids_effectif_total += poids_effectif
-
             journal.debug(
                 "Attestation %s : credibilite=%.2f poids_brut=%.1f poids_effectif=%.1f (%s)",
                 att.id, credibilite, att.poids_score, poids_effectif, att.attestant.role or "citoyen",
@@ -538,7 +482,6 @@ async def _collecter_attestations(
         stats["poids_total_effectif"],
         stats["attestants_uniques"],
     )
-
     return stats
 
 
@@ -548,12 +491,6 @@ def _calculer_credibilite_attestant(
 ) -> float:
     """
     Calcule un coefficient de crédibilité pour un attestant (1.0 = neutre).
-
-    Ce coefficient pondère le poids de l'attestation :
-      - Un attestant avec un score élevé et un rôle de confiance
-        (admin, agent, médecin...) atteste "plus fort"
-      - Un inconnu avec un score bas atteste "moins fort"
-
     Retourne un facteur multiplicateur entre 0.5 et 2.0.
     """
     facteur = 1.0
@@ -581,16 +518,15 @@ def _calculer_credibilite_attestant(
         facteur += 0.10
     elif score >= 30:
         facteur += 0.05
-    # score < 30 : aucun bonus
 
     # 3. Ajustement selon le type d'attestation
     bonus_type = {
-        "competence": +0.10,   # Attestation pro nécessite plus de crédibilité
-        "moralite": +0.05,     # Attestation morale nécessite confiance
-        "identite": 0.0,       # Neutre
-        "residence": -0.05,    # Plus facile à vérifier
-        "activite": -0.05,     # Plus factuelle
-        "personnalise": -0.10, # Type libre = moins de poids
+        "competence": +0.10,
+        "moralite": +0.05,
+        "identite": 0.0,
+        "residence": -0.05,
+        "activite": -0.05,
+        "personnalise": -0.10,
     }
     facteur += bonus_type.get(type_attestation, 0.0)
 
@@ -666,60 +602,22 @@ def _construire_detail(
         prochaine_mise_a_jour=prochaine,
     )
 
-# ============================================================================
+
+# =============================================================================
 # Evaluation contextuelle (score asymetrique par cas d'usage)
-# ============================================================================
+# =============================================================================
 
-# Seuils par contexte (configurables en prod via table ConfigurationSysteme)
-# Chaque contexte a un seuil minimal et un message d'eligibilite
 SEUILS_PAR_CONTEXTE = {
-    # --- Acces financier ---
-    "acces_credit": {
-        "libelle": "Acces au microcredit",
-        "seuil_requis": 65,
-    },
-    "ouverture_compte": {
-        "libelle": "Ouverture de compte bancaire",
-        "seuil_requis": 70,
-    },
-    "assurance": {
-        "libelle": "Souscription assurance",
-        "seuil_requis": 50,
-    },
-
-    # --- Aide humanitaire (seuils bas -- correcteur d'exclusion) ---
-    "aide_humanitaire": {
-        "libelle": "Aide humanitaire ONG",
-        "seuil_requis": 25,
-    },
-    "distribution_alimentaire": {
-        "libelle": "Distribution alimentaire",
-        "seuil_requis": 15,
-    },
-    "acces_soins": {
-        "libelle": "Acces aux soins de base",
-        "seuil_requis": 20,
-    },
-
-    # --- Verification identite ---
-    "verification_identite": {
-        "libelle": "Verification d'identite simple",
-        "seuil_requis": 30,
-    },
-    "verification_renforcee": {
-        "libelle": "Verification d'identite renforcee",
-        "seuil_requis": 55,
-    },
-
-    # --- Services numeriques ---
-    "location_vehicule": {
-        "libelle": "Location de vehicule",
-        "seuil_requis": 50,
-    },
-    "acces_plateforme": {
-        "libelle": "Acces a une plateforme partenaire",
-        "seuil_requis": 35,
-    },
+    "acces_credit": {"libelle": "Acces au microcredit", "seuil_requis": 65},
+    "ouverture_compte": {"libelle": "Ouverture de compte bancaire", "seuil_requis": 70},
+    "assurance": {"libelle": "Souscription assurance", "seuil_requis": 50},
+    "aide_humanitaire": {"libelle": "Aide humanitaire ONG", "seuil_requis": 25},
+    "distribution_alimentaire": {"libelle": "Distribution alimentaire", "seuil_requis": 15},
+    "acces_soins": {"libelle": "Acces aux soins de base", "seuil_requis": 20},
+    "verification_identite": {"libelle": "Verification d'identite simple", "seuil_requis": 30},
+    "verification_renforcee": {"libelle": "Verification d'identite renforcee", "seuil_requis": 55},
+    "location_vehicule": {"libelle": "Location de vehicule", "seuil_requis": 50},
+    "acces_plateforme": {"libelle": "Acces a une plateforme partenaire", "seuil_requis": 35},
 }
 
 
@@ -731,41 +629,20 @@ def evaluation_contextuelle(
 ) -> ResultatEvaluationContextuelle:
     """
     Evalue un score pour un contexte specifique (score asymetrique).
-
-    Concept :
-      Un score de 45/100 est INSUFFISANT pour ouvrir un compte bancaire
-      mais SUFFISANT pour acceder a une aide humanitaire.
-
-    Cette fonction applique des seuils differents par contexte, ce qui permet :
-      - Aux institutions financieres d'avoir des criteres stricts
-      - Aux ONG d'avoir des criteres inclusifs
-      - De ne pas exposer le score brut au citoyen (juste eligible/non)
-
-    Args:
-        digiid: Identifiant public DigiID
-        score: Score de confiance calcule
-        contexte: Contexte de la demande
-        montant_estime: Montant estime (optionnel, pour affiner)
-
-    Returns:
-        ResultatEvaluationContextuelle avec verdict par contexte
     """
     from src.modules.scoring.schemas import SeuilContexte
 
-    # Si un contexte specifique est demande, on l'evalue
     if contexte:
         config = SEUILS_PAR_CONTEXTE.get(contexte)
         if not config:
-            # Contexte inconnu -- seuil par defaut moyen
             config = {"libelle": contexte.replace("_", " ").title(), "seuil_requis": 40}
 
         seuil = config["seuil_requis"]
 
-        # Ajustement optionnel selon le montant estime
         if montant_estime and montant_estime > 500000:
-            seuil = min(95, seuil + 10)  # Montants eleves -> seuil plus haut
+            seuil = min(95, seuil + 10)
         elif montant_estime and montant_estime < 50000:
-            seuil = max(5, seuil - 5)  # Petits montants -> seuil plus bas
+            seuil = max(5, seuil - 5)
 
         eligible = score >= seuil
 
@@ -785,7 +662,6 @@ def evaluation_contextuelle(
             )
         ]
     else:
-        # Aucun contexte specifie -- retourner tous les contextes
         contextes_evalues = []
         for ctx, cfg in SEUILS_PAR_CONTEXTE.items():
             eligible_ctx = score >= cfg["seuil_requis"]
