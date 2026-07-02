@@ -79,7 +79,6 @@ from src.modules.invitations import routeur_invitations
 # --- Modules équipes ---
 from src.modules.equipes import routeur_equipes
 
-
 # Routeur racine — préfixe et tag globaux gérés au montage
 routeur_v1 = APIRouter()
 

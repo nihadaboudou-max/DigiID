@@ -27,7 +27,7 @@ from src.modeles.utilisateur import Utilisateur
 
 from src.modules.gamification import service_badges, service_tracking
 from src.modules.scoring import modele_pondere_v2 as modele_pondere
-from src.modules.scoring.service import declencher_recalcul_score
+
 from src.modules.scoring.chargeur_modele_ml import (
     est_modele_disponible, predire_score_ml,
 )
