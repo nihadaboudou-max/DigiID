@@ -125,6 +125,9 @@ def _nettoyer_ligne_mrz(ligne: str, longueur_attendue: int = 30) -> str:
     
     ligne = ligne.upper().strip()
     
+    # ✅ CORRECTION CRITIQUE : Supprimer TOUS les espaces
+    ligne = ligne.replace(" ", "").replace("  ", "")
+    
     # Corrections OCR courantes dans les MRZ
     # O → 0 dans un contexte numérique
     # I/l → 1 dans un contexte numérique
