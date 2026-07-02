@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 """Module Scoring — calcul du score de confiance DigiID."""
-from src.modules.scoring.routes import routeur_scoring
-from src.modules.scoring.service import declencher_recalcul_score
 
 # Version du modele de scoring utilisee
 # v1 = ponderee (anciennete 25, mobile_money 35, geographie 20, reseau 20)

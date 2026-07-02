@@ -26,6 +26,7 @@ from src.modules.ocr_cni.schemas import (
     SuppressionCNI,
     RestaurationCNI,
 )
+
 from src.modules.ocr_cni.validation_cni import (
     valider_donnees_cni,
     verifier_coherence_recto_verso,
