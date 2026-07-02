@@ -26,7 +26,7 @@ from src.modules.monitoring import routeur_monitoring
 # --- Phase 2 — modules métier ---
 from src.modules.profil import routeur_profil
 from src.modules.consentements import routeur_consentements
-from src.modules.scoring import routeur_scoring
+from src.modules.scoring.routes import routeur_scoring
 
 # --- Phase 3 — chatbot et documents RAG ---
 from src.modules.documents import routeur_documents
@@ -41,7 +41,7 @@ from src.modules.verification_visuelle import routeur_verification_visuelle
 from src.modules.gamification import routeur_gamification
 
 # --- Module OCR CNI ---
-from src.modules.ocr_cni import routeur_ocr_cni
+from src.modules.ocr_cni.routes import routeur_ocr_cni
 
 # --- Module Documents d'Identité (CNI + Permis + Assurance) ---
 # CORRECTION : renommé pour éviter l'écrasement de routeur_documents (Phase 3)
