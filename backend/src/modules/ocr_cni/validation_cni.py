@@ -21,7 +21,6 @@ from src.noyau.journal import journal
 # ==============================================================================
 # Constantes de validation
 # ==============================================================================
-
 # Poids pour le calcul du checksum MRZ (ICAO 9303)
 # Cycle de poids [7, 3, 1, 7, 3, 1, ...] pour la somme de contrôle
 POIDS_MRZ = [7, 3, 1, 7, 3, 1, 7, 3, 1, 7, 3, 1, 7, 3, 1]
@@ -29,20 +28,16 @@ POIDS_MRZ = [7, 3, 1, 7, 3, 1, 7, 3, 1, 7, 3, 1, 7, 3, 1]
 # Âge minimum pour avoir un document d'identité
 AGE_MINIMUM = 0  # Relaxé — un parent peut scanner pour son enfant
 
-
 def _calculer_checksum_mrz(valeur: str) -> int:
     """
     Calcule le checksum d'un champ MRZ selon la norme ICAO 9303.
-    
     Args:
-        valeur : Chaîne à valider (ne doit contenir que A-Z, 0-9, <)
-    
+         valeur : Chaîne à valider (ne doit contenir que A-Z, 0-9, <)
     Retour:
-        Valeur du checksum (0-9)
-    
+         Valeur du checksum (0-9)
     Note:
-        Les caractères < sont convertis en 0.
-        Les lettres sont converties : A=10, B=11, ..., Z=35
+         Les caractères < sont convertis en 0.
+         Les lettres sont converties : A=10, B=11, ..., Z=35
     """
     somme = 0
     for i, char in enumerate(valeur):
@@ -59,7 +54,6 @@ def _calculer_checksum_mrz(valeur: str) -> int:
         somme += valeur_num * POIDS_MRZ[i]
     return somme % 10
 
-
 def _nettoyer_champ_mrz(champ: str, longueur_max: int = 30) -> str:
     """Nettoie un champ MRZ pour le calcul de checksum."""
     # Remplacer les caractères invalides par <
@@ -70,7 +64,6 @@ def _nettoyer_champ_mrz(champ: str, longueur_max: int = 30) -> str:
     else:
         champ = champ + "<" * (longueur_max - len(champ))
     return champ
-
 
 def valider_mrz(ligne_1: Optional[str],
                 ligne_2: Optional[str],
@@ -88,14 +81,13 @@ def valider_mrz(ligne_1: Optional[str],
         "checksum_date_naissance": False,
         "checksum_date_expiration": False,
     }
-    
     if not all([ligne_1, ligne_2]):
         return False, details, "MRZ incomplète : les lignes 1 et 2 sont requises."
     
     # Parser la MRZ
     mrz = parser_mrz_complet(ligne_1, ligne_2, ligne_3)
+    code_pays = mrz.get("pays_emetteur", "")
     
-    code_pays = mrz.get("pays_emetteur", " ")
     if code_pays and code_pays in CODES_PAYS_ICAO:
         details["code_pays"] = True
         details["structure"] = True
@@ -106,7 +98,6 @@ def valider_mrz(ligne_1: Optional[str],
     # Vérifier checksums (si disponibles dans le format TD1)
     if mrz.get("format") == "TD1" and len(ligne_2) >= 30:
         l2 = _nettoyer_champ_mrz(ligne_2)
-        
         num_carte = l2[0:9]
         checksum_num_attendu = l2[9:10]
         if num_carte and checksum_num_attendu:
@@ -139,21 +130,18 @@ def valider_mrz(ligne_1: Optional[str],
     
     # Résultat : le pays est reconnu = déjà une bonne MRZ
     mrz_valide = details["code_pays"] and details["structure"]
-    
     pays_nom = CODES_PAYS_ICAO.get(code_pays, code_pays)
     message = f"MRZ valide. Pays : {pays_nom}." if mrz_valide else f"MRZ non reconnue."
-    
     return mrz_valide, details, message
-
 
 def valider_numero_cni(numero: Optional[str]) -> Tuple[bool, str]:
     """
     Valide le format du numéro de document.
     Accepte divers formats selon les pays :
-      - CNI Côte d'Ivoire : 12-15 alphanumériques
-      - NIN Nigeria : 11 chiffres
-      - Ghana Card : 10-15 alphanumériques
-      - Passeport : 8-12 alphanumériques
+    - CNI Côte d'Ivoire : 12-15 alphanumériques
+    - NIN Nigeria : 11 chiffres
+    - Ghana Card : 10-15 alphanumériques
+    - Passeport : 8-12 alphanumériques
     """
     if not numero:
         return False, "Numéro de carte manquant."
@@ -162,10 +150,8 @@ def valider_numero_cni(numero: Optional[str]) -> Tuple[bool, str]:
     
     if len(numero) < 6:
         return False, f"Numéro trop court ({len(numero)} car.). Minimum 6 caractères."
-    
     if len(numero) > 20:
         return False, f"Numéro trop long ({len(numero)} car.). Maximum 20 caractères."
-    
     if not numero.isalnum():
         return False, "Le numéro contient des caractères non autorisés."
     
@@ -174,7 +160,6 @@ def valider_numero_cni(numero: Optional[str]) -> Tuple[bool, str]:
         return False, "Le numéro doit contenir des chiffres."
     
     return True, "Format du numéro valide."
-
 
 def _normaliser_date(date_str: Optional[str]) -> Optional[str]:
     """
@@ -213,7 +198,6 @@ def _normaliser_date(date_str: Optional[str]) -> Optional[str]:
         "SEPTEMBRE": "09", "OCTOBRE": "10", "NOVEMBRE": "11",
         "DÉCEMBRE": "12", "DECEMBRE": "12"
     }
-    
     date_upper = date_str.upper()
     for mois_nom, mois_num in mois_map.items():
         if mois_nom in date_upper:
@@ -223,7 +207,6 @@ def _normaliser_date(date_str: Optional[str]) -> Optional[str]:
                 return f"{jj.zfill(2)}/{mois_num}/{aaaa}"
     
     return None
-
 
 def valider_date_naissance(date_naissance: Optional[str],
                            date_expiration: Optional[str] = None) -> Tuple[bool, str]:
@@ -261,16 +244,13 @@ def valider_date_naissance(date_naissance: Optional[str],
     
     return True, f"Date de naissance valide ({ddn_str})."
 
-
 def valider_date_expiration(date_expiration: Optional[str]) -> Tuple[bool, str]:
     """
     Valide la date d'expiration : format, non-expirée.
-    
     Args:
-        date_expiration : Date au format JJ/MM/AAAA
-    
+         date_expiration : Date au format JJ/MM/AAAA
     Retour:
-        Tuple (est_valide, message)
+         Tuple (est_valide, message)
     """
     if not date_expiration:
         return True, "Date d'expiration non fournie (vérification ignorée)."
@@ -290,29 +270,27 @@ def valider_date_expiration(date_expiration: Optional[str]) -> Tuple[bool, str]:
     # Vérifier la durée de validité (10 ans max)
     return True, f"Carte valide jusqu'au {dexp.strftime('%d/%m/%Y')}."
 
-
 def valider_sexe(sexe: Optional[str]) -> Tuple[bool, str]:
     """Valide que le sexe est M ou F."""
     if not sexe or sexe == "non_detecte":
         return False, "Sexe non détecté."
+    
     if sexe.upper() in ("M", "F"):
         return True, f"Sexe : {'Masculin' if sexe.upper() == 'M' else 'Féminin'}."
+    
     return False, f"Sexe invalide : {sexe}."
-
 
 def valider_donnees_cni(donnees: DonneesCNIExtraites) -> ValidationCNIResultat:
     """
     Valide l'ensemble des données extraites d'une CNI.
-    
     Effectue toutes les vérifications :
-      - Format du numéro
-      - Validité des dates
-      - Cohérence MRZ (si disponible)
-      - Sexe
-      - Âge minimum
-    
+       - Format du numéro
+       - Validité des dates
+       - Cohérence MRZ (si disponible)
+       - Sexe
+       - Âge minimum
     Retour:
-        ValidationCNIResultat avec le détail des validations.
+         ValidationCNIResultat avec le détail des validations.
     """
     scores: dict[str, bool] = {}
     
@@ -373,9 +351,9 @@ def valider_donnees_cni(donnees: DonneesCNIExtraites) -> ValidationCNIResultat:
         echecs = [k for k, v in scores.items() if not v]
         message = "Document partiellement valide. Champs manquants : " + ", ".join(echecs[:3]) + "."
     
-    #CORRECTION : utiliser str(scores) pour éviter le conflit avec loguru
-    #scores_str = str(scores)
-    #journal.info(f"Validation document : est_valide={est_valide}, scores={scores_str}")
+    # CORRECTION : utiliser str(scores) pour éviter le conflit avec loguru
+    # scores_str = str(scores)
+    # journal.info(f"Validation document : est_valide={est_valide}, scores={scores_str}")
     
     return ValidationCNIResultat(
         est_valide=est_valide,
@@ -383,7 +361,6 @@ def valider_donnees_cni(donnees: DonneesCNIExtraites) -> ValidationCNIResultat:
         verification_mrz=mrz_valide,
         message=message,
     )
-
 
 def verifier_coherence_recto_verso(
     donnees_recto: Optional[DonneesCNIExtraites],
@@ -393,13 +370,11 @@ def verifier_coherence_recto_verso(
     Vérifie la cohérence entre les données extraites du recto et du verso.
     Les informations doivent correspondre (même numéro, mêmes dates, etc.)
     pour éviter les falsifications.
-    
     Args:
-        donnees_recto : Données extraites du recto
-        donnees_verso : Données extraites du verso
-    
+         donnees_recto : Données extraites du recto
+         donnees_verso : Données extraites du verso
     Retour:
-        Tuple (coherent, message)
+         Tuple (coherent, message)
     """
     if not donnees_recto or not donnees_verso:
         return False, "Les deux faces sont nécessaires pour la vérification croisée."
