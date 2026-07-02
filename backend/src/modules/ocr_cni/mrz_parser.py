@@ -119,38 +119,17 @@ TYPES_DOCUMENTS: dict[str, str] = {
 # Fonctions utilitaires
 # =============================================================================
 def _nettoyer_ligne_mrz(ligne: str, longueur_attendue: int = 30) -> str:
-    """Nettoie une ligne MRZ avec corrections avancées."""
+    """Nettoie une ligne MRZ."""
     if not ligne:
         return "<" * longueur_attendue
-    
     ligne = ligne.upper().strip()
-    
-    # ✅ CORRECTION CRITIQUE : Supprimer TOUS les espaces
-    ligne = ligne.replace(" ", "").replace("  ", "")
-    
-    # Corrections OCR courantes dans les MRZ
-    # O → 0 dans un contexte numérique
-    # I/l → 1 dans un contexte numérique
-    corrections = [
-        (r"O(?=\d)", "0"),  # O suivi d'un chiffre
-        (r"(?<=\d)O(?=\d)", "0"),  # O entre deux chiffres
-        (r"I(?=\d)", "1"),  # I suivi d'un chiffre
-        (r"(?<=\d)I(?=\d)", "1"),  # I entre deux chiffres
-        (r"l(?=\d)", "1"),  # l minuscule suivi d'un chiffre
-    ]
-    
-    for pattern, remplacement in corrections:
-        ligne = re.sub(pattern, remplacement, ligne)
-    
     # Remplacer les caractères non valides par <
     ligne = "".join(c if c.isalnum() or c == "<" else "<" for c in ligne)
-    
     # Ajuster à la longueur attendue
     if len(ligne) > longueur_attendue:
         ligne = ligne[:longueur_attendue]
     elif len(ligne) < longueur_attendue:
         ligne = ligne + "<" * (longueur_attendue - len(ligne))
-    
     return ligne
 
 def _calculer_checksum_mrz(donnees: str) -> int:
