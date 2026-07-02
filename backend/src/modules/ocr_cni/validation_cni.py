@@ -373,9 +373,9 @@ def valider_donnees_cni(donnees: DonneesCNIExtraites) -> ValidationCNIResultat:
         echecs = [k for k, v in scores.items() if not v]
         message = "Document partiellement valide. Champs manquants : " + ", ".join(echecs[:3]) + "."
     
-    # ✅ CORRECTION : utiliser str(scores) pour éviter le conflit avec loguru
-    scores_str = str(scores)
-    journal.info(f"Validation document : est_valide={est_valide}, scores={scores_str}")
+    #CORRECTION : utiliser str(scores) pour éviter le conflit avec loguru
+    #scores_str = str(scores)
+    #journal.info(f"Validation document : est_valide={est_valide}, scores={scores_str}")
     
     return ValidationCNIResultat(
         est_valide=est_valide,
