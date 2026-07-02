@@ -19,7 +19,8 @@ from src.config.constantes import TypesEvenementAudit
 # ✅ Imports directs depuis les sous-modules (évite le cycle via src.modeles.__init__)
 from src.modeles.consentement import Consentement
 from src.modeles.document_identite import DocumentIdentite
-from src.modeles.journal_audit import JournalAudit
+from src.modeles.audit import JournalAudit
+
 from src.modeles.parrainage import Parrainage
 from src.modeles.score_historique import ScoreHistorique
 from src.modeles.utilisateur import Utilisateur
