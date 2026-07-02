@@ -1,20 +1,19 @@
 # -*- coding: utf-8 -*-
 """
 Extraction structurée des champs de documents d'identité africains.
-
 Supporte :
-  - CNI (Côte d'Ivoire, Sénégal, Mali, Burkina Faso, Niger, Bénin, Togo, etc.)
-  - Carte d'Identité Biométrique (CIP) — format ECOWAS
-  - Passeports africains (via MRZ universel)
-  - Carte de séjour / Permis de résidence
-  - Permis de conduire
-  - Tout document avec MRZ (fallback universel)
+- CNI (Côte d'Ivoire, Sénégal, Mali, Burkina Faso, Niger, Bénin, Togo, etc.)
+- Carte d'Identité Biométrique (CIP) — format ECOWAS
+- Passeports africains (via MRZ universel)
+- Carte de séjour / Permis de résidence
+- Permis de conduire
+- Tout document avec MRZ (fallback universel)
 
 Stratégie :
-  1. Détection du pays et type de document
-  2. Extraction par patterns spécifiques au pays
-  3. Fallback MRZ (standard ICAO 9303)
-  4. Extraction générique par regex (dernier recours)
+1. Détection du pays et type de document
+2. Extraction par patterns spécifiques au pays
+3. Fallback MRZ (standard ICAO 9303)
+4. Extraction générique par regex (dernier recours)
 """
 import re
 from typing import Optional
@@ -31,14 +30,11 @@ from src.modules.ocr_cni.schemas import (
 )
 from src.noyau.journal import journal
 
-
 # =============================================================================
 # PATTERNS MULTI-PAYS
 # =============================================================================
 # Structure : pays -> { champs -> [patterns_regex] }
-
 PATTERNS_DOCUMENTS: dict = {
-
     # ── CÔTE D'IVOIRE ──────────────────────────────────
     "cote_ivoire": {
         "indices_reconnaissance": [
@@ -60,7 +56,6 @@ PATTERNS_DOCUMENTS: dict = {
             "taille": [r"TAILLE\s*[:\\-]?\s*", r"Taille\s*[:\\-]?\s*"],
         },
     },
-
     # ── SÉNÉGAL ────────────────────────────────────────
     "senegal": {
         "indices_reconnaissance": [
@@ -80,7 +75,6 @@ PATTERNS_DOCUMENTS: dict = {
             "taille": [r"TAILLE\s*[:\\-]?\s*"],
         },
     },
-
     # ── MALI ───────────────────────────────────────────
     "mali": {
         "indices_reconnaissance": [
@@ -89,16 +83,15 @@ PATTERNS_DOCUMENTS: dict = {
         ],
         "champs": {
             "nom": [r"NOM\s*[:\\-]?\s*"],
-            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*"],
-            "sexe": [r"SEXE\s*"],
-            "date_naissance": [r"N[EÉ]\s*LE?\s*"],
-            "lieu_naissance": [r"[Ll][iée]u?\s*naissance\s*"],
-            "numero": [r"N[°o]\s*", r"NUMERO\s*"],
-            "date_delivrance": [r"D[EÉ]LIVR[EÉ]\s*LE?\s*"],
-            "date_expiration": [r"DATE\s*EXPIRATION\s*"],
+            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*[:\\-]?\s*"],
+            "sexe": [r"SEXE\s*[:\\-]?\s*"],
+            "date_naissance": [r"N[EÉ]\s*LE?\s*[:\\-]?\s*"],
+            "lieu_naissance": [r"[Ll][iée]u?\s*naissance\s*[:\\-]?\s*"],
+            "numero": [r"N[°o]\s*[:\\-]?\s*", r"NUMERO\s*[:\\-]?\s*"],
+            "date_delivrance": [r"D[EÉ]LIVR[EÉ]\s*LE?\s*[:\\-]?\s*"],
+            "date_expiration": [r"DATE\s*EXPIRATION\s*[:\\-]?\s*"],
         },
     },
-
     # ── BURKINA FASO ───────────────────────────────────
     "burkina": {
         "indices_reconnaissance": [
@@ -106,16 +99,15 @@ PATTERNS_DOCUMENTS: dict = {
             r"CARTE\s*NATIONALE\s*D[''`]IDENTIT[EÉ]\s*BURKINAB[EÉ]",
         ],
         "champs": {
-            "nom": [r"NOM\s*"],
-            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*"],
-            "sexe": [r"SEXE\s*"],
-            "date_naissance": [r"N[EÉ]\s*LE?\s*"],
-            "numero": [r"N[°o]\s*"],
-            "date_delivrance": [r"D[EÉ]LIVR[EÉ]\s*LE?\s*"],
-            "date_expiration": [r"EXPIRATION\s*"],
+            "nom": [r"NOM\s*[:\\-]?\s*"],
+            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*[:\\-]?\s*"],
+            "sexe": [r"SEXE\s*[:\\-]?\s*"],
+            "date_naissance": [r"N[EÉ]\s*LE?\s*[:\\-]?\s*"],
+            "numero": [r"N[°o]\s*[:\\-]?\s*"],
+            "date_delivrance": [r"D[EÉ]LIVR[EÉ]\s*LE?\s*[:\\-]?\s*"],
+            "date_expiration": [r"EXPIRATION\s*[:\\-]?\s*"],
         },
     },
-
     # ── NIGER ───────────────────────────────────────────
     "niger": {
         "indices_reconnaissance": [
@@ -123,42 +115,39 @@ PATTERNS_DOCUMENTS: dict = {
             r"CARTE\s*NATIONALE\s*D[''`]IDENTIT[EÉ]",
         ],
         "champs": {
-            "nom": [r"NOM\s*"],
-            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*"],
-            "sexe": [r"SEXE\s*"],
-            "date_naissance": [r"N[EÉ]\s*LE?\s*"],
-            "numero": [r"N[°o]\s*"],
+            "nom": [r"NOM\s*[:\\-]?\s*"],
+            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*[:\\-]?\s*"],
+            "sexe": [r"SEXE\s*[:\\-]?\s*"],
+            "date_naissance": [r"N[EÉ]\s*LE?\s*[:\\-]?\s*"],
+            "numero": [r"N[°o]\s*[:\\-]?\s*"],
         },
     },
-
     # ── BÉNIN ───────────────────────────────────────────
     "benin": {
         "indices_reconnaissance": [r"R[EÉ]PUBLIQUE\s*DU\s*B[EÉ]NIN", r"B[EÉ]NIN"],
         "champs": {
-            "nom": [r"NOM\s*"],
-            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*"],
-            "date_naissance": [r"N[EÉ]\s*LE?\s*"],
-            "numero": [r"N[°o]\s*", r"NUMERO\s*"],
+            "nom": [r"NOM\s*[:\\-]?\s*"],
+            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*[:\\-]?\s*"],
+            "date_naissance": [r"N[EÉ]\s*LE?\s*[:\\-]?\s*"],
+            "numero": [r"N[°o]\s*[:\\-]?\s*", r"NUMERO\s*[:\\-]?\s*"],
         },
     },
-
     # ── TOGO ────────────────────────────────────────────
     "togo": {
         "indices_reconnaissance": [r"R[EÉ]PUBLIQUE\s*TOGOLAISE", r"TOGO", r"CARTE\s*D[''`]IDENTIT[EÉ]\s*TOGOLAISE"],
         "champs": {
-            "nom": [r"NOM\s*"],
-            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*"],
-            "sexe": [r"SEXE\s*"],
-            "date_naissance": [r"N[EÉ]\s*LE?\s*"],
-            "numero": [r"N[°o]\s*"],
+            "nom": [r"NOM\s*[:\\-]?\s*"],
+            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*[:\\-]?\s*"],
+            "sexe": [r"SEXE\s*[:\\-]?\s*"],
+            "date_naissance": [r"N[EÉ]\s*LE?\s*[:\\-]?\s*"],
+            "numero": [r"N[°o]\s*[:\\-]?\s*"],
         },
     },
-
     # ── GHANA ───────────────────────────────────────────
     "ghana": {
         "indices_reconnaissance": [
             r"GHANA\s*CARD", r"REPUBLIC\s*OF\s*GHANA",
-            r"NIA\s*", r"NATIONAL\s*IDENTITY\s*CARD",
+            r"NIA\s*[:\\-]?\s*", r"NATIONAL\s*IDENTITY\s*CARD",
         ],
         "champs": {
             "nom": [r"SURNAME\s*[:\\-]?\s*", r"LAST\s*NAME\s*[:\\-]?\s*"],
@@ -168,12 +157,11 @@ PATTERNS_DOCUMENTS: dict = {
             "numero": [r"NIN\s*[:\\-]?\s*", r"ID\s*NUMBER\s*[:\\-]?\s*", r"NATIONAL\s*ID\s*"],
         },
     },
-
     # ── NIGERIA ─────────────────────────────────────────
     "nigeria": {
         "indices_reconnaissance": [
             r"NIGERIA", r"NATIONAL\s*IDENTITY\s*NUMBER",
-            r"NIN\s*", r"NIMC\s*", r"FEDERAL\s*REPUBLIC\s*OF\s*NIGERIA",
+            r"NIN\s*[:\\-]?\s*", r"NIMC\s*[:\\-]?\s*", r"FEDERAL\s*REPUBLIC\s*OF\s*NIGERIA",
         ],
         "champs": {
             "nom": [r"SURNAME\s*[:\\-]?\s*", r"LAST\s*NAME\s*[:\\-]?\s*"],
@@ -185,21 +173,19 @@ PATTERNS_DOCUMENTS: dict = {
             "date_expiration": [r"EXPIRY\s*DATE\s*", r"EXPIRES?\s*"],
         },
     },
-
     # ── CAMEROUN ────────────────────────────────────────
     "cameroun": {
         "indices_reconnaissance": [
             r"R[EÉ]PUBLIQUE\s*DU\s*CAMEROUN", r"CAMEROUN", r"CAMEROON",
         ],
         "champs": {
-            "nom": [r"NOM\s*"],
-            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*"],
-            "sexe": [r"SEXE\s*"],
-            "date_naissance": [r"N[EÉ]\s*LE?\s*"],
-            "numero": [r"N[°o]\s*", r"NUMERO\s*"],
+            "nom": [r"NOM\s*[:\\-]?\s*"],
+            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*[:\\-]?\s*"],
+            "sexe": [r"SEXE\s*[:\\-]?\s*"],
+            "date_naissance": [r"N[EÉ]\s*LE?\s*[:\\-]?\s*"],
+            "numero": [r"N[°o]\s*[:\\-]?\s*", r"NUMERO\s*[:\\-]?\s*"],
         },
     },
-
     # ── MAROC ───────────────────────────────────────────
     "maroc": {
         "indices_reconnaissance": [
@@ -207,14 +193,13 @@ PATTERNS_DOCUMENTS: dict = {
             r"CARTE\s*NATIONALE\s*D[''`]IDENTIT[EÉ]\s*",
         ],
         "champs": {
-            "nom": [r"NOM\s*"],
-            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*"],
-            "sexe": [r"SEXE\s*"],
-            "date_naissance": [r"N[EÉ]\s*LE?\s*"],
-            "numero": [r"N[°o]\s*", r"CIN\s*"],
+            "nom": [r"NOM\s*[:\\-]?\s*"],
+            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*[:\\-]?\s*"],
+            "sexe": [r"SEXE\s*[:\\-]?\s*"],
+            "date_naissance": [r"N[EÉ]\s*LE?\s*[:\\-]?\s*"],
+            "numero": [r"N[°o]\s*[:\\-]?\s*", r"CIN\s*"],
         },
     },
-
     # ── ALGÉRIE ─────────────────────────────────────────
     "algerie": {
         "indices_reconnaissance": [
@@ -222,14 +207,13 @@ PATTERNS_DOCUMENTS: dict = {
             r"CARTE\s*NATIONALE\s*D[''`]IDENTIT[EÉ]\s*ALG[EÉ]RIENNE",
         ],
         "champs": {
-            "nom": [r"NOM\s*"],
-            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*"],
-            "sexe": [r"SEXE\s*"],
-            "date_naissance": [r"N[EÉ]\s*LE?\s*"],
-            "numero": [r"N[°o]\s*"],
+            "nom": [r"NOM\s*[:\\-]?\s*"],
+            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*[:\\-]?\s*"],
+            "sexe": [r"SEXE\s*[:\\-]?\s*"],
+            "date_naissance": [r"N[EÉ]\s*LE?\s*[:\\-]?\s*"],
+            "numero": [r"N[°o]\s*[:\\-]?\s*"],
         },
     },
-
     # ── TUNISIE ─────────────────────────────────────────
     "tunisie": {
         "indices_reconnaissance": [
@@ -237,35 +221,30 @@ PATTERNS_DOCUMENTS: dict = {
             r"CARTE\s*D[''`]IDENTIT[EÉ]\s*NATIONALE",
         ],
         "champs": {
-            "nom": [r"NOM\s*"],
-            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*"],
-            "date_naissance": [r"N[EÉ]\s*LE?\s*"],
-            "numero": [r"N[°o]\s*"],
+            "nom": [r"NOM\s*[:\\-]?\s*"],
+            "prenoms": [r"PR[EÉ]NOM(?:S)?\s*[:\\-]?\s*"],
+            "date_naissance": [r"N[EÉ]\s*LE?\s*[:\\-]?\s*"],
+            "numero": [r"N[°o]\s*[:\\-]?\s*"],
         },
     },
 }
 
-
 # =============================================================================
 # PATTERNS GÉNÉRIQUES
 # =============================================================================
-
-PATTERN_DATE = r"(\d{2})\s*[/.\-]\s*(\d{2})\s*[/.\-]\s*(\d{4})"
-PATTERN_SEXE = r"\b(Masculin|Féminin|M[\.]?|F[\.]?|Male|Female)\b"
+PATTERN_DATE = r"(\d{2})\s*[/.-]\s*(\d{2})\s*[/.-]\s*(\d{4})"
+PATTERN_SEXE = r"\b(Masculin|Féminin|M[.]?|F[.]?|Male|Female)\b"
 PATTERN_TAILLE = r"(\d{3})\s*cm"
 PATTERN_NIN = r"\b(\d{11})\b"
-
 
 # =============================================================================
 # Fonctions d'extraction
 # =============================================================================
-
 def _nettoyer_texte(texte: str) -> str:
     if not texte:
         return ""
     texte = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", texte)
     return texte.strip()
-
 
 def _detecter_pays(texte: str) -> Optional[str]:
     texte_upper = texte.upper()
@@ -275,7 +254,6 @@ def _detecter_pays(texte: str) -> Optional[str]:
                 journal.info(f"Pays détecté : {pays}")
                 return pays
     return None
-
 
 def _extraire_valeur_label(texte: str, patterns_label: list[str], contexte: str = "nom") -> Optional[str]:
     """Extrait la valeur après un label sur la même ligne ou ligne suivante."""
@@ -291,7 +269,7 @@ def _extraire_valeur_label(texte: str, patterns_label: list[str], contexte: str 
                 valeur = re.sub(r"[:.\s-]+$", "", valeur)
                 if valeur and not re.match(r"^\s*$", valeur):
                     return _nettoyer_valeur(valeur, contexte)
-
+                
                 # Valeur sur la ligne suivante
                 if i + 1 < len(lignes):
                     suivante = lignes[i + 1].strip()
@@ -304,19 +282,15 @@ def _extraire_valeur_label(texte: str, patterns_label: list[str], contexte: str 
                     )
                     if suivante and len(suivante) > 3 and not est_label:
                         return _nettoyer_valeur(suivante, contexte)
-
                 return None
     return None
 
-
 def _nettoyer_valeur(valeur: str, contexte: str) -> str:
     valeur = valeur.strip().strip(":;,.- ")
-
     if contexte == "numero":
         valeur = "".join(c for c in valeur.upper() if c.isalnum())
         if len(valeur) > 20:
             valeur = valeur[:20]
-
     elif contexte == "sexe":
         valeur = valeur.upper()[:1]
         if valeur in ("M", "F"):
@@ -326,25 +300,22 @@ def _nettoyer_valeur(valeur: str, contexte: str) -> str:
         if valeur.upper().startswith("FEM"):
             return "F"
         return "N/A"
-
     elif contexte == "date_naissance":
         valeur = re.sub(r"[.\-]", "/", valeur)
         match = re.search(PATTERN_DATE, valeur)
         if match:
             valeur = f"{match.group(1)}/{match.group(2)}/{match.group(3)}"
-
     elif contexte == "taille":
         match = re.search(r"(\d{3})", valeur)
         if match:
             valeur = match.group(1)
-
     return valeur
 
 def _extraire_generique(texte: str) -> dict:
     """Extraction de dernier recours : patterns universels."""
     resultats: dict = {}
     texte_upper = texte.upper()
-
+    
     # 🔑 NUMÉRO CNI - Plusieurs patterns
     patterns_numero = [
         r"N[°O]\s*[:\-]?\s*([A-Z0-9]{8,20})",
@@ -353,19 +324,18 @@ def _extraire_generique(texte: str) -> dict:
         r"ID\s*(?:NUMBER)?\s*[:\-]?\s*([A-Z0-9]{8,20})",
         r"CARTE\s*N°\s*([A-Z0-9]{8,15})",
     ]
-
     for pattern in patterns_numero:
         match = re.search(pattern, texte_upper)
         if match:
             resultats["numero_cni"] = match.group(1).strip()
             break
-
+            
     # Pattern 2 : NIN Nigeria (11 chiffres)
     if "numero_cni" not in resultats:
         nin = re.search(r"\b(\d{11})\b", texte)
         if nin:
             resultats["numero_cni"] = nin.group(1)
-
+            
     # Pattern 3 : Chercher une longue séquence alphanumérique (fallback)
     if "numero_cni" not in resultats:
         numeros = re.findall(r"\b([A-Z0-9]{10,15})\b", texte_upper)
@@ -373,22 +343,21 @@ def _extraire_generique(texte: str) -> dict:
             if not re.match(r"^[A-Z]{8,}$", num) and not re.match(r"^\d{8}$", num):
                 resultats["numero_cni"] = num
                 break
-
-    #  DATE DE NAISSANCE - Formats multiples
+                
+    # 📅 DATE DE NAISSANCE - Formats multiples
     patterns_date = [
         r"N[ÉEÉ]\s+LE?\s+[:\-]?\s*(\d{1,2}\s*[/\-\.]\s*\d{1,2}\s*[/\-\.]\s*\d{2,4})",
         r"DATE\s+DE\s+NAISSANCE\s*[:\-]?\s*(\d{1,2}\s*[/\-\.]\s*\d{1,2}\s*[/\-\.]\s*\d{2,4})",
         r"NE\s+LE?\s+[:\-]?\s*(\d{1,2}\s*[/\-\.]\s*\d{1,2}\s*[/\-\.]\s*\d{2,4})",
         r"DATE\s+NAISSANCE\s*[:\-]?\s*(\d{1,2}\s*[/\-\.]\s*\d{1,2}\s*[/\-\.]\s*\d{2,4})",
     ]
-
     for pattern in patterns_date:
         match = re.search(pattern, texte_upper)
         if match:
             date_str = match.group(1).replace(" ", "")
             resultats["date_naissance"] = re.sub(r"[\-\.]", "/", date_str)
             break
-
+            
     # Fallback : chercher une date au format JJ/MM/AAAA
     if "date_naissance" not in resultats:
         dates = re.findall(r"(\d{2})\s*[/.\-]\s*(\d{2})\s*[/.\-]\s*(\d{4})", texte)
@@ -398,7 +367,7 @@ def _extraire_generique(texte: str) -> dict:
             if len(aaaa) == 2:
                 aaaa = "19" + aaaa if int(aaaa) > 40 else "20" + aaaa
             resultats["date_naissance"] = f"{d[0].zfill(2)}/{d[1].zfill(2)}/{aaaa}"
-
+            
     # ♂️♀️ SEXE - Patterns multiples
     patterns_sexe = [
         (r"SEXE\s*[:\-]?\s*(MASCULIN|FEMININ|M|F)\b", lambda x: "M" if x.upper().startswith("M") else "F"),
@@ -408,26 +377,24 @@ def _extraire_generique(texte: str) -> dict:
         (r"\b(MALE)\b", lambda x: "M"),
         (r"\b(FEMALE)\b", lambda x: "F"),
     ]
-
     for pattern, transform in patterns_sexe:
         match = re.search(pattern, texte_upper)
         if match:
             resultats["sexe"] = transform(match.group(1))
             break
-
+            
     # Fallback : chercher M ou F isolé près d'un label
     if "sexe" not in resultats:
         match_sexe_isole = re.search(r"SEXE\s*[:\-]?\s*([MF])\b", texte_upper)
         if match_sexe_isole:
             resultats["sexe"] = match_sexe_isole.group(1)
-
+            
     # 📏 TAILLE (optionnel)
     match_taille = re.search(r"(\d{3})\s*cm", texte, re.IGNORECASE)
     if match_taille:
         resultats["taille"] = match_taille.group(1)
-
+        
     return resultats
-
 
 def _fusionner_mrz_donnees(donnees: DonneesCNIExtraites, mrz_parse: dict) -> DonneesCNIExtraites:
     """MRZ comble les champs manquants de l'OCR."""
@@ -444,15 +411,14 @@ def _fusionner_mrz_donnees(donnees: DonneesCNIExtraites, mrz_parse: dict) -> Don
         modifs["sexe"] = mrz_parse["sexe"]
     if mrz_parse.get("date_expiration_date") and not donnees.date_expiration:
         modifs["date_expiration"] = mrz_parse["date_expiration_date"]
+        
     if modifs:
         return donnees.model_copy(update=modifs)
     return donnees
 
-
 # =============================================================================
 # Point d'entrée principal
 # =============================================================================
-
 def extraire_donnees_cni(
     texte_brut: str,
     confiance: float = 0.0,
@@ -460,13 +426,12 @@ def extraire_donnees_cni(
 ) -> DonneesCNIExtraites:
     """
     Extrait les champs d'un document d'identité depuis le texte OCR.
-
     Pipeline :
-      1. Nettoyage du texte
-      2. Détection du pays → patterns spécifiques
-      3. Parsing MRZ (universel, standard ICAO 9303)
-      4. Fusion MRZ → OCR
-      5. Extraction générique (fallback)
+       1. Nettoyage du texte
+       2. Détection du pays → patterns spécifiques
+       3. Parsing MRZ (universel, standard ICAO 9303)
+       4. Fusion MRZ → OCR
+       5. Extraction générique (fallback)
     """
     if not texte_brut:
         return DonneesCNIExtraites(
@@ -474,15 +439,15 @@ def extraire_donnees_cni(
             texte_brut="",
             taux_confiance_moyen=confiance,
         )
-
+        
     texte = _nettoyer_texte(texte_brut)
-
+    
     # ── Étape 1 : Détection du pays ──
     pays = _detecter_pays(texte)
     format_carte: TypeFormatCNI = "non_reconnu"
     if pays:
         format_carte = "nouveau_2021"  # Format biométrique moderne
-
+        
     # ── Étape 2 : Extraction par pays ──
     nom = None
     prenoms = None
@@ -494,19 +459,16 @@ def extraire_donnees_cni(
     date_expiration = None
     autorite = None
     taille = None
-
+    
     if pays and pays in PATTERNS_DOCUMENTS:
         champs = PATTERNS_DOCUMENTS[pays]["champs"]
-
         nom = _extraire_valeur_label(texte, champs.get("nom", []), "nom")
         prenoms = _extraire_valeur_label(texte, champs.get("prenoms", []), "prenoms")
-
         sexe_val = _extraire_valeur_label(texte, champs.get("sexe", []), "sexe")
         if sexe_val:
             sexe_str = sexe_val
             if sexe_str not in ("M", "F"):
                 sexe_str = "non_detecte"
-
         date_naissance = _extraire_valeur_label(texte, champs.get("date_naissance", []), "date_naissance")
         lieu_naissance = _extraire_valeur_label(texte, champs.get("lieu_naissance", []), "lieu_naissance")
         numero = _extraire_valeur_label(texte, champs.get("numero", []), "numero")
@@ -514,14 +476,14 @@ def extraire_donnees_cni(
         date_expiration = _extraire_valeur_label(texte, champs.get("date_expiration", []), "date_expiration")
         autorite = _extraire_valeur_label(texte, champs.get("autorite", []), "autorite")
         taille = _extraire_valeur_label(texte, champs.get("taille", []), "taille")
-
+        
     # ── Étape 3 : Parsing MRZ (universel) ──
     mrz_parse = {}
     l1, l2, l3 = mrz_lignes
     if l1 and l2:
         mrz_parse = parser_mrz_complet(l1, l2, l3)
         journal.info(f"MRZ parsée : format={mrz_parse.get('format')}, pays={mrz_parse.get('pays_emetteur')}, type={mrz_parse.get('type_document')}")
-
+        
         # MRZ comble les champs manquants
         if not nom:
             nom = mrz_parse.get("nom_famille")
@@ -535,18 +497,17 @@ def extraire_donnees_cni(
             sexe_str = mrz_parse["sexe"]
         if not date_expiration:
             date_expiration = mrz_parse.get("date_expiration_date")
-
+            
     # ── Debug : Voir ce qui a été extrait ──
     journal.info(f"DEBUG EXTRACTION - Pays: {pays}")
     journal.info(f"DEBUG EXTRACTION - Nom: {nom}, Prénoms: {prenoms}")
     journal.info(f"DEBUG EXTRACTION - Sexe: {sexe_str}, Date naissance: {date_naissance}")
     journal.info(f"DEBUG EXTRACTION - Numéro: {numero}")
     journal.info(f"DEBUG EXTRACTION - MRZ lignes: {mrz_lignes}")
-
+    
     # ── Étape 4 : Extraction générique (fallback) ──
     # ✅ CORRECTION : Toujours initialiser generique pour éviter NameError
     generique: dict = {}
-    
     if not all([nom, prenoms, numero, date_naissance]):
         journal.info("Extraction spécifique infructueuse, tentative générique...")
         generique = _extraire_generique(texte)
@@ -560,13 +521,13 @@ def extraire_donnees_cni(
             sexe_gen = generique.get("sexe")
             if sexe_gen:
                 sexe_str = sexe_gen
-        
+                
         # Récupérer la taille si manquante
         if not taille:
             taille = generique.get("taille")
-        
+            
         journal.info(f"Fallback générique - Numéro: {numero}, Date: {date_naissance}, Sexe: {sexe_str}")
-
+        
     # ── Construction du résultat ──
     donnees = DonneesCNIExtraites(
         nom_famille=nom,
@@ -586,12 +547,12 @@ def extraire_donnees_cni(
         texte_brut=texte_brut[:5000],
         taux_confiance_moyen=confiance,
     )
-
+    
     # ── Fusion MRZ → OCR ──
     if mrz_parse:
         donnees = _fusionner_mrz_donnees(donnees, mrz_parse)
-
+        
     champs_trouves = sum(1 for v in [nom, prenoms, date_naissance, numero, date_expiration] if v)
     journal.info(f"Extraction document : pays={pays or 'inconnu'}, MRZ={'OK' if mrz_parse else 'NON'}, champs={champs_trouves}/5")
-
+    
     return donnees

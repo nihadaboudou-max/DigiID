@@ -4,7 +4,6 @@ Routes API pour l'OCR CNI — upload, vérification, synthèse.
 """
 from typing import Annotated
 from uuid import UUID
-
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,15 +17,12 @@ from src.modules.ocr_cni.schemas import (
     RestaurationCNI,
     SyntheseVerificationCNI,
 )
-# ✅ CORRECTION : import direct depuis service (évite le cycle via __init__.py)
-from src.modules.scoring.service import declencher_recalcul_score
 from src.noyau import journal
 
 routeur_ocr_cni = APIRouter(
     prefix="/api/v1/utilisateur/verification-cni",
     tags=["OCR CNI"],
 )
-
 
 @routeur_ocr_cni.post(
     "/upload",
@@ -47,7 +43,7 @@ async def upload_cni(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Le paramètre 'face' doit être 'recto' ou 'verso'.",
         )
-
+    
     try:
         resultat = await service.traiter_upload_cni(
             session=session,
@@ -55,10 +51,13 @@ async def upload_cni(
             fichier=fichier,
             face=face,
         )
-
+        
         # Déclencher un recalcul du score après upload CNI validé
         if resultat.get("validation") and resultat["validation"].est_valide:
             try:
+                # ✅ CORRECTION : Import tardif ici pour éviter le cycle d'import au démarrage
+                from src.modules.scoring.service import declencher_recalcul_score
+                
                 await declencher_recalcul_score(
                     session=session,
                     utilisateur=utilisateur,
@@ -66,16 +65,15 @@ async def upload_cni(
                 )
             except Exception as e:
                 journal.warning(f"Échec recalcul score après upload CNI : {e}")
-
+                
         return resultat
-
+        
     except Exception as e:
         journal.exception(f"Erreur upload CNI : {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erreur lors du traitement : {str(e)}",
         )
-
 
 @routeur_ocr_cni.get(
     "/synthese",
@@ -95,7 +93,6 @@ async def synthese_verification(
         utilisateur=utilisateur,
     )
 
-
 @routeur_ocr_cni.get(
     "/historique",
     response_model=ListeVerificationsCNI,
@@ -113,7 +110,6 @@ async def historique_verifications(
         limite=limite,
     )
 
-
 @routeur_ocr_cni.delete(
     "/{verification_id}",
     response_model=SuppressionCNI,
@@ -130,7 +126,6 @@ async def supprimer_verification(
         utilisateur=utilisateur,
         verification_id=verification_id,
     )
-
 
 @routeur_ocr_cni.post(
     "/{verification_id}/restaurer",
