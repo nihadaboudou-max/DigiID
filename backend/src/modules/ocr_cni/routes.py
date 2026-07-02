@@ -1,123 +1,95 @@
 # -*- coding: utf-8 -*-
 """
-Routes API du module OCR CNI — Scan et authentification de la CNI.
-
-Prefixe : /api/v1/utilisateur/verification-cni
-
-Endpoints :
-  POST   /upload                  Uploader une face (recto/verso) de la CNI
-  GET    /synthese                Synthèse de la dernière vérification complète
-  GET    /                        Historique des vérifications CNI
-  DELETE /{id}                    Supprimer une vérification (corbeille)
-  PATCH  /{id}/restaurer          Restaurer une vérification
+Routes API pour l'OCR CNI — upload, vérification, synthèse.
 """
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
 from src.modeles import Utilisateur
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.ocr_cni import service
-from src.modules.scoring import declencher_recalcul_score
-from src.noyau import journal as journal_module
-from src.noyau.journal import enregistrer_evenement_audit
 from src.modules.ocr_cni.schemas import (
     ListeVerificationsCNI,
-    ReponseUploadCNI,
-    ResultatOCRCNI,
-    SyntheseVerificationCNI,
     SuppressionCNI,
     RestaurationCNI,
-    UploadCNIRequete,
+    SyntheseVerificationCNI,
 )
-
+# ✅ CORRECTION : import direct depuis service (évite le cycle via __init__.py)
+from src.modules.scoring.service import declencher_recalcul_score
+from src.noyau import journal
 
 routeur_ocr_cni = APIRouter(
     prefix="/api/v1/utilisateur/verification-cni",
-    tags=["OCR CNI — Scan de Carte d'Identité"],
+    tags=["OCR CNI"],
 )
 
 
 @routeur_ocr_cni.post(
     "/upload",
-    response_model=ReponseUploadCNI,
-    status_code=status.HTTP_201_CREATED,
-    summary="Uploader une face de CNI pour OCR et authentification",
-    description=(
-        "Upload une photo du recto ou du verso de la Carte Nationale d'Identité. "
-        "L'image est analysée par OCR (Tesseract) pour extraire automatiquement "
-        "tous les champs : nom, prénom, numéro de carte, dates, MRZ, etc. "
-        "Les données sont ensuite validées (format, checksum MRZ, cohérence)."
-    ),
+    summary="Uploader et analyser une face de CNI",
 )
-async def uploader_cni(
-    session: Annotated[AsyncSession, Depends(obtenir_session)],
-    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
-    fichier: UploadFile = File(..., description="Photo de la CNI (JPG, PNG, WEBP)"),
-    face: str = Form(
-        default="recto",
-        description="Face de la carte : 'recto' ou 'verso'",
-        pattern="^(recto|verso)$",
-    ),
+async def upload_cni(
+    fichier: UploadFile = File(...),
+    face: str = "recto",
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)] = None,
+    session: Annotated[AsyncSession, Depends(obtenir_session)] = None,
 ):
-    """Upload une face de CNI et lance l'analyse OCR complète."""
-    resultat = await service.traiter_upload_cni(
-        session=session,
-        utilisateur=utilisateur,
-        fichier=fichier,
-        face=face,
-    )
+    """
+    Upload une image de CNI (recto ou verso) et lance l'analyse OCR.
+    Retourne les données extraites et le résultat de validation.
+    """
+    if face not in ("recto", "verso"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le paramètre 'face' doit être 'recto' ou 'verso'.",
+        )
 
-    await enregistrer_evenement_audit(
-        session=session,
-        type_evenement="cni_upload",
-        description=f"Upload CNI face {face} — statut: {resultat['statut']}",
-        utilisateur_id=utilisateur.id,
-        role_acteur=utilisateur.role,
-    )
-
-    # Upload CNI réussi = vérification forte → recalcul score
     try:
-        await declencher_recalcul_score(
+        resultat = await service.traiter_upload_cni(
             session=session,
             utilisateur=utilisateur,
-            raison=f"upload_cni_{face}",
+            fichier=fichier,
+            face=face,
         )
-    except Exception as e:
-        journal_module.warning(f"Recalcul score ignoré (upload_cni) : {e}")
 
-    return ReponseUploadCNI(
-        id=resultat["id"],
-        face=resultat["face"],
-        statut=resultat["statut"],
-        resultat_ocr=ResultatOCRCNI(
-            succes=resultat["resultat_ocr"]["succes"],
-            donnees=resultat["resultat_ocr"]["donnees"],
-            erreurs=resultat["resultat_ocr"]["erreurs"],
-            champs_extraits=resultat["resultat_ocr"]["champs_extraits"],
-            temps_analyse_ms=resultat["resultat_ocr"]["temps_analyse_ms"],
-        ),
-        message=resultat["message"],
-    )
+        # Déclencher un recalcul du score après upload CNI validé
+        if resultat.get("validation") and resultat["validation"].est_valide:
+            try:
+                await declencher_recalcul_score(
+                    session=session,
+                    utilisateur=utilisateur,
+                    raison="upload_cni_valide",
+                )
+            except Exception as e:
+                journal.warning(f"Échec recalcul score après upload CNI : {e}")
+
+        return resultat
+
+    except Exception as e:
+        journal.exception(f"Erreur upload CNI : {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erreur lors du traitement : {str(e)}",
+        )
 
 
 @routeur_ocr_cni.get(
     "/synthese",
     response_model=SyntheseVerificationCNI,
-    summary="Synthèse de la dernière vérification CNI complète",
-    description=(
-        "Retourne la synthèse combinée des dernières analyses recto et verso. "
-        "Effectue une validation croisée entre les deux faces et retourne "
-        "le statut global de la vérification d'identité."
-    ),
+    summary="Synthèse des vérifications CNI",
 )
 async def synthese_verification(
-    session: Annotated[AsyncSession, Depends(obtenir_session)],
-    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)] = None,
+    session: Annotated[AsyncSession, Depends(obtenir_session)] = None,
 ):
-    """Obtient la synthèse de la dernière vérification complète (recto+verso)."""
+    """
+    Retourne la synthèse des dernières vérifications CNI (recto + verso)
+    avec validation croisée.
+    """
     return await service.obtenir_synthese_verification(
         session=session,
         utilisateur=utilisateur,
@@ -125,16 +97,16 @@ async def synthese_verification(
 
 
 @routeur_ocr_cni.get(
-    "",
+    "/historique",
     response_model=ListeVerificationsCNI,
     summary="Historique des vérifications CNI",
 )
-async def lister_verifications(
-    session: Annotated[AsyncSession, Depends(obtenir_session)],
-    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
-    limite: int = Query(default=20, ge=1, le=100, description="Nombre max de résultats"),
+async def historique_verifications(
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)] = None,
+    session: Annotated[AsyncSession, Depends(obtenir_session)] = None,
+    limite: int = 20,
 ):
-    """Liste l'historique des scans CNI effectués par l'utilisateur."""
+    """Retourne l'historique des vérifications CNI de l'utilisateur."""
     return await service.obtenir_verifications(
         session=session,
         utilisateur=utilisateur,
@@ -145,55 +117,34 @@ async def lister_verifications(
 @routeur_ocr_cni.delete(
     "/{verification_id}",
     response_model=SuppressionCNI,
-    summary="Supprimer une vérification CNI (corbeille)",
+    summary="Supprimer une vérification CNI",
 )
 async def supprimer_verification(
-    verification_id: str,
-    session: Annotated[AsyncSession, Depends(obtenir_session)],
-    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    verification_id: UUID,
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)] = None,
+    session: Annotated[AsyncSession, Depends(obtenir_session)] = None,
 ):
-    """Déplace une vérification CNI dans la corbeille (soft-delete)."""
-    import uuid
-    try:
-        uid = uuid.UUID(verification_id)
-    except ValueError:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=422, detail="ID de vérification invalide.")
-
-    await enregistrer_evenement_audit(
-        session=session,
-        type_evenement="cni_suppression",
-        description=f"Suppression vérification CNI {verification_id}",
-        utilisateur_id=utilisateur.id,
-        role_acteur=utilisateur.role,
-    )
+    """Supprime (soft-delete) une vérification CNI."""
     return await service.supprimer_verification(
         session=session,
         utilisateur=utilisateur,
-        verification_id=uid,
+        verification_id=verification_id,
     )
 
 
-@routeur_ocr_cni.patch(
+@routeur_ocr_cni.post(
     "/{verification_id}/restaurer",
     response_model=RestaurationCNI,
-    summary="Restaurer une vérification CNI depuis la corbeille",
+    summary="Restaurer une vérification CNI",
 )
 async def restaurer_verification(
-    verification_id: str,
-    session: Annotated[AsyncSession, Depends(obtenir_session)],
-    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    verification_id: UUID,
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)] = None,
+    session: Annotated[AsyncSession, Depends(obtenir_session)] = None,
 ):
     """Restaure une vérification CNI depuis la corbeille."""
-    import uuid
-    try:
-        uid = uuid.UUID(verification_id)
-    except ValueError:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=422, detail="ID de vérification invalide.")
-
     return await service.restaurer_verification(
         session=session,
         utilisateur=utilisateur,
-        verification_id=uid,
+        verification_id=verification_id,
     )
