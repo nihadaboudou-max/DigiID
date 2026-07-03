@@ -84,6 +84,7 @@ const SOUS_MENUS_IDENTITE: SousMenu[] = [
     titre: "Partage & accès",
     icone: IconePartage,
     liens: [
+      { href: "/citoyen/qr-code", libelle: "Mon QR Code", Icone: IconeScan },
       { href: "/partage",      libelle: "Partager mon DigiID",  Icone: IconePartage },
       { href: "/autorisations", libelle: "Autorisations",        Icone: IconeBouclier },
       { href: "/consentements", libelle: "Consentements",        Icone: IconeCheck },
