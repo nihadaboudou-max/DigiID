@@ -161,7 +161,8 @@ export async function verifierIdentite(data: {
   localisation_lng?: number;
   localisation_adresse?: string;
 }): Promise<VerificationPolice> {
-  return clientAPI.post<VerificationPolice>("/api/backend/api/v1/police/verifier", data, {
+  // ✅ CORRECTION : clientAPI ajoute déjà /api/backend
+  return clientAPI.post<VerificationPolice>("/api/v1/police/verifier", data, {
     authentifie: true,
   });
 }
@@ -170,7 +171,7 @@ export async function listerVerifications(params?: {
   limite?: number;
   page?: number;
 }): Promise<VerificationPolice[]> {
-  return clientAPI.get<VerificationPolice[]>("/api/backend/api/v1/police/verifications", {
+  return clientAPI.get<VerificationPolice[]>("/api/v1/police/verifications", {
     authentifie: true,
     params,
   });
@@ -180,7 +181,7 @@ export async function obtenirVerificationParId(
   verificationId: string
 ): Promise<VerificationPolice> {
   return clientAPI.get<VerificationPolice>(
-    `/api/backend/api/v1/police/verifications/${verificationId}`,
+    `/api/v1/police/verifications/${verificationId}`,
     { authentifie: true }
   );
 }
@@ -198,7 +199,7 @@ export async function rechercherPersonne(
 ): Promise<PersonneRecherchee[]> {
   return clientAPI.post<
     { resultats: PersonneRecherchee[]; total: number; page: number; limite: number; temps_ms: number }
-  >("/api/backend/api/v1/police/rechercher", { query: digiid, limite: 10 }, {
+  >("/api/v1/police/rechercher", { query: digiid, limite: 10 }, {
     authentifie: true,
   }).then((r) => r.resultats);
 }
@@ -219,7 +220,7 @@ export async function rechercherPersonnes(data: {
   limite: number;
   temps_ms: number;
 }> {
-  return clientAPI.post("/api/backend/api/v1/police/rechercher", data, {
+  return clientAPI.post("/api/v1/police/rechercher", data, {
     authentifie: true,
   });
 }
@@ -232,7 +233,7 @@ export async function obtenirProfilPersonne(
   digiid: string
 ): Promise<ProfilPersonne> {
   return clientAPI.get<ProfilPersonne>(
-    `/api/backend/api/v1/police/profil/${digiid}`,
+    `/api/v1/police/profil/${digiid}`,
     { authentifie: true }
   );
 }
@@ -247,7 +248,7 @@ export async function creerSignalement(data: {
   description?: string;
   priorite?: string;
 }): Promise<SignalementFraude> {
-  return clientAPI.post<SignalementFraude>("/api/backend/api/v1/police/signalements", data, {
+  return clientAPI.post<SignalementFraude>("/api/v1/police/signalements", data, {
     authentifie: true,
   });
 }
@@ -257,7 +258,7 @@ export async function listerSignalements(params?: {
   limite?: number;
   page?: number;
 }): Promise<SignalementFraude[]> {
-  return clientAPI.get<SignalementFraude[]>("/api/backend/api/v1/police/signalements", {
+  return clientAPI.get<SignalementFraude[]>("/api/v1/police/signalements", {
     authentifie: true,
     params,
   });
@@ -268,7 +269,7 @@ export async function traiterSignalement(
   data: { statut: string; notes_traitement?: string }
 ): Promise<SignalementFraude> {
   return clientAPI.patch<SignalementFraude>(
-    `/api/backend/api/v1/police/signalements/${signalementId}/traiter`,
+    `/api/v1/police/signalements/${signalementId}/traiter`,
     data,
     { authentifie: true }
   );
@@ -286,7 +287,7 @@ export async function creerNote(data: {
   est_important?: boolean;
   est_partagee?: boolean;
 }): Promise<NoteInterne> {
-  return clientAPI.post<NoteInterne>("/api/backend/api/v1/police/notes", data, {
+  return clientAPI.post<NoteInterne>("/api/v1/police/notes", data, {
     authentifie: true,
   });
 }
@@ -296,7 +297,7 @@ export async function listerNotes(params?: {
   categorie?: string;
   limite?: number;
 }): Promise<NoteInterne[]> {
-  return clientAPI.get<NoteInterne[]>("/api/backend/api/v1/police/notes", {
+  return clientAPI.get<NoteInterne[]>("/api/v1/police/notes", {
     authentifie: true,
     params,
   });
@@ -313,14 +314,14 @@ export async function modifierNote(
   }
 ): Promise<NoteInterne> {
   return clientAPI.patch<NoteInterne>(
-    `/api/backend/api/v1/police/notes/${noteId}`,
+    `/api/v1/police/notes/${noteId}`,
     data,
     { authentifie: true }
   );
 }
 
 export async function supprimerNote(noteId: string): Promise<void> {
-  return clientAPI.delete(`/api/backend/api/v1/police/notes/${noteId}`, {
+  return clientAPI.delete(`/api/v1/police/notes/${noteId}`, {
     authentifie: true,
   });
 }
@@ -337,7 +338,7 @@ export async function listerAlertes(params?: {
   total: number;
   non_lues: number;
 }> {
-  return clientAPI.get("/api/backend/api/v1/police/alertes", {
+  return clientAPI.get("/api/v1/police/alertes", {
     authentifie: true,
     params,
   });
@@ -347,7 +348,7 @@ export async function marquerAlerteLue(
   alerteId: string
 ): Promise<AlertePolice> {
   return clientAPI.patch<AlertePolice>(
-    `/api/backend/api/v1/police/alertes/${alerteId}/lire`,
+    `/api/v1/police/alertes/${alerteId}/lire`,
     {},
     { authentifie: true }
   );
@@ -360,7 +361,7 @@ export async function marquerAlerteLue(
 
 export async function obtenirStatistiques(): Promise<StatistiquesPolice> {
   return clientAPI.get<StatistiquesPolice>(
-    "/api/backend/api/v1/police/statistiques",
+    "/api/v1/police/statistiques",
     { authentifie: true }
   );
 }
@@ -378,7 +379,7 @@ export async function obtenirPointsCarte(params?: {
   centre_lat: number | null;
   centre_lng: number | null;
 }> {
-  return clientAPI.get("/api/backend/api/v1/police/carte", {
+  return clientAPI.get("/api/v1/police/carte", {
     authentifie: true,
     params,
   });
@@ -391,7 +392,7 @@ export async function obtenirPointsCarte(params?: {
 
 export async function scannerQR(digiid: string): Promise<ScanQRResultat> {
   return clientAPI.get<ScanQRResultat>(
-    `/api/backend/api/v1/police/scan-qr/${digiid}`,
+    `/api/v1/police/scan-qr/${digiid}`,
     { authentifie: true }
   );
 }
@@ -405,7 +406,7 @@ export async function obtenirHistorique(params?: {
   type_historique?: string;
   limite?: number;
 }): Promise<Record<string, unknown>> {
-  return clientAPI.get("/api/backend/api/v1/police/historique", {
+  return clientAPI.get("/api/v1/police/historique", {
     authentifie: true,
     params,
   });
@@ -422,7 +423,7 @@ export async function genererRapport(params?: {
   format?: string;
   type_donnees?: string[];
 }): Promise<Record<string, unknown>> {
-  return clientAPI.post("/api/backend/api/v1/police/export-rapport", {}, {
+  return clientAPI.post("/api/v1/police/export-rapport", {}, {
     authentifie: true,
     params,
   });
@@ -438,7 +439,7 @@ export async function comparerPhotos(data: {
   photo_cible: string;
 }): Promise<ComparaisonPhotos> {
   return clientAPI.post<ComparaisonPhotos>(
-    "/api/backend/api/v1/police/comparer-photos",
+    "/api/v1/police/comparer-photos",
     data,
     { authentifie: true }
   );
