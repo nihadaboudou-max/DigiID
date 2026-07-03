@@ -9,35 +9,27 @@ from datetime import datetime
 from src.noyau.exceptions import ErreurRessourceIntrouvable, ErreurValidation
 from src.noyau import dechiffrer_donnee
 
-
 # ─── Fonctions utilitaires de cloisonnement ──────────────────────────
-
 def _est_super_admin(utilisateur: Utilisateur) -> bool:
     """Vérifie si l'utilisateur est super admin."""
     return utilisateur.role in ["super_admin", "super_administrateur"]
-
 
 def _appliquer_filtres_cloisonnement(query, utilisateur: Utilisateur, modele):
     """Applique les filtres de cloisonnement selon le rôle."""
     if _est_super_admin(utilisateur):
         return query
-
     conditions = []
     if utilisateur.domaine_id:
         conditions.append(modele.domaine_id == utilisateur.domaine_id)
     if utilisateur.role not in ["admin_domaine"] and utilisateur.departement_id:
         conditions.append(modele.departement_id == utilisateur.departement_id)
-
     if conditions:
         query = query.where(and_(*conditions))
-
     return query
-
 
 # =============================================================================
 # VÉRIFICATION DIGIID
 # =============================================================================
-
 async def verifier_digiid(session: AsyncSession, digiid: str) -> Utilisateur | None:
     """Recherche un utilisateur par son DigiID public."""
     result = await session.execute(
@@ -47,7 +39,6 @@ async def verifier_digiid(session: AsyncSession, digiid: str) -> Utilisateur | N
         )
     )
     return result.scalar_one_or_none()
-
 
 async def _verifier_digiid_existe(session: AsyncSession, digiid: str) -> Utilisateur:
     """Vérifie qu'un DigiID public correspond à un utilisateur existant."""
@@ -59,11 +50,9 @@ async def _verifier_digiid_existe(session: AsyncSession, digiid: str) -> Utilisa
         )
     return utilisateur
 
-
 # =============================================================================
 # DOSSIERS MÉDICAUX
 # =============================================================================
-
 async def creer_dossier(
     session: AsyncSession,
     medecin: Utilisateur,
@@ -82,7 +71,6 @@ async def creer_dossier(
     await session.refresh(dossier)
     return dossier
 
-
 async def obtenir_dossiers(
     session: AsyncSession,
     utilisateur: Utilisateur,
@@ -91,14 +79,11 @@ async def obtenir_dossiers(
 ) -> list[DossierMedical]:
     """Liste les dossiers avec cloisonnement."""
     query = select(DossierMedical)
-
     # --- Cloisonnement (NOUVEAU) ---
     query = _appliquer_filtres_cloisonnement(query, utilisateur, DossierMedical)
-
     # Si ce n'est pas un super admin, on filtre aussi par medecin_id
     if not _est_super_admin(utilisateur):
         query = query.where(DossierMedical.medecin_id == utilisateur.id)
-
     if statut and statut != "tous":
         query = query.where(DossierMedical.statut == statut)
     if recherche:
@@ -106,11 +91,9 @@ async def obtenir_dossiers(
             DossierMedical.patient_nom.ilike(f"%{recherche}%")
             | DossierMedical.patient_digiid.ilike(f"%{recherche}%")
         )
-
     query = query.order_by(DossierMedical.date_creation.desc())
     result = await session.execute(query)
     return list(result.scalars().all())
-
 
 async def obtenir_dossier(
     session: AsyncSession,
@@ -119,19 +102,15 @@ async def obtenir_dossier(
 ) -> DossierMedical:
     """Récupère un dossier avec vérification d'accès."""
     query = select(DossierMedical).where(DossierMedical.id == dossier_id)
-
     # --- Cloisonnement (NOUVEAU) ---
     query = _appliquer_filtres_cloisonnement(query, utilisateur, DossierMedical)
-
     if not _est_super_admin(utilisateur):
         query = query.where(DossierMedical.medecin_id == utilisateur.id)
-
     result = await session.execute(query)
     dossier = result.scalar_one_or_none()
     if not dossier:
         raise ErreurRessourceIntrouvable(f"Dossier {dossier_id} introuvable")
     return dossier
-
 
 async def modifier_dossier(
     session: AsyncSession,
@@ -148,11 +127,9 @@ async def modifier_dossier(
     await session.refresh(dossier)
     return dossier
 
-
 # =============================================================================
 # CONSULTATIONS
 # =============================================================================
-
 async def ajouter_consultation(
     session: AsyncSession,
     medecin: Utilisateur,
@@ -170,7 +147,6 @@ async def ajouter_consultation(
     await session.refresh(consultation)
     return consultation
 
-
 async def obtenir_consultations(
     session: AsyncSession,
     dossier_id: UUID,
@@ -183,11 +159,9 @@ async def obtenir_consultations(
     )
     return list(result.scalars().all())
 
-
 # =============================================================================
 # ORDONNANCES
 # =============================================================================
-
 async def _generer_numero_ordonnance(session: AsyncSession) -> str:
     """Génère un numéro d'ordonnance unique."""
     result = await session.execute(
@@ -206,7 +180,6 @@ async def _generer_numero_ordonnance(session: AsyncSession) -> str:
     else:
         nouveau_num = 1
     return f"ORD-{annee}-{nouveau_num:06d}"
-
 
 async def creer_ordonnance(
     session: AsyncSession,
@@ -227,9 +200,9 @@ async def creer_ordonnance(
     )
     session.add(ordonnance)
     await session.commit()
+    # ✅ CORRECTION : faute de frappe "awai t" -> "await"
     await session.refresh(ordonnance)
     return ordonnance
-
 
 async def obtenir_ordonnances(
     session: AsyncSession,
@@ -243,24 +216,19 @@ async def obtenir_ordonnances(
     )
     return list(result.scalars().all())
 
-
 async def obtenir_toutes_ordonnances(
     session: AsyncSession,
     utilisateur: Utilisateur,
 ) -> list[Ordonnance]:
     """Liste toutes les ordonnances du médecin avec cloisonnement."""
     query = select(Ordonnance)
-
     # --- Cloisonnement (NOUVEAU) ---
     query = _appliquer_filtres_cloisonnement(query, utilisateur, Ordonnance)
-
     if not _est_super_admin(utilisateur):
         query = query.where(Ordonnance.medecin_id == utilisateur.id)
-
     query = query.order_by(Ordonnance.date_prescription.desc())
     result = await session.execute(query)
     return list(result.scalars().all())
-
 
 async def compter_consultations(session: AsyncSession, dossier_id: UUID) -> int:
     """Compte les consultations d'un dossier."""
@@ -269,14 +237,12 @@ async def compter_consultations(session: AsyncSession, dossier_id: UUID) -> int:
     )
     return result.scalar() or 0
 
-
 async def compter_ordonnances(session: AsyncSession, dossier_id: UUID) -> int:
     """Compte les ordonnances d'un dossier."""
     result = await session.execute(
         select(func.count(Ordonnance.id)).where(Ordonnance.dossier_id == dossier_id)
     )
     return result.scalar() or 0
-
 
 async def obtenir_dossiers_par_digiid(
     session: AsyncSession,
@@ -290,7 +256,6 @@ async def obtenir_dossiers_par_digiid(
     )
     return list(result.scalars().all())
 
-
 async def _obtenir_ordonnance(
     session: AsyncSession,
     ordonnance_id: UUID,
@@ -298,19 +263,15 @@ async def _obtenir_ordonnance(
 ) -> Ordonnance:
     """Récupère une ordonnance avec vérification d'accès."""
     query = select(Ordonnance).where(Ordonnance.id == ordonnance_id)
-
     # --- Cloisonnement (NOUVEAU) ---
     query = _appliquer_filtres_cloisonnement(query, utilisateur, Ordonnance)
-
     if not _est_super_admin(utilisateur):
         query = query.where(Ordonnance.medecin_id == utilisateur.id)
-
     result = await session.execute(query)
     ordonnance = result.scalar_one_or_none()
     if not ordonnance:
         raise ErreurRessourceIntrouvable(f"Ordonnance {ordonnance_id} introuvable")
     return ordonnance
-
 
 async def modifier_ordonnance(
     session: AsyncSession,
@@ -327,7 +288,6 @@ async def modifier_ordonnance(
     await session.refresh(ordonnance)
     return ordonnance
 
-
 async def supprimer_ordonnance(
     session: AsyncSession,
     ordonnance_id: UUID,
@@ -337,7 +297,6 @@ async def supprimer_ordonnance(
     ordonnance = await _obtenir_ordonnance(session, ordonnance_id, utilisateur)
     await session.delete(ordonnance)
     await session.commit()
-
 
 async def obtenir_ordonnances_par_digiid(
     session: AsyncSession,
@@ -354,7 +313,6 @@ async def obtenir_ordonnances_par_digiid(
         .order_by(Ordonnance.date_prescription.desc())
     )
     return list(result.scalars().all())
-
 
 async def verifier_patient_ordonnance(
     session: AsyncSession,

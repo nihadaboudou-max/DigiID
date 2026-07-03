@@ -19,8 +19,8 @@ from src.noyau.exceptions import ErreurAutorisation
 from src.modules.medical import service as medical_service
 
 routeur_medical = APIRouter(prefix="/api/v1/medical", tags=["Médical"])
-routeur_patient = APIRouter(prefix="/api/v1", tags=["Patient"])
-
+# ✅ CORRECTION : Préfixe /utilisateur pour correspondre au frontend
+routeur_patient = APIRouter(prefix="/api/v1/utilisateur", tags=["Patient"])
 
 @routeur_medical.get("/verifier-patient/{digiid}", response_model=VerificationDigiIDResponse)
 async def verifier_patient(
@@ -39,7 +39,6 @@ async def verifier_patient(
             nom=nom, prenom=prenom, email=email,
         )
     return VerificationDigiIDResponse(trouvé=False, digiid=digiid, nom=None, prenom=None, email=None)
-
 
 @routeur_medical.get("/dossiers", response_model=list[DossierMedicalResponse])
 async def lister_dossiers(
@@ -64,7 +63,6 @@ async def lister_dossiers(
         ))
     return result
 
-
 @routeur_medical.post("/dossiers", response_model=DossierMedicalResponse, status_code=201)
 async def creer_dossier(
     data: DossierMedicalCreate,
@@ -88,7 +86,6 @@ async def creer_dossier(
         domaine_id=dossier.domaine_id, departement_id=dossier.departement_id,
     )
 
-
 @routeur_medical.get("/dossiers/{dossier_id}", response_model=DossierMedicalResponse)
 async def obtenir_dossier(
     dossier_id: UUID,
@@ -108,7 +105,6 @@ async def obtenir_dossier(
         date_creation=dossier.date_creation, date_modification=dossier.date_modification,
         domaine_id=dossier.domaine_id, departement_id=dossier.departement_id,
     )
-
 
 @routeur_medical.patch("/dossiers/{dossier_id}", response_model=DossierMedicalResponse)
 async def modifier_dossier(
@@ -130,7 +126,6 @@ async def modifier_dossier(
         domaine_id=dossier.domaine_id, departement_id=dossier.departement_id,
     )
 
-
 @routeur_medical.get("/dossiers/{dossier_id}/consultations", response_model=list[ConsultationResponse])
 async def lister_consultations(
     dossier_id: UUID,
@@ -150,7 +145,6 @@ async def lister_consultations(
         )
         for c in consultations
     ]
-
 
 @routeur_medical.post("/consultations", response_model=ConsultationResponse, status_code=201)
 async def ajouter_consultation(
@@ -174,7 +168,6 @@ async def ajouter_consultation(
         date_controle=consultation.date_controle, date_consultation=consultation.date_consultation,
     )
 
-
 @routeur_medical.get("/ordonnances", response_model=list[OrdonnanceResponse])
 async def lister_toutes_ordonnances(
     medecin: Annotated[Utilisateur, Depends(utilisateur_courant)],
@@ -191,7 +184,6 @@ async def lister_toutes_ordonnances(
         )
         for o in ordonnances
     ]
-
 
 @routeur_medical.get("/dossiers/{dossier_id}/ordonnances", response_model=list[OrdonnanceResponse])
 async def lister_ordonnances(
@@ -210,7 +202,6 @@ async def lister_ordonnances(
         )
         for o in ordonnances
     ]
-
 
 @routeur_medical.post("/ordonnances", response_model=OrdonnanceResponse, status_code=201)
 async def creer_ordonnance(
@@ -236,7 +227,6 @@ async def creer_ordonnance(
         date_prescription=ordonnance.date_prescription, date_expiration=ordonnance.date_expiration,
     )
 
-
 @routeur_medical.patch("/ordonnances/{ordonnance_id}", response_model=OrdonnanceResponse)
 async def modifier_ordonnance(
     ordonnance_id: UUID,
@@ -245,7 +235,8 @@ async def modifier_ordonnance(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     """Modifie une ordonnance."""
-    ordonnance = await medical_service.modifier_ordonnance(session, ordonnance_id, medecin.id, data.model_dump(exclude_none=True))
+    # ✅ CORRECTION : passer medecin (objet) et non medecin.id
+    ordonnance = await medical_service.modifier_ordonnance(session, ordonnance_id, medecin, data.model_dump(exclude_none=True))
     await enregistrer_evenement_audit(
         session=session, type_evenement="ordonnance_modification",
         description=f"Ordonnance #{ordonnance.numero_ordonnance} modifiée",
@@ -258,7 +249,6 @@ async def modifier_ordonnance(
         date_prescription=ordonnance.date_prescription, date_expiration=ordonnance.date_expiration,
     )
 
-
 @routeur_medical.delete("/ordonnances/{ordonnance_id}", status_code=204)
 async def supprimer_ordonnance(
     ordonnance_id: UUID,
@@ -266,18 +256,17 @@ async def supprimer_ordonnance(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     """Supprime une ordonnance."""
-    await medical_service.supprimer_ordonnance(session, ordonnance_id, medecin.id)
+    # ✅ CORRECTION : passer medecin (objet) et non medecin.id
+    await medical_service.supprimer_ordonnance(session, ordonnance_id, medecin)
     await enregistrer_evenement_audit(
         session=session, type_evenement="ordonnance_suppression",
         description=f"Ordonnance supprimée — {ordonnance_id}",
         utilisateur_id=medecin.id, role_acteur=medecin.role,
     )
 
-
 # =============================================================================
 # ROUTES PATIENT (citoyen)
 # =============================================================================
-
 @routeur_patient.get("/mes-ordonnances", response_model=list[OrdonnanceResponse])
 async def lister_mes_ordonnances(
     citoyen: Annotated[Utilisateur, Depends(utilisateur_courant)],
@@ -294,7 +283,6 @@ async def lister_mes_ordonnances(
         )
         for o in ordonnances
     ]
-
 
 @routeur_patient.post("/mes-ordonnances/{ordonnance_id}/signaler", status_code=201)
 async def signaler_ordonnance(
@@ -313,7 +301,6 @@ async def signaler_ordonnance(
         utilisateur_id=citoyen.id, role_acteur=citoyen.role,
     )
     return {"succes": True, "message": "Signalement envoyé avec succès"}
-
 
 @routeur_patient.get("/mon-dossier-medical", response_model=list[DossierCompletResponse])
 async def mon_dossier_medical(
