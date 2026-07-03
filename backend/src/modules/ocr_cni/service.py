@@ -4,7 +4,7 @@ Service OCR CNI — orchestration du scan et de l'authentification
 des Cartes Nationales d'Identité.
 """
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Tuple
 from uuid import UUID
 
 from fastapi import UploadFile
@@ -31,7 +31,7 @@ from src.modules.ocr_cni.validation_cni import (
     valider_donnees_cni,
     verifier_coherence_recto_verso,
 )
-from src.noyau import journal
+from src.noyau import journal, dechiffrer_donnee
 from src.noyau.exceptions import ErreurRessourceIntrouvable, ErreurValidation
 
 # =============================================================================
@@ -45,6 +45,82 @@ TYPES_MIME_AUTORISES = {
     "image/webp": "webp",
     "image/tiff": "tiff",
 }
+
+
+# =============================================================================
+# ✅ NOUVEAU : Vérification de cohérence d'identité
+# =============================================================================
+
+async def verifier_coherence_identite(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    nouvelles_donnees: DonneesCNIExtraites,
+) -> Tuple[bool, str]:
+    """
+    Vérifie la cohérence entre la nouvelle CNI et le profil utilisateur.
+    
+    ⚠️ ATTENTION : Lors de l'inscription, l'utilisateur fournit UNIQUEMENT :
+    - Nom, Prénom, Numéro téléphone, Email
+    
+    La CNI contient : Nom, Prénom, Numéro CNI, Date naissance, Photo
+    
+    On ne peut comparer QUE : Nom et Prénom (et Photo si dispo)
+    Le numéro CNI est DIFFÉRENT du numéro de téléphone → on ne compare PAS
+    La date de naissance n'est PAS dans le profil → on ne compare PAS
+    L'email n'est PAS sur la CNI → on ne compare PAS
+    
+    Retourne: (est_coherent, message)
+    """
+    incoherences = []
+    
+    # 1. Comparaison Nom (SEUL champ fiable)
+    nom_utilisateur = dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else ""
+    if nom_utilisateur and nouvelles_donnees.nom_famille:
+        # Comparaison souple : on vérifie que le nom de la CNI contient le nom du profil
+        # (car l'OCR peut extraire des noms composés)
+        nom_cni = nouvelles_donnees.nom_famille.upper().strip()
+        nom_profil = nom_utilisateur.upper().strip()
+        
+        if nom_profil not in nom_cni and nom_cni not in nom_profil:
+            incoherences.append(
+                f"Nom CNI ({nom_cni}) ≠ Nom compte ({nom_profil})"
+            )
+    
+    # 2. Comparaison Prénom (SEUL champ fiable)
+    prenom_utilisateur = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else ""
+    if prenom_utilisateur and nouvelles_donnees.prenoms:
+        prenom_cni = nouvelles_donnees.prenoms.upper().strip()
+        prenom_profil = prenom_utilisateur.upper().strip()
+        
+        if prenom_profil not in prenom_cni and prenom_cni not in prenom_profil:
+            incoherences.append(
+                f"Prénom CNI ({prenom_cni}) ≠ Prénom compte ({prenom_utilisateur})"
+            )
+    
+    # 3. Vérification biométrique (OPTIONNELLE — si photo de profil existe)
+    # NOTE : Cette vérification nécessiterait un module de reconnaissance faciale
+    # Pour l'instant, on ne l'implémente pas car il faudrait extraire la photo de la CNI
+    # et la comparer avec la photo de profil de l'utilisateur
+    # if utilisateur.photo_profil_url and nouvelles_donnees.photo_cni_url:
+    #     similarite = await comparer_visages(...)
+    #     if similarite < 0.7:
+    #         incoherences.append(f"Photo CNI ≠ Photo profil (similarité: {similarite:.1%})")
+    
+    # 4. ⚠️ IMPORTANT : On NE vérifie PAS :
+    # - La date de naissance (pas dans le profil utilisateur)
+    # - Le numéro CNI (différent du numéro de téléphone)
+    # - L'email (pas sur la CNI)
+    
+    if incoherences:
+        # Journaliser l'alerte de sécurité
+        journal.warning(
+            f"ALERTE SÉCURITÉ | Tentative CNI incohérente | "
+            f"utilisateur_id={utilisateur.id} | "
+            f"incoherences={'; '.join(incoherences)}"
+        )
+        return False, "Incohérence détectée : " + "; ".join(incoherences)
+    
+    return True, "Identité cohérente (nom et prénom vérifiés)"
 
 
 # =============================================================================
@@ -294,6 +370,22 @@ async def traiter_upload_cni(
     nb_champs = _compter_champs_extraits(donnees)
     validation = valider_donnees_cni(donnees) if succes_ocr else None
 
+    # ✅ NOUVEAU : Vérification de cohérence d'identité (seulement pour le recto)
+    message_coherence = ""
+    if succes_ocr and face == "recto" and donnees.nom_famille:
+        est_coherent, message_coherence = await verifier_coherence_identite(
+            session=session,
+            utilisateur=utilisateur,
+            nouvelles_donnees=donnees,
+        )
+        
+        if not est_coherent:
+            # On ne bloque pas l'upload, mais on ajoute un avertissement
+            erreurs.append(f"⚠️ {message_coherence}")
+            journal.warning(
+                f"Upload CNI avec incohérence | utilisateur={utilisateur.id} | {message_coherence}"
+            )
+
     verification = await _enregistrer_verification(
         session=session,
         utilisateur=utilisateur,
@@ -324,6 +416,7 @@ async def traiter_upload_cni(
             "temps_analyse_ms": temps_ms,
         },
         "validation": validation,
+        "coherence_identite": message_coherence if message_coherence else "Non vérifiée",
         "message": (
             "Carte scannée avec succès." if succes_ocr
             else "L'OCR n'a pas pu extraire les données. Vérifie la qualité de l'image."
