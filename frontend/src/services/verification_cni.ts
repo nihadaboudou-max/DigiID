@@ -160,12 +160,13 @@ export async function obtenirSynthese(): Promise<SyntheseVerificationCNI> {
 
 /**
  * Liste l'historique des vérifications CNI de l'utilisateur.
+ * ✅ CORRECTION : Ajout de /historique dans l'URL (endpoint backend)
  */
 export async function listerVerifications(
   limite: number = 20
 ): Promise<ListeVerificationsCNI> {
   return clientAPI.get<ListeVerificationsCNI>(
-    `/api/v1/utilisateur/verification-cni?limite=${limite}`,
+    `/api/v1/utilisateur/verification-cni/historique?limite=${limite}`,
     { authentifie: true }
   );
 }
@@ -184,11 +185,12 @@ export async function supprimerVerification(
 
 /**
  * Restaure une vérification CNI depuis la corbeille.
+ * ✅ CORRECTION : Utilisation de POST au lieu de PATCH (endpoint backend)
  */
 export async function restaurerVerification(
   id: string
 ): Promise<{ id: string; message: string }> {
-  return clientAPI.patch<{ id: string; message: string }>(
+  return clientAPI.post<{ id: string; message: string }>(
     `/api/v1/utilisateur/verification-cni/${id}/restaurer`,
     undefined,
     { authentifie: true }
