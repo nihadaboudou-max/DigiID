@@ -79,6 +79,10 @@ from src.modules.invitations import routeur_invitations
 # --- Modules équipes ---
 from src.modules.equipes import routeur_equipes
 
+# --- Module QR Code Dynamique ---
+from src.modules.qr_dynamique import routeur_qr_dynamique
+
+
 # Routeur racine — préfixe et tag globaux gérés au montage
 routeur_v1 = APIRouter()
 
@@ -151,3 +155,6 @@ routeur_v1.include_router(routeur_invitations)
 
 # Module équipes -  créer les routeurs pour gérer les équipes et leurs membres
 routeur_v1.include_router(routeur_equipes)
+
+# ... (dans la section d'include_router)
+routeur_v1.include_router(routeur_qr_dynamique)
