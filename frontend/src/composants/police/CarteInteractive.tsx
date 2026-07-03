@@ -148,7 +148,7 @@ export default function CarteInteractive({
           <div style="font-size:11px;color:#94a3b8;">
             📅 ${new Date(point.date || Date.now()).toLocaleString("fr-FR")}
           </div>
-          ${point.description ? `<div style="margin-top:8px;font-size:12px;">${point.description}</div>` : ""}
+          ${point.adresse ? `<div style="margin-top:8px;font-size:12px;">${point.adresse}</div>` : ""}
           ${point.verification_id ? `
             <a href="/police/verification?id=${point.verification_id}" 
                style="display:inline-block;margin-top:10px;padding:5px 10px;background:${couleur};color:white;text-decoration:none;border-radius:4px;font-size:12px;">
