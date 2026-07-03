@@ -36,12 +36,8 @@ export default function PageVerificationCNI() {
   const [dernierResultatVerso, setDernierResultatVerso] = useState<ReponseUploadCNI | null>(null);
   const [imageRecto, setImageRecto] = useState<string | null>(null);
   const [imageVerso, setImageVerso] = useState<string | null>(null);
-  const [synthese, setSynthese] = useState<SyntheseVerificationCNI | null>(
-    null
-  );
-  const [historique, setHistorique] = useState<ListeVerificationsCNI | null>(
-    null
-  );
+  const [synthese, setSynthese] = useState<SyntheseVerificationCNI | null>(null);
+  const [historique, setHistorique] = useState<ListeVerificationsCNI | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   const [chargement, setChargement] = useState(false);
 
@@ -51,31 +47,44 @@ export default function PageVerificationCNI() {
   }, []);
 
   const chargerDonnees = async () => {
+    setChargement(true); // ✅ CORRECTION : Activer le chargement
     try {
       const [syntheseData, historiqueData] = await Promise.all([
         obtenirSynthese().catch(() => null),
-        listerVerifications(10).catch(() => null),
+        listerVerifications(20).catch(() => null),
       ]);
       setSynthese(syntheseData);
       setHistorique(historiqueData);
     } catch {
       // Erreur silencieuse si aucune donnée
+    } finally {
+      setChargement(false); // ✅ CORRECTION : Désactiver le chargement
     }
   };
 
   // --- Gestion des succès d'upload ---
   const handleSuccesRecto = useCallback(
     (resultat: ReponseUploadCNI, imageUrl?: string) => {
-      setDernierResultatRecto(resultat); setErreur(null); if (imageUrl) setImageRecto(imageUrl);
-      obtenirSynthese().then(setSynthese).catch(() => {});
-    }, []
+      setDernierResultatRecto(resultat);
+      setErreur(null);
+      if (imageUrl) setImageRecto(imageUrl);
+      // ✅ CORRECTION : Recharger TOUTES les données (synthese + historique)
+      chargerDonnees();
+      setOngletActif("resultats"); // ✅ Aller automatiquement aux résultats
+    },
+    []
   );
 
   const handleSuccesVerso = useCallback(
     (resultat: ReponseUploadCNI, imageUrl?: string) => {
-      setDernierResultatVerso(resultat); setErreur(null); if (imageUrl) setImageVerso(imageUrl);
-      obtenirSynthese().then(setSynthese).catch(() => {});
-    }, []
+      setDernierResultatVerso(resultat);
+      setErreur(null);
+      if (imageUrl) setImageVerso(imageUrl);
+      // ✅ CORRECTION : Recharger TOUTES les données (synthese + historique)
+      chargerDonnees();
+      setOngletActif("resultats"); // ✅ Aller automatiquement aux résultats
+    },
+    []
   );
 
   const handleErreur = useCallback((msg: string) => {
@@ -86,7 +95,7 @@ export default function PageVerificationCNI() {
   const handleSupprimer = async (id: string) => {
     try {
       await supprimerVerification(id);
-      chargerDonnees();
+      chargerDonnees(); // ✅ Recharger après suppression
     } catch {
       setErreur("Erreur lors de la suppression.");
     }
@@ -95,7 +104,7 @@ export default function PageVerificationCNI() {
   const handleRestaurer = async (id: string) => {
     try {
       await restaurerVerification(id);
-      chargerDonnees();
+      chargerDonnees(); // ✅ Recharger après restauration
     } catch {
       setErreur("Erreur lors de la restauration.");
     }
@@ -179,7 +188,10 @@ export default function PageVerificationCNI() {
         {onglets.map((onglet) => (
           <button
             key={onglet.id}
-            onClick={() => setOngletActif(onglet.id)}
+            onClick={() => {
+              setOngletActif(onglet.id);
+              if (onglet.id === "historique") chargerDonnees(); // ✅ Recharger si on va sur historique
+            }}
             className={`
               flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors
               ${
@@ -222,14 +234,46 @@ export default function PageVerificationCNI() {
       )}
 
       {ongletActif === "resultats" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">Résultat Recto</h3>
-            <ResultatCNI resultat={dernierResultatRecto} synthese={synthese} imageUrl={imageRecto} face="recto" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">Résultat Verso</h3>
-            <ResultatCNI resultat={dernierResultatVerso} synthese={null} imageUrl={imageVerso} face="verso" />
+        <div className="space-y-6">
+          {/* ✅ CORRECTION : Afficher la synthèse globale d'abord */}
+          {synthese && (
+            <div>
+              <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
+                Synthèse globale
+              </h3>
+              <ResultatCNI
+                resultat={null}
+                synthese={synthese}
+                imageUrl={imageRecto}
+                face="recto"
+              />
+            </div>
+          )}
+
+          {/* Résultats individuels */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
+                Résultat Recto
+              </h3>
+              <ResultatCNI
+                resultat={dernierResultatRecto}
+                synthese={null}
+                imageUrl={imageRecto}
+                face="recto"
+              />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
+                Résultat Verso
+              </h3>
+              <ResultatCNI
+                resultat={dernierResultatVerso}
+                synthese={null}
+                imageUrl={imageVerso}
+                face="verso"
+              />
+            </div>
           </div>
         </div>
       )}
@@ -249,8 +293,8 @@ export default function PageVerificationCNI() {
 
           {!chargement && (!historique || historique.historique.length === 0) && (
             <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
-              <p className="text-gray-400 text-lg mb-2">📄</p>
-              <p className="text-gray-500">
+              <p className="text-gray-400 text-5xl mb-2">📄</p>
+              <p className="text-gray-500 font-medium">
                 Aucune vérification CNI pour le moment.
               </p>
               <p className="text-gray-400 text-sm mt-1">
