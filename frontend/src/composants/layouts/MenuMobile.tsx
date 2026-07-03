@@ -432,8 +432,17 @@ export function BoutonMenuMobile() {
                         { href: "/police/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
                         { href: "/police/verification", libelle: "Vérification", Icone: IconeBouclier },
                         { href: "/police/recherche", libelle: "Recherche", Icone: IconeScan },
+                        { href: "/police/scan-qr", libelle: "Scan QR Code", Icone: IconeScan },
+                        // --- Outils avancés ---
+                        { href: "/police/comparaison-photos", libelle: "Comparaison photos", Icone: IconeVisage },
+                        { href: "/police/carte", libelle: "Carte géographique", Icone: IconeStatistique },
+                        { href: "/police/alertes", libelle: "Alertes temps réel", Icone: IconeAlerte },
+                        // --- Gestion ---
+                        { href: "/police/notes", libelle: "Notes internes", Icone: IconeJournal },
+                        { href: "/police/historique", libelle: "Historique", Icone: IconeJournal },
+                        { href: "/police/audit", libelle: "Journal d'audit", Icone: IconeBouclier },
+                        { href: "/police/export", libelle: "Export rapports", Icone: IconePartage },
                         { href: "/police/signalement", libelle: "Signalements", Icone: IconeAlerte },
-                        { href: "/police/audit", libelle: "Audit", Icone: IconeJournal },
                       ].map(({ href, libelle, Icone }) => {
                         const actif = pathname === href || pathname.startsWith(href);
                         return (

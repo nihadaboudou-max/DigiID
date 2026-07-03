@@ -170,28 +170,10 @@ function Contenu() {
           icone="📱" 
         />
         <CarteAction 
-          titre="Comparaison" 
-          description="Comparer des photos" 
-          href="/police/comparaison-photos" 
-          icone="🖼️" 
-        />
-        <CarteAction 
-          titre="Carte" 
-          description="Vue géographique" 
-          href="/police/carte" 
-          icone="🗺️" 
-        />
-        <CarteAction 
           titre="Alertes" 
           description="Alertes en temps réel" 
           href="/police/alertes" 
           icone="🔔" 
-        />
-        <CarteAction 
-          titre="Notes" 
-          description="Notes internes" 
-          href="/police/notes" 
-          icone="📝" 
         />
         <CarteAction 
           titre="Historique" 
