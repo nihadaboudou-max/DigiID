@@ -1,15 +1,37 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useQRDynamique } from "@/crochets/useQRDynamique";
 
 export default function AffichageQR() {
   const { qrCode, tempsRestant, chargement, erreur, rafraichir } = useQRDynamique();
+  const [estHTTPS, setEstHTTPS] = useState<boolean | null>(null);
+
+  // Détection HTTPS au montage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isSecure = window.location.protocol === "https:" || window.location.hostname === "localhost";
+      setEstHTTPS(isSecure);
+    }
+  }, []);
 
   const timerUrgent = tempsRestant <= 10;
   const pourcentage = (tempsRestant / 30) * 100;
 
   return (
     <div className="space-y-6">
+      {/* Alerte HTTPS */}
+      {estHTTPS === false && (
+        <div className="p-4 bg-ocre/10 border-l-4 border-ocre rounded-lg">
+          <p className="text-sm font-semibold text-ocre mb-1">
+            ⚠️ Mode non sécurisé détecté
+          </p>
+          <p className="text-xs text-ardoise-clair">
+            La caméra nécessite HTTPS. En production, le site sera en HTTPS.
+            Pour l'instant, utilisez la <strong>saisie manuelle du token</strong> côté policier.
+          </p>
+        </div>
+      )}
+
       {/* Compte à rebours visuel */}
       <div className="bg-sable-clair rounded-lg p-4">
         <div className="flex items-center justify-between mb-2">
@@ -123,6 +145,18 @@ export default function AffichageQR() {
           <li>✓ Une capture d'écran est <strong>inutile</strong> (code expiré)</li>
           <li>✓ Il change si vous <strong>quittez cette page</strong></li>
         </ul>
+      </div>
+
+      {/* Info sécurité HTTPS */}
+      <div className="bg-sable-clair rounded-lg p-3 text-xs text-ardoise-clair">
+        <p className="flex items-center gap-2">
+          <span>{estHTTPS ? "🔒" : "⚠️"}</span>
+          <span>
+            {estHTTPS
+              ? "Connexion sécurisée HTTPS active"
+              : "Mode HTTP détecté — la caméra sera désactivée"}
+          </span>
+        </p>
       </div>
     </div>
   );
