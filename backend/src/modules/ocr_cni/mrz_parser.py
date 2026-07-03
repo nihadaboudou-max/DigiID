@@ -471,9 +471,11 @@ def parser_mrz_td2(l1: str, l2: str) -> dict:
             # Sexe : position 20
             sexe = l2[20:21].strip("<")
             resultat["sexe"] = "M" if sexe == "M" else "F" if sexe == "F" else "non_detecte"
-            # Date expiration : positions 21-26 (AAMMJJ)
-            exp = l2[21:26]
-            check_exp = l2[26] if len(l2) > 26 else ""
+            # ✅ CORRECTION CRITIQUE : Date expiration — positions 21-26 (6 caractères AAMMJJ)
+            # Avant : exp = l2[21:26] → seulement 5 caractères → date tronquée !
+            # Après : exp = l2[21:27] → 6 caractères corrects
+            exp = l2[21:27]
+            check_exp = l2[27] if len(l2) > 27 else ""
             resultat["date_expiration"] = exp
             resultat["date_expiration_date"] = _convertir_date_mrz(exp)
             resultat["checksum_expiration_ok"] = _verifier_checksum_mrz(exp, check_exp)
