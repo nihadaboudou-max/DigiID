@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
@@ -20,13 +19,20 @@ interface Domaine {
   description: string | null;
   region: string | null;
   admin_id: string | null;
+  admin_nom: string | null; // NOUVEAU
   est_actif: boolean;
   date_creation: string;
 }
 
+interface AdminDisponible {
+  id: string;
+  nom: string;
+  role: string;
+}
+
 export default function PageDomaines() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["super_administrateur"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["super_administrateur", "super_admin"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
@@ -35,6 +41,7 @@ export default function PageDomaines() {
 function Contenu() {
   const { notifier } = useNotifications();
   const [domaines, setDomaines] = useState<Domaine[]>([]);
+  const [adminsDisponibles, setAdminsDisponibles] = useState<AdminDisponible[]>([]); // NOUVEAU
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [recherche, setRecherche] = useState("");
@@ -44,8 +51,8 @@ function Contenu() {
   const [creationEnCours, setCreationEnCours] = useState(false);
   const [editionEnCours, setEditionEnCours] = useState(false);
   const [domaineSelectionne, setDomaineSelectionne] = useState<Domaine | null>(null);
-  const [formCreation, setFormCreation] = useState({ nom: "", code: "", region: "", description: "" });
-  const [formEdition, setFormEdition] = useState({ nom: "", code: "", region: "", description: "" });
+  const [formCreation, setFormCreation] = useState({ nom: "", code: "", region: "", description: "", admin_id: "" });
+  const [formEdition, setFormEdition] = useState({ nom: "", code: "", region: "", description: "", admin_id: "" });
   const [erreurCreation, setErreurCreation] = useState<string | null>(null);
   const [erreurEdition, setErreurEdition] = useState<string | null>(null);
 
@@ -53,8 +60,12 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      const data = await clientAPI.get<{ domaines: Domaine[] }>("/api/v1/domaines", { authentifie: true });
-      setDomaines(data.domaines || []);
+      const [doms, admins] = await Promise.all([
+        clientAPI.get<{ domaines: Domaine[] }>("/api/v1/domaines", { authentifie: true }),
+        clientAPI.get<{ admins: AdminDisponible[] }>("/api/v1/utilisateurs?role=admin_domaine", { authentifie: true }).catch(() => ({ admins: [] })),
+      ]);
+      setDomaines(doms.domaines || []);
+      setAdminsDisponibles(admins.admins || []);
     } catch (e) {
       setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
     } finally {
@@ -78,7 +89,7 @@ function Contenu() {
       await clientAPI.post("/api/v1/domaines", formCreation, { authentifie: true });
       notifier("Domaine créé avec succès !", "succes");
       setModaleOuverte(false);
-      setFormCreation({ nom: "", code: "", region: "", description: "" });
+      setFormCreation({ nom: "", code: "", region: "", description: "", admin_id: "" });
       charger();
     } catch (e) {
       setErreurCreation(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de création");
@@ -117,7 +128,7 @@ function Contenu() {
 
   const ouvrirEdition = (d: Domaine) => {
     setDomaineSelectionne(d);
-    setFormEdition({ nom: d.nom, code: d.code, region: d.region || "", description: d.description || "" });
+    setFormEdition({ nom: d.nom, code: d.code, region: d.region || "", description: d.description || "", admin_id: d.admin_id || "" });
     setModaleEdition(true);
   };
 
@@ -136,6 +147,11 @@ function Contenu() {
       cle: "region",
       libelle: "Région",
       rendu: (d) => <span className="text-sm text-ardoise-clair">{d.region || "—"}</span>,
+    },
+    {
+      cle: "admin",
+      libelle: "Admin",
+      rendu: (d) => <span className="text-sm text-ardoise-clair">{d.admin_nom || "—"}</span>,
     },
     {
       cle: "statut",
@@ -168,7 +184,7 @@ function Contenu() {
         <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Super administration</p>
         <h1 className="mt-1 text-2xl">Gestion des Domaines</h1>
         <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
-          Crée et gère les domaines organisationnels du système.
+          Crée et gère les domaines organisationnels du système. Assigne un admin à chaque domaine.
         </p>
       </header>
 
@@ -192,7 +208,6 @@ function Contenu() {
             </Bouton>
           </div>
         </div>
-
         {chargement ? (
           <p className="text-center text-ardoise-clair italic py-6">Chargement...</p>
         ) : (
@@ -207,6 +222,16 @@ function Contenu() {
           <ChampSaisie libelle="Nom" value={formCreation.nom} onChange={(e) => setFormCreation({ ...formCreation, nom: e.target.value })} required />
           <ChampSaisie libelle="Code" value={formCreation.code} onChange={(e) => setFormCreation({ ...formCreation, code: e.target.value.toUpperCase() })} required />
           <ChampSaisie libelle="Région" value={formCreation.region} onChange={(e) => setFormCreation({ ...formCreation, region: e.target.value })} />
+          {/* NOUVEAU : Sélection de l'admin */}
+          <div>
+            <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Admin du domaine (optionnel)</label>
+            <select value={formCreation.admin_id} onChange={(e) => setFormCreation({ ...formCreation, admin_id: e.target.value })} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm">
+              <option value="">Aucun admin assigné</option>
+              {adminsDisponibles.map((a) => (
+                <option key={a.id} value={a.id}>{a.nom}</option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Description</label>
             <textarea value={formCreation.description} onChange={(e) => setFormCreation({ ...formCreation, description: e.target.value })} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm" rows={3} />
@@ -225,6 +250,16 @@ function Contenu() {
           <ChampSaisie libelle="Nom" value={formEdition.nom} onChange={(e) => setFormEdition({ ...formEdition, nom: e.target.value })} required />
           <ChampSaisie libelle="Code" value={formEdition.code} onChange={(e) => setFormEdition({ ...formEdition, code: e.target.value.toUpperCase() })} required />
           <ChampSaisie libelle="Région" value={formEdition.region} onChange={(e) => setFormEdition({ ...formEdition, region: e.target.value })} />
+          {/* NOUVEAU : Sélection de l'admin */}
+          <div>
+            <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Admin du domaine</label>
+            <select value={formEdition.admin_id} onChange={(e) => setFormEdition({ ...formEdition, admin_id: e.target.value })} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm">
+              <option value="">Aucun admin assigné</option>
+              {adminsDisponibles.map((a) => (
+                <option key={a.id} value={a.id}>{a.nom}</option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Description</label>
             <textarea value={formEdition.description} onChange={(e) => setFormEdition({ ...formEdition, description: e.target.value })} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm" rows={3} />
@@ -244,6 +279,7 @@ function Contenu() {
               <div><p className="text-xs text-ardoise-clair">Nom</p><p className="font-semibold">{modaleDetails.nom}</p></div>
               <div><p className="text-xs text-ardoise-clair">Code</p><p className="font-mono text-ocre">{modaleDetails.code}</p></div>
               <div><p className="text-xs text-ardoise-clair">Région</p><p>{modaleDetails.region || "—"}</p></div>
+              <div><p className="text-xs text-ardoise-clair">Admin</p><p>{modaleDetails.admin_nom || "—"}</p></div>
               <div><p className="text-xs text-ardoise-clair">Statut</p>{modaleDetails.est_actif ? <Badge variante="succes">Actif</Badge> : <Badge variante="neutre">Inactif</Badge>}</div>
               <div className="col-span-2"><p className="text-xs text-ardoise-clair">Description</p><p>{modaleDetails.description || "—"}</p></div>
               <div><p className="text-xs text-ardoise-clair">Créé le</p><p>{new Date(modaleDetails.date_creation).toLocaleDateString("fr-FR")}</p></div>

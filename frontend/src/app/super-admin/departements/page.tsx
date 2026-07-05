@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
@@ -22,6 +21,7 @@ interface Departement {
   domaine_id: string;
   domaine_nom: string | null;
   chef_id: string | null;
+  chef_nom: string | null; // NOUVEAU
   est_actif: boolean;
   date_creation: string;
 }
@@ -31,9 +31,15 @@ interface DomaineSimple {
   nom: string;
 }
 
+interface ChefDisponible {
+  id: string;
+  nom: string;
+  role: string;
+}
+
 export default function PageDepartements() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["super_administrateur"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["super_administrateur", "super_admin"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
@@ -43,6 +49,7 @@ function Contenu() {
   const { notifier } = useNotifications();
   const [departements, setDepartements] = useState<Departement[]>([]);
   const [domaines, setDomaines] = useState<DomaineSimple[]>([]);
+  const [chefsDisponibles, setChefsDisponibles] = useState<ChefDisponible[]>([]); // NOUVEAU
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [recherche, setRecherche] = useState("");
@@ -52,8 +59,8 @@ function Contenu() {
   const [creationEnCours, setCreationEnCours] = useState(false);
   const [editionEnCours, setEditionEnCours] = useState(false);
   const [departementSelectionne, setDepartementSelectionne] = useState<Departement | null>(null);
-  const [formCreation, setFormCreation] = useState({ nom: "", type_departement: "police", domaine_id: "", description: "", capacite_max: 50 });
-  const [formEdition, setFormEdition] = useState({ nom: "", type_departement: "police", domaine_id: "", description: "", capacite_max: 50 });
+  const [formCreation, setFormCreation] = useState({ nom: "", type_departement: "police", domaine_id: "", description: "", capacite_max: 50, chef_id: "" });
+  const [formEdition, setFormEdition] = useState({ nom: "", type_departement: "police", domaine_id: "", description: "", capacite_max: 50, chef_id: "" });
   const [erreurCreation, setErreurCreation] = useState<string | null>(null);
   const [erreurEdition, setErreurEdition] = useState<string | null>(null);
 
@@ -61,12 +68,14 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      const [deps, doms] = await Promise.all([
+      const [deps, doms, chefs] = await Promise.all([
         clientAPI.get<{ departements: Departement[] }>("/api/v1/departements", { authentifie: true }),
         clientAPI.get<{ domaines: DomaineSimple[] }>("/api/v1/domaines", { authentifie: true }),
+        clientAPI.get<{ chefs: ChefDisponible[] }>("/api/v1/utilisateurs?role=chef", { authentifie: true }).catch(() => ({ chefs: [] })),
       ]);
       setDepartements(deps.departements || []);
       setDomaines(doms.domaines || []);
+      setChefsDisponibles(chefs.chefs || []);
     } catch (e) {
       setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
     } finally {
@@ -90,7 +99,7 @@ function Contenu() {
       await clientAPI.post("/api/v1/departements", formCreation, { authentifie: true });
       notifier("Département créé avec succès !", "succes");
       setModaleOuverte(false);
-      setFormCreation({ nom: "", type_departement: "police", domaine_id: "", description: "", capacite_max: 50 });
+      setFormCreation({ nom: "", type_departement: "police", domaine_id: "", description: "", capacite_max: 50, chef_id: "" });
       charger();
     } catch (e) {
       setErreurCreation(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de création");
@@ -129,7 +138,7 @@ function Contenu() {
 
   const ouvrirEdition = (d: Departement) => {
     setDepartementSelectionne(d);
-    setFormEdition({ nom: d.nom, type_departement: d.type_departement, domaine_id: d.domaine_id, description: d.description || "", capacite_max: d.capacite_max });
+    setFormEdition({ nom: d.nom, type_departement: d.type_departement, domaine_id: d.domaine_id, description: d.description || "", capacite_max: d.capacite_max, chef_id: d.chef_id || "" });
     setModaleEdition(true);
   };
 
@@ -148,6 +157,11 @@ function Contenu() {
       cle: "domaine",
       libelle: "Domaine",
       rendu: (d) => <span className="text-sm text-ardoise-clair">{d.domaine_nom || "—"}</span>,
+    },
+    {
+      cle: "chef",
+      libelle: "Chef",
+      rendu: (d) => <span className="text-sm text-ardoise-clair">{d.chef_nom || "—"}</span>,
     },
     {
       cle: "statut",
@@ -175,7 +189,7 @@ function Contenu() {
         <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Super administration</p>
         <h1 className="mt-1 text-2xl">Gestion des Départements</h1>
         <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
-          Crée et gère les départements par domaine.
+          Crée et gère les départements par domaine. Assigne un chef à chaque département.
         </p>
       </header>
 
@@ -191,7 +205,6 @@ function Contenu() {
             <Bouton variante="primaire" taille="petit" onClick={() => setModaleOuverte(true)}>+ Nouveau Département</Bouton>
           </div>
         </div>
-
         {chargement ? (
           <p className="text-center text-ardoise-clair italic py-6">Chargement...</p>
         ) : (
@@ -218,6 +231,16 @@ function Contenu() {
             <select value={formCreation.domaine_id} onChange={(e) => setFormCreation({ ...formCreation, domaine_id: e.target.value })} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm" required>
               <option value="">Sélectionner un domaine</option>
               {domaines.map((d) => <option key={d.id} value={d.id}>{d.nom}</option>)}
+            </select>
+          </div>
+          {/* NOUVEAU : Sélection du chef */}
+          <div>
+            <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Chef de département (optionnel)</label>
+            <select value={formCreation.chef_id} onChange={(e) => setFormCreation({ ...formCreation, chef_id: e.target.value })} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm">
+              <option value="">Aucun chef assigné</option>
+              {chefsDisponibles.filter(c => c.role === `chef_${formCreation.type_departement}`).map((c) => (
+                <option key={c.id} value={c.id}>{c.nom}</option>
+              ))}
             </select>
           </div>
           <div>
@@ -252,6 +275,16 @@ function Contenu() {
               {domaines.map((d) => <option key={d.id} value={d.id}>{d.nom}</option>)}
             </select>
           </div>
+          {/* NOUVEAU : Sélection du chef */}
+          <div>
+            <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Chef de département</label>
+            <select value={formEdition.chef_id} onChange={(e) => setFormEdition({ ...formEdition, chef_id: e.target.value })} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm">
+              <option value="">Aucun chef assigné</option>
+              {chefsDisponibles.filter(c => c.role === `chef_${formEdition.type_departement}`).map((c) => (
+                <option key={c.id} value={c.id}>{c.nom}</option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Description</label>
             <textarea value={formEdition.description} onChange={(e) => setFormEdition({ ...formEdition, description: e.target.value })} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm" rows={3} />
@@ -271,6 +304,7 @@ function Contenu() {
               <div><p className="text-xs text-ardoise-clair">Nom</p><p className="font-semibold">{modaleDetails.nom}</p></div>
               <div><p className="text-xs text-ardoise-clair">Type</p><Badge variante="ocre">{modaleDetails.type_departement}</Badge></div>
               <div><p className="text-xs text-ardoise-clair">Domaine</p><p>{modaleDetails.domaine_nom || "—"}</p></div>
+              <div><p className="text-xs text-ardoise-clair">Chef</p><p>{modaleDetails.chef_nom || "—"}</p></div>
               <div><p className="text-xs text-ardoise-clair">Statut</p>{modaleDetails.est_actif ? <Badge variante="succes">Actif</Badge> : <Badge variante="neutre">Inactif</Badge>}</div>
               <div className="col-span-2"><p className="text-xs text-ardoise-clair">Description</p><p>{modaleDetails.description || "—"}</p></div>
               <div><p className="text-xs text-ardoise-clair">Capacité max</p><p>{modaleDetails.capacite_max}</p></div>

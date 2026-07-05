@@ -1,11 +1,11 @@
 "use client";
 /**
- * Page super-admin — gestion complète des administrateurs.
- * Création, consultation, édition, suspension, réactivation.
- */
+Page super-admin — gestion complète des administrateurs et chefs.
+Création, consultation, édition, suspension, réactivation.
+Gère TOUS les rôles : admin_domaine, chef_*, agent_*
+*/
 import { useEffect, useState } from "react";
 import Link from "next/link";
-
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Badge } from "@/composants/commun/Badge";
@@ -22,9 +22,22 @@ import {
 } from "@/services/super_admin";
 import { ErreurAPI } from "@/services/client_api";
 
+// NOUVEAU : Liste complète des rôles gérables par le super admin
+const ROLES_GERABLES = [
+  { value: "admin_domaine", label: "Admin Domaine", couleur: "ocre" },
+  { value: "chef_police", label: "Chef Police", couleur: "terre" },
+  { value: "chef_medical", label: "Chef Médical", couleur: "lagune" },
+  { value: "chef_ong", label: "Chef ONG", couleur: "ocre" },
+  { value: "chef_agent", label: "Chef Enrôlement", couleur: "lagune" },
+  { value: "agent_police", label: "Agent Police", couleur: "terre" },
+  { value: "agent_medical", label: "Agent Médical", couleur: "lagune" },
+  { value: "agent_ong", label: "Agent ONG", couleur: "ocre" },
+  { value: "agent_terrain", label: "Agent Terrain", couleur: "lagune" },
+];
+
 export default function PageAdministrateurs() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["super_administrateur"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["super_administrateur", "super_admin"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
@@ -32,30 +45,24 @@ export default function PageAdministrateurs() {
 
 function Contenu() {
   const { notifier } = useNotifications();
-
-  // Liste des admins récupérée du backend
   const [admins, setAdmins] = useState<AdminApercu[]>([]);
   const [chargement, setChargement] = useState(true);
-
-  // État de la recherche locale
   const [recherche, setRecherche] = useState("");
-
-  // État de la modale de création
+  const [filtreRole, setFiltreRole] = useState<string>("tous"); // NOUVEAU
   const [modaleOuverte, setModaleOuverte] = useState(false);
   const [creationEnCours, setCreationEnCours] = useState(false);
   const [formCreation, setFormCreation] = useState({
     email: "", mot_de_passe: "", prenom: "", nom: "", ville: "Dakar",
+    role: "admin_domaine", // NOUVEAU : rôle sélectionnable
   });
   const [erreurCreation, setErreurCreation] = useState<string | null>(null);
 
-  // --- Charger la liste au montage de la page ---
   async function rechargerListe(avecChargement: boolean = true) {
     if (avecChargement) setChargement(true);
     try {
       const reponse = await listerAdmins();
       setAdmins(reponse.administrateurs);
     } catch (e) {
-      // Silencieux en rafraîchissement automatique
       if (avecChargement) {
         notifier(
           e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement",
@@ -69,16 +76,12 @@ function Contenu() {
 
   useEffect(() => {
     rechargerListe();
-
-    // Rafraîchissement automatique toutes les 10 secondes (silencieux)
     const intervalle = setInterval(() => rechargerListe(false), 10000);
-
     return () => clearInterval(intervalle);
   }, []);
 
-  // --- Création d'un nouvel admin ---
   function modifierChamp(champ: keyof typeof formCreation) {
-    return (e: React.ChangeEvent<HTMLInputElement>) =>
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setFormCreation((f) => ({ ...f, [champ]: e.target.value }));
   }
 
@@ -89,13 +92,11 @@ function Contenu() {
     try {
       const nouveau = await creerAdmin(formCreation);
       notifier(
-        `Administrateur créé : ${nouveau.prenom} ${nouveau.nom}. Communique-lui ses identifiants par un canal sécurisé.`,
+        `Administrateur créé : ${nouveau.prenom} ${nouveau.nom} (${nouveau.role}). Communique-lui ses identifiants par un canal sécurisé.`,
         "succes",
       );
-      // Ajouter en tête de liste sans recharger
       setAdmins((liste) => [nouveau, ...liste]);
-      // Réinitialiser le formulaire et fermer la modale
-      setFormCreation({ email: "", mot_de_passe: "", prenom: "", nom: "", ville: "Dakar" });
+      setFormCreation({ email: "", mot_de_passe: "", prenom: "", nom: "", ville: "Dakar", role: "admin_domaine" });
       setModaleOuverte(false);
     } catch (e) {
       const msg = e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de création";
@@ -105,7 +106,6 @@ function Contenu() {
     }
   }
 
-  // --- Suspension / Réactivation ---
   async function gererBascule(admin: AdminApercu) {
     const verbe = admin.est_actif ? "suspendre" : "réactiver";
     if (!confirm(`Veux-tu vraiment ${verbe} ${admin.prenom} ${admin.nom} ?`)) return;
@@ -113,7 +113,6 @@ function Contenu() {
       const maj = admin.est_actif
         ? await suspendreAdmin(admin.id)
         : await reactiverAdmin(admin.id);
-      // Mise à jour locale
       setAdmins((liste) => liste.map((a) => (a.id === admin.id ? maj : a)));
       notifier(
         `Administrateur ${maj.est_actif ? "réactivé" : "suspendu"}.`,
@@ -125,18 +124,17 @@ function Contenu() {
     }
   }
 
-  // Filtrage local par la recherche
+  // Filtrage par recherche ET par rôle
   const adminsFiltres = admins.filter((a) => {
     const r = recherche.toLowerCase();
-    if (!r) return true;
-    return (
+    const correspondRecherche = !r || 
       a.email.toLowerCase().includes(r) ||
       (a.prenom?.toLowerCase().includes(r) ?? false) ||
-      (a.nom?.toLowerCase().includes(r) ?? false)
-    );
+      (a.nom?.toLowerCase().includes(r) ?? false);
+    const correspondRole = filtreRole === "tous" || a.role === filtreRole;
+    return correspondRecherche && correspondRole;
   });
 
-  // Export CSV des administrateurs
   const gererExportCSV = () => {
     if (adminsFiltres.length === 0) {
       notifier("Aucun administrateur à exporter.", "avertissement");
@@ -144,16 +142,12 @@ function Contenu() {
     }
     const enTetes = ["Email", "Prénom", "Nom", "Rôle", "Statut", "2FA", "Date création", "Dernière connexion"];
     const lignes = adminsFiltres.map((a) => [
-      a.email,
-      a.prenom || "",
-      a.nom || "",
-      a.role,
+      a.email, a.prenom || "", a.nom || "", a.role,
       a.est_actif ? "Actif" : "Suspendu",
       a.deux_fa_active ? "Oui" : "Non",
       new Date(a.date_creation).toLocaleDateString("fr-FR"),
       a.date_derniere_connexion ? new Date(a.date_derniere_connexion).toLocaleDateString("fr-FR") : "",
     ]);
-
     const csv = [enTetes.join(","), ...lignes.map((l) => l.join(","))].join("\n");
     const bom = "\uFEFF";
     const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
@@ -168,7 +162,12 @@ function Contenu() {
     notifier("Export CSV téléchargé.", "succes");
   };
 
-  // Définition des colonnes du tableau
+  // NOUVEAU : Fonction pour obtenir la couleur du badge selon le rôle
+  const obtenirCouleurRole = (role: string): string => {
+    const roleInfo = ROLES_GERABLES.find(r => r.value === role);
+    return roleInfo?.couleur || "lagune";
+  };
+
   const colonnes: Colonne<AdminApercu>[] = [
     {
       cle: "identite",
@@ -176,9 +175,7 @@ function Contenu() {
       rendu: (a) => (
         <Link href={`/super-admin/administrateurs/${a.id}`} className="hover:text-lagune transition-colors">
           <div>
-            <p className="font-medium text-ardoise">
-              {a.prenom} {a.nom}
-            </p>
+            <p className="font-medium text-ardoise">{a.prenom} {a.nom}</p>
             <p className="text-xs text-ardoise-clair">{a.email}</p>
           </div>
         </Link>
@@ -188,12 +185,11 @@ function Contenu() {
       cle: "role",
       libelle: "Rôle",
       alignement: "centre",
-      rendu: (a) =>
-        a.role === "super_administrateur" ? (
-          <Badge variante="ocre">Super admin</Badge>
-        ) : (
-          <Badge variante="lagune">Admin</Badge>
-        ),
+      rendu: (a) => {
+        const couleur = obtenirCouleurRole(a.role);
+        const label = ROLES_GERABLES.find(r => r.value === a.role)?.label || a.role;
+        return <Badge variante={couleur as any}>{label}</Badge>;
+      },
     },
     {
       cle: "date_creation",
@@ -242,16 +238,13 @@ function Contenu() {
       libelle: "",
       alignement: "droite",
       rendu: (a) => {
-        // On ne peut pas modifier le super admin lui-même
-        if (a.role === "super_administrateur") {
+        if (a.role === "super_administrateur" || a.role === "super_admin") {
           return <span className="text-xs italic text-ardoise-clair">—</span>;
         }
         return (
           <div className="flex gap-2">
             <Link href={`/super-admin/administrateurs/${a.id}`}>
-              <Bouton variante="ghost" taille="petit">
-                Voir
-              </Bouton>
+              <Bouton variante="ghost" taille="petit">Voir</Bouton>
             </Link>
             <Bouton
               variante="ghost"
@@ -269,20 +262,19 @@ function Contenu() {
 
   return (
     <div className="space-y-4">
-      {/* En-tête compact */}
       <header>
         <p className="text-ocre font-semibold text-xs uppercase tracking-wider">
           Super administration
         </p>
-        <h1 className="mt-1 text-2xl">Administrateurs</h1>
+        <h1 className="mt-1 text-2xl">Administrateurs & Chefs</h1>
         <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
-          Crée, suspends ou réactive les comptes administrateurs.
+          Crée, suspends ou réactive les comptes administrateurs, chefs de département et agents.
           Toute action est tracée dans le journal d'audit avec ton identité.
         </p>
       </header>
 
       <Alerte variante="avertissement" titre="Action sensible">
-        La création d'un administrateur est une action critique. Communique le mot
+        La création d'un administrateur ou chef est une action critique. Communique le mot
         de passe par un canal sécurisé (téléphone, en main propre) — jamais par email.
       </Alerte>
 
@@ -293,6 +285,17 @@ function Contenu() {
             {adminsFiltres.length > 1 ? "s" : ""}
           </p>
           <div className="flex gap-2 items-center w-full sm:w-auto">
+            {/* NOUVEAU : Filtre par rôle */}
+            <select
+              value={filtreRole}
+              onChange={(e) => setFiltreRole(e.target.value)}
+              className="px-3 py-1.5 border border-ardoise-clair/20 rounded-lg text-sm"
+            >
+              <option value="tous">Tous les rôles</option>
+              {ROLES_GERABLES.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
             <div className="flex-grow sm:w-64">
               <ChampRecherche
                 placeholder="Rechercher email, prénom, nom..."
@@ -308,11 +311,10 @@ function Contenu() {
               taille="petit"
               onClick={() => setModaleOuverte(true)}
             >
-              + Nouvel administrateur
+              + Nouvel utilisateur
             </Bouton>
           </div>
         </div>
-
         {chargement ? (
           <p className="text-center text-ardoise-clair italic py-6">Chargement...</p>
         ) : (
@@ -320,24 +322,38 @@ function Contenu() {
             colonnes={colonnes}
             donnees={adminsFiltres}
             cleLigne={(a) => a.id}
-            vide="Aucun administrateur correspondant à ta recherche."
+            vide="Aucun utilisateur correspondant à ta recherche."
           />
         )}
       </Carte>
 
-      {/* Modale de création d'admin */}
+      {/* Modale de création */}
       <Modal
         ouvert={modaleOuverte}
         surFermeture={() => !creationEnCours && setModaleOuverte(false)}
-        titre="Créer un nouvel administrateur"
-        description="Ce compte aura les pleins droits d'administration."
+        titre="Créer un nouvel utilisateur"
+        description="Ce compte aura les droits associés au rôle sélectionné."
         taille="grand"
       >
         <form onSubmit={gererCreation} className="space-y-3">
           {erreurCreation && (
             <Alerte variante="erreur">{erreurCreation}</Alerte>
           )}
-
+          {/* NOUVEAU : Sélection du rôle */}
+          <div>
+            <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
+              Rôle
+            </label>
+            <select
+              value={formCreation.role}
+              onChange={modifierChamp("role")}
+              className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+            >
+              {ROLES_GERABLES.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <ChampSaisie
               libelle="Prénom"
@@ -354,16 +370,14 @@ function Contenu() {
               onChange={modifierChamp("nom")}
             />
           </div>
-
           <ChampSaisie
             libelle="Email"
             type="email"
             required
             value={formCreation.email}
             onChange={modifierChamp("email")}
-            placeholder="admin@digiid.africa"
+            placeholder="user@digiid.africa"
           />
-
           <ChampSaisie
             libelle="Mot de passe initial"
             type="password"
@@ -373,14 +387,12 @@ function Contenu() {
             onChange={modifierChamp("mot_de_passe")}
             aide="Minimum 12 caractères : majuscule, minuscule, chiffre, caractère spécial."
           />
-
           <ChampSaisie
             libelle="Ville"
             value={formCreation.ville}
             onChange={modifierChamp("ville")}
             placeholder="Dakar"
           />
-
           <div className="flex justify-end gap-2 pt-2">
             <Bouton
               type="button"
@@ -395,7 +407,7 @@ function Contenu() {
               variante="primaire"
               chargement={creationEnCours}
             >
-              Créer l'administrateur
+              Créer l'utilisateur
             </Bouton>
           </div>
         </form>

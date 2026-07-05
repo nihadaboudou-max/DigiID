@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
@@ -26,9 +25,22 @@ interface Invitation {
   date_acceptation: string | null;
 }
 
+// NOUVEAU : Liste complète des rôles invitables
+const ROLES_INVITABLES = [
+  { value: "admin_domaine", label: "Admin Domaine", couleur: "ocre" },
+  { value: "chef_police", label: "Chef Police", couleur: "terre" },
+  { value: "chef_medical", label: "Chef Médical", couleur: "lagune" },
+  { value: "chef_ong", label: "Chef ONG", couleur: "ocre" },
+  { value: "chef_agent", label: "Chef Enrôlement", couleur: "lagune" },
+  { value: "agent_police", label: "Agent Police", couleur: "terre" },
+  { value: "agent_medical", label: "Agent Médical", couleur: "lagune" },
+  { value: "agent_ong", label: "Agent ONG", couleur: "ocre" },
+  { value: "agent_terrain", label: "Agent Terrain", couleur: "lagune" },
+];
+
 export default function PageInvitations() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["super_administrateur"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["super_administrateur", "super_admin"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
@@ -40,9 +52,12 @@ function Contenu() {
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [recherche, setRecherche] = useState("");
+  const [filtreRole, setFiltreRole] = useState<string>("tous"); // NOUVEAU
   const [modaleOuverte, setModaleOuverte] = useState(false);
   const [creationEnCours, setCreationEnCours] = useState(false);
-  const [formCreation, setFormCreation] = useState({ email: "", role: "admin_domaine", message: "" });
+  const [formCreation, setFormCreation] = useState({
+    email: "", role: "admin_domaine", message: "",
+  });
   const [erreurCreation, setErreurCreation] = useState<string | null>(null);
 
   const charger = async () => {
@@ -61,9 +76,14 @@ function Contenu() {
   useEffect(() => { charger(); }, []);
 
   const invitationsFiltrees = invitations.filter((i) => {
-    if (!recherche) return true;
+    if (!recherche && filtreRole === "tous") return true;
     const q = recherche.toLowerCase();
-    return i.email.toLowerCase().includes(q) || i.role.toLowerCase().includes(q) || i.statut.toLowerCase().includes(q);
+    const correspondRecherche = !recherche || 
+      i.email.toLowerCase().includes(q) || 
+      i.role.toLowerCase().includes(q) || 
+      i.statut.toLowerCase().includes(q);
+    const correspondRole = filtreRole === "tous" || i.role === filtreRole;
+    return correspondRecherche && correspondRole;
   });
 
   const gererCreation = async (e: React.FormEvent) => {
@@ -105,6 +125,11 @@ function Contenu() {
     }
   };
 
+  const obtenirCouleurRole = (role: string): string => {
+    const roleInfo = ROLES_INVITABLES.find(r => r.value === role);
+    return roleInfo?.couleur || "lagune";
+  };
+
   const colonnes: Colonne<Invitation>[] = [
     {
       cle: "email",
@@ -114,7 +139,11 @@ function Contenu() {
     {
       cle: "role",
       libelle: "Rôle",
-      rendu: (i) => <Badge variante="lagune">{i.role}</Badge>,
+      rendu: (i) => {
+        const couleur = obtenirCouleurRole(i.role);
+        const label = ROLES_INVITABLES.find(r => r.value === i.role)?.label || i.role;
+        return <Badge variante={couleur as any}>{label}</Badge>;
+      },
     },
     {
       cle: "statut",
@@ -150,7 +179,7 @@ function Contenu() {
         <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Super administration</p>
         <h1 className="mt-1 text-2xl">Gestion des Invitations</h1>
         <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
-          Envoie des invitations pour créer des comptes administrateurs.
+          Envoie des invitations pour créer des comptes (admin, chef, agent).
         </p>
       </header>
 
@@ -162,11 +191,21 @@ function Contenu() {
             <strong className="text-lagune">{invitationsFiltrees.length}</strong> invitation{invitationsFiltrees.length > 1 ? "s" : ""}
           </p>
           <div className="flex gap-2 items-center w-full sm:w-auto">
+            {/* NOUVEAU : Filtre par rôle */}
+            <select
+              value={filtreRole}
+              onChange={(e) => setFiltreRole(e.target.value)}
+              className="px-3 py-1.5 border border-ardoise-clair/20 rounded-lg text-sm"
+            >
+              <option value="tous">Tous les rôles</option>
+              {ROLES_INVITABLES.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
             <input type="text" value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Rechercher..." className="flex-grow sm:w-64 px-3 py-1.5 border border-ardoise-clair/20 rounded-lg text-sm" />
             <Bouton variante="primaire" taille="petit" onClick={() => setModaleOuverte(true)}>+ Nouvelle Invitation</Bouton>
           </div>
         </div>
-
         {chargement ? (
           <p className="text-center text-ardoise-clair italic py-6">Chargement...</p>
         ) : (
@@ -179,14 +218,13 @@ function Contenu() {
         <form onSubmit={gererCreation} className="space-y-3">
           {erreurCreation && <Alerte variante="erreur">{erreurCreation}</Alerte>}
           <ChampSaisie libelle="Email" type="email" value={formCreation.email} onChange={(e) => setFormCreation({ ...formCreation, email: e.target.value })} required />
+          {/* NOUVEAU : Sélection du rôle */}
           <div>
             <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Rôle</label>
             <select value={formCreation.role} onChange={(e) => setFormCreation({ ...formCreation, role: e.target.value })} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm">
-              <option value="admin_domaine">Admin Domaine</option>
-              <option value="chef_police">Chef Police</option>
-              <option value="chef_medical">Chef Médical</option>
-              <option value="chef_ong">Chef ONG</option>
-              <option value="chef_agent">Chef Agent</option>
+              {ROLES_INVITABLES.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
             </select>
           </div>
           <div>
