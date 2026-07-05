@@ -12,13 +12,14 @@ Sécurité :
     - L'adresse IP est systématiquement extraite pour l'audit
 """
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, List
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
@@ -27,6 +28,7 @@ from src.modules.authentification.dependances import (
     super_admin_courant,
 )
 from src.modeles import Utilisateur
+from src.noyau import dechiffrer_donnee
 
 from src.modules.super_admin import service as service_super_admin
 from src.modules.super_admin import service_phase6 as service_super_admin_v2
@@ -1226,3 +1228,67 @@ async def monitoring_complet(
 ):
     """Point d'entrée unique pour le dashboard temps réel."""
     return await service_monitoring.obtenir_monitoring_complet(session)
+
+
+# =============================================================================
+# ADMIN DISPONIBLES — Pour assignation aux domaines
+# =============================================================================
+
+
+class AdminDisponibleResponse(BaseModel):
+    """Réponse pour un admin disponible à assigner à un domaine."""
+    id: str
+    nom: str
+    email: str
+    role: str
+
+
+@routeur_super_admin.get(
+    "/admins-disponibles",
+    response_model=List[AdminDisponibleResponse],
+    summary="Lister les admins disponibles pour assignation",
+    description=(
+        "Retourne la liste des administrateurs actifs pouvant être assignés à un domaine. "
+        "Inclut les rôles 'admin_domaine' et 'administrateur'."
+    ),
+)
+async def lister_admins_disponibles(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    super_admin: Annotated[Utilisateur, Depends(super_admin_courant)],
+):
+    """
+    Liste tous les administrateurs actifs qui peuvent être assignés à un domaine.
+
+    Filtre les utilisateurs ayant les rôles :
+      - admin_domaine
+      - administrateur
+    
+    Exclut les comptes supprimés ou inactifs.
+    """
+    # Requête pour récupérer les admins actifs
+    query = select(Utilisateur).where(
+        Utilisateur.role.in_(["admin_domaine", "administrateur"]),
+        Utilisateur.est_actif == True,
+        Utilisateur.est_supprime == False,
+    ).order_by(Utilisateur.cree_le.desc())
+    
+    result = await session.execute(query)
+    admins = result.scalars().all()
+    
+    # Formater la réponse avec déchiffrement
+    resultats = []
+    for admin in admins:
+        prenom = dechiffrer_donnee(admin.prenom_chiffre) if admin.prenom_chiffre else ""
+        nom = dechiffrer_donnee(admin.nom_chiffre) if admin.nom_chiffre else ""
+        email = dechiffrer_donnee(admin.email_chiffre) if admin.email_chiffre else ""
+        
+        resultats.append(
+            AdminDisponibleResponse(
+                id=str(admin.id),
+                nom=f"{prenom} {nom}".strip() or email,
+                email=email,
+                role=admin.role,
+            )
+        )
+    
+    return resultats
