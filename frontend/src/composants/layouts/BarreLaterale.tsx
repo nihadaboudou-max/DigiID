@@ -104,7 +104,10 @@ const LIENS_ADMIN_ACTIVITES: Lien[] = [
 const LIENS_ADMIN: Lien[] = [
   { href: "/admin/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
   { href: "/admin/monitoring",      libelle: "Monitoring",       Icone: IconeStatistique },
+  { href: "/admin/chefs", libelle: "Chefs", Icone: IconeUtilisateur },
   { href: "/admin/utilisateurs",    libelle: "Utilisateurs",     Icone: IconeUtilisateur },
+  { href: "/admin/departements", libelle: "Départements", Icone: IconeStatistique },
+  { href: "/admin/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
   { href: "/admin/attestations",    libelle: "Attestations",     Icone: IconeCheck },
   { href: "/admin/droits",          libelle: "Droits",           Icone: IconeBouclier },
   { href: "/admin/audit",           libelle: "Journal d'audit",  Icone: IconeJournal },
