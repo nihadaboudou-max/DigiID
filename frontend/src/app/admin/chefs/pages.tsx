@@ -76,10 +76,10 @@ function Contenu() {
     setErreur(null);
     try {
       const params = new URLSearchParams();
+      // ✅ CORRECTION : Utiliser le domaine_id de l'utilisateur connecté
       if (utilisateur?.domaine_id) {
         params.append("domaine_id", utilisateur.domaine_id);
       }
-      params.append("role", "chef");
       
       const data = await clientAPI.get<ChefApercu[]>(
         `/api/v1/admin/chefs?${params.toString()}`,
@@ -104,8 +104,8 @@ function Contenu() {
       );
       setModalDetail(data);
     } catch (e) {
-      const msg = e instanceof ErreurAPI ? `Erreur ${e.code_http} — ${e.message_utilisateur}` : String(e);
-      notifier(`Impossible de charger le detail: ${msg}`, "erreur");
+      const msg = e instanceof ErreurAPI ? e.message_utilisateur : String(e);
+      notifier(`Impossible de charger le détail: ${msg}`, "erreur");
     } finally {
       setDetailChargement(false);
     }
@@ -146,7 +146,7 @@ function Contenu() {
     try {
       await clientAPI.patch<ChefDetail>(
         `/api/v1/admin/chefs/${id}/reactiver`,
-        undefined,
+        {},
         { authentifie: true }
       );
       notifier("Compte réactivé", "succes");
@@ -239,7 +239,7 @@ function Contenu() {
             onClick={() => chargerDetail(u.id)}
             title="Voir détails"
           >
-            👁️
+            ️
           </Bouton>
           <Bouton
             variante="ghost"
@@ -334,6 +334,109 @@ function Contenu() {
           </Bouton>
         </Link>
       </div>
+
+      {/* ✅ NOUVEAU : Modale de détail */}
+      {modalDetail && (
+        <Modal
+          ouvert={true}
+          surFermeture={() => setModalDetail(null)}
+          titre={modalDetail.prenom || modalDetail.email}
+          description={`Rôle: ${obtenirLabelRole(modalDetail.role)}`}
+        >
+          {detailChargement ? (
+            <div className="space-y-3 p-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-8 bg-sable-clair/50 rounded-lg animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-xs text-ardoise-clair">Email</p>
+                  <p className="font-medium">{modalDetail.email}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-ardoise-clair">Téléphone</p>
+                  <p>{modalDetail.telephone || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-ardoise-clair">Ville</p>
+                  <p>{modalDetail.ville || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-ardoise-clair">Département</p>
+                  <p>{modalDetail.departement_nom || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-ardoise-clair">Créé le</p>
+                  <p>{new Date(modalDetail.date_creation).toLocaleDateString("fr-FR")}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-ardoise-clair">Dernière connexion</p>
+                  <p>
+                    {modalDetail.date_derniere_connexion
+                      ? new Date(modalDetail.date_derniere_connexion).toLocaleDateString("fr-FR")
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+              {modalDetail.motif_suspension && (
+                <div className="p-3 bg-terre/5 rounded-lg border border-terre/10">
+                  <p className="text-xs font-semibold text-terre">Motif suspension</p>
+                  <p className="text-sm">{modalDetail.motif_suspension}</p>
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-3 border-t border-ardoise-clair/10">
+                <Bouton variante="ghost" onClick={() => setModalDetail(null)}>
+                  Fermer
+                </Bouton>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* ✅ NOUVEAU : Modale de confirmation */}
+      {modalConfirmation && (
+        <Modal
+          ouvert={true}
+          surFermeture={() => setModalConfirmation(null)}
+          titre={
+            modalConfirmation.type === "suspendre"
+              ? "Suspendre le compte"
+              : "Réactiver le compte"
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-ardoise">
+              {modalConfirmation.type === "suspendre" && (
+                <>Suspendre <strong>{modalConfirmation.chef.email_masque}</strong> ?</>
+              )}
+              {modalConfirmation.type === "reactiver" && (
+                <>Réactiver <strong>{modalConfirmation.chef.email_masque}</strong> ?</>
+              )}
+            </p>
+            <div className="flex justify-end gap-3 pt-4 border-t border-ardoise-clair/10">
+              <Bouton variante="ghost" onClick={() => setModalConfirmation(null)}>
+                Annuler
+              </Bouton>
+              <Bouton
+                variante={modalConfirmation.type === "suspendre" ? "primaire" : "secondaire"}
+                taille="petit"
+                chargement={actionChargement}
+                onClick={() => {
+                  const u = modalConfirmation.chef;
+                  if (modalConfirmation.type === "suspendre") gererSuspension(u.id);
+                  else gererReactivation(u.id);
+                }}
+              >
+                {modalConfirmation.type === "suspendre" ? "Suspendre" : "Réactiver"}
+              </Bouton>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

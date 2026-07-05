@@ -13,22 +13,16 @@ import { Alerte } from "@/composants/commun/Alerte";
 import { Modal } from "@/composants/commun/Modal";
 import { Tableau, type Colonne } from "@/composants/commun/Tableau";
 import { useNotifications } from "@/contextes/notifications";
-import { clientAPI, ErreurAPI } from "@/services/client_api";
+import { ErreurAPI } from "@/services/client_api";
 import { useAuthentification } from "@/contextes/authentification";
-
-interface Invitation {
-  id: string;
-  email: string;
-  role: string;
-  domaine_id: string | null;
-  departement_id: string | null;
-  statut: string;
-  message: string | null;
-  cree_par: string;
-  date_creation: string;
-  date_expiration: string;
-  date_acceptation: string | null;
-}
+// ✅ CORRECTION : Utiliser le service
+import {
+  listerInvitations,
+  creerInvitation,
+  annulerInvitation,
+  renvoyerInvitation,
+  type Invitation,
+} from "@/services/invitations";
 
 // Rôles de chefs que l'admin peut inviter
 const ROLES_CHEF_INVITABLES = [
@@ -67,15 +61,10 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      // L'admin ne voit que les invitations de SON domaine
-      const params = new URLSearchParams();
-      if (utilisateur?.domaine_id) {
-        params.append("domaine_id", utilisateur.domaine_id);
-      }
-      const data = await clientAPI.get<{ invitations: Invitation[] }>(
-        `/api/v1/invitations?${params.toString()}`,
-        { authentifie: true }
-      );
+      // ✅ CORRECTION : Utiliser le service avec filtrage par domaine
+      const data = await listerInvitations({
+        domaine_id: utilisateur?.domaine_id || undefined,
+      });
       setInvitations(data.invitations || []);
     } catch (e) {
       setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
@@ -105,15 +94,13 @@ function Contenu() {
     setErreurCreation(null);
     setCreationEnCours(true);
     try {
-      // L'invitation est créée avec le domaine_id de l'admin
-      await clientAPI.post(
-        "/api/v1/invitations",
-        {
-          ...formCreation,
-          domaine_id: utilisateur?.domaine_id || null,
-        },
-        { authentifie: true }
-      );
+      // ✅ CORRECTION : Utiliser le service
+      await creerInvitation({
+        email: formCreation.email,
+        role: formCreation.role,
+        domaine_id: utilisateur?.domaine_id || undefined,
+        message: formCreation.message || undefined,
+      });
       notifier("Invitation envoyée au chef avec succès !", "succes");
       setModaleOuverte(false);
       setFormCreation({ email: "", role: "chef_police", message: "" });
@@ -128,7 +115,7 @@ function Contenu() {
   const gererRenvoi = async (id: string) => {
     if (!confirm("Renvoyer cette invitation ?")) return;
     try {
-      await clientAPI.post(`/api/v1/invitations/${id}/renvoyer`, {}, { authentifie: true });
+      await renvoyerInvitation(id);
       notifier("Invitation renvoyée", "succes");
       charger();
     } catch (e) {
@@ -139,7 +126,7 @@ function Contenu() {
   const gererAnnulation = async (id: string) => {
     if (!confirm("Annuler cette invitation ?")) return;
     try {
-      await clientAPI.delete(`/api/v1/invitations/${id}`, { authentifie: true });
+      await annulerInvitation(id);
       notifier("Invitation annulée", "succes");
       charger();
     } catch (e) {
@@ -245,7 +232,6 @@ function Contenu() {
             {invitationsFiltrees.length > 1 ? "s" : ""}
           </p>
           <div className="flex gap-2 items-center w-full sm:w-auto">
-            {/* Filtre par rôle de chef */}
             <select
               value={filtreRole}
               onChange={(e) => setFiltreRole(e.target.value)}
@@ -306,7 +292,6 @@ function Contenu() {
             required
           />
 
-          {/* Sélection du rôle de chef */}
           <div>
             <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
               Type de chef à inviter

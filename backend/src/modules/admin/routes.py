@@ -1567,3 +1567,198 @@ async def reactiver_chef(
         "domaine_id": str(chef.domaine_id) if chef.domaine_id else None,
         "departement_id": str(chef.departement_id) if chef.departement_id else None,
     }
+    
+# ===========================================================================
+# GESTION DES CHEFS — Routes manquantes (CRUD complet)
+# ===========================================================================
+
+class ChefApercuAdmin(BaseModel):
+    """Aperçu d'un chef pour la liste."""
+    id: str
+    prenom_initiale: str | None = None
+    nom_initiale: str | None = None
+    email_masque: str
+    ville: str | None = None
+    role: str
+    departement_nom: str | None = None
+    departement_id: str | None = None
+    est_verrouille: bool
+    date_inscription: str | None = None
+
+
+@routeur_admin.get(
+    "/chefs-liste",
+    response_model=List[ChefApercuAdmin],
+    summary="Liste formatée des chefs (pour tableau UI)",
+)
+async def lister_chefs_pour_tableau(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    admin: Annotated[Utilisateur, Depends(admin_courant)],
+):
+    """Version formatée pour le tableau UI (emails masqués, initiales)."""
+    from src.noyau import dechiffrer_donnee
+    from src.modeles.departement import Departement
+    
+    query = select(Utilisateur).where(
+        Utilisateur.domaine_id == admin.domaine_id,
+        Utilisateur.role.in_([
+            RolesUtilisateur.CHEF_POLICE.value,
+            RolesUtilisateur.CHEF_MEDICAL.value,
+            RolesUtilisateur.CHEF_ONG.value,
+            RolesUtilisateur.CHEF_AGENT.value,
+        ]),
+        Utilisateur.est_supprime == False,
+    ).order_by(Utilisateur.cree_le.desc())
+    
+    result = await session.execute(query)
+    chefs = result.scalars().all()
+    
+    # Charger les départements
+    dept_ids = [c.departement_id for c in chefs if c.departement_id]
+    departements = {}
+    if dept_ids:
+        dept_result = await session.execute(
+            select(Departement).where(Departement.id.in_(dept_ids))
+        )
+        for d in dept_result.scalars().all():
+            departements[str(d.id)] = d.nom
+    
+    apercus = []
+    for c in chefs:
+        email = dechiffrer_donnee(c.email_chiffre) if c.email_chiffre else ""
+        prenom = dechiffrer_donnee(c.prenom_chiffre) if c.prenom_chiffre else None
+        nom = dechiffrer_donnee(c.nom_chiffre) if c.nom_chiffre else None
+        
+        email_masque = email[:1] + "***" + email[email.index("@"):] if "@" in email else email
+        
+        apercus.append(ChefApercuAdmin(
+            id=str(c.id),
+            prenom_initiale=prenom[0].upper() + "." if prenom else None,
+            nom_initiale=nom[0].upper() + "." if nom else None,
+            email_masque=email_masque,
+            ville=c.ville,
+            role=c.role,
+            departement_nom=departements.get(str(c.departement_id)) if c.departement_id else None,
+            departement_id=str(c.departement_id) if c.departement_id else None,
+            est_verrouille=c.est_verrouille,
+            date_inscription=c.cree_le.strftime("%Y-%m-%d") if c.cree_le else None,
+        ))
+    
+    return apercus
+
+
+# ===========================================================================
+# INVITATIONS — Routes pour l'admin de domaine
+# ===========================================================================
+
+class InvitationCreateAdmin(BaseModel):
+    """Création d'invitation par un admin de domaine."""
+    email: str
+    role: str
+    message: str | None = None
+
+
+@routeur_admin.post(
+    "/invitations",
+    summary="Créer une invitation (admin domaine)",
+    status_code=status.HTTP_201_CREATED,
+)
+async def creer_invitation_admin(
+    data: InvitationCreateAdmin,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    admin: Annotated[Utilisateur, Depends(admin_courant)],
+):
+    """
+    Crée une invitation pour un chef de département.
+    L'invitation est automatiquement liée au domaine de l'admin.
+    """
+    from src.modeles.invitation import Invitation
+    import uuid
+    
+    # Vérifier que le rôle est un rôle de chef
+    roles_chef = [
+        RolesUtilisateur.CHEF_POLICE.value,
+        RolesUtilisateur.CHEF_MEDICAL.value,
+        RolesUtilisateur.CHEF_ONG.value,
+        RolesUtilisateur.CHEF_AGENT.value,
+    ]
+    
+    if data.role not in roles_chef:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Rôle invalide. Seuls les rôles de chef sont autorisés: {roles_chef}",
+        )
+    
+    # Vérifier que l'email n'est pas déjà utilisé
+    from src.config.constantes import hasher_email
+    email_hash = hasher_email(data.email)
+    existing = await session.scalar(
+        select(Utilisateur).where(Utilisateur.email_hash == email_hash)
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cet email est déjà utilisé.",
+        )
+    
+    # Créer l'invitation
+    invitation = Invitation(
+        email=data.email,
+        role=data.role,
+        domaine_id=admin.domaine_id,
+        message=data.message,
+        cree_par=admin.id,
+        token=str(uuid.uuid4()),
+    )
+    session.add(invitation)
+    await session.commit()
+    await session.refresh(invitation)
+    
+    # TODO: Envoyer l'email d'invitation
+    # await envoyer_email(destinataire=data.email, sujet=..., corps=...)
+    
+    return {
+        "id": str(invitation.id),
+        "email": data.email,
+        "role": data.role,
+        "statut": "en_attente",
+        "message": "Invitation créée avec succès.",
+    }
+
+
+@routeur_admin.get(
+    "/invitations",
+    summary="Lister les invitations du domaine",
+)
+async def lister_invitations_admin(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    admin: Annotated[Utilisateur, Depends(admin_courant)],
+):
+    """Liste toutes les invitations du domaine de l'admin."""
+    from src.modeles.invitation import Invitation
+    
+    query = select(Invitation).where(
+        Invitation.domaine_id == admin.domaine_id,
+    ).order_by(Invitation.date_creation.desc())
+    
+    result = await session.execute(query)
+    invitations = result.scalars().all()
+    
+    return {
+        "invitations": [
+            {
+                "id": str(i.id),
+                "email": i.email,
+                "role": i.role,
+                "domaine_id": str(i.domaine_id) if i.domaine_id else None,
+                "departement_id": str(i.departement_id) if i.departement_id else None,
+                "statut": i.statut,
+                "message": i.message,
+                "cree_par": str(i.cree_par) if i.cree_par else None,
+                "date_creation": i.date_creation.strftime("%Y-%m-%dT%H:%M:%S") if i.date_creation else "",
+                "date_expiration": i.date_expiration.strftime("%Y-%m-%dT%H:%M:%S") if i.date_expiration else "",
+                "date_acceptation": i.date_acceptation.strftime("%Y-%m-%dT%H:%M:%S") if i.date_acceptation else None,
+            }
+            for i in invitations
+        ]
+    }

@@ -1,9 +1,10 @@
 /**
- * Service API pour la gestion des invitations (Super Admin).
- */
+Service API pour la gestion des invitations (Admin & Super Admin).
+*/
 import { clientAPI } from "./client_api";
 
-const PREFIXE = "/api/v1/invitations";
+// ✅ CORRECTION : Pas de /api au début, clientAPI ajoute /api/backend
+const PREFIXE = "/v1/invitations";
 
 export interface Invitation {
   id: string;
@@ -34,17 +35,25 @@ export interface ListeInvitations {
   par_page: number;
 }
 
-/** Liste toutes les invitations */
+/** Liste toutes les invitations avec filtrage optionnel */
 export const listerInvitations = (
-  statut?: string,
-  page = 1,
-  par_page = 20,
+  options?: {
+    statut?: string;
+    domaine_id?: string;
+    page?: number;
+    par_page?: number;
+  }
 ) => {
   const params = new URLSearchParams();
-  if (statut) params.append("statut", statut);
-  params.append("page", String(page));
-  params.append("par_page", String(par_page));
-  return clientAPI.get<ListeInvitations>(`${PREFIXE}?${params.toString()}`, { authentifie: true });
+  if (options?.statut) params.append("statut", options.statut);
+  if (options?.domaine_id) params.append("domaine_id", options.domaine_id);
+  params.append("page", String(options?.page || 1));
+  params.append("par_page", String(options?.par_page || 20));
+  
+  return clientAPI.get<ListeInvitations>(
+    `${PREFIXE}?${params.toString()}`,
+    { authentifie: true }
+  );
 };
 
 /** Crée une nouvelle invitation */
