@@ -105,7 +105,7 @@ const LIENS_ADMIN: Lien[] = [
   { href: "/admin/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
   { href: "/admin/monitoring",      libelle: "Monitoring",       Icone: IconeStatistique },
   { href: "/admin/utilisateurs",    libelle: "Utilisateurs",     Icone: IconeUtilisateur },
-  { href: "/attestations-communautaires",    libelle: "Attestations",     Icone: IconeCheck },
+  { href: "/admin/attestations",    libelle: "Attestations",     Icone: IconeCheck },
   { href: "/admin/droits",          libelle: "Droits",           Icone: IconeBouclier },
   { href: "/admin/audit",           libelle: "Journal d'audit",  Icone: IconeJournal },
   { href: "/admin/alertes",         libelle: "Alertes",          Icone: IconeAlerte },
@@ -130,7 +130,7 @@ const LIENS_SUPER_ADMIN: Lien[] = [
   { href: "/super-admin/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
   // ← FIN NOUVEAUX LIENS
   { href: "/super-admin/administrateurs", libelle: "Administrateurs", Icone: IconeBouclier },
-  { href: "/attestations-communautaires", libelle: "Attestations", Icone: IconeCheck },
+  { href: "/super-admin/attestations", libelle: "Attestations", Icone: IconeCheck },
   { href: "/super-admin/droits-ui", libelle: "Droits UI", Icone: IconeBouclier },
   { href: "/super-admin/droits", libelle: "Droits", Icone: IconeCle },
   { href: "/super-admin/audit", libelle: "Journal d'audit", Icone: IconeJournal },
