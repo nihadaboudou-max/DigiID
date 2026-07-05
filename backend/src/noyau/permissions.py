@@ -1,20 +1,17 @@
 # -*- coding: utf-8 -*-
 """
 Système de permissions — Contrôle d'accès basé sur les rôles et le cloisonnement.
-
 Architecture:
-    1. Permissions par rôle (RBAC)
-    2. Filtrage automatique par domaine/département
-    3. Exceptions explicites (super_admin bypass)
+1. Permissions par rôle (RBAC)
+2. Filtrage automatique par domaine/département
+3. Exceptions explicites (super_admin bypass)
 """
 from functools import wraps
 from typing import Any, Callable, TypeVar
 from uuid import UUID
-
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.noyau.constantes_roles import (
     RoleUtilisateur, ROLES_SUPER_ADMIN, ROLES_ADMIN_DOMAINE,
     ROLES_CHEF, ROLES_AGENT, obtenir_niveau_hierarchie
@@ -22,9 +19,7 @@ from src.noyau.constantes_roles import (
 
 T = TypeVar("T")
 
-
 # ─── Matrice de permissions ──────────────────────────────────────────
-
 PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
     # Super Admin — accès total
     RoleUtilisateur.SUPER_ADMIN: frozenset({"*"}),
@@ -33,41 +28,50 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
     RoleUtilisateur.ADMIN_DOMAINE: frozenset({
         "domaine.lire", "domaine.ecrire", "domaine.supprimer",
         "departement.lire", "departement.ecrire", "departement.supprimer",
-        "utilisateur.lire", "utilisateur.ecrire", "utilisateur.supprimer",
+        "utilisateur.lire", "utilisateur.ecrire",
         "invitation.envoyer", "invitation.lire",
         "audit.lire", "statistiques.lire",
         "equipe.lire", "equipe.ecrire", "equipe.supprimer",
+        # Permissions pour créer des chefs
+        "chef.creer", "chef.lire", "chef.modifier",
     }),
     
     # Chefs de Département — accès dans leur département
     RoleUtilisateur.CHEF_POLICE: frozenset({
-        "equipe.lire", "equipe.ecrire", "equipe.supprimer",
+        "equipe.lire", "equipe.ecrire",
         "police.lire", "police.ecrire",
         "verification.lire", "verification.ecrire",
         "signalement.lire", "signalement.ecrire",
         "statistiques.departement",
-        "equipe.lire", "equipe.ecrire", "equipe.supprimer",
+        # Permissions pour créer des agents police
+        "agent_police.creer", "agent_police.lire", "agent_police.modifier",
     }),
+    
     RoleUtilisateur.CHEF_MEDICAL: frozenset({
-        "equipe.lire", "equipe.ecrire", "equipe.supprimer",
+        "equipe.lire", "equipe.ecrire",
         "medical.lire", "medical.ecrire",
         "dossier.lire", "dossier.ecrire",
         "statistiques.departement",
-        "equipe.lire", "equipe.ecrire", "equipe.supprimer", 
+        # Permissions pour créer des médecins
+        "medecin.creer", "medecin.lire", "medecin.modifier",
     }),
+    
     RoleUtilisateur.CHEF_ONG: frozenset({
-        "equipe.lire", "equipe.ecrire", "equipe.supprimer",
+        "equipe.lire", "equipe.ecrire",
         "ong.lire", "ong.ecrire",
         "beneficiaire.lire", "beneficiaire.ecrire",
         "statistiques.departement",
-        "equipe.lire", "equipe.ecrire", "equipe.supprimer",
+        # Permissions pour créer des agents ONG
+        "agent_ong.creer", "agent_ong.lire", "agent_ong.modifier",
     }),
+    
     RoleUtilisateur.CHEF_AGENT: frozenset({
-        "equipe.lire", "equipe.ecrire", "equipe.supprimer",
+        "equipe.lire", "equipe.ecrire",
         "agent.lire", "agent.ecrire",
         "enrolement.lire", "enrolement.ecrire",
         "statistiques.departement",
-        "equipe.lire", "equipe.ecrire", "equipe.supprimer",
+        # Permissions pour créer des agents terrain
+        "agent_terrain.creer", "agent_terrain.lire", "agent_terrain.modifier",
     }),
     
     # Agents Terrain — accès limité
@@ -75,14 +79,17 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
         "police.lire", "police.ecrire",
         "verification.lire", "verification.ecrire",
     }),
+    
     RoleUtilisateur.AGENT_MEDICAL: frozenset({
         "medical.lire", "medical.ecrire",
         "dossier.lire", "dossier.ecrire",
     }),
+    
     RoleUtilisateur.AGENT_ONG: frozenset({
         "ong.lire",
         "beneficiaire.lire", "beneficiaire.ecrire",
     }),
+    
     RoleUtilisateur.AGENT_TERRAIN: frozenset({
         "agent.lire", "agent.ecrire",
         "enrolement.lire", "enrolement.ecrire",
@@ -94,18 +101,19 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
         "documents.lire", "documents.ecrire",
         "attestations.lire",
     }),
-    
 }
 
+
 # ─── Fonctions de vérification ───────────────────────────────────────
+
 def a_permission(role: str, permission: str) -> bool:
     """
     Vérifie si un rôle a une permission spécifique.
-
+    
     Args:
         role: Rôle de l'utilisateur (ex: "super_administrateur" ou "super_admin")
         permission: Permission demandée (ex: "domaine.lire")
-
+    
     Returns:
         True si l'utilisateur a la permission, False sinon
     """
@@ -113,14 +121,15 @@ def a_permission(role: str, permission: str) -> bool:
     roles_super_admin_compatibles = {"super_admin", "super_administrateur"}
     if role in roles_super_admin_compatibles:
         return True
-
+    
     permissions_role = PERMISSIONS_PAR_ROLE.get(role, frozenset())
-
+    
     # Super Admin a toutes les permissions (fallback)
     if "*" in permissions_role:
         return True
-
+    
     return permission in permissions_role
+
 
 def peut_acceder_a(
     role_utilisateur: str,
@@ -129,11 +138,6 @@ def peut_acceder_a(
     domaine_cible: UUID | None,
     departement_cible: UUID | None,
 ) -> bool:
-    """Vérifie si un utilisateur peut accéder à une ressource cible."""
-    # ✅ Normalisation : accepter les deux variantes du super admin
-    roles_super_admin_compatibles = {"super_admin", "super_administrateur"}
-    if role_utilisateur in roles_super_admin_compatibles:
-        return True
     """
     Vérifie si un utilisateur peut accéder à une ressource cible.
     
@@ -155,7 +159,8 @@ def peut_acceder_a(
         True si l'accès est autorisé, False sinon
     """
     # Super Admin — accès total
-    if role_utilisateur in ROLES_SUPER_ADMIN:
+    roles_super_admin_compatibles = {"super_admin", "super_administrateur"}
+    if role_utilisateur in roles_super_admin_compatibles:
         return True
     
     # Admin Domaine — accès à tout son domaine
@@ -185,17 +190,18 @@ def niveau_acces_requis(resource: str) -> int:
     Retourne le niveau hiérarchique minimum requis pour accéder à une ressource.
     
     Niveaux:
-        1: super_admin uniquement
-        2: admin_domaine ou supérieur
-        3: chef ou supérieur
-        4: agent ou supérieur
-        5: tout le monde (y compris citoyen)
+         1: super_admin uniquement
+         2: admin_domaine ou supérieur
+         3: chef ou supérieur
+         4: agent ou supérieur
+         5: tout le monde (y compris citoyen)
     """
     niveaux = {
         "super_admin.*": 1,
         "domaine.*": 2,
         "departement.*": 2,
         "equipe.*": 3,
+        "chef.*": 3,
         "police.*": 4,
         "medical.*": 4,
         "ong.*": 4,
@@ -204,6 +210,51 @@ def niveau_acces_requis(resource: str) -> int:
         "documents.*": 5,
     }
     return niveaux.get(resource, 5)
+
+
+def peut_creer_utilisateur(role_createur: str, role_cible: str) -> bool:
+    """
+    Vérifie si un utilisateur peut créer un autre utilisateur avec un rôle donné.
+    
+    Règles hiérarchiques:
+        - Super Admin peut créer tous les rôles
+        - Admin Domaine peut créer des chefs de département
+        - Chef Police peut créer des agents police
+        - Chef Médical peut créer des médecins
+        - Chef ONG peut créer des agents ONG
+        - Chef Agent peut créer des agents terrain
+        - Agents ne peuvent créer personne
+    
+    Args:
+        role_createur: Rôle de la personne qui crée
+        role_cible: Rôle de la personne à créer
+    
+    Returns:
+        True si la création est autorisée
+    """
+    # Super Admin peut tout créer
+    if role_createur in {"super_admin", "super_administrateur"}:
+        return True
+    
+    # Admin Domaine peut créer des chefs
+    if role_createur in ROLES_ADMIN_DOMAINE:
+        return role_cible in ROLES_CHEF
+    
+    # Chefs peuvent créer des agents de leur domaine
+    if role_createur == RoleUtilisateur.CHEF_POLICE:
+        return role_cible == RoleUtilisateur.AGENT_POLICE
+    
+    if role_createur == RoleUtilisateur.CHEF_MEDICAL:
+        return role_cible == RoleUtilisateur.AGENT_MEDICAL
+    
+    if role_createur == RoleUtilisateur.CHEF_ONG:
+        return role_cible == RoleUtilisateur.AGENT_ONG
+    
+    if role_createur == RoleUtilisateur.CHEF_AGENT:
+        return role_cible == RoleUtilisateur.AGENT_TERRAIN
+    
+    # Agents et citoyens ne peuvent créer personne
+    return False
 
 
 # ─── Décorateurs ─────────────────────────────────────────────────────
@@ -235,6 +286,7 @@ def require_permission(permission: str) -> Callable:
                 )
             
             return await func(*args, **kwargs)
+        
         return wrapper
     return decorator
 
@@ -266,5 +318,37 @@ def require_niveau_minimum(niveau: int) -> Callable:
                 )
             
             return await func(*args, **kwargs)
+        
+        return wrapper
+    return decorator
+
+
+def require_role_chef() -> Callable:
+    """
+    Décorateur pour vérifier que l'utilisateur est un chef de département.
+    
+    Usage:
+        @require_role_chef()
+        async def creer_agent(...):
+            ...
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            utilisateur = kwargs.get("utilisateur_courant")
+            if not utilisateur:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Utilisateur courant non disponible",
+                )
+            
+            if utilisateur.role not in ROLES_CHEF:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Rôle de chef de département requis",
+                )
+            
+            return await func(*args, **kwargs)
+        
         return wrapper
     return decorator
