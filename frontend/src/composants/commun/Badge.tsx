@@ -4,14 +4,18 @@
 import clsx from "clsx";
 import type { ReactNode } from "react";
 
+// ✅ NOUVEAU : Export du type pour utilisation dans d'autres composants
+export type BadgeVariante = "lagune" | "ocre" | "terre" | "neutre" | "succes" | "info";
+export type BadgeTaille = "petit" | "moyen";
+
 interface ProprietesBadge {
-  variante?: "lagune" | "ocre" | "terre" | "neutre" | "succes" | "info";
-  taille?: "petit" | "moyen";
+  variante?: BadgeVariante;
+  taille?: BadgeTaille;
   children: ReactNode;
   className?: string;
 }
 
-const STYLES = {
+const STYLES: Record<BadgeVariante, string> = {
   lagune: "bg-lagune/10 text-lagune",
   ocre: "bg-ocre/15 text-ocre-fonce",
   terre: "bg-terre/10 text-terre",
@@ -20,7 +24,7 @@ const STYLES = {
   info: "bg-blue-100 text-blue-800",
 };
 
-const TAILLES = {
+const TAILLES: Record<BadgeTaille, string> = {
   petit: "px-2 py-0.5 text-xs",
   moyen: "px-3 py-1 text-sm",
 };
