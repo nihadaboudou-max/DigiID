@@ -19,7 +19,7 @@ interface Domaine {
   description: string | null;
   region: string | null;
   admin_id: string | null;
-  admin_nom: string | null; // NOUVEAU
+  admin_nom: string | null;
   est_actif: boolean;
   date_creation: string;
 }
@@ -27,6 +27,7 @@ interface Domaine {
 interface AdminDisponible {
   id: string;
   nom: string;
+  email: string;
   role: string;
 }
 
@@ -41,7 +42,7 @@ export default function PageDomaines() {
 function Contenu() {
   const { notifier } = useNotifications();
   const [domaines, setDomaines] = useState<Domaine[]>([]);
-  const [adminsDisponibles, setAdminsDisponibles] = useState<AdminDisponible[]>([]); // NOUVEAU
+  const [adminsDisponibles, setAdminsDisponibles] = useState<AdminDisponible[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [recherche, setRecherche] = useState("");
@@ -51,8 +52,20 @@ function Contenu() {
   const [creationEnCours, setCreationEnCours] = useState(false);
   const [editionEnCours, setEditionEnCours] = useState(false);
   const [domaineSelectionne, setDomaineSelectionne] = useState<Domaine | null>(null);
-  const [formCreation, setFormCreation] = useState({ nom: "", code: "", region: "", description: "", admin_id: "" });
-  const [formEdition, setFormEdition] = useState({ nom: "", code: "", region: "", description: "", admin_id: "" });
+  const [formCreation, setFormCreation] = useState({
+    nom: "",
+    code: "",
+    region: "",
+    description: "",
+    admin_id: "",
+  });
+  const [formEdition, setFormEdition] = useState({
+    nom: "",
+    code: "",
+    region: "",
+    description: "",
+    admin_id: "",
+  });
   const [erreurCreation, setErreurCreation] = useState<string | null>(null);
   const [erreurEdition, setErreurEdition] = useState<string | null>(null);
 
@@ -62,10 +75,16 @@ function Contenu() {
     try {
       const [doms, admins] = await Promise.all([
         clientAPI.get<{ domaines: Domaine[] }>("/api/v1/domaines", { authentifie: true }),
-        clientAPI.get<{ admins: AdminDisponible[] }>("/api/v1/utilisateurs?role=admin_domaine", { authentifie: true }).catch(() => ({ admins: [] })),
+        // ✅ CORRECTION : Utiliser le bon endpoint
+        clientAPI
+          .get<AdminDisponible[]>("/api/v1/super-admin/admins-disponibles", {
+            authentifie: true,
+          })
+          .catch(() => []),
       ]);
       setDomaines(doms.domaines || []);
-      setAdminsDisponibles(admins.admins || []);
+      // ✅ CORRECTION : admins est directement un tableau, pas { admins: [] }
+      setAdminsDisponibles(Array.isArray(admins) ? admins : []);
     } catch (e) {
       setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
     } finally {
@@ -73,12 +92,19 @@ function Contenu() {
     }
   };
 
-  useEffect(() => { charger(); }, []);
+  useEffect(() => {
+    charger();
+  }, []);
 
   const domainesFiltres = domaines.filter((d) => {
     if (!recherche) return true;
     const q = recherche.toLowerCase();
-    return d.nom.toLowerCase().includes(q) || d.code.toLowerCase().includes(q) || (d.region && d.region.toLowerCase().includes(q));
+    return (
+      d.nom.toLowerCase().includes(q) ||
+      d.code.toLowerCase().includes(q) ||
+      (d.region && d.region.toLowerCase().includes(q)) ||
+      (d.admin_nom && d.admin_nom.toLowerCase().includes(q))
+    );
   });
 
   const gererCreation = async (e: React.FormEvent) => {
@@ -86,7 +112,17 @@ function Contenu() {
     setErreurCreation(null);
     setCreationEnCours(true);
     try {
-      await clientAPI.post("/api/v1/domaines", formCreation, { authentifie: true });
+      // ✅ CORRECTION : Envoyer admin_id seulement si renseigné
+      const payload: any = {
+        nom: formCreation.nom,
+        code: formCreation.code,
+        region: formCreation.region || null,
+        description: formCreation.description || null,
+      };
+      if (formCreation.admin_id) {
+        payload.admin_id = formCreation.admin_id;
+      }
+      await clientAPI.post("/api/v1/domaines", payload, { authentifie: true });
       notifier("Domaine créé avec succès !", "succes");
       setModaleOuverte(false);
       setFormCreation({ nom: "", code: "", region: "", description: "", admin_id: "" });
@@ -104,7 +140,19 @@ function Contenu() {
     setErreurEdition(null);
     setEditionEnCours(true);
     try {
-      await clientAPI.patch(`/api/v1/domaines/${domaineSelectionne.id}`, formEdition, { authentifie: true });
+      const payload: any = {
+        nom: formEdition.nom,
+        description: formEdition.description || null,
+        region: formEdition.region || null,
+      };
+      if (formEdition.admin_id) {
+        payload.admin_id = formEdition.admin_id;
+      } else {
+        payload.admin_id = null; // Permet de désassigner
+      }
+      await clientAPI.patch(`/api/v1/domaines/${domaineSelectionne.id}`, payload, {
+        authentifie: true,
+      });
       notifier("Domaine modifié avec succès !", "succes");
       setModaleEdition(false);
       charger();
@@ -128,7 +176,13 @@ function Contenu() {
 
   const ouvrirEdition = (d: Domaine) => {
     setDomaineSelectionne(d);
-    setFormEdition({ nom: d.nom, code: d.code, region: d.region || "", description: d.description || "", admin_id: d.admin_id || "" });
+    setFormEdition({
+      nom: d.nom,
+      code: d.code,
+      region: d.region || "",
+      description: d.description || "",
+      admin_id: d.admin_id || "",
+    });
     setModaleEdition(true);
   };
 
@@ -151,18 +205,36 @@ function Contenu() {
     {
       cle: "admin",
       libelle: "Admin",
-      rendu: (d) => <span className="text-sm text-ardoise-clair">{d.admin_nom || "—"}</span>,
+      rendu: (d) =>
+        d.admin_nom ? (
+          <Badge variante="lagune" taille="petit">
+            {d.admin_nom}
+          </Badge>
+        ) : (
+          <Badge variante="ocre" taille="petit">
+            Non assigné
+          </Badge>
+        ),
     },
     {
       cle: "statut",
       libelle: "Statut",
       alignement: "centre",
-      rendu: (d) => d.est_actif ? <Badge variante="succes">Actif</Badge> : <Badge variante="neutre">Inactif</Badge>,
+      rendu: (d) =>
+        d.est_actif ? (
+          <Badge variante="succes">Actif</Badge>
+        ) : (
+          <Badge variante="neutre">Inactif</Badge>
+        ),
     },
     {
       cle: "date_creation",
       libelle: "Créé le",
-      rendu: (d) => <span className="text-xs text-ardoise-clair">{new Date(d.date_creation).toLocaleDateString("fr-FR")}</span>,
+      rendu: (d) => (
+        <span className="text-xs text-ardoise-clair">
+          {new Date(d.date_creation).toLocaleDateString("fr-FR")}
+        </span>
+      ),
     },
     {
       cle: "actions",
@@ -170,9 +242,15 @@ function Contenu() {
       alignement: "droite",
       rendu: (d) => (
         <div className="flex gap-1">
-          <Bouton variante="ghost" taille="petit" onClick={() => setModaleDetails(d)}>Voir</Bouton>
-          <Bouton variante="ghost" taille="petit" onClick={() => ouvrirEdition(d)}>Modifier</Bouton>
-          <Bouton variante="danger" taille="petit" onClick={() => gererSuppression(d.id)}>Supprimer</Bouton>
+          <Bouton variante="ghost" taille="petit" onClick={() => setModaleDetails(d)}>
+            Voir
+          </Bouton>
+          <Bouton variante="ghost" taille="petit" onClick={() => ouvrirEdition(d)}>
+            Modifier
+          </Bouton>
+          <Bouton variante="danger" taille="petit" onClick={() => gererSuppression(d.id)}>
+            Supprimer
+          </Bouton>
         </div>
       ),
     },
@@ -181,7 +259,9 @@ function Contenu() {
   return (
     <div className="space-y-4">
       <header>
-        <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Super administration</p>
+        <p className="text-ocre font-semibold text-xs uppercase tracking-wider">
+          Super administration
+        </p>
         <h1 className="mt-1 text-2xl">Gestion des Domaines</h1>
         <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
           Crée et gère les domaines organisationnels du système. Assigne un admin à chaque domaine.
@@ -190,10 +270,25 @@ function Contenu() {
 
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
 
+      {/* Message si aucun admin disponible */}
+      {adminsDisponibles.length === 0 && (
+        <Alerte variante="avertissement" titre="Aucun admin disponible">
+          Vous devez d'abord créer des administrateurs de domaine avant de pouvoir les assigner.
+          <div className="mt-2">
+            <Link href="/super-admin/administrateurs">
+              <Bouton variante="primaire" taille="petit">
+                Créer un administrateur →
+              </Bouton>
+            </Link>
+          </div>
+        </Alerte>
+      )}
+
       <Carte>
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <p className="text-sm text-ardoise-clair">
-            <strong className="text-lagune">{domainesFiltres.length}</strong> domaine{domainesFiltres.length > 1 ? "s" : ""}
+            <strong className="text-lagune">{domainesFiltres.length}</strong> domaine
+            {domainesFiltres.length > 1 ? "s" : ""}
           </p>
           <div className="flex gap-2 items-center w-full sm:w-auto">
             <input
@@ -211,82 +306,216 @@ function Contenu() {
         {chargement ? (
           <p className="text-center text-ardoise-clair italic py-6">Chargement...</p>
         ) : (
-          <Tableau colonnes={colonnes} donnees={domainesFiltres} cleLigne={(d) => d.id} vide="Aucun domaine trouvé." />
+          <Tableau
+            colonnes={colonnes}
+            donnees={domainesFiltres}
+            cleLigne={(d) => d.id}
+            vide="Aucun domaine trouvé."
+          />
         )}
       </Carte>
 
       {/* Modale Création */}
-      <Modal ouvert={modaleOuverte} surFermeture={() => setModaleOuverte(false)} titre="Nouveau Domaine" taille="moyen">
+      <Modal
+        ouvert={modaleOuverte}
+        surFermeture={() => setModaleOuverte(false)}
+        titre="Nouveau Domaine"
+        taille="moyen"
+      >
         <form onSubmit={gererCreation} className="space-y-3">
           {erreurCreation && <Alerte variante="erreur">{erreurCreation}</Alerte>}
-          <ChampSaisie libelle="Nom" value={formCreation.nom} onChange={(e) => setFormCreation({ ...formCreation, nom: e.target.value })} required />
-          <ChampSaisie libelle="Code" value={formCreation.code} onChange={(e) => setFormCreation({ ...formCreation, code: e.target.value.toUpperCase() })} required />
-          <ChampSaisie libelle="Région" value={formCreation.region} onChange={(e) => setFormCreation({ ...formCreation, region: e.target.value })} />
-          {/* NOUVEAU : Sélection de l'admin */}
+          <ChampSaisie
+            libelle="Nom"
+            value={formCreation.nom}
+            onChange={(e) => setFormCreation({ ...formCreation, nom: e.target.value })}
+            required
+          />
+          <ChampSaisie
+            libelle="Code"
+            value={formCreation.code}
+            onChange={(e) =>
+              setFormCreation({ ...formCreation, code: e.target.value.toUpperCase() })
+            }
+            required
+            aide="Code unique (ex: SAN, SEC, EDU)"
+          />
+          <ChampSaisie
+            libelle="Région"
+            value={formCreation.region}
+            onChange={(e) => setFormCreation({ ...formCreation, region: e.target.value })}
+          />
+          {/* Sélection de l'admin */}
           <div>
-            <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Admin du domaine (optionnel)</label>
-            <select value={formCreation.admin_id} onChange={(e) => setFormCreation({ ...formCreation, admin_id: e.target.value })} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm">
+            <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
+              Admin du domaine (optionnel)
+            </label>
+            <select
+              value={formCreation.admin_id}
+              onChange={(e) => setFormCreation({ ...formCreation, admin_id: e.target.value })}
+              className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+            >
               <option value="">Aucun admin assigné</option>
               {adminsDisponibles.map((a) => (
-                <option key={a.id} value={a.id}>{a.nom}</option>
+                <option key={a.id} value={a.id}>
+                  {a.nom} ({a.role.replace(/_/g, " ")})
+                </option>
               ))}
             </select>
+            {adminsDisponibles.length === 0 && (
+              <p className="text-xs text-ocre mt-1">
+                ⚠️ Aucun admin disponible.{" "}
+                <Link href="/super-admin/administrateurs" className="text-lagune hover:underline">
+                  Créer un admin →
+                </Link>
+              </p>
+            )}
           </div>
           <div>
-            <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Description</label>
-            <textarea value={formCreation.description} onChange={(e) => setFormCreation({ ...formCreation, description: e.target.value })} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm" rows={3} />
+            <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
+              Description
+            </label>
+            <textarea
+              value={formCreation.description}
+              onChange={(e) => setFormCreation({ ...formCreation, description: e.target.value })}
+              className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+              rows={3}
+            />
           </div>
           <div className="flex gap-2 justify-end pt-2">
-            <Bouton variante="ghost" onClick={() => setModaleOuverte(false)}>Annuler</Bouton>
-            <Bouton type="submit" variante="primaire" chargement={creationEnCours}>Créer</Bouton>
+            <Bouton variante="ghost" onClick={() => setModaleOuverte(false)}>
+              Annuler
+            </Bouton>
+            <Bouton type="submit" variante="primaire" chargement={creationEnCours}>
+              Créer
+            </Bouton>
           </div>
         </form>
       </Modal>
 
       {/* Modale Édition */}
-      <Modal ouvert={modaleEdition} surFermeture={() => setModaleEdition(false)} titre="Modifier le Domaine" taille="moyen">
+      <Modal
+        ouvert={modaleEdition}
+        surFermeture={() => setModaleEdition(false)}
+        titre="Modifier le Domaine"
+        taille="moyen"
+      >
         <form onSubmit={gererEdition} className="space-y-3">
           {erreurEdition && <Alerte variante="erreur">{erreurEdition}</Alerte>}
-          <ChampSaisie libelle="Nom" value={formEdition.nom} onChange={(e) => setFormEdition({ ...formEdition, nom: e.target.value })} required />
-          <ChampSaisie libelle="Code" value={formEdition.code} onChange={(e) => setFormEdition({ ...formEdition, code: e.target.value.toUpperCase() })} required />
-          <ChampSaisie libelle="Région" value={formEdition.region} onChange={(e) => setFormEdition({ ...formEdition, region: e.target.value })} />
-          {/* NOUVEAU : Sélection de l'admin */}
+          <ChampSaisie
+            libelle="Nom"
+            value={formEdition.nom}
+            onChange={(e) => setFormEdition({ ...formEdition, nom: e.target.value })}
+            required
+          />
+          <ChampSaisie
+            libelle="Code"
+            value={formEdition.code}
+            onChange={(e) =>
+              setFormEdition({ ...formEdition, code: e.target.value.toUpperCase() })
+            }
+            required
+          />
+          <ChampSaisie
+            libelle="Région"
+            value={formEdition.region}
+            onChange={(e) => setFormEdition({ ...formEdition, region: e.target.value })}
+          />
+          {/* Sélection de l'admin */}
           <div>
-            <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Admin du domaine</label>
-            <select value={formEdition.admin_id} onChange={(e) => setFormEdition({ ...formEdition, admin_id: e.target.value })} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm">
+            <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
+              Admin du domaine
+            </label>
+            <select
+              value={formEdition.admin_id}
+              onChange={(e) => setFormEdition({ ...formEdition, admin_id: e.target.value })}
+              className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+            >
               <option value="">Aucun admin assigné</option>
               {adminsDisponibles.map((a) => (
-                <option key={a.id} value={a.id}>{a.nom}</option>
+                <option key={a.id} value={a.id}>
+                  {a.nom} ({a.role.replace(/_/g, " ")})
+                </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Description</label>
-            <textarea value={formEdition.description} onChange={(e) => setFormEdition({ ...formEdition, description: e.target.value })} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm" rows={3} />
+            <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
+              Description
+            </label>
+            <textarea
+              value={formEdition.description}
+              onChange={(e) => setFormEdition({ ...formEdition, description: e.target.value })}
+              className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+              rows={3}
+            />
           </div>
           <div className="flex gap-2 justify-end pt-2">
-            <Bouton variante="ghost" onClick={() => setModaleEdition(false)}>Annuler</Bouton>
-            <Bouton type="submit" variante="primaire" chargement={editionEnCours}>Enregistrer</Bouton>
+            <Bouton variante="ghost" onClick={() => setModaleEdition(false)}>
+              Annuler
+            </Bouton>
+            <Bouton type="submit" variante="primaire" chargement={editionEnCours}>
+              Enregistrer
+            </Bouton>
           </div>
         </form>
       </Modal>
 
       {/* Modale Détails */}
       {modaleDetails && (
-        <Modal ouvert={true} surFermeture={() => setModaleDetails(null)} titre="Détails du Domaine" taille="moyen">
+        <Modal
+          ouvert={true}
+          surFermeture={() => setModaleDetails(null)}
+          titre="Détails du Domaine"
+          taille="moyen"
+        >
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><p className="text-xs text-ardoise-clair">Nom</p><p className="font-semibold">{modaleDetails.nom}</p></div>
-              <div><p className="text-xs text-ardoise-clair">Code</p><p className="font-mono text-ocre">{modaleDetails.code}</p></div>
-              <div><p className="text-xs text-ardoise-clair">Région</p><p>{modaleDetails.region || "—"}</p></div>
-              <div><p className="text-xs text-ardoise-clair">Admin</p><p>{modaleDetails.admin_nom || "—"}</p></div>
-              <div><p className="text-xs text-ardoise-clair">Statut</p>{modaleDetails.est_actif ? <Badge variante="succes">Actif</Badge> : <Badge variante="neutre">Inactif</Badge>}</div>
-              <div className="col-span-2"><p className="text-xs text-ardoise-clair">Description</p><p>{modaleDetails.description || "—"}</p></div>
-              <div><p className="text-xs text-ardoise-clair">Créé le</p><p>{new Date(modaleDetails.date_creation).toLocaleDateString("fr-FR")}</p></div>
+              <div>
+                <p className="text-xs text-ardoise-clair">Nom</p>
+                <p className="font-semibold">{modaleDetails.nom}</p>
+              </div>
+              <div>
+                <p className="text-xs text-ardoise-clair">Code</p>
+                <p className="font-mono text-ocre">{modaleDetails.code}</p>
+              </div>
+              <div>
+                <p className="text-xs text-ardoise-clair">Région</p>
+                <p>{modaleDetails.region || "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-ardoise-clair">Admin</p>
+                <p>{modaleDetails.admin_nom || "Non assigné"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-ardoise-clair">Statut</p>
+                {modaleDetails.est_actif ? (
+                  <Badge variante="succes">Actif</Badge>
+                ) : (
+                  <Badge variante="neutre">Inactif</Badge>
+                )}
+              </div>
+              <div>
+                <p className="text-xs text-ardoise-clair">Créé le</p>
+                <p>{new Date(modaleDetails.date_creation).toLocaleDateString("fr-FR")}</p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-xs text-ardoise-clair">Description</p>
+                <p>{modaleDetails.description || "—"}</p>
+              </div>
             </div>
             <div className="flex gap-2 justify-end pt-3 border-t border-ardoise-clair/10">
-              <Bouton variante="ghost" onClick={() => setModaleDetails(null)}>Fermer</Bouton>
-              <Bouton variante="primaire" onClick={() => { setModaleDetails(null); ouvrirEdition(modaleDetails); }}>Modifier</Bouton>
+              <Bouton variante="ghost" onClick={() => setModaleDetails(null)}>
+                Fermer
+              </Bouton>
+              <Bouton
+                variante="primaire"
+                onClick={() => {
+                  setModaleDetails(null);
+                  ouvrirEdition(modaleDetails);
+                }}
+              >
+                Modifier
+              </Bouton>
             </div>
           </div>
         </Modal>

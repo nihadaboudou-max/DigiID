@@ -1,8 +1,7 @@
 "use client";
 /**
 Page admin — Gestion des chefs de département.
-L'admin de domaine consulte les chefs de son domaine, voit leurs détails,
-et peut modifier/suspendre/réactiver les comptes.
+L'admin de domaine consulte les chefs de son domaine.
 */
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
@@ -18,7 +17,6 @@ import { useNotifications } from "@/contextes/notifications";
 import { clientAPI, ErreurAPI } from "@/services/client_api";
 import { useAuthentification } from "@/contextes/authentification";
 
-// ---- Types ----
 interface ChefApercu {
   id: string;
   prenom_initiale: string | null;
@@ -42,7 +40,6 @@ interface ChefDetail {
   role: string;
   est_actif: boolean;
   est_verrouille: boolean;
-  est_supprime: boolean;
   domaine_id: string | null;
   departement_id: string | null;
   departement_nom: string | null;
@@ -51,7 +48,6 @@ interface ChefDetail {
   motif_suspension: string | null;
 }
 
-// ---- Page ----
 export default function PageGestionChefs() {
   return (
     <EnvelopperEspaceProtege rolesAutorises={["administrateur", "admin_domaine"]}>
@@ -75,17 +71,15 @@ function Contenu() {
   } | null>(null);
   const [actionChargement, setActionChargement] = useState(false);
 
-  // ---- Chargement liste ----
   const charger = useCallback(async () => {
     setChargement(true);
     setErreur(null);
     try {
-      // Récupérer les chefs du domaine de l'admin
       const params = new URLSearchParams();
       if (utilisateur?.domaine_id) {
         params.append("domaine_id", utilisateur.domaine_id);
       }
-      params.append("role", "chef"); // Filtrer uniquement les chefs
+      params.append("role", "chef");
       
       const data = await clientAPI.get<ChefApercu[]>(
         `/api/v1/admin/chefs?${params.toString()}`,
@@ -101,7 +95,6 @@ function Contenu() {
 
   useEffect(() => { charger(); }, [charger]);
 
-  // ---- Chargement detail ----
   const chargerDetail = async (id: string) => {
     setDetailChargement(true);
     try {
@@ -112,13 +105,12 @@ function Contenu() {
       setModalDetail(data);
     } catch (e) {
       const msg = e instanceof ErreurAPI ? `Erreur ${e.code_http} — ${e.message_utilisateur}` : String(e);
-      notifier(`Impossible de charger le détail: ${msg}`, "erreur");
+      notifier(`Impossible de charger le detail: ${msg}`, "erreur");
     } finally {
       setDetailChargement(false);
     }
   };
 
-  // ---- Filtrage ----
   const donneesFiltrees = chefs.filter((u) => {
     const r = recherche.toLowerCase();
     if (!r) return true;
@@ -131,7 +123,6 @@ function Contenu() {
     );
   });
 
-  // ---- Actions API ----
   const gererSuspension = async (id: string) => {
     setActionChargement(true);
     try {
@@ -168,7 +159,6 @@ function Contenu() {
     }
   };
 
-  // ---- Colonnes ----
   const obtenirLabelRole = (role: string): string => {
     const mapping: Record<string, string> = {
       chef_police: "Chef Police",
@@ -266,7 +256,6 @@ function Contenu() {
 
   return (
     <div className="apparition space-y-6">
-      {/* Fil d'Ariane */}
       <nav className="flex items-center gap-2 text-sm text-ardoise-clair">
         <Link href="/admin/tableau-de-bord" className="hover:text-lagune">
           Tableau de bord
@@ -275,14 +264,12 @@ function Contenu() {
         <span className="text-ardoise font-semibold">Chefs de département</span>
       </nav>
 
-      {/* En-tête */}
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="section-header">
           <p className="text-terre">Administration</p>
           <h1>Gestion des chefs de département</h1>
           <p className="text-ardoise-clair/70 text-sm mt-1">
             Consulte les profils des chefs de ton domaine, leurs départements et statuts.
-            Modifie ou suspend un compte.
           </p>
         </div>
         <div className="flex gap-2 flex-shrink-0">
@@ -299,15 +286,12 @@ function Contenu() {
 
       {erreur && <Alerte variante="erreur" titre="Erreur">{erreur}</Alerte>}
 
-      {/* Barre recherche */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-ardoise-clair/70">
           <strong className="text-lagune font-semibold">{donneesFiltrees.length}</strong> chef
           {donneesFiltrees.length > 1 ? "s" : ""}
           {recherche && (
-            <>
-              {" "}· filtre : <code className="text-xs bg-sable px-1.5 py-0.5 rounded">{recherche}</code>
-            </>
+            <> · filtre : <code className="text-xs bg-sable px-1.5 py-0.5 rounded">{recherche}</code></>
           )}
         </p>
         <div className="w-full sm:w-72">
@@ -319,7 +303,6 @@ function Contenu() {
         </div>
       </div>
 
-      {/* Tableau */}
       {chargement ? (
         <Carte>
           <div className="space-y-3">
@@ -334,24 +317,11 @@ function Contenu() {
             colonnes={colonnes}
             donnees={donneesFiltrees}
             cleLigne={(u) => u.id}
-            vide={
-              <div className="text-center py-8">
-                <svg className="w-10 h-10 mx-auto text-ardoise-clair/20 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <p className="text-ardoise-clair/70">Aucun chef trouvé</p>
-                <Link href="/admin/invitations">
-                  <Bouton variante="primaire" taille="petit" className="mt-3">
-                    + Inviter un chef
-                  </Bouton>
-                </Link>
-              </div>
-            }
+            vide={<div className="text-center py-8"><p className="text-ardoise-clair/70">Aucun chef trouvé</p></div>}
           />
         </Carte>
       )}
 
-      {/* Navigation */}
       <div className="flex gap-3 flex-wrap pt-4 border-t border-ardoise-clair/10">
         <Link href="/admin/invitations">
           <Bouton variante="ghost" taille="petit">
@@ -363,169 +333,7 @@ function Contenu() {
             Départements
           </Bouton>
         </Link>
-        <Link href="/admin/droits">
-          <Bouton variante="ghost" taille="petit">
-            Droits
-          </Bouton>
-        </Link>
       </div>
-
-      {/* ========== MODAL DETAIL ========== */}
-      <Modal
-        ouvert={modalDetail !== null}
-        surFermeture={() => setModalDetail(null)}
-        titre={
-          modalDetail
-            ? [modalDetail.prenom, modalDetail.nom].filter(Boolean).join(" ") || modalDetail.email
-            : ""
-        }
-        description={modalDetail ? `Rôle: ${(modalDetail.role || "").replace(/_/g, " ")}` : undefined}
-      >
-        {detailChargement ? (
-          <div className="space-y-3 p-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-8 bg-sable-clair/50 rounded-lg animate-pulse" />
-            ))}
-          </div>
-        ) : modalDetail ? (
-          <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-1">
-            {/* Identité */}
-            <Section titre="Identité">
-              <Grille
-                champs={[
-                  { label: "Email", valeur: modalDetail.email },
-                  { label: "Prénom", valeur: modalDetail.prenom || "—" },
-                  { label: "Nom", valeur: modalDetail.nom || "—" },
-                  { label: "Téléphone", valeur: modalDetail.telephone || "—" },
-                  { label: "Ville", valeur: modalDetail.ville || "—" },
-                  { label: "Département", valeur: modalDetail.departement_nom || "—" },
-                ]}
-              />
-            </Section>
-
-            <Separateur />
-
-            {/* Statut */}
-            <Section titre="Statut du compte">
-              <Grille
-                champs={[
-                  { label: "Rôle", valeur: (modalDetail.role || "").replace(/_/g, " ") },
-                  { label: "Compte", valeur: modalDetail.est_supprime ? "Supprimé" : modalDetail.est_verrouille ? "Verrouillé" : modalDetail.est_actif ? "Actif" : "Inactif" },
-                ]}
-              />
-              {modalDetail.motif_suspension && (
-                <div className="mt-3 p-3 bg-terre/5 rounded-lg border border-terre/10">
-                  <p className="text-xs font-semibold text-terre">Motif suspension</p>
-                  <p className="text-sm text-ardoise">{modalDetail.motif_suspension}</p>
-                </div>
-              )}
-            </Section>
-
-            <Separateur />
-
-            {/* Dates */}
-            <div className="grid grid-cols-2 gap-4 text-xs text-ardoise-clair">
-              <div>
-                <p className="font-semibold text-ardoise">Inscrit le</p>
-                <p>{new Date(modalDetail.date_creation).toLocaleDateString("fr-FR")}</p>
-              </div>
-              <div>
-                <p className="font-semibold text-ardoise">Dernière connexion</p>
-                <p>
-                  {modalDetail.date_derniere_connexion
-                    ? new Date(modalDetail.date_derniere_connexion).toLocaleDateString("fr-FR")
-                    : "—"}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <Bouton variante="ghost" onClick={() => setModalDetail(null)}>
-                Fermer
-              </Bouton>
-            </div>
-          </div>
-        ) : null}
-      </Modal>
-
-      {/* ========== MODAL CONFIRMATION ========== */}
-      {modalConfirmation && (
-        <Modal
-          ouvert={true}
-          surFermeture={() => setModalConfirmation(null)}
-          titre={
-            modalConfirmation.type === "suspendre"
-              ? "Suspendre le compte"
-              : "Réactiver le compte"
-          }
-        >
-          <div className="space-y-4">
-            <p className="text-sm text-ardoise">
-              {modalConfirmation.type === "suspendre" && (
-                <>
-                  Suspendre <strong>{modalConfirmation.chef.email_masque}</strong> ?
-                </>
-              )}
-              {modalConfirmation.type === "reactiver" && (
-                <>
-                  Réactiver <strong>{modalConfirmation.chef.email_masque}</strong> ?
-                </>
-              )}
-            </p>
-            <div className="flex justify-end gap-3 pt-4 border-t border-ardoise-clair/10">
-              <Bouton
-                variante="ghost"
-                onClick={() => setModalConfirmation(null)}
-              >
-                Annuler
-              </Bouton>
-              <Bouton
-                variante={modalConfirmation.type === "suspendre" ? "primaire" : "secondaire"}
-                taille="petit"
-                chargement={actionChargement}
-                onClick={() => {
-                  const u = modalConfirmation.chef;
-                  if (modalConfirmation.type === "suspendre") gererSuspension(u.id);
-                  else gererReactivation(u.id);
-                }}
-              >
-                {modalConfirmation.type === "suspendre" ? "Suspendre" : "Réactiver"}
-              </Bouton>
-            </div>
-          </div>
-        </Modal>
-      )}
-    </div>
-  );
-}
-
-// ---- Sous-composants ----
-function Section({ titre, children }: { titre: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-xs uppercase text-ardoise-clair font-semibold tracking-wider mb-3">
-        {titre}
-      </p>
-      {children}
-    </div>
-  );
-}
-
-function Separateur() {
-  return <div className="h-px bg-ardoise-clair/10" />;
-}
-
-function Grille({ champs }: { champs: { label: string; valeur: string }[] }) {
-  return (
-    <div className="grid grid-cols-2 gap-4">
-      {champs.map((c) => (
-        <div key={c.label}>
-          <p className="text-[11px] uppercase text-ardoise-clair/60 font-semibold tracking-wider">
-            {c.label}
-          </p>
-          <p className="text-sm mt-0.5 text-ardoise">{c.valeur}</p>
-        </div>
-      ))}
     </div>
   );
 }

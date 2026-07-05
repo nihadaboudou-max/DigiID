@@ -48,9 +48,10 @@ const TYPES_DEPARTEMENT: Record<TypeDepartement, { label: string; icone: string;
   agent: { label: "Enrôlement", icone: "📋", couleur: "lagune" },
 };
 
-export default function PageDepartements() {
+// Remplacez cette ligne :
+export default function PageDepartementsAdmin() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["super_administrateur", "super_admin"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["administrateur", "admin_domaine"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

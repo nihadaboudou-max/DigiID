@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException  # Pour les erreurs HTTP
 
 from src.base_donnees.session import obtenir_session
 from src.config.constantes import PREFIXE_API_ADMIN, RolesUtilisateur
@@ -1360,5 +1361,209 @@ async def monitoring_complet_admin(
             a.email = a.email[:1] + "***" + a.email[a.email.index("@"):]
     return resultat
 
+@routeur_admin.get(
+    "/chefs",
+    summary="Lister les chefs de département du domaine",
+    description="Liste tous les chefs de département du domaine de l'admin.",
+)
+async def lister_chefs_domaine(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    admin: Annotated[Utilisateur, Depends(admin_courant)],
+):
+    """
+    Liste les chefs de département du domaine de l'admin.
+    """
+    from src.noyau import dechiffrer_donnee
+    
+    # Construire la requête pour récupérer les chefs du domaine
+    query = select(Utilisateur).where(
+        Utilisateur.domaine_id == admin.domaine_id,
+        Utilisateur.role.in_([
+            RolesUtilisateur.CHEF_POLICE.value,
+            RolesUtilisateur.CHEF_MEDICAL.value,
+            RolesUtilisateur.CHEF_ONG.value,
+            RolesUtilisateur.CHEF_AGENT.value,
+        ]),
+        Utilisateur.est_actif == True,
+        Utilisateur.est_supprime == False,
+    )
+    
+    result = await session.execute(query)
+    chefs = result.scalars().all()
+    
+    # Formater les résultats
+    resultats = []
+    for chef in chefs:
+        prenom = dechiffrer_donnee(chef.prenom_chiffre) if chef.prenom_chiffre else ""
+        nom = dechiffrer_donnee(chef.nom_chiffre) if chef.nom_chiffre else ""
+        email = dechiffrer_donnee(chef.email_chiffre) if chef.email_chiffre else ""
+        
+        resultats.append({
+            "id": str(chef.id),
+            "email": email,
+            "prenom": prenom,
+            "nom": nom,
+            "role": chef.role,
+            "domaine_id": str(chef.domaine_id) if chef.domaine_id else None,
+            "departement_id": str(chef.departement_id) if chef.departement_id else None,
+            "est_actif": chef.est_actif,
+        })
+    
+    return resultats
 
 
+@routeur_admin.get(
+    "/chefs/{chef_id}/detail",
+    summary="Détail d'un chef de département",
+    description="Obtient les informations détaillées d'un chef.",
+)
+async def detail_chef(
+    chef_id: UUID,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    admin: Annotated[Utilisateur, Depends(admin_courant)],
+):
+    """
+    Obtient le détail complet d'un chef de département.
+    """
+    from src.noyau import dechiffrer_donnee
+    
+    chef = (await session.scalars(
+        select(Utilisateur).where(
+            Utilisateur.id == chef_id,
+            Utilisateur.domaine_id == admin.domaine_id,
+            Utilisateur.est_supprime == False,
+        )
+    )).first()
+    
+    if not chef:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chef introuvable ou hors de votre domaine.",
+        )
+    
+    prenom = dechiffrer_donnee(chef.prenom_chiffre) if chef.prenom_chiffre else ""
+    nom = dechiffrer_donnee(chef.nom_chiffre) if chef.nom_chiffre else ""
+    email = dechiffrer_donnee(chef.email_chiffre) if chef.email_chiffre else ""
+    telephone = dechiffrer_donnee(chef.telephone_chiffre) if chef.telephone_chiffre else ""
+    
+    return {
+        "id": str(chef.id),
+        "email": email,
+        "prenom": prenom,
+        "nom": nom,
+        "telephone": telephone,
+        "ville": chef.ville,
+        "role": chef.role,
+        "est_actif": chef.est_actif,
+        "est_verrouille": chef.est_verrouille,
+        "domaine_id": str(chef.domaine_id) if chef.domaine_id else None,
+        "departement_id": str(chef.departement_id) if chef.departement_id else None,
+        "date_creation": chef.cree_le.strftime("%Y-%m-%dT%H:%M:%S") if chef.cree_le else "",
+        "date_derniere_connexion": chef.date_derniere_connexion.strftime("%Y-%m-%dT%H:%M:%S") if chef.date_derniere_connexion else None,
+        "motif_suspension": chef.motif_suspension if hasattr(chef, 'motif_suspension') else None,
+    }
+
+
+@routeur_admin.patch(
+    "/chefs/{chef_id}/suspendre",
+    summary="Suspendre un chef",
+    description="Suspend le compte d'un chef de département.",
+)
+async def suspendre_chef(
+    chef_id: UUID,
+    data: dict,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    admin: Annotated[Utilisateur, Depends(admin_courant)],
+):
+    """
+    Suspend le compte d'un chef de département.
+    """
+    chef = (await session.scalars(
+        select(Utilisateur).where(
+            Utilisateur.id == chef_id,
+            Utilisateur.domaine_id == admin.domaine_id,
+            Utilisateur.est_supprime == False,
+        )
+    )).first()
+    
+    if not chef:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chef introuvable.",
+        )
+    
+    chef.est_verrouille = True
+    chef.est_actif = False
+    chef.motif_suspension = data.get("motif", "Suspendu par administrateur")
+    
+    await session.commit()
+    
+    # Retourner le détail mis à jour
+    from src.noyau import dechiffrer_donnee
+    prenom = dechiffrer_donnee(chef.prenom_chiffre) if chef.prenom_chiffre else ""
+    nom = dechiffrer_donnee(chef.nom_chiffre) if chef.nom_chiffre else ""
+    email = dechiffrer_donnee(chef.email_chiffre) if chef.email_chiffre else ""
+    
+    return {
+        "id": str(chef.id),
+        "email": email,
+        "prenom": prenom,
+        "nom": nom,
+        "role": chef.role,
+        "est_actif": chef.est_actif,
+        "est_verrouille": chef.est_verrouille,
+        "domaine_id": str(chef.domaine_id) if chef.domaine_id else None,
+        "departement_id": str(chef.departement_id) if chef.departement_id else None,
+    }
+
+
+@routeur_admin.patch(
+    "/chefs/{chef_id}/reactiver",
+    summary="Réactiver un chef",
+    description="Réactive le compte d'un chef suspendu.",
+)
+async def reactiver_chef(
+    chef_id: UUID,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    admin: Annotated[Utilisateur, Depends(admin_courant)],
+):
+    """
+    Réactive le compte d'un chef de département.
+    """
+    chef = (await session.scalars(
+        select(Utilisateur).where(
+            Utilisateur.id == chef_id,
+            Utilisateur.domaine_id == admin.domaine_id,
+            Utilisateur.est_supprime == False,
+        )
+    )).first()
+    
+    if not chef:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chef introuvable.",
+        )
+    
+    chef.est_verrouille = False
+    chef.est_actif = True
+    chef.motif_suspension = None
+    
+    await session.commit()
+    
+    # Retourner le détail mis à jour
+    from src.noyau import dechiffrer_donnee
+    prenom = dechiffrer_donnee(chef.prenom_chiffre) if chef.prenom_chiffre else ""
+    nom = dechiffrer_donnee(chef.nom_chiffre) if chef.nom_chiffre else ""
+    email = dechiffrer_donnee(chef.email_chiffre) if chef.email_chiffre else ""
+    
+    return {
+        "id": str(chef.id),
+        "email": email,
+        "prenom": prenom,
+        "nom": nom,
+        "role": chef.role,
+        "est_actif": chef.est_actif,
+        "est_verrouille": chef.est_verrouille,
+        "domaine_id": str(chef.domaine_id) if chef.domaine_id else None,
+        "departement_id": str(chef.departement_id) if chef.departement_id else None,
+    }
