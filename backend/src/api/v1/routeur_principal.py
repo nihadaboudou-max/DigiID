@@ -82,6 +82,8 @@ from src.modules.equipes import routeur_equipes
 # --- Module QR Code Dynamique ---
 from src.modules.qr_dynamique import routeur_qr_dynamique
 
+# --- Module Chefs ---
+from src.modules.chefs import routeur_chefs
 
 # Routeur racine — préfixe et tag globaux gérés au montage
 routeur_v1 = APIRouter()
@@ -158,3 +160,6 @@ routeur_v1.include_router(routeur_equipes)
 
 # ... (dans la section d'include_router)
 routeur_v1.include_router(routeur_qr_dynamique)
+
+# ... (dans la section d'include_router, ajoute cette ligne)
+routeur_v1.include_router(routeur_chefs)

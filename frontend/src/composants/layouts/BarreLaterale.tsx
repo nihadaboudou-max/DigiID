@@ -18,6 +18,8 @@ import {
   IconeIdentite, IconeEmail, IconeCadenas, IconeScan, IconeFlecheBas,
   IconeCheck, IconeEnvoyer,
 } from "@/composants/commun/Icones";
+import type { RoleUtilisateur } from "@/types/api";
+import { ROLES_CHEF, ROLES_AGENT, ROLES_ADMIN } from "@/types/api";
 
 interface Lien {
   href: string;
@@ -427,8 +429,8 @@ export function BarreLaterale() {
 
   if (!utilisateur) return null;
 
-  const estSuperAdmin = utilisateur.role === "super_administrateur";
-  const estAdmin = utilisateur.role === "administrateur";
+  const estSuperAdmin = utilisateur.role === "super_administrateur" || utilisateur.role === "super_admin";
+  const estAdmin = utilisateur.role === "administrateur" || utilisateur.role === "admin_domaine";
   const estDansActivitesAdmin = pathname.startsWith("/admin/activites");
   const estDansActivitesSuperAdmin = pathname.startsWith("/super-admin/activites");
   
@@ -467,7 +469,118 @@ export function BarreLaterale() {
     titreSection = "Administration";
     couleurLabel = "text-terre";
     accentColor = "bg-terre";
-  } else if (utilisateur.role === "medecin") {
+  }
+
+  // ─── NOUVEAUX RÔLES : Admin Domaine ──────────────────────────────
+  else if (utilisateur.role === "admin_domaine") {
+    liens = [
+      { href: "/admin-domaine", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/admin-domaine/departements", libelle: "Départements", Icone: IconeIdentite },
+      { href: "/admin-domaine/chefs", libelle: "Chefs de département", Icone: IconeBouclier },
+      { href: "/admin-domaine/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
+      { href: "/admin-domaine/activites", libelle: "Activités", Icone: IconeJournal },
+      { href: "/admin-domaine/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
+    ];
+    titreSection = "Admin de Domaine";
+    couleurLabel = "text-ocre";
+    accentColor = "bg-ocre";
+  }
+
+  // ─── NOUVEAUX RÔLES : Chefs de Département ───────────────────────
+  else if (utilisateur.role === "chef_police") {
+    liens = [
+      { href: "/chef-police", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/chef-police/equipe", libelle: "Mon équipe", Icone: IconeUtilisateur },
+      { href: "/chef-police/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
+      { href: "/chef-police/activites", libelle: "Activités", Icone: IconeJournal },
+      { href: "/chef-police/rapports", libelle: "Rapports", Icone: IconePartage },
+    ];
+    titreSection = "Chef Police";
+    couleurLabel = "text-terre";
+    accentColor = "bg-terre";
+  } else if (utilisateur.role === "chef_medical") {
+    liens = [
+      { href: "/chef-medical", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/chef-medical/medecins", libelle: "Médecins", Icone: IconeUtilisateur },
+      { href: "/chef-medical/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
+      { href: "/chef-medical/activites", libelle: "Activités", Icone: IconeJournal },
+      { href: "/chef-medical/rapports", libelle: "Rapports", Icone: IconePartage },
+    ];
+    titreSection = "Chef Médical";
+    couleurLabel = "text-lagune";
+    accentColor = "bg-lagune";
+  } else if (utilisateur.role === "chef_ong") {
+    liens = [
+      { href: "/chef-ong", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/chef-ong/agents", libelle: "Agents ONG", Icone: IconeUtilisateur },
+      { href: "/chef-ong/missions", libelle: "Missions", Icone: IconeEnvoyer },
+      { href: "/chef-ong/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
+      { href: "/chef-ong/rapports", libelle: "Rapports", Icone: IconePartage },
+    ];
+    titreSection = "Chef ONG";
+    couleurLabel = "text-ocre";
+    accentColor = "bg-ocre";
+  } else if (utilisateur.role === "chef_agent") {
+    liens = [
+      { href: "/chef-enrolement", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/chef-enrolement/agents", libelle: "Agents terrain", Icone: IconeUtilisateur },
+      { href: "/chef-enrolement/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
+      { href: "/chef-enrolement/activites", libelle: "Activités", Icone: IconeJournal },
+      { href: "/chef-enrolement/rapports", libelle: "Rapports", Icone: IconePartage },
+    ];
+    titreSection = "Chef Enrôlement";
+    couleurLabel = "text-lagune";
+    accentColor = "bg-lagune";
+  }
+
+  // ─── NOUVEAUX RÔLES : Agents Terrain ─────────────────────────────
+  else if (utilisateur.role === "agent_police") {
+    liens = [
+      { href: "/agent-police", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/agent-police/verification", libelle: "Vérification", Icone: IconeBouclier },
+      { href: "/agent-police/recherche", libelle: "Recherche", Icone: IconeScan },
+      { href: "/agent-police/scan-qr", libelle: "Scan QR Code", Icone: IconeScan },
+      { href: "/agent-police/historique", libelle: "Historique", Icone: IconeJournal },
+    ];
+    titreSection = "Agent Police";
+    couleurLabel = "text-terre";
+    accentColor = "bg-terre";
+  } else if (utilisateur.role === "agent_medical") {
+    liens = [
+      { href: "/agent-medical", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/agent-medical/nouveau-dossier", libelle: "Nouveau dossier", Icone: IconeUtilisateur },
+      { href: "/agent-medical/dossiers", libelle: "Dossiers patients", Icone: IconeStatistique },
+      { href: "/agent-medical/ordonnances", libelle: "Ordonnances", Icone: IconeJournal },
+      { href: "/agent-medical/historique", libelle: "Historique", Icone: IconeAlerte },
+    ];
+    titreSection = "Médecin";
+    couleurLabel = "text-lagune";
+    accentColor = "bg-lagune";
+  } else if (utilisateur.role === "agent_ong") {
+    liens = [
+      { href: "/agent-ong", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/agent-ong/beneficiaires", libelle: "Bénéficiaires", Icone: IconeUtilisateur },
+      { href: "/agent-ong/missions", libelle: "Missions", Icone: IconeEnvoyer },
+      { href: "/agent-ong/historique", libelle: "Historique", Icone: IconeJournal },
+    ];
+    titreSection = "Agent ONG";
+    couleurLabel = "text-ocre";
+    accentColor = "bg-ocre";
+  } else if (utilisateur.role === "agent_terrain") {
+    liens = [
+      { href: "/agent-terrain", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/agent-terrain/enrolement", libelle: "Enrôlement", Icone: IconeUtilisateur },
+      { href: "/agent-terrain/scan", libelle: "Scan CNI", Icone: IconeScan },
+      { href: "/agent-terrain/capture", libelle: "Capture biométrique", Icone: IconeIdentite },
+      { href: "/agent-terrain/historique", libelle: "Historique", Icone: IconeJournal },
+    ];
+    titreSection = "Agent Terrain";
+    couleurLabel = "text-lagune";
+    accentColor = "bg-lagune";
+  }
+
+  // ─── ANCIENS RÔLES (rétrocompatibilité) ──────────────────────────
+  else if (utilisateur.role === "medecin") {
     liens = [
       { href: "/medecin/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
       { href: "/medecin/nouveau-dossier", libelle: "Nouveau dossier", Icone: IconeUtilisateur },
@@ -496,11 +609,9 @@ export function BarreLaterale() {
       { href: "/police/verification", libelle: "Vérification", Icone: IconeBouclier },
       { href: "/police/recherche", libelle: "Recherche", Icone: IconeScan },
       { href: "/police/scan-qr", libelle: "Scan QR Code", Icone: IconeScan },
-      // --- Outils avancés ---
       { href: "/police/comparaison-photos", libelle: "Comparaison photos", Icone: IconeVisage },
       { href: "/police/carte", libelle: "Carte géographique", Icone: IconeStatistique },
       { href: "/police/alertes", libelle: "Alertes temps réel", Icone: IconeAlerte },
-      // --- Gestion ---
       { href: "/police/notes", libelle: "Notes internes", Icone: IconeJournal },
       { href: "/police/historique", libelle: "Historique", Icone: IconeJournal },
       { href: "/police/audit", libelle: "Journal d'audit", Icone: IconeBouclier },
@@ -521,7 +632,10 @@ export function BarreLaterale() {
     titreSection = "ONG Partenaire";
     couleurLabel = "text-ocre";
     accentColor = "bg-ocre";
-  } else {
+  }
+
+  // ─── CITOYEN (défaut) ────────────────────────────────────────────
+  else {
     liens = [];  // Citoyen : les liens sont dans les groupes thématiques
     titreSection = "Navigation";
     couleurLabel = "text-lagune";
