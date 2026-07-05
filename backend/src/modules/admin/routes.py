@@ -1160,7 +1160,7 @@ async def lister_beneficiaires_ong_admin(
     _: Annotated[Utilisateur, Depends(admin_courant)],
     limite: int = Query(50, ge=1, le=200),
 ):
-    from src.modeles.beneficiaire_ong import BeneficiaireONG
+    from src.modeles.ong import BeneficiaireONG
     query = select(BeneficiaireONG).order_by(BeneficiaireONG.date_inscription.desc()).limit(limite)
     beneficiaires = (await session.scalars(query)).all()
 
@@ -1195,7 +1195,7 @@ async def lister_programmes_ong_admin(
     _: Annotated[Utilisateur, Depends(admin_courant)],
     limite: int = Query(50, ge=1, le=200),
 ):
-    from src.modeles.programme_ong import ProgrammeONG
+    from src.modeles.ong import ProgrammeONG
     query = select(ProgrammeONG).order_by(ProgrammeONG.date_debut.desc()).limit(limite)
     programmes = (await session.scalars(query)).all()
 
@@ -1228,7 +1228,7 @@ async def lister_missions_ong_admin(
     _: Annotated[Utilisateur, Depends(admin_courant)],
     limite: int = Query(50, ge=1, le=200),
 ):
-    from src.modeles.mission_ong import MissionONG
+    from src.modeles.ong import MissionONG
     query = select(MissionONG).order_by(MissionONG.date_depart.desc()).limit(limite)
     missions = (await session.scalars(query)).all()
 
