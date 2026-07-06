@@ -299,8 +299,8 @@ def envoyer_email_invitation(
     """
     label_role = LABELS_ROLES.get(role, role.replace("_", " ").title())
     
-    # URL d'activation (à adapter selon ton environnement)
-    url_activation = f"https://digiid.africa/inscription?token={token}"
+    # ✅ CORRECTION : URL cohérente avec les routes (accepter-invitation/{token})
+    url_activation = f"https://digiid.africa/accepter-invitation/{token}"
     
     sujet = f"DigiID — Invitation à rejoindre en tant que {label_role}"
     
@@ -329,7 +329,22 @@ L'équipe DigiID
 https://digiid.africa
 """
     
-    # Corps HTML
+    # ✅ CORRECTION : HTML sans triple quotes imbriquées
+    domaine_html = f'<p style="color:#78350f;font-size:14px;margin:5px 0 0 0">Domaine : <strong>{nom_domaine}</strong></p>' if nom_domaine else ""
+    
+    message_html = ""
+    if message_personnalise:
+        message_html = f"""
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;padding:15px;border-radius:8px;margin:25px 0">
+        <p style="color:#6b7280;font-size:12px;margin:0 0 8px 0;text-transform:uppercase;font-weight:bold">
+            Message de {nom_invitant or "l'invitant"}
+        </p>
+        <p style="color:#374151;font-size:14px;margin:0;line-height:1.5;font-style:italic">
+            "{message_personnalise}"
+        </p>
+    </div>
+    """
+    
     corps_html = f"""
 <div style="max-width:560px;margin:0 auto;padding:30px;font-family:Arial,sans-serif;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px">
     <!-- En-tête -->
@@ -357,7 +372,7 @@ https://digiid.africa
             <p style="font-size:18px;font-weight:bold;color:#92400e;margin:0">
                 {label_role}
             </p>
-            {f'<p style="color:#78350f;font-size:14px;margin:5px 0 0 0">Domaine : <strong>{nom_domaine}</strong></p>' if nom_domaine else ""}
+            {domaine_html}
         </div>
     </div>
     
@@ -376,16 +391,7 @@ https://digiid.africa
     </p>
     
     <!-- Message personnalisé -->
-    {f'''
-    <div style="background:#f9fafb;border:1px solid #e5e7eb;padding:15px;border-radius:8px;margin:25px 0">
-        <p style="color:#6b7280;font-size:12px;margin:0 0 8px 0;text-transform:uppercase;font-weight:bold">
-            Message de {nom_invitant or "l'invitant"}
-        </p>
-        <p style="color:#374151;font-size:14px;margin:0;line-height:1.5;font-style:italic">
-            "{message_personnalise}"
-        </p>
-    </div>
-    ''' if message_personnalise else ""}
+    {message_html}
     
     <!-- Informations importantes -->
     <div style="background:#fef2f2;border:1px solid #fecaca;padding:15px;border-radius:8px;margin:25px 0">
