@@ -95,7 +95,7 @@ def _envoyer_via_sendgrid(
             },
             json={
                 "personalizations": [{"to": [{"email": destinataire}]}],
-                "from": {"email": "bigdataism2024@gmail.com", "name": "DigiID"},
+                "from": {"email": "noreply@digiid.africa", "name": "DigiID"},
                 "subject": sujet,
                 "content": contenu,
             },
