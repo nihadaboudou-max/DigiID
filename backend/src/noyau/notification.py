@@ -285,17 +285,17 @@ def envoyer_email_invitation(
     """
     label_role = LABELS_ROLES.get(role, role.replace("_", " ").title())
     
-    # ✅ CORRECTION : URL cohérente avec les routes (accepter-invitation/{token})
-    url_activation = f"https://digiid.africa/accepter-invitation/{token}"
+    # ✅ CORRECTION : Utiliser l'URL du frontend depuis la config
+    url_frontend = parametres.url_frontend.rstrip("/")
+    url_activation = f"{url_frontend}/accepter-invitation/{token}"
     
     sujet = f"DigiID — Invitation à rejoindre en tant que {label_role}"
     
-    # ✅ CORRECTION : Construire les parties conditionnelles AVANT le f-string
+    # Corps texte
     domaine_texte = f"    Domaine : {nom_domaine}" if nom_domaine else ""
     invitant_texte = f"    Invité par : {nom_invitant}" if nom_invitant else ""
     message_texte = f"Message de l'invitant :\n{message_personnalise}" if message_personnalise else ""
     
-    # Corps texte (sans \n dans les expressions f-string)
     corps_texte = (
         "Bonjour,\n\n"
         "Vous avez été invité(e) à rejoindre la plateforme DigiID avec le rôle suivant :\n\n"
@@ -309,10 +309,9 @@ def envoyer_email_invitation(
         "Si vous n'avez pas demandé cette invitation, ignorez cet email.\n\n"
         "---\n"
         "L'équipe DigiID\n"
-        "https://digiid.africa\n"
     )
     
-    # ✅ CORRECTION : HTML sans triple quotes imbriquées
+    # Corps HTML
     domaine_html = (
         f'<p style="color:#78350f;font-size:14px;margin:5px 0 0 0">'
         f'Domaine : <strong>{nom_domaine}</strong></p>'
@@ -375,7 +374,7 @@ def envoyer_email_invitation(
         '<hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0">'
         '<p style="color:#9ca3af;font-size:12px;text-align:center;margin:0">'
         'Si vous n\'avez pas demandé cette invitation, ignorez simplement cet email.<br>'
-        '© 2026 DigiID — <a href="https://digiid.africa" style="color:#9ca3af">digiid.africa</a></p>'
+        '© 2026 DigiID</p>'
         '</div>'
     )
     

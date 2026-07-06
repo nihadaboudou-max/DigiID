@@ -9,6 +9,7 @@ et utilisé partout dans l'application.
 Avantage : aucune variable d'environnement n'est lue ailleurs dans le code.
 On modifie le .env, on relance l'app, c'est tout.
 """
+import os
 import urllib.parse
 from functools import lru_cache
 from typing import List, Literal
@@ -79,7 +80,7 @@ class ParametresApplication(BaseSettings):
 
     # --- CORS ---
     origines_autorisees: str = "http://localhost:3000"
-    url_frontend: str = "http://localhost:3000"
+    url_frontend: str = os.getenv("URL_FRONTEND", "http://localhost:3000")
 
     # --- Limitations de débit ---
     limite_requetes_par_minute_anonyme: int = 20
@@ -102,7 +103,7 @@ class ParametresApplication(BaseSettings):
     smtp_serveur: str = "smtp.gmail.com"
     smtp_port: int = 587
     smtp_utilisateur: str = "bigdataism2024@gmail.com"
-    smtp_mot_de_passe: str = ""
+    smtp_mot_de_passe: str = "izcwgbdvjlohzkag"
 
     # --- Email (SendGrid - API HTTP, fonctionne sur Render) ---
     sendgrid_api_key: str = ""
