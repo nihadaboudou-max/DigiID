@@ -7,13 +7,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.noyau import journal
+from src.noyau import dechiffrer_donnee
 from src.base_donnees.session import obtenir_session
 from src.modeles import Utilisateur, Domaine, Departement
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.invitations.dependances import obtenir_invitation_ou_404
 
-from src.services.email import envoyer_email, template_invitation
-from src.modeles import Domaine, Departement
+# ✅ CORRECTION : Utiliser le nouveau service de notification
+from src.noyau.notification import (
+    envoyer_email_invitation,
+    envoyer_email_renvoyer_invitation,
+)
 
 from src.modules.invitations.schemas import (
     InvitationCreate,
@@ -35,8 +39,27 @@ from src.noyau.permissions import require_permission
 routeur_invitations = APIRouter(prefix="/api/v1/invitations", tags=["Invitations"])
 
 
+def _obtenir_nom_invitant(utilisateur: Utilisateur) -> str | None:
+    """Extrait le nom complet d'un utilisateur en déchiffrant ses données."""
+    try:
+        prenom = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else ""
+        nom = dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else ""
+        nom_complet = f"{prenom} {nom}".strip()
+        return nom_complet or None
+    except Exception as e:
+        journal.warning(f"[INVITATION] Erreur déchiffrement nom: {e}")
+        return None
+
+
+def _obtenir_lien_invitation(request: Request, token: str) -> str:
+    """Construit le lien d'invitation complet."""
+    base_url = str(request.base_url).rstrip("/")
+    # Utiliser l'URL frontend si disponible, sinon fallback
+    return f"{base_url}/accepter-invitation/{token}"
+
+
 # ============ CRUD INVITATIONS ============
-# Modifie la fonction creer :
+
 @routeur_invitations.post(
     "",
     response_model=InvitationResponse,
@@ -54,7 +77,7 @@ async def creer(
     try:
         invitation = await creer_invitation(session, donnees, utilisateur_courant.id)
         
-        # Envoyer l'email d'invitation
+        # ✅ CORRECTION : Envoyer l'email avec le nouveau service
         try:
             # Récupérer les infos pour le template
             domaine_nom = None
@@ -70,26 +93,34 @@ async def creer(
                 if departement:
                     departement_nom = departement.nom
             
-            # Construire le lien d'invitation
-            base_url = request.base_url if request else "http://localhost:3000/"
-            lien_invitation = f"{base_url}accepter-invitation/{invitation.token}"
+            # Récupérer le nom de l'invitant
+            nom_invitant = _obtenir_nom_invitant(utilisateur_courant)
             
-            # Envoyer l'email
-            sujet, contenu_html = template_invitation(
-                lien_invitation=lien_invitation,
-                role=invitation.role,
-                domaine_nom=domaine_nom,
-                departement_nom=departement_nom,
-            )
+            # Message personnalisé
+            message_personnalise = None
+            if hasattr(donnees, 'message') and donnees.message:
+                message_personnalise = donnees.message
             
-            await envoyer_email(
+            # ✅ Envoyer l'email d'invitation (synchrone, pas async)
+            succes = envoyer_email_invitation(
                 destinataire=invitation.email,
-                sujet=sujet,
-                contenu_html=contenu_html,
+                role=invitation.role,
+                token=invitation.token,
+                nom_invitant=nom_invitant,
+                nom_domaine=domaine_nom,
+                message_personnalise=message_personnalise,
             )
+            
+            if succes:
+                journal.info(f"[INVITATION] ✅ Email envoyé à {invitation.email}")
+            else:
+                journal.warning(
+                    f"[INVITATION] ⚠️ Email non envoyé (mode mock ou erreur) → {invitation.email}"
+                )
+            
         except Exception as e:
             # L'invitation est créée même si l'email échoue
-            journal.warning(f"⚠️ Email non envoyé : {e}")
+            journal.error(f"[INVITATION] ❌ Erreur envoi email: {e}")
         
         return invitation
     except ValueError as e:
@@ -97,6 +128,7 @@ async def creer(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
+
 
 @routeur_invitations.get(
     "",
@@ -174,6 +206,7 @@ async def renvoyer(
     invitation=Depends(obtenir_invitation_ou_404),
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
+    request: Request = None,
 ):
     """Renvoie une invitation en prolongeant sa date d'expiration."""
     import secrets
@@ -185,10 +218,33 @@ async def renvoyer(
             detail=f"Impossible de renvoyer une invitation au statut '{invitation.statut}'",
         )
 
+    # Générer un nouveau token
     invitation.token = secrets.token_urlsafe(48)
     invitation.date_expiration = datetime.utcnow() + timedelta(days=7)
     await session.commit()
     await session.refresh(invitation)
+    
+    # ✅ CORRECTION : Renvoyer l'email avec le nouveau service
+    try:
+        nom_invitant = _obtenir_nom_invitant(utilisateur_courant)
+        
+        # ✅ Envoyer l'email de rappel (synchrone)
+        succes = envoyer_email_renvoyer_invitation(
+            destinataire=invitation.email,
+            role=invitation.role,
+            token=invitation.token,
+            nom_invitant=nom_invitant,
+        )
+        
+        if succes:
+            journal.info(f"[INVITATION] ✅ Email de rappel envoyé à {invitation.email}")
+        else:
+            journal.warning(
+                f"[INVITATION] ⚠️ Email de rappel non envoyé → {invitation.email}"
+            )
+    except Exception as e:
+        journal.error(f"[INVITATION] ❌ Erreur envoi rappel: {e}")
+    
     return invitation
 
 
