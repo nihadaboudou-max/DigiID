@@ -392,7 +392,7 @@ def envoyer_email_renvoyer_invitation(
     """
     label_role = LABELS_ROLES.get(role, role.replace("_", " ").title())
     # ✅ CORRECTION : URL cohérente
-    url_activation = f"https://digiid.africa/accepter-invitation/{token}"
+    url_activation = f"http://152.228.141.69:3000/accepter-invitation/{token}"
     
     sujet = "DigiID — Rappel : Votre invitation est toujours active"
     
