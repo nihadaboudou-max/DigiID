@@ -141,8 +141,13 @@ def _envoyer_via_smtp(
     if corps_html:
         msg.attach(MIMEText(corps_html, "html", "utf-8"))
     else:
-        # Convertir le texte en HTML basique
-        html_simple = f"<html><body style='font-family:Arial,sans-serif;padding:20px'>{corps_texte.replace(chr(10), '<br>')}</body></html>"
+        # ✅ CORRECTION : Utiliser chr(10) au lieu de \n dans f-string
+        saut_ligne = chr(10)
+        html_simple = (
+            "<html><body style='font-family:Arial,sans-serif;padding:20px'>"
+            + corps_texte.replace(saut_ligne, "<br>")
+            + "</body></html>"
+        )
         msg.attach(MIMEText(html_simple, "html", "utf-8"))
     
     try:
@@ -187,34 +192,30 @@ def envoyer_email_verification(
     prenom_texte = f"{prenom}, " if prenom else ""
     sujet = "DigiID — Confirme ton adresse email"
     
-    corps_texte = f"""
-Bonjour {prenom_texte}
-
-Merci de t'être inscrit sur DigiID ! Pour finaliser ton inscription,
-confirme ton adresse email avec le code suivant :
-
-    {code}
-
-Ce code expire dans 10 minutes.
-
-Si tu n'as pas demandé cette vérification, ignore cet email.
-
----
-L'équipe DigiID
-"""
+    corps_texte = (
+        "Bonjour " + prenom_texte + "\n\n"
+        "Merci de t'être inscrit sur DigiID ! Pour finaliser ton inscription,\n"
+        "confirme ton adresse email avec le code suivant :\n\n"
+        "    " + code + "\n\n"
+        "Ce code expire dans 10 minutes.\n\n"
+        "Si tu n'as pas demandé cette vérification, ignore cet email.\n\n"
+        "---\n"
+        "L'équipe DigiID\n"
+    )
     
-    corps_html = f"""
-<div style="max-width:480px;margin:0 auto;padding:20px;font-family:Arial,sans-serif">
-    <h1 style="color:#1a73e8;font-size:24px;text-align:center">DigiID</h1>
-    <p>Bonjour {prenom_texte}</p>
-    <p>Merci de t'être inscrit sur DigiID ! Pour finaliser ton inscription, confirme ton adresse email :</p>
-    <div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;margin:20px 0">
-        <span style="font-size:32px;letter-spacing:8px;font-weight:bold;color:#1a73e8">{code}</span>
-    </div>
-    <p style="color:#666;font-size:14px">Ce code expire dans 10 minutes.</p>
-    <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
-    <p style="color:#999;font-size:12px">Si tu n'as pas demandé cette vérification, ignore cet email.</p>
-</div>"""
+    corps_html = (
+        '<div style="max-width:480px;margin:0 auto;padding:20px;font-family:Arial,sans-serif">'
+        '<h1 style="color:#1a73e8;font-size:24px;text-align:center">DigiID</h1>'
+        f"<p>Bonjour {prenom_texte}</p>"
+        "<p>Merci de t'être inscrit sur DigiID ! Pour finaliser ton inscription, confirme ton adresse email :</p>"
+        '<div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;margin:20px 0">'
+        f'<span style="font-size:32px;letter-spacing:8px;font-weight:bold;color:#1a73e8">{code}</span>'
+        "</div>"
+        '<p style="color:#666;font-size:14px">Ce code expire dans 10 minutes.</p>'
+        '<hr style="border:none;border-top:1px solid #eee;margin:20px 0">'
+        '<p style="color:#999;font-size:12px">Si tu n\'as pas demandé cette vérification, ignore cet email.</p>'
+        "</div>"
+    )
     
     return envoyer_email(destinataire, sujet, corps_texte, corps_html)
 
@@ -226,39 +227,35 @@ def envoyer_email_changement(
     """Envoie un email pour confirmer un changement d'email."""
     sujet = "DigiID — Confirme ton nouvel email"
     
-    corps_texte = f"""
-Bonjour,
-
-Tu as demandé le changement de ton adresse email. Voici le code de confirmation :
-
-    {code}
-
-Ce code expire dans 10 minutes.
-
-Si tu n'as pas demandé ce changement, contacte le support immédiatement.
-
----
-L'équipe DigiID
-"""
+    corps_texte = (
+        "Bonjour,\n\n"
+        "Tu as demandé le changement de ton adresse email. Voici le code de confirmation :\n\n"
+        "    " + code + "\n\n"
+        "Ce code expire dans 10 minutes.\n\n"
+        "Si tu n'as pas demandé ce changement, contacte le support immédiatement.\n\n"
+        "---\n"
+        "L'équipe DigiID\n"
+    )
     
-    corps_html = f"""
-<div style="max-width:480px;margin:0 auto;padding:20px;font-family:Arial,sans-serif">
-    <h1 style="color:#1a73e8;font-size:24px;text-align:center">DigiID</h1>
-    <p>Bonjour,</p>
-    <p>Tu as demandé le changement de ton adresse email. Voici le code de confirmation :</p>
-    <div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;margin:20px 0">
-        <span style="font-size:32px;letter-spacing:8px;font-weight:bold;color:#1a73e8">{code}</span>
-    </div>
-    <p style="color:#666;font-size:14px">Ce code expire dans 10 minutes.</p>
-    <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
-    <p style="color:#999;font-size:12px">Si tu n'as pas demandé ce changement, contacte le support immédiatement.</p>
-</div>"""
+    corps_html = (
+        '<div style="max-width:480px;margin:0 auto;padding:20px;font-family:Arial,sans-serif">'
+        '<h1 style="color:#1a73e8;font-size:24px;text-align:center">DigiID</h1>'
+        "<p>Bonjour,</p>"
+        "<p>Tu as demandé le changement de ton adresse email. Voici le code de confirmation :</p>"
+        '<div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;margin:20px 0">'
+        f'<span style="font-size:32px;letter-spacing:8px;font-weight:bold;color:#1a73e8">{code}</span>'
+        "</div>"
+        '<p style="color:#666;font-size:14px">Ce code expire dans 10 minutes.</p>'
+        '<hr style="border:none;border-top:1px solid #eee;margin:20px 0">'
+        '<p style="color:#999;font-size:12px">Si tu n\'as pas demandé ce changement, contacte le support immédiatement.</p>'
+        "</div>"
+    )
     
     return envoyer_email(destinataire, sujet, corps_texte, corps_html)
 
 
 # =============================================================================
-# NOUVEAU : Emails spécifiques — Invitations
+# Emails spécifiques — Invitations
 # =============================================================================
 
 # Mapping des rôles pour affichage
@@ -285,17 +282,6 @@ def envoyer_email_invitation(
 ) -> bool:
     """
     Envoie un email d'invitation à rejoindre DigiID avec un rôle spécifique.
-    
-    Args:
-        destinataire: Email du destinataire
-        role: Rôle proposé (ex: "chef_police", "admin_domaine")
-        token: Token d'activation unique
-        nom_invitant: Nom de la personne qui invite (optionnel)
-        nom_domaine: Nom du domaine (optionnel)
-        message_personnalise: Message personnalisé (optionnel)
-    
-    Returns:
-        True si l'email a été envoyé avec succès
     """
     label_role = LABELS_ROLES.get(role, role.replace("_", " ").title())
     
@@ -304,111 +290,94 @@ def envoyer_email_invitation(
     
     sujet = f"DigiID — Invitation à rejoindre en tant que {label_role}"
     
-    # Corps texte
-    corps_texte = f"""
-Bonjour,
-
-Vous avez été invité(e) à rejoindre la plateforme DigiID avec le rôle suivant :
-
-    {label_role}
-{f"    Domaine : {nom_domaine}" if nom_domaine else ""}
-{f"    Invité par : {nom_invitant}" if nom_invitant else ""}
-
-Pour activer votre compte, cliquez sur le lien ci-dessous :
-
-    {url_activation}
-
-Ce lien expire dans 7 jours.
-
-{f"Message de l'invitant :\n{message_personnalise}" if message_personnalise else ""}
-
-Si vous n'avez pas demandé cette invitation, ignorez cet email.
-
----
-L'équipe DigiID
-https://digiid.africa
-"""
+    # ✅ CORRECTION : Construire les parties conditionnelles AVANT le f-string
+    domaine_texte = f"    Domaine : {nom_domaine}" if nom_domaine else ""
+    invitant_texte = f"    Invité par : {nom_invitant}" if nom_invitant else ""
+    message_texte = f"Message de l'invitant :\n{message_personnalise}" if message_personnalise else ""
+    
+    # Corps texte (sans \n dans les expressions f-string)
+    corps_texte = (
+        "Bonjour,\n\n"
+        "Vous avez été invité(e) à rejoindre la plateforme DigiID avec le rôle suivant :\n\n"
+        f"    {label_role}\n"
+        f"{domaine_texte}\n"
+        f"{invitant_texte}\n\n"
+        "Pour activer votre compte, cliquez sur le lien ci-dessous :\n\n"
+        f"    {url_activation}\n\n"
+        "Ce lien expire dans 7 jours.\n\n"
+        f"{message_texte}\n\n"
+        "Si vous n'avez pas demandé cette invitation, ignorez cet email.\n\n"
+        "---\n"
+        "L'équipe DigiID\n"
+        "https://digiid.africa\n"
+    )
     
     # ✅ CORRECTION : HTML sans triple quotes imbriquées
-    domaine_html = f'<p style="color:#78350f;font-size:14px;margin:5px 0 0 0">Domaine : <strong>{nom_domaine}</strong></p>' if nom_domaine else ""
+    domaine_html = (
+        f'<p style="color:#78350f;font-size:14px;margin:5px 0 0 0">'
+        f'Domaine : <strong>{nom_domaine}</strong></p>'
+    ) if nom_domaine else ""
     
-    message_html = ""
-    if message_personnalise:
-        message_html = f"""
-    <div style="background:#f9fafb;border:1px solid #e5e7eb;padding:15px;border-radius:8px;margin:25px 0">
-        <p style="color:#6b7280;font-size:12px;margin:0 0 8px 0;text-transform:uppercase;font-weight:bold">
-            Message de {nom_invitant or "l'invitant"}
-        </p>
-        <p style="color:#374151;font-size:14px;margin:0;line-height:1.5;font-style:italic">
-            "{message_personnalise}"
-        </p>
-    </div>
-    """
+    nom_invitant_affiche = nom_invitant or "l'invitant"
+    message_html = (
+        '<div style="background:#f9fafb;border:1px solid #e5e7eb;padding:15px;border-radius:8px;margin:25px 0">'
+        f'<p style="color:#6b7280;font-size:12px;margin:0 0 8px 0;text-transform:uppercase;font-weight:bold">'
+        f'Message de {nom_invitant_affiche}</p>'
+        f'<p style="color:#374151;font-size:14px;margin:0;line-height:1.5;font-style:italic">'
+        f'"{message_personnalise}"</p>'
+        '</div>'
+    ) if message_personnalise else ""
     
-    corps_html = f"""
-<div style="max-width:560px;margin:0 auto;padding:30px;font-family:Arial,sans-serif;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px">
-    <!-- En-tête -->
-    <div style="text-align:center;margin-bottom:30px">
-        <h1 style="color:#0284c7;font-size:28px;margin:0">🏛️ DigiID</h1>
-        <p style="color:#6b7280;font-size:14px;margin-top:5px">Plateforme d'identité numérique</p>
-    </div>
-    
-    <!-- Message principal -->
-    <div style="background:#f0f9ff;border-left:4px solid #0284c7;padding:20px;border-radius:8px;margin-bottom:25px">
-        <h2 style="color:#0c4a6e;font-size:20px;margin:0 0 10px 0">
-            Vous êtes invité(e) à rejoindre DigiID
-        </h2>
-        <p style="color:#374151;font-size:15px;margin:0;line-height:1.6">
-            Un administrateur vous invite à créer un compte avec un rôle spécifique.
-        </p>
-    </div>
-    
-    <!-- Détails du rôle -->
-    <div style="margin-bottom:25px">
-        <h3 style="color:#111827;font-size:16px;margin:0 0 15px 0;text-transform:uppercase;letter-spacing:1px">
-            Votre futur rôle
-        </h3>
-        <div style="background:#fef3c7;border:1px solid #fcd34d;padding:15px;border-radius:8px;text-align:center">
-            <p style="font-size:18px;font-weight:bold;color:#92400e;margin:0">
-                {label_role}
-            </p>
-            {domaine_html}
-        </div>
-    </div>
-    
-    <!-- Bouton d'action -->
-    <div style="text-align:center;margin:30px 0">
-        <a href="{url_activation}" 
-           style="display:inline-block;background:#0284c7;color:white;padding:14px 32px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px">
-            🚀 Activer mon compte
-        </a>
-    </div>
-    
-    <!-- Lien alternatif -->
-    <p style="color:#6b7280;font-size:13px;text-align:center;margin:20px 0">
-        Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br>
-        <a href="{url_activation}" style="color:#0284c7;word-break:break-all">{url_activation}</a>
-    </p>
-    
-    <!-- Message personnalisé -->
-    {message_html}
-    
-    <!-- Informations importantes -->
-    <div style="background:#fef2f2;border:1px solid #fecaca;padding:15px;border-radius:8px;margin:25px 0">
-        <p style="color:#991b1b;font-size:13px;margin:0;line-height:1.5">
-            ⚠️ <strong>Important :</strong> Ce lien expire dans <strong>7 jours</strong>. 
-            Après activation, vous devrez définir votre mot de passe et configurer la double authentification (2FA).
-        </p>
-    </div>
-    
-    <!-- Pied de page -->
-    <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0">
-    <p style="color:#9ca3af;font-size:12px;text-align:center;margin:0">
-        Si vous n'avez pas demandé cette invitation, ignorez simplement cet email.<br>
-        © 2026 DigiID — <a href="https://digiid.africa" style="color:#9ca3af">digiid.africa</a>
-    </p>
-</div>
-"""
+    corps_html = (
+        '<div style="max-width:560px;margin:0 auto;padding:30px;font-family:Arial,sans-serif;'
+        'background:#ffffff;border:1px solid #e5e7eb;border-radius:12px">'
+        '<!-- En-tête -->'
+        '<div style="text-align:center;margin-bottom:30px">'
+        '<h1 style="color:#0284c7;font-size:28px;margin:0">🏛️ DigiID</h1>'
+        '<p style="color:#6b7280;font-size:14px;margin-top:5px">Plateforme d\'identité numérique</p>'
+        '</div>'
+        '<!-- Message principal -->'
+        '<div style="background:#f0f9ff;border-left:4px solid #0284c7;padding:20px;border-radius:8px;margin-bottom:25px">'
+        '<h2 style="color:#0c4a6e;font-size:20px;margin:0 0 10px 0">'
+        'Vous êtes invité(e) à rejoindre DigiID</h2>'
+        '<p style="color:#374151;font-size:15px;margin:0;line-height:1.6">'
+        'Un administrateur vous invite à créer un compte avec un rôle spécifique.</p>'
+        '</div>'
+        '<!-- Détails du rôle -->'
+        '<div style="margin-bottom:25px">'
+        '<h3 style="color:#111827;font-size:16px;margin:0 0 15px 0;text-transform:uppercase;letter-spacing:1px">'
+        'Votre futur rôle</h3>'
+        '<div style="background:#fef3c7;border:1px solid #fcd34d;padding:15px;border-radius:8px;text-align:center">'
+        f'<p style="font-size:18px;font-weight:bold;color:#92400e;margin:0">{label_role}</p>'
+        f'{domaine_html}'
+        '</div>'
+        '</div>'
+        '<!-- Bouton d\'action -->'
+        '<div style="text-align:center;margin:30px 0">'
+        f'<a href="{url_activation}" '
+        'style="display:inline-block;background:#0284c7;color:white;padding:14px 32px;'
+        'text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px">'
+        '🚀 Activer mon compte</a>'
+        '</div>'
+        '<!-- Lien alternatif -->'
+        '<p style="color:#6b7280;font-size:13px;text-align:center;margin:20px 0">'
+        'Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br>'
+        f'<a href="{url_activation}" style="color:#0284c7;word-break:break-all">{url_activation}</a>'
+        '</p>'
+        f'{message_html}'
+        '<!-- Informations importantes -->'
+        '<div style="background:#fef2f2;border:1px solid #fecaca;padding:15px;border-radius:8px;margin:25px 0">'
+        '<p style="color:#991b1b;font-size:13px;margin:0;line-height:1.5">'
+        '⚠️ <strong>Important :</strong> Ce lien expire dans <strong>7 jours</strong>. '
+        'Après activation, vous devrez définir votre mot de passe et configurer la double authentification (2FA).</p>'
+        '</div>'
+        '<!-- Pied de page -->'
+        '<hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0">'
+        '<p style="color:#9ca3af;font-size:12px;text-align:center;margin:0">'
+        'Si vous n\'avez pas demandé cette invitation, ignorez simplement cet email.<br>'
+        '© 2026 DigiID — <a href="https://digiid.africa" style="color:#9ca3af">digiid.africa</a></p>'
+        '</div>'
+    )
     
     return envoyer_email(destinataire, sujet, corps_texte, corps_html)
 
@@ -423,47 +392,43 @@ def envoyer_email_renvoyer_invitation(
     Envoie un email de rappel pour une invitation déjà envoyée.
     """
     label_role = LABELS_ROLES.get(role, role.replace("_", " ").title())
-    url_activation = f"https://digiid.africa/inscription?token={token}"
+    # ✅ CORRECTION : URL cohérente
+    url_activation = f"https://digiid.africa/accepter-invitation/{token}"
     
-    sujet = f"DigiID — Rappel : Votre invitation est toujours active"
+    sujet = "DigiID — Rappel : Votre invitation est toujours active"
     
-    corps_texte = f"""
-Bonjour,
-
-Ceci est un rappel concernant votre invitation à rejoindre DigiID en tant que :
-
-    {label_role}
-
-Votre invitation est toujours active. Pour activer votre compte, cliquez ici :
-
-    {url_activation}
-
-Ce lien expire dans 7 jours à compter de la première invitation.
-
----
-L'équipe DigiID
-"""
+    corps_texte = (
+        "Bonjour,\n\n"
+        "Ceci est un rappel concernant votre invitation à rejoindre DigiID en tant que :\n\n"
+        f"    {label_role}\n\n"
+        "Votre invitation est toujours active. Pour activer votre compte, cliquez ici :\n\n"
+        f"    {url_activation}\n\n"
+        "Ce lien expire dans 7 jours à compter de la première invitation.\n\n"
+        "---\n"
+        "L'équipe DigiID\n"
+    )
     
-    corps_html = f"""
-<div style="max-width:480px;margin:0 auto;padding:20px;font-family:Arial,sans-serif">
-    <h1 style="color:#0284c7;font-size:24px;text-align:center">DigiID</h1>
-    <p>Bonjour,</p>
-    <p>Ceci est un rappel concernant votre invitation à rejoindre DigiID en tant que :</p>
-    <div style="background:#fef3c7;border:1px solid #fcd34d;padding:15px;border-radius:8px;text-align:center;margin:20px 0">
-        <p style="font-size:18px;font-weight:bold;color:#92400e;margin:0">{label_role}</p>
-    </div>
-    <div style="text-align:center;margin:25px 0">
-        <a href="{url_activation}" style="display:inline-block;background:#0284c7;color:white;padding:12px 28px;text-decoration:none;border-radius:8px;font-weight:bold">
-            Activer mon compte
-        </a>
-    </div>
-    <p style="color:#6b7280;font-size:13px">
-        Lien alternatif : <a href="{url_activation}" style="color:#0284c7">{url_activation}</a>
-    </p>
-    <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
-    <p style="color:#999;font-size:12px">L'équipe DigiID</p>
-</div>
-"""
+    corps_html = (
+        '<div style="max-width:480px;margin:0 auto;padding:20px;font-family:Arial,sans-serif">'
+        '<h1 style="color:#0284c7;font-size:24px;text-align:center">DigiID</h1>'
+        "<p>Bonjour,</p>"
+        "<p>Ceci est un rappel concernant votre invitation à rejoindre DigiID en tant que :</p>"
+        '<div style="background:#fef3c7;border:1px solid #fcd34d;padding:15px;border-radius:8px;text-align:center;margin:20px 0">'
+        f'<p style="font-size:18px;font-weight:bold;color:#92400e;margin:0">{label_role}</p>'
+        '</div>'
+        '<div style="text-align:center;margin:25px 0">'
+        f'<a href="{url_activation}" '
+        'style="display:inline-block;background:#0284c7;color:white;padding:12px 28px;'
+        'text-decoration:none;border-radius:8px;font-weight:bold">'
+        'Activer mon compte</a>'
+        '</div>'
+        '<p style="color:#6b7280;font-size:13px">'
+        f'Lien alternatif : <a href="{url_activation}" style="color:#0284c7">{url_activation}</a>'
+        '</p>'
+        '<hr style="border:none;border-top:1px solid #eee;margin:20px 0">'
+        "<p style=\"color:#999;font-size:12px\">L'équipe DigiID</p>"
+        '</div>'
+    )
     
     return envoyer_email(destinataire, sujet, corps_texte, corps_html)
 
