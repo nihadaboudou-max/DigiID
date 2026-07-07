@@ -1,8 +1,13 @@
 /**
  * Service API pour le module Chefs.
  * Permet aux chefs de département de créer et gérer leurs agents.
+ *
+ * ✅ Utilise clientAPI centralisé pour :
+ *   - Gestion automatique du token JWT
+ *   - Rafraîchissement automatique (401)
+ *   - Gestion uniforme des erreurs
  */
-import { clientAPI, obtenirTokenAcces, ErreurAPI } from "./client_api";
+import { clientAPI } from "./client_api";
 
 // =============================================================================
 // TYPES
@@ -35,6 +40,7 @@ export interface AgentONGCreate {
   ville?: string;
   pays?: string;
   mission?: string;
+  zone_intervention?: string;
 }
 
 export interface AgentEnrolementCreate {
@@ -86,39 +92,11 @@ export interface StatistiquesChefResponse {
 export async function creerAgentPolice(
   data: AgentPoliceCreate
 ): Promise<AgentResponse> {
-  const token = obtenirTokenAcces();
-
-  try {
-    const reponse = await fetch("/api/backend/api/v1/chefs/police/agents", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!reponse.ok) {
-      let erreur: any = {};
-      try {
-        erreur = await reponse.json();
-      } catch {}
-      throw new ErreurAPI(
-        erreur.detail || "CREATION_AGENT_POLICE",
-        erreur.detail || "Impossible de créer l'agent police.",
-        reponse.status
-      );
-    }
-
-    return reponse.json();
-  } catch (erreur: unknown) {
-    if (erreur instanceof ErreurAPI) throw erreur;
-    throw new ErreurAPI(
-      "RESEAU",
-      "Erreur réseau lors de la création de l'agent police.",
-      0
-    );
-  }
+  return clientAPI.post<AgentResponse>(
+    "/api/v1/chefs/police/agents",
+    data,
+    { authentifie: true }
+  );
 }
 
 /**
@@ -127,39 +105,11 @@ export async function creerAgentPolice(
 export async function creerMedecin(
   data: MedecinCreate
 ): Promise<AgentResponse> {
-  const token = obtenirTokenAcces();
-
-  try {
-    const reponse = await fetch("/api/backend/api/v1/chefs/medical/medecins", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!reponse.ok) {
-      let erreur: any = {};
-      try {
-        erreur = await reponse.json();
-      } catch {}
-      throw new ErreurAPI(
-        erreur.detail || "CREATION_MEDECIN",
-        erreur.detail || "Impossible de créer le médecin.",
-        reponse.status
-      );
-    }
-
-    return reponse.json();
-  } catch (erreur: unknown) {
-    if (erreur instanceof ErreurAPI) throw erreur;
-    throw new ErreurAPI(
-      "RESEAU",
-      "Erreur réseau lors de la création du médecin.",
-      0
-    );
-  }
+  return clientAPI.post<AgentResponse>(
+    "/api/v1/chefs/medical/medecins",
+    data,
+    { authentifie: true }
+  );
 }
 
 /**
@@ -168,39 +118,11 @@ export async function creerMedecin(
 export async function creerAgentONG(
   data: AgentONGCreate
 ): Promise<AgentResponse> {
-  const token = obtenirTokenAcces();
-
-  try {
-    const reponse = await fetch("/api/backend/api/v1/chefs/ong/agents", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!reponse.ok) {
-      let erreur: any = {};
-      try {
-        erreur = await reponse.json();
-      } catch {}
-      throw new ErreurAPI(
-        erreur.detail || "CREATION_AGENT_ONG",
-        erreur.detail || "Impossible de créer l'agent ONG.",
-        reponse.status
-      );
-    }
-
-    return reponse.json();
-  } catch (erreur: unknown) {
-    if (erreur instanceof ErreurAPI) throw erreur;
-    throw new ErreurAPI(
-      "RESEAU",
-      "Erreur réseau lors de la création de l'agent ONG.",
-      0
-    );
-  }
+  return clientAPI.post<AgentResponse>(
+    "/api/v1/chefs/ong/agents",
+    data,
+    { authentifie: true }
+  );
 }
 
 /**
@@ -209,42 +131,11 @@ export async function creerAgentONG(
 export async function creerAgentEnrolement(
   data: AgentEnrolementCreate
 ): Promise<AgentResponse> {
-  const token = obtenirTokenAcces();
-
-  try {
-    const reponse = await fetch(
-      "/api/backend/api/v1/chefs/enrolement/agents",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(data),
-      }
-    );
-
-    if (!reponse.ok) {
-      let erreur: any = {};
-      try {
-        erreur = await reponse.json();
-      } catch {}
-      throw new ErreurAPI(
-        erreur.detail || "CREATION_AGENT_ENROLEMENT",
-        erreur.detail || "Impossible de créer l'agent enrôlement.",
-        reponse.status
-      );
-    }
-
-    return reponse.json();
-  } catch (erreur: unknown) {
-    if (erreur instanceof ErreurAPI) throw erreur;
-    throw new ErreurAPI(
-      "RESEAU",
-      "Erreur réseau lors de la création de l'agent enrôlement.",
-      0
-    );
-  }
+  return clientAPI.post<AgentResponse>(
+    "/api/v1/chefs/enrolement/agents",
+    data,
+    { authentifie: true }
+  );
 }
 
 // =============================================================================
@@ -252,47 +143,83 @@ export async function creerAgentEnrolement(
 // =============================================================================
 
 /**
- * Liste les agents créés par le chef connecté.
+ * Liste les agents créés par le chef connecté (tous types confondus).
  */
 export async function listerEquipe(params?: {
   page?: number;
   par_page?: number;
 }): Promise<ListeAgentsResponse> {
-  const token = obtenirTokenAcces();
-  const queryParams = new URLSearchParams();
-
-  if (params?.page) queryParams.set("page", params.page.toString());
-  if (params?.par_page) queryParams.set("par_page", params.par_page.toString());
-
-  try {
-    const reponse = await fetch(
-      `/api/backend/api/v1/chefs/equipe?${queryParams.toString()}`,
-      {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      }
-    );
-
-    if (!reponse.ok) {
-      let erreur: any = {};
-      try {
-        erreur = await reponse.json();
-      } catch {}
-      throw new ErreurAPI(
-        erreur.detail || "LISTE_EQUIPE",
-        erreur.detail || "Impossible de charger l'équipe.",
-        reponse.status
-      );
+  return clientAPI.get<ListeAgentsResponse>(
+    "/api/v1/chefs/equipe",
+    {
+      authentifie: true,
+      params: params as Record<string, unknown>,
     }
+  );
+}
 
-    return reponse.json();
-  } catch (erreur: unknown) {
-    if (erreur instanceof ErreurAPI) throw erreur;
-    throw new ErreurAPI(
-      "RESEAU",
-      "Erreur réseau lors du chargement de l'équipe.",
-      0
-    );
-  }
+/**
+ * Liste les agents ONG créés par le chef ONG connecté.
+ */
+export async function listerAgentsONG(params?: {
+  page?: number;
+  par_page?: number;
+}): Promise<ListeAgentsResponse> {
+  return clientAPI.get<ListeAgentsResponse>(
+    "/api/v1/chefs/ong/agents",
+    {
+      authentifie: true,
+      params: params as Record<string, unknown>,
+    }
+  );
+}
+
+/**
+ * Liste les agents police créés par le chef police connecté.
+ */
+export async function listerAgentsPolice(params?: {
+  page?: number;
+  par_page?: number;
+}): Promise<ListeAgentsResponse> {
+  return clientAPI.get<ListeAgentsResponse>(
+    "/api/v1/chefs/police/agents",
+    {
+      authentifie: true,
+      params: params as Record<string, unknown>,
+    }
+  );
+}
+
+/**
+ * Liste les médecins créés par le chef médical connecté.
+ */
+export async function listerMedecins(params?: {
+  page?: number;
+  par_page?: number;
+}): Promise<ListeAgentsResponse> {
+  return clientAPI.get<ListeAgentsResponse>(
+    "/api/v1/chefs/medical/medecins",
+    {
+      authentifie: true,
+      params: params as Record<string, unknown>,
+    }
+  );
+}
+
+/**
+ * Liste les agents d'enrôlement créés par le chef enrôlement connecté.
+ */
+export async function listerAgentsEnrolement(params?: {
+  page?: number;
+  par_page?: number;
+}): Promise<ListeAgentsResponse> {
+  return clientAPI.get<ListeAgentsResponse>(
+    "/api/v1/chefs/enrolement/agents",
+    {
+      authentifie: true,
+      params: params as Record<string, unknown>,
+    }
+  );
 }
 
 // =============================================================================
@@ -303,32 +230,44 @@ export async function listerEquipe(params?: {
  * Obtient les statistiques pour le dashboard du chef.
  */
 export async function obtenirStatistiquesChef(): Promise<StatistiquesChefResponse> {
-  const token = obtenirTokenAcces();
+  return clientAPI.get<StatistiquesChefResponse>(
+    "/api/v1/chefs/statistiques",
+    { authentifie: true }
+  );
+}
 
-  try {
-    const reponse = await fetch("/api/backend/api/v1/chefs/statistiques", {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+// =============================================================================
+// GESTION DES AGENTS (suspendre, réactiver, supprimer)
+// =============================================================================
 
-    if (!reponse.ok) {
-      let erreur: any = {};
-      try {
-        erreur = await reponse.json();
-      } catch {}
-      throw new ErreurAPI(
-        erreur.detail || "STATISTIQUES_CHEF",
-        erreur.detail || "Impossible de charger les statistiques.",
-        reponse.status
-      );
-    }
+/**
+ * Suspend un agent.
+ */
+export async function suspendreAgent(agentId: string): Promise<AgentResponse> {
+  return clientAPI.patch<AgentResponse>(
+    `/api/v1/chefs/agents/${agentId}/suspendre`,
+    undefined,
+    { authentifie: true }
+  );
+}
 
-    return reponse.json();
-  } catch (erreur: unknown) {
-    if (erreur instanceof ErreurAPI) throw erreur;
-    throw new ErreurAPI(
-      "RESEAU",
-      "Erreur réseau lors du chargement des statistiques.",
-      0
-    );
-  }
+/**
+ * Réactive un agent suspendu.
+ */
+export async function reactiverAgent(agentId: string): Promise<AgentResponse> {
+  return clientAPI.patch<AgentResponse>(
+    `/api/v1/chefs/agents/${agentId}/reactiver`,
+    undefined,
+    { authentifie: true }
+  );
+}
+
+/**
+ * Supprime un agent.
+ */
+export async function supprimerAgent(agentId: string): Promise<void> {
+  return clientAPI.delete<void>(
+    `/api/v1/chefs/agents/${agentId}`,
+    { authentifie: true }
+  );
 }
