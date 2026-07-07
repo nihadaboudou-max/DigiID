@@ -3,16 +3,19 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
+
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
+
+# ✅ CORRECTIONS DES IMPORTS
+from src.config.constantes import hasher_email
 from src.modeles import Utilisateur
 from src.modeles.invitation import Invitation
 from src.modules.invitations.schemas import (
     InvitationCreate,
     InvitationAcceptationSchema,
 )
-# ✅ CORRECTION : Importer hacher_mot_de_passe depuis noyau
-from src.noyau import hacher_mot_de_passe
+from src.noyau import chiffrer_donnee, hacher_mot_de_passe
 
 
 async def creer_invitation(
@@ -59,7 +62,6 @@ async def lister_invitations(
     par_page: int = 20,
 ) -> tuple[list[Invitation], int]:
     """Liste les invitations avec filtres."""
-    # Construction de la requête
     conditions = []
     if cree_par:
         conditions.append(Invitation.cree_par == cree_par)
@@ -148,7 +150,7 @@ async def valider_invitation(
     
     # Marquer comme acceptée
     invitation.statut = "acceptee"
-    invitation.date_acceptation = datetime.utcnow()
+    invitation.date_acceptation = datetime.now(timezone.utc)
     await session.commit()
     await session.refresh(invitation)
     return invitation, token_inscription
@@ -159,28 +161,52 @@ async def accepter_invitation_service(
     invitation: Invitation,
     donnees: InvitationAcceptationSchema,
 ) -> Utilisateur:
-    """Accepte une invitation et crée le compte utilisateur."""
-    # ✅ CORRECTION : Utiliser hacher_mot_de_passe qui gère les mots de passe longs
-    # (pré-hash SHA-256 avant bcrypt pour contourner la limite de 72 bytes)
+    """
+    Accepte une invitation et crée le compte utilisateur.
+    ✅ CORRECTION COMPLÈTE : Utilisation des champs chiffrés et hashés du modèle.
+    """
+    # 1. Hasher l'email pour l'unicité
+    email_hash = hasher_email(invitation.email)
+    
+    # Vérifier que l'email n'existe pas déjà (sécurité)
+    stmt = select(Utilisateur).where(
+        and_(
+            Utilisateur.email_hash == email_hash,
+            Utilisateur.est_supprime == False,
+        )
+    )
+    existant = (await session.execute(stmt)).scalar_one_or_none()
+    if existant:
+        raise ValueError(f"Un compte existe déjà avec l'email {invitation.email}")
+
+    # 2. Hasher le mot de passe (SHA-256 + bcrypt pour supporter > 72 caractères)
     mot_de_passe_hash = hacher_mot_de_passe(donnees.mot_de_passe)
     
-    # Créer l'utilisateur
+    # 3. Créer l'utilisateur avec les champs corrects du modèle (données chiffrées)
     utilisateur = Utilisateur(
-        email=invitation.email,
-        prenom=donnees.prenom,
-        nom=donnees.nom,
+        email_chiffre=chiffrer_donnee(invitation.email),
+        email_hash=email_hash,
+        prenom_chiffre=chiffrer_donnee(donnees.prenom),
+        nom_chiffre=chiffrer_donnee(donnees.nom),
+        telephone_chiffre=chiffrer_donnee(donnees.telephone) if donnees.telephone else None,
+        mot_de_passe_hash=mot_de_passe_hash,
         role=invitation.role,
         ville=donnees.ville,
-        telephone=donnees.telephone,
-        mot_de_passe=mot_de_passe_hash,
-        email_verifie=True,  # L'email est vérifié via l'invitation
+        domaine_id=invitation.domaine_id,
+        departement_id=invitation.departement_id,
         est_actif=True,
+        est_email_verifie=True,  # L'email est vérifié via l'invitation
+        est_supprime=False,
+        est_verrouille=False,
+        deux_fa_active=False,
     )
+    
     session.add(utilisateur)
     
     # Marquer l'invitation comme acceptée
     invitation.statut = "acceptee"
-    invitation.date_acceptation = datetime.utcnow()
+    invitation.date_acceptation = datetime.now(timezone.utc)
+    
     await session.commit()
     await session.refresh(utilisateur)
     return utilisateur
