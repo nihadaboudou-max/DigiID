@@ -12,9 +12,9 @@ import Cookies from "js-cookie";
 
 import type { Jetons, ReponseErreurAPI } from "@/types/api";
 
-// URL du backend interne utilisé par le proxy Next.js.
-// Toujours utiliser /api/backend pour éviter les problèmes CORS et les appels mixtes http/https.
-const URL_BASE = "/api/backend";
+// ✅ CORRECTION : URL_BASE vide pour éviter le doublon /api/backend/api/v1/...
+// Les appels sont déjà au format /api/v1/... dans les composants
+const URL_BASE = "";
 
 // Nom du cookie où on stocke le token d'accès
 const NOM_COOKIE_TOKEN = "digiid_token";
@@ -50,22 +50,17 @@ export function declencherEvenementAuthExpire() {
 // -----------------------------------------------------------------------------
 
 export function stockerJetons(tokenAcces: string, tokenRafraichissement: string) {
-  // Cookies sécurisés en httponly serait mieux, mais nécessite un middleware
-  // Next.js. Pour le prototype, on utilise js-cookie côté navigateur.
-  // ⚠️ path: "/" est OBLIGATOIRE — sans ça, le cookie n'est accessible que
-  // En HTTP, secure doit être false sinon les cookies ne sont pas envoyés
-  
   const estHTTPS = typeof window !== 'undefined' && window.location.protocol === 'https:';
   
   Cookies.set(NOM_COOKIE_TOKEN, tokenAcces, {
     path: "/",
-    secure: estHTTPS,  // ← true seulement si HTTPS
+    secure: estHTTPS,
     sameSite: "strict",
     expires: 1 / 96, // 15 minutes
   });
   Cookies.set(NOM_COOKIE_REFRESH, tokenRafraichissement, {
     path: "/",
-    secure: estHTTPS,  // ← true seulement si HTTPS
+    secure: estHTTPS,
     sameSite: "strict",
     expires: 7, // 7 jours
   });
@@ -193,11 +188,10 @@ async function appel_api<T>(
       credentials: "include",
     });
   } catch (erreur) {
-    // Erreur réseau : le serveur n'a pas répondu du tout.
     console.error("Échec d'appel API vers :", url, erreur);
     throw new ErreurAPI(
       "RESEAU",
-      `Le backend ne répond pas à ${URL_BASE}. ` +
+      `Le backend ne répond pas. ` +
       `Vérifie que Docker tourne (« docker compose ps backend » doit montrer Up) ` +
       `et que .env.local contient NEXT_PUBLIC_URL_BACKEND=http://127.0.0.1:8000.`,
       0,
@@ -237,9 +231,6 @@ async function appel_api<T>(
         return appel_api<T>(chemin, { ...options, _retry: true });
       }
     }
-    // 🔑 Rafraîchissement impossible (rôle modifié, token invalide, etc.)
-    // → Déclencher l'événement pour que le contexte d'authentification
-    //   déconnecte l'utilisateur et le redirige vers la connexion
     declencherEvenementAuthExpire();
     throw new ErreurAPI(
       "AUTH_TOKEN_EXPIRE",
