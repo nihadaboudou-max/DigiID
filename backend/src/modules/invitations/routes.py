@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.noyau import journal
 from src.noyau import dechiffrer_donnee
 from src.base_donnees.session import obtenir_session
+from src.config.constantes import hasher_email
 from src.modeles import Utilisateur, Domaine, Departement
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.invitations.dependances import obtenir_invitation_ou_404
@@ -39,6 +40,10 @@ from src.noyau.permissions import require_permission
 routeur_invitations = APIRouter(prefix="/api/v1/invitations", tags=["Invitations"])
 
 
+# =============================================================================
+# FONCTIONS UTILITAIRES
+# =============================================================================
+
 def _obtenir_nom_invitant(utilisateur: Utilisateur) -> str | None:
     """Extrait le nom complet d'un utilisateur en déchiffrant ses données."""
     try:
@@ -54,7 +59,6 @@ def _obtenir_nom_invitant(utilisateur: Utilisateur) -> str | None:
 def _obtenir_lien_invitation(request: Request, token: str) -> str:
     """Construit le lien d'invitation complet."""
     base_url = str(request.base_url).rstrip("/")
-    # Utiliser l'URL frontend si disponible, sinon fallback
     return f"{base_url}/accepter-invitation/{token}"
 
 
@@ -83,7 +87,9 @@ def _est_expire(date_expiration: datetime) -> bool:
     return date_norm < maintenant
 
 
-# ============ CRUD INVITATIONS ============
+# =============================================================================
+# CRUD INVITATIONS
+# =============================================================================
 
 @routeur_invitations.post(
     "",
@@ -273,7 +279,9 @@ async def renvoyer(
     return invitation
 
 
-# ============ ACCEPTATION PUBLIQUE (sans auth) ============
+# =============================================================================
+# ACCEPTATION PUBLIQUE (sans auth)
+# =============================================================================
 
 @routeur_invitations.get(
     "/verifier/{token}",
@@ -350,9 +358,12 @@ async def accepter_invitation(
         await session.commit()
         raise HTTPException(400, "Invitation expirée")
 
-    # Vérifier que l'email n'est pas déjà utilisé
+    # ✅ CORRECTION : Utiliser email_hash au lieu de email
+    # Le modèle Utilisateur n'a pas de champ 'email' direct
+    # Il utilise email_hash (hashé, indexé) et email_chiffre (chiffré)
+    email_hash = hasher_email(invitation.email)
     result = await session.execute(
-        select(Utilisateur).where(Utilisateur.email == invitation.email)
+        select(Utilisateur).where(Utilisateur.email_hash == email_hash)
     )
     if result.scalar_one_or_none():
         raise HTTPException(400, "Un compte avec cet email existe déjà")
@@ -362,6 +373,7 @@ async def accepter_invitation(
 
     return {
         "message": "Compte créé avec succès",
-        "email": utilisateur.email,
+        # ✅ CORRECTION : Utiliser invitation.email, pas utilisateur.email
+        "email": invitation.email,
         "role": utilisateur.role,
     }
