@@ -9,27 +9,34 @@ from enum import Enum
 
 class RolesUtilisateur(str, Enum):
     """
-    Les 7 rôles du système DigiID (RBAC étendu).
+    Les rôles du système DigiID (RBAC étendu).
 
     Chaque rôle a son propre espace, ses permissions, ses routes.
     L'enum est `str` pour faciliter la sérialisation JSON.
 
     Hiérarchie (ordre croissant de privilèges) :
-        citoyen < ong < medecin < agent < police < administrateur < super_administrateur
+        citoyen < ong < medecin < agent < police < chef_* < administrateur < super_administrateur
     """
     CITOYEN = "citoyen"
     ONG = "ong"
     MEDECIN = "medecin"
     AGENT = "agent"
     POLICE = "police"
+    CHEF_POLICE = "chef_police"
+    CHEF_MEDICAL = "chef_medical"
+    CHEF_ONG = "chef_ong"
+    CHEF_AGENT = "chef_agent"
     ADMINISTRATEUR = "administrateur"
     SUPER_ADMINISTRATEUR = "super_administrateur"
 
     @classmethod
-    def hierachie(cls) -> dict:
+    def hierarchie(cls) -> dict:
         """
         Niveau hiérarchique de chaque rôle.
         Plus le chiffre est élevé, plus le rôle a de pouvoirs.
+        
+        Note : Les chefs de département sont des rôles fonctionnels
+        (supervision au sein d'un domaine), pas des rôles administratifs.
         """
         return {
             cls.CITOYEN: 1,
@@ -37,6 +44,10 @@ class RolesUtilisateur(str, Enum):
             cls.MEDECIN: 3,
             cls.AGENT: 4,
             cls.POLICE: 5,
+            cls.CHEF_POLICE: 6,
+            cls.CHEF_MEDICAL: 6,
+            cls.CHEF_ONG: 6,
+            cls.CHEF_AGENT: 6,
             cls.ADMINISTRATEUR: 10,
             cls.SUPER_ADMINISTRATEUR: 100,
         }
@@ -47,6 +58,16 @@ class RolesUtilisateur(str, Enum):
         return [cls.ADMINISTRATEUR.value, cls.SUPER_ADMINISTRATEUR.value]
 
     @classmethod
+    def roles_chefs(cls) -> list[str]:
+        """Retourne les rôles de chefs de département."""
+        return [
+            cls.CHEF_POLICE.value,
+            cls.CHEF_MEDICAL.value,
+            cls.CHEF_ONG.value,
+            cls.CHEF_AGENT.value,
+        ]
+
+    @classmethod
     def roles_institutionnels(cls) -> list[str]:
         """Retourne les rôles liés à des institutions (hors citoyen et admins)."""
         return [
@@ -54,6 +75,10 @@ class RolesUtilisateur(str, Enum):
             cls.MEDECIN.value,
             cls.POLICE.value,
             cls.ONG.value,
+            cls.CHEF_POLICE.value,
+            cls.CHEF_MEDICAL.value,
+            cls.CHEF_ONG.value,
+            cls.CHEF_AGENT.value,
         ]
 
     @classmethod
@@ -65,7 +90,12 @@ class RolesUtilisateur(str, Enum):
         return [
             cls.MEDECIN.value,
             cls.POLICE.value,
+            cls.ONG.value,
+            cls.CHEF_POLICE.value,
+            cls.CHEF_MEDICAL.value,
+            cls.CHEF_ONG.value,
             cls.AGENT.value,
+            cls.CHEF_AGENT.value,
             cls.ADMINISTRATEUR.value,
             cls.SUPER_ADMINISTRATEUR.value,
         ]
