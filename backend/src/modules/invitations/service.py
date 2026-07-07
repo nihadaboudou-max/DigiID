@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """Service métier pour les invitations."""
+import hashlib
 import secrets
+import string
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# ✅ CORRECTIONS DES IMPORTS
-from src.config.constantes import hasher_email
 from src.modeles import Utilisateur
 from src.modeles.invitation import Invitation
 from src.modules.invitations.schemas import (
@@ -18,13 +18,23 @@ from src.modules.invitations.schemas import (
 from src.noyau import chiffrer_donnee, hacher_mot_de_passe
 
 
+def hasher_email(email: str) -> str:
+    """Hash SHA-256 de l'email pour la recherche en base."""
+    return hashlib.sha256(email.lower().strip().encode("utf-8")).hexdigest()
+
+
+def _generer_digiid_public() -> str:
+    """Génère un identifiant DigiID public de 16 caractères (majuscules + chiffres)."""
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(16))
+
+
 async def creer_invitation(
     session: AsyncSession,
     donnees: InvitationCreate,
     cree_par: UUID,
 ) -> Invitation:
     """Crée une nouvelle invitation."""
-    # Vérifier qu'il n'y a pas déjà une invitation en attente pour cet email
     stmt = select(Invitation).where(
         and_(
             Invitation.email == donnees.email,
@@ -36,7 +46,6 @@ async def creer_invitation(
     if existante:
         raise ValueError(f"Une invitation en attente existe déjà pour {donnees.email}")
     
-    # Créer l'invitation
     invitation = Invitation(
         email=donnees.email,
         role=donnees.role,
@@ -70,13 +79,11 @@ async def lister_invitations(
     if statut:
         conditions.append(Invitation.statut == statut)
     
-    # Compter le total
     stmt_count = select(func.count(Invitation.id))
     if conditions:
         stmt_count = stmt_count.where(and_(*conditions))
     total = (await session.execute(stmt_count)).scalar() or 0
     
-    # Récupérer les invitations paginées
     stmt = (
         select(Invitation)
         .order_by(Invitation.date_creation.desc())
@@ -130,11 +137,7 @@ async def valider_invitation(
     session: AsyncSession,
     token: str,
 ) -> tuple[Invitation, str]:
-    """
-    Valide une invitation et retourne un token d'inscription.
-    Returns:
-        Tuple (invitation, token_inscription)
-    """
+    """Valide une invitation et retourne un token d'inscription."""
     invitation = await obtenir_invitation_par_token(session, token)
     if not invitation:
         raise ValueError("Invitation introuvable")
@@ -145,10 +148,7 @@ async def valider_invitation(
         await session.commit()
         raise ValueError("Invitation expirée")
     
-    # Générer un token d'inscription (valable 1 heure)
     token_inscription = secrets.token_urlsafe(32)
-    
-    # Marquer comme acceptée
     invitation.statut = "acceptee"
     invitation.date_acceptation = datetime.now(timezone.utc)
     await session.commit()
@@ -163,12 +163,12 @@ async def accepter_invitation_service(
 ) -> Utilisateur:
     """
     Accepte une invitation et crée le compte utilisateur.
-    ✅ CORRECTION COMPLÈTE : Utilisation des champs chiffrés et hashés du modèle.
+    Utilise les champs chiffrés et hashés du modèle Utilisateur.
     """
     # 1. Hasher l'email pour l'unicité
     email_hash = hasher_email(invitation.email)
     
-    # Vérifier que l'email n'existe pas déjà (sécurité)
+    # Vérifier que l'email n'existe pas déjà
     stmt = select(Utilisateur).where(
         and_(
             Utilisateur.email_hash == email_hash,
@@ -182,23 +182,28 @@ async def accepter_invitation_service(
     # 2. Hasher le mot de passe (SHA-256 + bcrypt pour supporter > 72 caractères)
     mot_de_passe_hash = hacher_mot_de_passe(donnees.mot_de_passe)
     
-    # 3. Créer l'utilisateur avec les champs corrects du modèle (données chiffrées)
+    # 3. Chiffrer les données personnelles
+    telephone_chiffre = chiffrer_donnee(donnees.telephone) if donnees.telephone else None
+    
+    # 4. Créer l'utilisateur avec TOUS les champs requis
     utilisateur = Utilisateur(
         email_chiffre=chiffrer_donnee(invitation.email),
         email_hash=email_hash,
         prenom_chiffre=chiffrer_donnee(donnees.prenom),
         nom_chiffre=chiffrer_donnee(donnees.nom),
-        telephone_chiffre=chiffrer_donnee(donnees.telephone) if donnees.telephone else None,
+        telephone_chiffre=telephone_chiffre,
         mot_de_passe_hash=mot_de_passe_hash,
         role=invitation.role,
         ville=donnees.ville,
         domaine_id=invitation.domaine_id,
         departement_id=invitation.departement_id,
+        digiid_public=_generer_digiid_public(),  # ✅ AJOUT IMPORTANT
         est_actif=True,
-        est_email_verifie=True,  # L'email est vérifié via l'invitation
+        est_email_verifie=True,
         est_supprime=False,
         est_verrouille=False,
         deux_fa_active=False,
+        tentatives_connexion_echouees=0,
     )
     
     session.add(utilisateur)
