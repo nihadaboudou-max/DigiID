@@ -21,7 +21,12 @@ import { ModalConfirmation } from "@/composants/commun/ModalConfirmation";
 
 export default function PageTableauDeBord() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["citoyen", "agent", "medecin", "police", "ong", "administrateur", "super_administrateur"]}>
+    // ✅ CORRECTION : Ajout des rôles de chefs
+    <EnvelopperEspaceProtege rolesAutorises={[
+      "citoyen", "agent", "medecin", "police", "ong",
+      "chef_police", "chef_medical", "chef_ong", "chef_agent",
+      "administrateur", "super_administrateur"
+    ]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
