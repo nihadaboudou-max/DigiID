@@ -5,11 +5,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import hashlib
 
 from src.noyau import journal
 from src.noyau import dechiffrer_donnee
 from src.base_donnees.session import obtenir_session
-from src.config.constantes import hasher_email
 from src.modeles import Utilisateur, Domaine, Departement
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.invitations.dependances import obtenir_invitation_ou_404
@@ -43,6 +43,14 @@ routeur_invitations = APIRouter(prefix="/api/v1/invitations", tags=["Invitations
 # =============================================================================
 # FONCTIONS UTILITAIRES
 # =============================================================================
+
+def hasher_email(email: str) -> str:
+    """
+    Hash un email pour permettre les recherches tout en protégeant la vie privée.
+    Utilise SHA256 de l'email en minuscules et sans espaces.
+    """
+    return hashlib.sha256(email.lower().strip().encode()).hexdigest()
+
 
 def _obtenir_nom_invitant(utilisateur: Utilisateur) -> str | None:
     """Extrait le nom complet d'un utilisateur en déchiffrant ses données."""
