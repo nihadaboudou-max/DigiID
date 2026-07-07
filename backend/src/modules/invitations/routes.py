@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Routes API pour les invitations."""
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlalchemy import select
@@ -56,6 +56,31 @@ def _obtenir_lien_invitation(request: Request, token: str) -> str:
     base_url = str(request.base_url).rstrip("/")
     # Utiliser l'URL frontend si disponible, sinon fallback
     return f"{base_url}/accepter-invitation/{token}"
+
+
+def _maintenant_utc() -> datetime:
+    """Retourne l'heure actuelle en UTC avec timezone-aware."""
+    return datetime.now(timezone.utc)
+
+
+def _normaliser_datetime(dt: datetime) -> datetime:
+    """
+    Normalise un datetime pour qu'il soit timezone-aware (UTC).
+    Si le datetime est naive, on lui ajoute UTC.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _est_expire(date_expiration: datetime) -> bool:
+    """
+    Vérifie si une date d'expiration est dépassée.
+    Gère les cas aware/naive sans erreur de comparaison.
+    """
+    maintenant = _maintenant_utc()
+    date_norm = _normaliser_datetime(date_expiration)
+    return date_norm < maintenant
 
 
 # ============ CRUD INVITATIONS ============
@@ -210,7 +235,6 @@ async def renvoyer(
 ):
     """Renvoie une invitation en prolongeant sa date d'expiration."""
     import secrets
-    from datetime import timedelta
 
     if invitation.statut != "en_attente":
         raise HTTPException(
@@ -220,7 +244,8 @@ async def renvoyer(
 
     # Générer un nouveau token
     invitation.token = secrets.token_urlsafe(48)
-    invitation.date_expiration = datetime.utcnow() + timedelta(days=7)
+    # ✅ CORRECTION : Utiliser datetime.now(timezone.utc) au lieu de utcnow()
+    invitation.date_expiration = _maintenant_utc() + timedelta(days=7)
     await session.commit()
     await session.refresh(invitation)
     
@@ -269,7 +294,8 @@ async def verifier_invitation(
     if invitation.statut != "en_attente":
         raise HTTPException(400, f"Invitation déjà {invitation.statut}")
 
-    if invitation.date_expiration < datetime.utcnow():
+    # ✅ CORRECTION : Utiliser la fonction _est_expire qui gère aware/naive
+    if _est_expire(invitation.date_expiration):
         invitation.statut = "expiree"
         await session.commit()
         raise HTTPException(400, "Invitation expirée")
@@ -318,7 +344,8 @@ async def accepter_invitation(
     if invitation.statut != "en_attente":
         raise HTTPException(400, f"Invitation déjà {invitation.statut}")
 
-    if invitation.date_expiration < datetime.utcnow():
+    # ✅ CORRECTION : Utiliser la fonction _est_expire qui gère aware/naive
+    if _est_expire(invitation.date_expiration):
         invitation.statut = "expiree"
         await session.commit()
         raise HTTPException(400, "Invitation expirée")
