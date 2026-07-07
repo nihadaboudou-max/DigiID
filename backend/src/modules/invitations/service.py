@@ -3,19 +3,16 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
-
-from passlib.context import CryptContext
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.modeles import Utilisateur
 from src.modeles.invitation import Invitation
 from src.modules.invitations.schemas import (
     InvitationCreate,
     InvitationAcceptationSchema,
 )
-
-contexte_mdp = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# ✅ CORRECTION : Importer hacher_mot_de_passe depuis noyau
+from src.noyau import hacher_mot_de_passe
 
 
 async def creer_invitation(
@@ -35,7 +32,7 @@ async def creer_invitation(
     existante = result.scalar_one_or_none()
     if existante:
         raise ValueError(f"Une invitation en attente existe déjà pour {donnees.email}")
-
+    
     # Créer l'invitation
     invitation = Invitation(
         email=donnees.email,
@@ -70,13 +67,13 @@ async def lister_invitations(
         conditions.append(Invitation.domaine_id == domaine_id)
     if statut:
         conditions.append(Invitation.statut == statut)
-
+    
     # Compter le total
     stmt_count = select(func.count(Invitation.id))
     if conditions:
         stmt_count = stmt_count.where(and_(*conditions))
     total = (await session.execute(stmt_count)).scalar() or 0
-
+    
     # Récupérer les invitations paginées
     stmt = (
         select(Invitation)
@@ -86,10 +83,9 @@ async def lister_invitations(
     )
     if conditions:
         stmt = stmt.where(and_(*conditions))
-
+    
     result = await session.execute(stmt)
     invitations = list(result.scalars().all())
-
     return invitations, total
 
 
@@ -140,24 +136,21 @@ async def valider_invitation(
     invitation = await obtenir_invitation_par_token(session, token)
     if not invitation:
         raise ValueError("Invitation introuvable")
-
     if invitation.statut != "en_attente":
         raise ValueError(f"Invitation déjà {invitation.statut}")
-
     if invitation.est_expiree:
         invitation.statut = "expiree"
         await session.commit()
         raise ValueError("Invitation expirée")
-
+    
     # Générer un token d'inscription (valable 1 heure)
     token_inscription = secrets.token_urlsafe(32)
-
+    
     # Marquer comme acceptée
     invitation.statut = "acceptee"
     invitation.date_acceptation = datetime.utcnow()
     await session.commit()
     await session.refresh(invitation)
-
     return invitation, token_inscription
 
 
@@ -167,9 +160,10 @@ async def accepter_invitation_service(
     donnees: InvitationAcceptationSchema,
 ) -> Utilisateur:
     """Accepte une invitation et crée le compte utilisateur."""
-    # Hasher le mot de passe
-    mot_de_passe_hash = contexte_mdp.hash(donnees.mot_de_passe)
-
+    # ✅ CORRECTION : Utiliser hacher_mot_de_passe qui gère les mots de passe longs
+    # (pré-hash SHA-256 avant bcrypt pour contourner la limite de 72 bytes)
+    mot_de_passe_hash = hacher_mot_de_passe(donnees.mot_de_passe)
+    
     # Créer l'utilisateur
     utilisateur = Utilisateur(
         email=invitation.email,
@@ -183,11 +177,10 @@ async def accepter_invitation_service(
         est_actif=True,
     )
     session.add(utilisateur)
-
+    
     # Marquer l'invitation comme acceptée
     invitation.statut = "acceptee"
     invitation.date_acceptation = datetime.utcnow()
-
     await session.commit()
     await session.refresh(utilisateur)
     return utilisateur
