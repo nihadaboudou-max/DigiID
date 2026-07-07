@@ -51,6 +51,11 @@ class RolesUtilisateur(str, Enum):
             cls.ADMINISTRATEUR: 10,
             cls.SUPER_ADMINISTRATEUR: 100,
         }
+        
+    @classmethod
+    def hierachie(cls) -> dict:
+        """Alias de hierarchie (compatibilité avec le code existant)."""
+        return cls.hierarchie()    
 
     @classmethod
     def roles_administratifs(cls) -> list[str]:
