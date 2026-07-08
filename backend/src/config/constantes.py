@@ -190,3 +190,9 @@ PREFIXE_API_UTILISATEUR = "/api/v1/utilisateur"
 PREFIXE_API_ADMIN = "/api/v1/admin"
 PREFIXE_API_SUPER_ADMIN = "/api/v1/super-admin"
 PREFIXE_API_PUBLIC = "/api/v1/public"
+
+import hashlib
+
+def hasher_email(email: str) -> str:
+    """Hash SHA-256 de l'email pour la recherche en base."""
+    return hashlib.sha256(email.lower().strip().encode("utf-8")).hexdigest()

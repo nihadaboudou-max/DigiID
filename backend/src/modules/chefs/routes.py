@@ -199,13 +199,17 @@ async def lister_agents_ong(
     if chef.role != "chef_ong":
         raise HTTPException(status_code=403, detail="Seul un chef ONG peut accéder à cette ressource")
     
-    agents, total = await service.lister_agents_chef(session, chef, page, par_page, type_agent="agent_ong")
+    # ✅ CORRECTION : Pas de type_agent, on filtre après récupération
+    agents, total = await service.lister_agents_chef(session, chef, page, par_page)
+    
+    # Filtrer pour ne garder que les agents ONG
+    agents = [a for a in agents if a.role in ("agent_ong", "ong")]
     
     agents_response = [_dechiffrer_agent(agent) for agent in agents]
     
     return ListeAgentsResponse(
         agents=agents_response,
-        total=total,
+        total=len(agents_response),
         page=page,
         par_page=par_page,
     )
@@ -227,13 +231,17 @@ async def lister_agents_police(
     if chef.role != "chef_police":
         raise HTTPException(status_code=403, detail="Seul un chef police peut accéder à cette ressource")
     
-    agents, total = await service.lister_agents_chef(session, chef, page, par_page, type_agent="agent_police")
+    # ✅ CORRECTION : Pas de type_agent, on filtre après récupération
+    agents, total = await service.lister_agents_chef(session, chef, page, par_page)
+    
+    # Filtrer pour ne garder que les agents police
+    agents = [a for a in agents if a.role in ("agent_police", "police")]
     
     agents_response = [_dechiffrer_agent(agent) for agent in agents]
     
     return ListeAgentsResponse(
         agents=agents_response,
-        total=total,
+        total=len(agents_response),
         page=page,
         par_page=par_page,
     )
@@ -255,13 +263,17 @@ async def lister_medecins(
     if chef.role != "chef_medical":
         raise HTTPException(status_code=403, detail="Seul un chef médical peut accéder à cette ressource")
     
-    agents, total = await service.lister_agents_chef(session, chef, page, par_page, type_agent="agent_medical")
+    # ✅ CORRECTION : Pas de type_agent, on filtre après récupération
+    agents, total = await service.lister_agents_chef(session, chef, page, par_page)
+    
+    # Filtrer pour ne garder que les médecins
+    agents = [a for a in agents if a.role in ("agent_medical", "medecin")]
     
     agents_response = [_dechiffrer_agent(agent) for agent in agents]
     
     return ListeAgentsResponse(
         agents=agents_response,
-        total=total,
+        total=len(agents_response),
         page=page,
         par_page=par_page,
     )
@@ -283,13 +295,17 @@ async def lister_agents_enrolement(
     if chef.role != "chef_agent":
         raise HTTPException(status_code=403, detail="Seul un chef enrôlement peut accéder à cette ressource")
     
-    agents, total = await service.lister_agents_chef(session, chef, page, par_page, type_agent="agent_terrain")
+    # ✅ CORRECTION : Pas de type_agent, on filtre après récupération
+    agents, total = await service.lister_agents_chef(session, chef, page, par_page)
+    
+    # Filtrer pour ne garder que les agents d'enrôlement
+    agents = [a for a in agents if a.role in ("agent_terrain", "agent")]
     
     agents_response = [_dechiffrer_agent(agent) for agent in agents]
     
     return ListeAgentsResponse(
         agents=agents_response,
-        total=total,
+        total=len(agents_response),
         page=page,
         par_page=par_page,
     )
