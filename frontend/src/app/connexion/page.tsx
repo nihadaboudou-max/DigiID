@@ -15,6 +15,22 @@ import { Logo } from "@/composants/commun/Logo";
 import { useAuthentification } from "@/contextes/authentification";
 import { ErreurAPI } from "@/services/client_api";
 
+// ✅ NOUVEAU : Mapping des redirections par rôle
+const REDIRECTIONS_PAR_ROLE: Record<string, string> = {
+  "super_administrateur": "/super-admin/tableau-de-bord",
+  "administrateur": "/admin/tableau-de-bord",
+  "admin_domaine": "/admin/tableau-de-bord",
+  "chef_ong": "/chef-ong",
+  "chef_police": "/chef-police",
+  "chef_medical": "/chef-medical",
+  "chef_agent": "/chef-enrolement",
+  "citoyen": "/tableau-de-bord",
+  "agent": "/tableau-de-bord",
+  "medecin": "/tableau-de-bord",
+  "police": "/tableau-de-bord",
+  "ong": "/tableau-de-bord",
+};
+
 export default function PageConnexion() {
   const router = useRouter();
   const { seConnecter, utilisateur } = useAuthentification();
@@ -28,17 +44,12 @@ export default function PageConnexion() {
   const [info2fa, setInfo2fa] = useState<string | null>(null);
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
 
-  // Redirection automatique après connexion réussie
+  // ✅ CORRECTION : Redirection automatique après connexion réussie selon le rôle
   useEffect(() => {
     if (utilisateur) {
-      // Déjà connecté, rediriger selon le rôle
-      if (utilisateur.role === "super_administrateur") {
-        router.push("/super-admin/tableau-de-bord");
-      } else if (utilisateur.role === "administrateur") {
-        router.push("/admin/tableau-de-bord");
-      } else {
-        router.push("/tableau-de-bord");
-      }
+      // Déterminer la page de redirection selon le rôle
+      const pageRedirection = REDIRECTIONS_PAR_ROLE[utilisateur.role] || "/tableau-de-bord";
+      router.push(pageRedirection);
     }
   }, [utilisateur, router]);
 
