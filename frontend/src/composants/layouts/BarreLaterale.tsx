@@ -20,6 +20,7 @@ import {
 } from "@/composants/commun/Icones";
 import type { RoleUtilisateur } from "@/types/api";
 import { ROLES_CHEF, ROLES_AGENT, ROLES_ADMIN } from "@/types/api";
+import { icon } from "leaflet";
 
 interface Lien {
   href: string;
@@ -514,6 +515,8 @@ export function BarreLaterale() {
     liens = [
       { href: "/chef-ong", libelle: "Tableau de bord", Icone: IconeAccueil },
       { href: "/chef-ong/agents", libelle: "Agents ONG", Icone: IconeUtilisateur },
+      { href: "/chef-ong/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
+      { href: "/chef-ong/recherche", libelle: "Recherche", Icone: IconeScan },
       { href: "/chef-ong/missions", libelle: "Missions", Icone: IconeEnvoyer },
       { href: "/chef-ong/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
       { href: "/chef-ong/rapports", libelle: "Rapports", Icone: IconePartage },

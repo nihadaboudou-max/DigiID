@@ -1,30 +1,22 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Carte } from "@/composants/commun/Carte";
-import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
-import { Modal } from "@/composants/commun/Modal";
-import { ChampSaisie } from "@/composants/commun/ChampSaisie";
+import { BarreProgression } from "@/composants/commun/BarreProgression";
 import {
-  listerEquipe,
   obtenirStatistiquesChef,
-  type AgentResponse,
+  listerEquipe,
   type StatistiquesChefResponse,
+  type AgentResponse,
 } from "@/services/chefs";
 
 interface DashboardChefProps {
   titre: string;
   sousTitre: string;
-  typeAgent: string; // "police", "medical", "ong", "enrolement"
+  typeAgent: "police" | "medical" | "ong" | "enrolement";
   iconeDashboard: string;
-  creerAgent: (data: any) => Promise<AgentResponse>;
-  champsSupplementaires?: Array<{
-    nom: string;
-    label: string;
-    type: string;
-    required?: boolean;
-  }>;
 }
 
 export default function DashboardChef({
@@ -32,76 +24,48 @@ export default function DashboardChef({
   sousTitre,
   typeAgent,
   iconeDashboard,
-  creerAgent,
-  champsSupplementaires = [],
 }: DashboardChefProps) {
-  const [agents, setAgents] = useState<AgentResponse[]>([]);
   const [stats, setStats] = useState<StatistiquesChefResponse | null>(null);
+  const [agentsRecents, setAgentsRecents] = useState<AgentResponse[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
-  const [afficherFormulaire, setAfficherFormulaire] = useState(false);
-  const [sauvegarde, setSauvegarde] = useState(false);
-
-  // Formulaire
-  const [email, setEmail] = useState("");
-  const [prenom, setPrenom] = useState("");
-  const [nom, setNom] = useState("");
-  const [telephone, setTelephone] = useState("");
-  const [ville, setVille] = useState("");
-  const [champsAdditionnels, setChampsAdditionnels] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    charger();
-  }, []);
+    chargerDonnees();
+    // Rafraîchissement automatique toutes les 30 secondes
+    const interval = setInterval(chargerDonnees, 30000);
+    return () => clearInterval(interval);
+  }, [typeAgent]);
 
-  async function charger() {
-    setChargement(true);
-    setErreur("");
+  async function chargerDonnees() {
     try {
-      const [equipeData, statsData] = await Promise.all([
-        listerEquipe({ par_page: 50 }),
+      setChargement(true);
+      const [statsData, equipeData] = await Promise.all([
         obtenirStatistiquesChef(),
+        listerEquipe({ page: 1, par_page: 5 }),
       ]);
-      setAgents(equipeData.agents || []);
       setStats(statsData);
+      setAgentsRecents(equipeData.agents || []);
+      setErreur("");
     } catch (error: any) {
-      setErreur(error?.message || "Erreur de chargement.");
+      setErreur(error?.message || "Erreur de chargement des données");
     } finally {
       setChargement(false);
     }
   }
 
-  function ouvrirFormulaire() {
-    setEmail("");
-    setPrenom("");
-    setNom("");
-    setTelephone("");
-    setVille("");
-    setChampsAdditionnels({});
-    setAfficherFormulaire(true);
-  }
-
-  async function handleCreer() {
-    if (!email || !prenom || !nom) return;
-    setSauvegarde(true);
-    try {
-      const data: any = { email, prenom, nom, telephone, ville };
-      // Ajouter les champs supplémentaires
-      Object.entries(champsAdditionnels).forEach(([key, value]) => {
-        if (value) data[key] = value;
-      });
-      await creerAgent(data);
-      setAfficherFormulaire(false);
-      charger();
-    } catch (error: any) {
-      setErreur(error?.message || "Erreur lors de la création.");
-    } finally {
-      setSauvegarde(false);
-    }
-  }
+  const getTypeLabel = () => {
+    const labels = {
+      police: "Police",
+      medical: "Médical",
+      ong: "ONG",
+      enrolement: "Enrôlement",
+    };
+    return labels[typeAgent];
+  };
 
   return (
-    <div className="space-y-8 apparition">
+    <div className="space-y-6 apparition">
       {/* En-tête */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between">
         <div>
@@ -110,12 +74,21 @@ export default function DashboardChef({
           </p>
           <h1 className="mt-1">{sousTitre}</h1>
           <p className="text-ardoise-clair mt-2">
-            Gérez votre équipe et créez de nouveaux agents.
+            Tableau de bord en temps réel
           </p>
         </div>
-        <Bouton variante="primaire" onClick={ouvrirFormulaire}>
-          + Nouvel agent
-        </Bouton>
+        <div className="flex gap-2 mt-4 md:mt-0">
+          <Link href={`/chef-${typeAgent}/agents`}>
+            <button className="px-4 py-2 bg-lagune text-white rounded-lg hover:bg-lagune/90 transition-colors text-sm font-semibold">
+              + Nouvel agent
+            </button>
+          </Link>
+          <Link href={`/chef-${typeAgent}/missions`}>
+            <button className="px-4 py-2 bg-ocre text-white rounded-lg hover:bg-ocre/90 transition-colors text-sm font-semibold">
+              + Mission
+            </button>
+          </Link>
+        </div>
       </div>
 
       {/* Erreur */}
@@ -125,50 +98,95 @@ export default function DashboardChef({
         </div>
       )}
 
-      {/* Statistiques */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <div className="carte text-center p-4">
-            <p className="text-3xl font-bold text-lagune">{stats.total_agents}</p>
-            <p className="text-xs uppercase text-ardoise-clair font-semibold">Total agents</p>
+      {/* Statistiques en temps réel */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Carte className="text-center p-6 hover:shadow-lg transition-shadow">
+          <div className="text-4xl font-bold text-lagune mb-2">
+            {chargement ? "..." : stats?.total_agents || 0}
           </div>
-          <div className="carte text-center p-4">
-            <p className="text-3xl font-bold text-succes">{stats.agents_actifs}</p>
-            <p className="text-xs uppercase text-ardoise-clair font-semibold">Actifs</p>
+          <p className="text-xs uppercase text-ardoise-clair font-semibold">
+            Total {getTypeLabel()}
+          </p>
+          <div className="mt-3">
+            <Badge variante="lagune" taille="petit">
+              Actif
+            </Badge>
           </div>
-          <div className="carte text-center p-4">
-            <p className="text-3xl font-bold text-terre">{stats.agents_inactifs}</p>
-            <p className="text-xs uppercase text-ardoise-clair font-semibold">Inactifs</p>
-          </div>
-          <div className="carte text-center p-4">
-            <p className="text-3xl font-bold text-ocre">{stats.agents_crees_aujourdhui}</p>
-            <p className="text-xs uppercase text-ardoise-clair font-semibold">Créés aujourd'hui</p>
-          </div>
-          <div className="carte text-center p-4">
-            <p className="text-3xl font-bold text-jaune">{stats.agents_crees_ce_mois}</p>
-            <p className="text-xs uppercase text-ardoise-clair font-semibold">Ce mois</p>
-          </div>
-        </div>
-      )}
+        </Carte>
 
-      {/* Liste des agents */}
-      <Carte titre={`${agents.length} agent(s) dans votre équipe`}>
+        <Carte className="text-center p-6 hover:shadow-lg transition-shadow">
+          <div className="text-4xl font-bold text-succes mb-2">
+            {chargement ? "..." : stats?.agents_actifs || 0}
+          </div>
+          <p className="text-xs uppercase text-ardoise-clair font-semibold">
+            Agents actifs
+          </p>
+          <div className="mt-3">
+            <BarreProgression
+              valeur={
+                stats?.total_agents
+                  ? (stats.agents_actifs / stats.total_agents) * 100
+                  : 0
+              }
+              couleur="succes"
+            />
+          </div>
+        </Carte>
+
+        <Carte className="text-center p-6 hover:shadow-lg transition-shadow">
+          <div className="text-4xl font-bold text-ocre mb-2">
+            {chargement ? "..." : stats?.agents_crees_aujourdhui || 0}
+          </div>
+          <p className="text-xs uppercase text-ardoise-clair font-semibold">
+            Aujourd'hui
+          </p>
+          <div className="mt-3">
+            <Badge variante="ocre" taille="petit">
+              +{stats?.agents_crees_ce_mois || 0} ce mois
+            </Badge>
+          </div>
+        </Carte>
+
+        <Carte className="text-center p-6 hover:shadow-lg transition-shadow">
+          <div className="text-4xl font-bold text-terre mb-2">
+            {chargement ? "..." : stats?.agents_inactifs || 0}
+          </div>
+          <p className="text-xs uppercase text-ardoise-clair font-semibold">
+            Inactifs
+          </p>
+          <div className="mt-3">
+            <Badge variante="terre" taille="petit">
+              Nécessite action
+            </Badge>
+          </div>
+        </Carte>
+      </div>
+
+      {/* Agents récents */}
+      <Carte titre="Derniers agents créés">
         {chargement ? (
-          <p className="text-ardoise-clair italic text-center py-8">Chargement...</p>
-        ) : agents.length === 0 ? (
+          <div className="text-center py-8">
+            <div className="animate-spin w-8 h-8 border-4 border-lagune border-t-transparent rounded-full mx-auto"></div>
+            <p className="text-ardoise-clair mt-2">Chargement...</p>
+          </div>
+        ) : agentsRecents.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-4xl mb-3">👥</p>
-            <p className="text-ardoise-clair italic mb-4">Aucun agent dans votre équipe.</p>
-            <Bouton variante="primaire" taille="petit" onClick={ouvrirFormulaire}>
-              + Créer votre premier agent
-            </Bouton>
+            <p className="text-ardoise-clair italic mb-4">
+              Aucun agent dans votre équipe.
+            </p>
+            <Link href={`/chef-${typeAgent}/agents`}>
+              <button className="px-4 py-2 bg-lagune text-white rounded-lg hover:bg-lagune/90 transition-colors text-sm font-semibold">
+                + Créer votre premier agent
+              </button>
+            </Link>
           </div>
         ) : (
           <div className="space-y-3">
-            {agents.map((agent) => (
+            {agentsRecents.map((agent) => (
               <div
                 key={agent.id}
-                className="flex items-center justify-between p-4 bg-sable rounded-lg hover:bg-sable-fonce transition-colors"
+                className="flex items-center justify-between p-4 bg-sable rounded-lg hover:bg-sable/80 transition-colors"
               >
                 <div className="flex items-center gap-4 min-w-0 flex-1">
                   <div className="w-12 h-12 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold flex-shrink-0">
@@ -178,7 +196,9 @@ export default function DashboardChef({
                     <p className="font-bold text-ardoise truncate">
                       {agent.prenom} {agent.nom}
                     </p>
-                    <p className="text-sm text-ardoise-clair truncate">{agent.email}</p>
+                    <p className="text-sm text-ardoise-clair truncate">
+                      {agent.email}
+                    </p>
                     <div className="flex items-center gap-2 mt-1">
                       <Badge
                         variante={agent.est_actif ? "succes" : "terre"}
@@ -204,89 +224,38 @@ export default function DashboardChef({
         )}
       </Carte>
 
-      {/* Modal de création */}
-      {afficherFormulaire && (
-        <Modal
-          ouvert={true}
-          titre={`Créer un nouvel agent ${typeAgent}`}
-          surFermeture={() => setAfficherFormulaire(false)}
-        >
-          <div className="space-y-4">
-            <ChampSaisie
-              libelle="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="agent@exemple.com"
-              required
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <ChampSaisie
-                libelle="Prénom"
-                value={prenom}
-                onChange={(e) => setPrenom(e.target.value)}
-                placeholder="Prénom"
-                required
-              />
-              <ChampSaisie
-                libelle="Nom"
-                value={nom}
-                onChange={(e) => setNom(e.target.value)}
-                placeholder="Nom"
-                required
-              />
-            </div>
-            <ChampSaisie
-              libelle="Téléphone"
-              value={telephone}
-              onChange={(e) => setTelephone(e.target.value)}
-              placeholder="+221 77 123 45 67"
-            />
-            <ChampSaisie
-              libelle="Ville"
-              value={ville}
-              onChange={(e) => setVille(e.target.value)}
-              placeholder="Dakar"
-            />
-            {/* Champs supplémentaires */}
-            {champsSupplementaires.map((champ) => (
-              <ChampSaisie
-                key={champ.nom}
-                libelle={champ.label}
-                type={champ.type}
-                value={champsAdditionnels[champ.nom] || ""}
-                onChange={(e) =>
-                  setChampsAdditionnels({
-                    ...champsAdditionnels,
-                    [champ.nom]: e.target.value,
-                  })
-                }
-                placeholder={champ.label}
-                required={champ.required}
-              />
-            ))}
-            <div className="flex gap-3 pt-2">
-              <Bouton
-                variante="primaire"
-                chargement={sauvegarde}
-                onClick={handleCreer}
-              >
-                Créer l'agent
-              </Bouton>
-              <Bouton
-                variante="ghost"
-                onClick={() => setAfficherFormulaire(false)}
-              >
-                Annuler
-              </Bouton>
-            </div>
-          </div>
-        </Modal>
-      )}
+      {/* Actions rapides */}
+      <div className="grid md:grid-cols-3 gap-4">
+        <Link href={`/chef-${typeAgent}/agents`}>
+          <Carte className="cursor-pointer hover:shadow-lg transition-all p-6">
+            <div className="text-3xl mb-3">👥</div>
+            <h3 className="font-bold text-ardoise mb-1">Gérer les agents</h3>
+            <p className="text-sm text-ardoise-clair">
+              Inviter, créer et gérer votre équipe
+            </p>
+          </Carte>
+        </Link>
 
-      <Link href="/police/dashboard">
-        <Bouton variante="ghost">← Retour au dashboard</Bouton>
-      </Link>
+        <Link href={`/chef-${typeAgent}/missions`}>
+          <Carte className="cursor-pointer hover:shadow-lg transition-all p-6">
+            <div className="text-3xl mb-3">📋</div>
+            <h3 className="font-bold text-ardoise mb-1">Missions</h3>
+            <p className="text-sm text-ardoise-clair">
+              Planifier et suivre les missions
+            </p>
+          </Carte>
+        </Link>
+
+        <Link href={`/chef-${typeAgent}/rapports`}>
+          <Carte className="cursor-pointer hover:shadow-lg transition-all p-6">
+            <div className="text-3xl mb-3">📊</div>
+            <h3 className="font-bold text-ardoise mb-1">Rapports</h3>
+            <p className="text-sm text-ardoise-clair">
+              Consulter et générer les rapports
+            </p>
+          </Carte>
+        </Link>
+      </div>
     </div>
   );
 }

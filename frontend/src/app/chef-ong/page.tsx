@@ -1,6 +1,7 @@
 "use client";
+
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
-import DashboardChef from "@/composants/chefs/DashboardChef";
+import DashboardChef from "@/composants/chefs/GestionAgentsChef";
 import { creerAgentONG } from "@/services/chefs";
 
 export default function ChefONGPage() {
@@ -9,8 +10,7 @@ export default function ChefONGPage() {
       <DashboardChef
         titre="Chef ONG"
         sousTitre="Gestion des agents ONG"
-        typeAgent="ONG"
-        iconeDashboard="🤝"
+        typeAgent="ong"  // 
         creerAgent={creerAgentONG}
         champsSupplementaires={[
           { nom: "mission", label: "Mission principale", type: "text" },

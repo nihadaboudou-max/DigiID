@@ -4,22 +4,23 @@ import { useState, useEffect } from "react";
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
-import { Modal } from "@/composants/commun/Modal";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
 
 interface Rapport {
   id: string;
   titre: string;
-  type: string;
+  type: "activite" | "mission" | "financier" | "beneficiaires";
+  description?: string;
   date_creation: string;
   statut: "brouillon" | "valide" | "archive";
+  auteur: string;
 }
 
 interface RapportsChefProps {
   titre: string;
   sousTitre: string;
-  typeOrganisation: string;
+  typeOrganisation: "police" | "medical" | "ong" | "enrolement";
 }
 
 export default function RapportsChef({
@@ -32,10 +33,13 @@ export default function RapportsChef({
   const [erreur, setErreur] = useState("");
   const [afficherFormulaire, setAfficherFormulaire] = useState(false);
   const [sauvegarde, setSauvegarde] = useState(false);
+  const [filtreType, setFiltreType] = useState<string>("tous");
+  const [filtreStatut, setFiltreStatut] = useState<string>("tous");
+  const [recherche, setRecherche] = useState("");
 
   const [formData, setFormData] = useState({
     titre: "",
-    type: "activite",
+    type: "activite" as "activite" | "mission" | "financier" | "beneficiaires",
     description: "",
   });
 
@@ -45,30 +49,54 @@ export default function RapportsChef({
 
   async function chargerRapports() {
     setChargement(true);
-    // Simulation
-    setTimeout(() => {
-      setRapports([
-        {
-          id: "1",
-          titre: "Rapport d'activité - Juin 2026",
-          type: "activite",
-          date_creation: "2026-06-30",
-          statut: "valide",
-        },
-      ]);
+    setErreur("");
+    try {
+      // TODO: Remplacer par un appel API réel
+      setTimeout(() => {
+        setRapports([
+          {
+            id: "1",
+            titre: "Rapport d'activité - Juin 2026",
+            type: "activite",
+            description: "Résumé des activités du mois de juin",
+            date_creation: "2026-06-30",
+            statut: "valide",
+            auteur: "Chef ONG",
+          },
+        ]);
+        setChargement(false);
+      }, 500);
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur de chargement.");
       setChargement(false);
-    }, 500);
+    }
   }
 
   async function handleCreer() {
     if (!formData.titre) return;
     setSauvegarde(true);
-    setTimeout(() => {
+    try {
+      // TODO: Appel API réel
+      setTimeout(() => {
+        setSauvegarde(false);
+        setAfficherFormulaire(false);
+        setFormData({ titre: "", type: "activite", description: "" });
+        chargerRapports();
+      }, 1000);
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur lors de la création.");
       setSauvegarde(false);
-      setAfficherFormulaire(false);
-      setFormData({ titre: "", type: "activite", description: "" });
+    }
+  }
+
+  async function handleSupprimer(rapportId: string) {
+    if (!confirm("Supprimer ce rapport ?")) return;
+    try {
+      // TODO: Appel API réel
       chargerRapports();
-    }, 1000);
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur lors de la suppression.");
+    }
   }
 
   const getBadgeStatut = (statut: string) => {
@@ -83,118 +111,271 @@ export default function RapportsChef({
 
   const getTypeLabel = (type: string) => {
     const types: any = {
-      activite: "Activité",
-      mission: "Mission",
-      financier: "Financier",
-      beneficiaires: "Bénéficiaires",
+      activite: "📋 Activité",
+      mission: "🎯 Mission",
+      financier: "💰 Financier",
+      beneficiaires: "👥 Bénéficiaires",
     };
     return types[type] || type;
   };
 
+  const getTypeIcon = (type: string) => {
+    const icons: any = {
+      activite: "📋",
+      mission: "🎯",
+      financier: "💰",
+      beneficiaires: "👥",
+    };
+    return icons[type] || "📄";
+  };
+
+  const rapportsFiltres = rapports.filter((rapport) => {
+    const matchType = filtreType === "tous" || rapport.type === filtreType;
+    const matchStatut = filtreStatut === "tous" || rapport.statut === filtreStatut;
+    const matchRecherche =
+      recherche.trim() === "" ||
+      rapport.titre.toLowerCase().includes(recherche.toLowerCase()) ||
+      (rapport.description || "").toLowerCase().includes(recherche.toLowerCase()) ||
+      rapport.auteur.toLowerCase().includes(recherche.toLowerCase());
+    return matchType && matchStatut && matchRecherche;
+  });
+
+  const statsRapports = {
+    total: rapports.length,
+    brouillons: rapports.filter((r) => r.statut === "brouillon").length,
+    valides: rapports.filter((r) => r.statut === "valide").length,
+    archives: rapports.filter((r) => r.statut === "archive").length,
+  };
+
   return (
-    <div className="space-y-6 apparition">
+    <div className="min-h-screen space-y-6 apparition pb-20">
+      {/* En-tête */}
       <div>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Rapports</p>
+        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
+          📄 Rapports
+        </p>
         <h1>{titre}</h1>
         <p className="text-ardoise-clair mt-2">{sousTitre}</p>
       </div>
 
+      {/* Erreur */}
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
 
-      <div className="flex justify-end">
+      {/* Statistiques rapides */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Carte className="text-center p-4 hover:shadow-lg transition-shadow">
+          <p className="text-2xl font-bold text-lagune">{statsRapports.total}</p>
+          <p className="text-xs text-ardoise-clair">Total</p>
+        </Carte>
+        <Carte className="text-center p-4 hover:shadow-lg transition-shadow">
+          <p className="text-2xl font-bold text-ocre">{statsRapports.brouillons}</p>
+          <p className="text-xs text-ardoise-clair">Brouillons</p>
+        </Carte>
+        <Carte className="text-center p-4 hover:shadow-lg transition-shadow">
+          <p className="text-2xl font-bold text-succes">{statsRapports.valides}</p>
+          <p className="text-xs text-ardoise-clair">Validés</p>
+        </Carte>
+        <Carte className="text-center p-4 hover:shadow-lg transition-shadow">
+          <p className="text-2xl font-bold text-terre">{statsRapports.archives}</p>
+          <p className="text-xs text-ardoise-clair">Archivés</p>
+        </Carte>
+      </div>
+
+      {/* Filtres et actions */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <input
+          type="text"
+          placeholder="Rechercher un rapport..."
+          value={recherche}
+          onChange={(e) => setRecherche(e.target.value)}
+          className="flex-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
+        />
+        <select
+          value={filtreType}
+          onChange={(e) => setFiltreType(e.target.value)}
+          className="px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
+        >
+          <option value="tous">Tous les types</option>
+          <option value="activite">📋 Activité</option>
+          <option value="mission">🎯 Mission</option>
+          <option value="financier">💰 Financier</option>
+          <option value="beneficiaires">👥 Bénéficiaires</option>
+        </select>
+        <select
+          value={filtreStatut}
+          onChange={(e) => setFiltreStatut(e.target.value)}
+          className="px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
+        >
+          <option value="tous">Tous les statuts</option>
+          <option value="brouillon">Brouillons</option>
+          <option value="valide">Validés</option>
+          <option value="archive">Archivés</option>
+        </select>
         <Bouton variante="primaire" onClick={() => setAfficherFormulaire(true)}>
           + Nouveau rapport
         </Bouton>
       </div>
 
-      <Carte titre={`${rapports.length} rapport(s)`}>
+      {/* Liste des rapports */}
+      <Carte titre={`${rapportsFiltres.length} rapport(s)`}>
         {chargement ? (
-          <p className="text-ardoise-clair italic text-center py-8">Chargement...</p>
-        ) : rapports.length === 0 ? (
+          <div className="text-center py-8">
+            <div className="animate-spin w-8 h-8 border-4 border-lagune border-t-transparent rounded-full mx-auto mb-3"></div>
+            <p className="text-ardoise-clair italic">Chargement...</p>
+          </div>
+        ) : rapportsFiltres.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-4xl mb-3">📄</p>
-            <p className="text-ardoise-clair italic">Aucun rapport disponible.</p>
+            <p className="text-ardoise-clair italic">
+              {recherche
+                ? "Aucun rapport ne correspond à votre recherche."
+                : "Aucun rapport disponible."}
+            </p>
+            {!recherche && (
+              <Bouton
+                variante="primaire"
+                className="mt-4"
+                onClick={() => setAfficherFormulaire(true)}
+              >
+                + Créer votre premier rapport
+              </Bouton>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
-            {rapports.map((rapport) => (
+            {rapportsFiltres.map((rapport) => (
               <div
                 key={rapport.id}
-                className="flex items-center justify-between p-4 bg-sable rounded-lg hover:bg-sable/80 transition-colors"
+                className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-sable rounded-lg hover:bg-sable/80 transition-colors gap-3"
               >
                 <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <div className="w-10 h-10 rounded-lg bg-lagune/10 flex items-center justify-center text-lagune flex-shrink-0">
-                    📄
+                  <div className="w-12 h-12 rounded-lg bg-lagune/10 flex items-center justify-center text-2xl flex-shrink-0">
+                    {getTypeIcon(rapport.type)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold text-ardoise truncate">{rapport.titre}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-ardoise-clair">{getTypeLabel(rapport.type)}</span>
+                    <p className="font-bold text-ardoise truncate">
+                      {rapport.titre}
+                    </p>
+                    {rapport.description && (
+                      <p className="text-sm text-ardoise-clair truncate mt-1">
+                        {rapport.description}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <span className="text-xs text-ardoise-clair">
+                        {getTypeLabel(rapport.type)}
+                      </span>
                       <span className="text-ardoise-clair">•</span>
                       <span className="text-xs text-ardoise-clair">
                         {new Date(rapport.date_creation).toLocaleDateString("fr-FR")}
                       </span>
+                      <span className="text-ardoise-clair">•</span>
+                      <span className="text-xs text-ardoise-clair">
+                        Par {rapport.auteur}
+                      </span>
                     </div>
                   </div>
                 </div>
-                <div className="ml-4">{getBadgeStatut(rapport.statut)}</div>
+                <div className="flex items-center gap-2 sm:ml-4 flex-shrink-0">
+                  {getBadgeStatut(rapport.statut)}
+                  <button
+                    onClick={() => handleSupprimer(rapport.id)}
+                    className="p-2 text-terre hover:bg-terre/10 rounded-lg transition-colors"
+                    title="Supprimer"
+                  >
+                    🗑️
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         )}
       </Carte>
 
+      {/* Modal de création - CORRIGÉ : Plein écran */}
       {afficherFormulaire && (
-        <Modal
-          ouvert={true}
-          titre="Nouveau rapport"
-          surFermeture={() => setAfficherFormulaire(false)}
-        >
-          <div className="space-y-4">
-            <ChampSaisie
-              libelle="Titre du rapport"
-              value={formData.titre}
-              onChange={(e) => setFormData({ ...formData, titre: e.target.value })}
-              placeholder="Ex: Rapport mensuel d'activité"
-              required
-            />
-            <div>
-              <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
-                Type de rapport
-              </label>
-              <select
-                value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
-              >
-                <option value="activite">Activité</option>
-                <option value="mission">Mission</option>
-                <option value="financier">Financier</option>
-                <option value="beneficiaires">Bénéficiaires</option>
-              </select>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            {/* Header sticky */}
+            <div className="sticky top-0 bg-white border-b border-ardoise-clair/10 p-6 rounded-t-xl z-10">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-ardoise">
+                  📄 Nouveau rapport
+                </h2>
+                <button
+                  onClick={() => setAfficherFormulaire(false)}
+                  className="text-ardoise-clair hover:text-ardoise transition-colors text-2xl leading-none"
+                  aria-label="Fermer"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
-                Description
-              </label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
-                rows={4}
-                placeholder="Décrivez le contenu du rapport..."
+
+            {/* Contenu */}
+            <div className="p-6 space-y-4">
+              <ChampSaisie
+                libelle="Titre du rapport"
+                value={formData.titre}
+                onChange={(e) => setFormData({ ...formData, titre: e.target.value })}
+                placeholder="Ex: Rapport mensuel d'activité"
+                required
               />
-            </div>
-            <div className="flex gap-3 pt-2">
-              <Bouton variante="primaire" chargement={sauvegarde} onClick={handleCreer}>
-                Créer le rapport
-              </Bouton>
-              <Bouton variante="ghost" onClick={() => setAfficherFormulaire(false)}>
-                Annuler
-              </Bouton>
+              <div>
+                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
+                  Type de rapport
+                </label>
+                <select
+                  value={formData.type}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      type: e.target.value as any,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
+                >
+                  <option value="activite">📋 Activité</option>
+                  <option value="mission">🎯 Mission</option>
+                  <option value="financier">💰 Financier</option>
+                  <option value="beneficiaires">👥 Bénéficiaires</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
+                  Description
+                </label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) =>
+                    setFormData({ ...formData, description: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
+                  rows={5}
+                  placeholder="Décrivez le contenu du rapport..."
+                />
+              </div>
+
+              {/* Footer avec boutons */}
+              <div className="flex gap-3 pt-4 border-t border-ardoise-clair/10">
+                <Bouton
+                  variante="primaire"
+                  chargement={sauvegarde}
+                  onClick={handleCreer}
+                  className="flex-1"
+                >
+                  Créer le rapport
+                </Bouton>
+                <Bouton
+                  variante="ghost"
+                  onClick={() => setAfficherFormulaire(false)}
+                >
+                  Annuler
+                </Bouton>
+              </div>
             </div>
           </div>
-        </Modal>
+        </div>
       )}
     </div>
   );
