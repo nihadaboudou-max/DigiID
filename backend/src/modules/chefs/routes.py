@@ -183,6 +183,118 @@ async def lister_mon_equipe(
     )
 
 
+@routeur_chefs.get(
+    "/ong/agents",
+    response_model=ListeAgentsResponse,
+)
+async def lister_agents_ong(
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    page: int = Query(1, ge=1),
+    par_page: int = Query(20, ge=1, le=100),
+):
+    """Liste les agents ONG créés par le chef ONG."""
+    chef = await verifier_est_chef(chef)
+    
+    if chef.role != "chef_ong":
+        raise HTTPException(status_code=403, detail="Seul un chef ONG peut accéder à cette ressource")
+    
+    agents, total = await service.lister_agents_chef(session, chef, page, par_page, type_agent="agent_ong")
+    
+    agents_response = [_dechiffrer_agent(agent) for agent in agents]
+    
+    return ListeAgentsResponse(
+        agents=agents_response,
+        total=total,
+        page=page,
+        par_page=par_page,
+    )
+
+
+@routeur_chefs.get(
+    "/police/agents",
+    response_model=ListeAgentsResponse,
+)
+async def lister_agents_police(
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    page: int = Query(1, ge=1),
+    par_page: int = Query(20, ge=1, le=100),
+):
+    """Liste les agents police créés par le chef police."""
+    chef = await verifier_est_chef(chef)
+    
+    if chef.role != "chef_police":
+        raise HTTPException(status_code=403, detail="Seul un chef police peut accéder à cette ressource")
+    
+    agents, total = await service.lister_agents_chef(session, chef, page, par_page, type_agent="agent_police")
+    
+    agents_response = [_dechiffrer_agent(agent) for agent in agents]
+    
+    return ListeAgentsResponse(
+        agents=agents_response,
+        total=total,
+        page=page,
+        par_page=par_page,
+    )
+
+
+@routeur_chefs.get(
+    "/medical/medecins",
+    response_model=ListeAgentsResponse,
+)
+async def lister_medecins(
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    page: int = Query(1, ge=1),
+    par_page: int = Query(20, ge=1, le=100),
+):
+    """Liste les médecins créés par le chef médical."""
+    chef = await verifier_est_chef(chef)
+    
+    if chef.role != "chef_medical":
+        raise HTTPException(status_code=403, detail="Seul un chef médical peut accéder à cette ressource")
+    
+    agents, total = await service.lister_agents_chef(session, chef, page, par_page, type_agent="agent_medical")
+    
+    agents_response = [_dechiffrer_agent(agent) for agent in agents]
+    
+    return ListeAgentsResponse(
+        agents=agents_response,
+        total=total,
+        page=page,
+        par_page=par_page,
+    )
+
+
+@routeur_chefs.get(
+    "/enrolement/agents",
+    response_model=ListeAgentsResponse,
+)
+async def lister_agents_enrolement(
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    page: int = Query(1, ge=1),
+    par_page: int = Query(20, ge=1, le=100),
+):
+    """Liste les agents enrôlement créés par le chef enrôlement."""
+    chef = await verifier_est_chef(chef)
+    
+    if chef.role != "chef_agent":
+        raise HTTPException(status_code=403, detail="Seul un chef enrôlement peut accéder à cette ressource")
+    
+    agents, total = await service.lister_agents_chef(session, chef, page, par_page, type_agent="agent_terrain")
+    
+    agents_response = [_dechiffrer_agent(agent) for agent in agents]
+    
+    return ListeAgentsResponse(
+        agents=agents_response,
+        total=total,
+        page=page,
+        par_page=par_page,
+    )
+
+
 # =============================================================================
 # Statistiques
 # =============================================================================
