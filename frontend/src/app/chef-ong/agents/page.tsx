@@ -10,9 +10,8 @@ export default function ChefONGAgentsPage() {
       <GestionAgentsChef
         titre="Agents ONG"
         sousTitre="Gérez votre équipe d'agents ONG"
-        typeAgent="ONG"
+        typeAgent="ong"  // ✅ minuscules
         creerAgent={creerAgentONG}
-        listerAgents={listerAgentsONG}
         champsSupplementaires={[
           { nom: "mission", label: "Mission principale", type: "text" },
           { nom: "zone_intervention", label: "Zone d'intervention", type: "text" },
