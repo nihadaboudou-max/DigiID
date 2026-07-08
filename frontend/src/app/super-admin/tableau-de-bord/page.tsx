@@ -27,43 +27,6 @@ interface TechnologieCard {
 }
 
 const CARTES_TECHNOLOGIES: TechnologieCard[] = [
-  // ─── NOUVEAU : Gestion organisationnelle ───
-  {
-    id: "domaines",
-    titre: "Domaines",
-    description: "Créer et gérer les domaines organisationnels",
-    icone: "🏢",
-    href: "/super-admin/domaines",
-    statut: "actif",
-    technologies: ["CRUD", "Organisation", "Multi-tenant"],
-  },
-  {
-    id: "departements",
-    titre: "Départements",
-    description: "Structurer les départements par domaine",
-    icone: "🏛️",
-    href: "/super-admin/departements",
-    statut: "actif",
-    technologies: ["Hiérarchie", "Cloisonnement", "Rôles"],
-  },
-  {
-    id: "invitations",
-    titre: "Invitations",
-    description: "Inviter des administrateurs et chefs de département",
-    icone: "✉️",
-    href: "/super-admin/invitations",
-    statut: "actif",
-    technologies: ["Email", "Tokens", "Sécurité"],
-  },
-  {
-    id: "equipes",
-    titre: "Équipes",
-    description: "Créer et gérer les équipes par département",
-    icone: "👥",
-    href: "/super-admin/equipes",
-    statut: "actif",
-    technologies: ["Membres", "Rôles", "Collaboration"],
-  },
   // ─── EXISTANT : Administration ───
   {
     id: "administrateurs",
@@ -82,15 +45,6 @@ const CARTES_TECHNOLOGIES: TechnologieCard[] = [
     href: "/super-admin/droits",
     statut: "actif",
     technologies: ["RBAC", "Permissions", "Rôles"],
-  },
-  {
-    id: "droits-ui",
-    titre: "Matrice des droits UI",
-    description: "Configuration fine des modules UI accessibles par chaque rôle",
-    icone: "🎛️",
-    href: "/super-admin/droits-ui",
-    statut: "actif",
-    technologies: ["Modules UI", "Toggle", "Overrides"],
   },
   {
     id: "statistiques",
@@ -127,24 +81,6 @@ const CARTES_TECHNOLOGIES: TechnologieCard[] = [
     href: "/super-admin/configuration",
     statut: "actif",
     technologies: ["Flags", "Config", "Système"],
-  },
-  {
-    id: "reconnaissance-faciale",
-    titre: "Reconnaissance faciale",
-    description: "Vérification visuelle, liveness, matching biométrique",
-    icone: "📸",
-    href: "/super-admin/statistiques",
-    statut: "actif",
-    technologies: ["Face API", "Liveness", "Matching"],
-  },
-  {
-    id: "ocr-cni",
-    titre: "OCR & CNI",
-    description: "Scan de CNI, extraction MRZ, validation documents",
-    icone: "🪪",
-    href: "/super-admin/statistiques",
-    statut: "actif",
-    technologies: ["OCR", "MRZ", "Documents"],
   },
   {
     id: "mon-profil",
