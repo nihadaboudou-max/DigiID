@@ -9,7 +9,7 @@ export default function ChefONGMissionsPage() {
       <GestionMissionsChef
         titre="Missions ONG"
         sousTitre="Planifiez et suivez vos missions sur le terrain"
-        typeOrganisation="ONG"
+        typeOrganisation="ong"
       />
     </EnvelopperEspaceProtege>
   );

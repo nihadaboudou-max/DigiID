@@ -9,7 +9,7 @@ export default function ChefONGRapportsPage() {
       <RapportsChef
         titre="Rapports ONG"
         sousTitre="Consultez et générez les rapports d'activité"
-        typeOrganisation="ONG"
+        typeOrganisation="ong"
       />
     </EnvelopperEspaceProtege>
   );
