@@ -1,6 +1,6 @@
 "use client";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
-import DashboardChef from "@/composants/chefs/DashboardChef";
+import DashboardChef from "@/composants/chefs/GestionAgentsChef";
 import { creerAgentPolice } from "@/services/chefs";
 
 export default function ChefPolicePage() {
@@ -10,7 +10,6 @@ export default function ChefPolicePage() {
         titre="Chef Police"
         sousTitre="Gestion des agents police"
         typeAgent="police"
-        iconeDashboard="👮"
         creerAgent={creerAgentPolice}
         champsSupplementaires={[
           { nom: "matricule", label: "Matricule", type: "text" },

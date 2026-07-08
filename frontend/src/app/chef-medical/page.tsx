@@ -1,6 +1,6 @@
 "use client";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
-import DashboardChef from "@/composants/chefs/DashboardChef";
+import DashboardChef from "@/composants/chefs/GestionAgentsChef";
 import { creerMedecin } from "@/services/chefs";
 
 export default function ChefMedicalPage() {
@@ -9,8 +9,7 @@ export default function ChefMedicalPage() {
       <DashboardChef
         titre="Chef Médical"
         sousTitre="Gestion des médecins"
-        typeAgent="médical"
-        iconeDashboard=""
+        typeAgent="medical"
         creerAgent={creerMedecin}
         champsSupplementaires={[
           { nom: "specialite", label: "Spécialité", type: "text", required: true },
