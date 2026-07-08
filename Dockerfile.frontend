@@ -10,8 +10,9 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# 🔧 npm à jour
-RUN npm install -g npm@latest && npm cache clean --force
+# ✅ CORRECTION : Suppression de npm@latest (incompatible avec Node 20)
+# npm 10.8.2 fourni avec node:20-alpine est suffisant
+# RUN npm install -g npm@latest && npm cache clean --force  ← SUPPRIMÉ
 
 # 🔧 Installer explicitement le binaire SWC Alpine
 RUN npm install @next/swc-linux-x64-musl --no-save 2>/dev/null || true
