@@ -1,17 +1,21 @@
 /**
  * Service API pour le module Chefs.
  * Permet aux chefs de département de créer et gérer leurs agents.
- *
- * ✅ Utilise clientAPI centralisé pour :
- *   - Gestion automatique du token JWT
- *   - Rafraîchissement automatique (401)
- *   - Gestion uniforme des erreurs
  */
 import { clientAPI } from "./client_api";
 
 // =============================================================================
 // TYPES
 // =============================================================================
+
+export interface InvitationAgentCreate {
+  email: string;
+  prenom?: string;
+  nom?: string;
+  telephone?: string;
+  ville?: string;
+  message?: string;
+}
 
 export interface AgentPoliceCreate {
   email: string;
@@ -63,7 +67,18 @@ export interface AgentResponse {
   departement_id: string | null;
   superieur_id: string | null;
   est_actif: boolean;
+  ville?: string;
   date_creation: string;
+}
+
+export interface InvitationResponse {
+  id: string;
+  email: string;
+  role: string;
+  statut: "en_attente" | "acceptee" | "expiree" | "annulee";
+  date_creation: string;
+  date_expiration: string;
+  date_acceptation: string | null;
 }
 
 export interface ListeAgentsResponse {
@@ -83,12 +98,65 @@ export interface StatistiquesChefResponse {
 }
 
 // =============================================================================
-// CRÉATION D'AGENTS
+// INVITATIONS - NOUVEAU !
 // =============================================================================
 
 /**
- * Crée un agent police (réservé aux chefs police).
+ * Envoie une invitation à un futur agent.
  */
+export async function inviterAgent(
+  typeChef: "ong" | "police" | "medical" | "enrolement",
+  data: InvitationAgentCreate
+): Promise<InvitationResponse> {
+  return clientAPI.post<InvitationResponse>(
+    `/api/v1/chefs/${typeChef}/invitations`,
+    data,
+    { authentifie: true }
+  );
+}
+
+/**
+ * Liste les invitations envoyées par le chef.
+ */
+export async function listerInvitations(params?: {
+  page?: number;
+  par_page?: number;
+  statut?: string;
+}): Promise<{ invitations: InvitationResponse[]; total: number }> {
+  return clientAPI.get<any>(
+    "/api/v1/chefs/invitations",
+    {
+      authentifie: true,
+      params: params as Record<string, unknown>,
+    }
+  );
+}
+
+/**
+ * Annule une invitation en attente.
+ */
+export async function annulerInvitation(invitationId: string): Promise<void> {
+  return clientAPI.delete<void>(
+    `/api/v1/chefs/invitations/${invitationId}`,
+    { authentifie: true }
+  );
+}
+
+/**
+ * Renvoie une invitation.
+ */
+export async function renvoyerInvitation(invitationId: string): Promise<InvitationResponse> {
+  return clientAPI.post<InvitationResponse>(
+    `/api/v1/chefs/invitations/${invitationId}/renvoyer`,
+    undefined,
+    { authentifie: true }
+  );
+}
+
+// =============================================================================
+// CRÉATION DIRECTE D'AGENTS (sans invitation)
+// =============================================================================
+
 export async function creerAgentPolice(
   data: AgentPoliceCreate
 ): Promise<AgentResponse> {
@@ -99,9 +167,6 @@ export async function creerAgentPolice(
   );
 }
 
-/**
- * Crée un médecin (réservé aux chefs médicaux).
- */
 export async function creerMedecin(
   data: MedecinCreate
 ): Promise<AgentResponse> {
@@ -112,9 +177,6 @@ export async function creerMedecin(
   );
 }
 
-/**
- * Crée un agent ONG (réservé aux chefs ONG).
- */
 export async function creerAgentONG(
   data: AgentONGCreate
 ): Promise<AgentResponse> {
@@ -125,9 +187,6 @@ export async function creerAgentONG(
   );
 }
 
-/**
- * Crée un agent enrôlement (réservé aux chefs enrôlement).
- */
 export async function creerAgentEnrolement(
   data: AgentEnrolementCreate
 ): Promise<AgentResponse> {
@@ -142,9 +201,6 @@ export async function creerAgentEnrolement(
 // LISTE DES AGENTS
 // =============================================================================
 
-/**
- * Liste les agents créés par le chef connecté (tous types confondus).
- */
 export async function listerEquipe(params?: {
   page?: number;
   par_page?: number;
@@ -158,9 +214,6 @@ export async function listerEquipe(params?: {
   );
 }
 
-/**
- * Liste les agents ONG créés par le chef ONG connecté.
- */
 export async function listerAgentsONG(params?: {
   page?: number;
   par_page?: number;
@@ -174,9 +227,6 @@ export async function listerAgentsONG(params?: {
   );
 }
 
-/**
- * Liste les agents police créés par le chef police connecté.
- */
 export async function listerAgentsPolice(params?: {
   page?: number;
   par_page?: number;
@@ -190,9 +240,6 @@ export async function listerAgentsPolice(params?: {
   );
 }
 
-/**
- * Liste les médecins créés par le chef médical connecté.
- */
 export async function listerMedecins(params?: {
   page?: number;
   par_page?: number;
@@ -206,9 +253,6 @@ export async function listerMedecins(params?: {
   );
 }
 
-/**
- * Liste les agents d'enrôlement créés par le chef enrôlement connecté.
- */
 export async function listerAgentsEnrolement(params?: {
   page?: number;
   par_page?: number;
@@ -223,12 +267,9 @@ export async function listerAgentsEnrolement(params?: {
 }
 
 // =============================================================================
-// STATISTIQUES
+// STATISTIQUES EN TEMPS RÉEL
 // =============================================================================
 
-/**
- * Obtient les statistiques pour le dashboard du chef.
- */
 export async function obtenirStatistiquesChef(): Promise<StatistiquesChefResponse> {
   return clientAPI.get<StatistiquesChefResponse>(
     "/api/v1/chefs/statistiques",
@@ -237,12 +278,9 @@ export async function obtenirStatistiquesChef(): Promise<StatistiquesChefRespons
 }
 
 // =============================================================================
-// GESTION DES AGENTS (suspendre, réactiver, supprimer)
+// GESTION DES AGENTS
 // =============================================================================
 
-/**
- * Suspend un agent.
- */
 export async function suspendreAgent(agentId: string): Promise<AgentResponse> {
   return clientAPI.patch<AgentResponse>(
     `/api/v1/chefs/agents/${agentId}/suspendre`,
@@ -251,9 +289,6 @@ export async function suspendreAgent(agentId: string): Promise<AgentResponse> {
   );
 }
 
-/**
- * Réactive un agent suspendu.
- */
 export async function reactiverAgent(agentId: string): Promise<AgentResponse> {
   return clientAPI.patch<AgentResponse>(
     `/api/v1/chefs/agents/${agentId}/reactiver`,
@@ -262,9 +297,6 @@ export async function reactiverAgent(agentId: string): Promise<AgentResponse> {
   );
 }
 
-/**
- * Supprime un agent.
- */
 export async function supprimerAgent(agentId: string): Promise<void> {
   return clientAPI.delete<void>(
     `/api/v1/chefs/agents/${agentId}`,
