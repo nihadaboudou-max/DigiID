@@ -9,7 +9,7 @@ export default function ChefONGStatistiquesPage() {
       <StatistiquesChef
         titre="Statistiques ONG"
         sousTitre="Suivez les performances de votre équipe"
-        typeOrganisation="ONG"
+        typeOrganisation="ong"
       />
     </EnvelopperEspaceProtege>
   );
