@@ -65,6 +65,47 @@ const LIENS_SUPER_ADMIN_ACTIVITES: Lien[] = [
   { href: "/super-admin/activites/ong", libelle: "ONG", Icone: IconePartage },
 ];
 
+// ✅ NOUVEAU : Liens pour les CHEFS de département
+const LIENS_CHEF_ONG: Lien[] = [
+  { href: "/chef-ong", libelle: "Tableau de bord", Icone: IconeAccueil },
+  { href: "/chef-ong/agents", libelle: "Agents ONG", Icone: IconeUtilisateur },
+  { href: "/chef-ong/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
+  { href: "/chef-ong/recherche", libelle: "Recherche", Icone: IconeScan },
+  { href: "/chef-ong/missions", libelle: "Missions", Icone: IconePartage },
+  { href: "/chef-ong/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
+  { href: "/chef-ong/rapports", libelle: "Rapports", Icone: IconeJournal },
+];
+
+const LIENS_CHEF_POLICE: Lien[] = [
+  { href: "/chef-police", libelle: "Tableau de bord", Icone: IconeAccueil },
+  { href: "/chef-police/agents", libelle: "Agents Police", Icone: IconeUtilisateur },
+  { href: "/chef-police/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
+  { href: "/chef-police/recherche", libelle: "Recherche", Icone: IconeScan },
+  { href: "/chef-police/missions", libelle: "Missions", Icone: IconePartage },
+  { href: "/chef-police/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
+  { href: "/chef-police/rapports", libelle: "Rapports", Icone: IconeJournal },
+];
+
+const LIENS_CHEF_MEDICAL: Lien[] = [
+  { href: "/chef-medical", libelle: "Tableau de bord", Icone: IconeAccueil },
+  { href: "/chef-medical/agents", libelle: "Médecins", Icone: IconeUtilisateur },
+  { href: "/chef-medical/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
+  { href: "/chef-medical/recherche", libelle: "Recherche", Icone: IconeScan },
+  { href: "/chef-medical/missions", libelle: "Missions", Icone: IconePartage },
+  { href: "/chef-medical/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
+  { href: "/chef-medical/rapports", libelle: "Rapports", Icone: IconeJournal },
+];
+
+const LIENS_CHEF_ENROLEMENT: Lien[] = [
+  { href: "/chef-enrolement", libelle: "Tableau de bord", Icone: IconeAccueil },
+  { href: "/chef-enrolement/agents", libelle: "Agents terrain", Icone: IconeUtilisateur },
+  { href: "/chef-enrolement/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
+  { href: "/chef-enrolement/recherche", libelle: "Recherche", Icone: IconeScan },
+  { href: "/chef-enrolement/missions", libelle: "Missions", Icone: IconePartage },
+  { href: "/chef-enrolement/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
+  { href: "/chef-enrolement/rapports", libelle: "Rapports", Icone: IconeJournal },
+];
+
 // ---- Composant section pliable mobile ----
 function SectionPlieMobile({
   titre,
@@ -118,6 +159,12 @@ export function BoutonMenuMobile() {
   const estAgent = utilisateur.role === "agent";
   const estPolice = utilisateur.role === "police";
   const estOng = utilisateur.role === "ong";
+  // ✅ NOUVEAU : Détection des rôles chefs
+  const estChefOng = utilisateur.role === "chef_ong";
+  const estChefPolice = utilisateur.role === "chef_police";
+  const estChefMedical = utilisateur.role === "chef_medical";
+  const estChefEnrolement = utilisateur.role === "chef_agent";
+  const estChef = estChefOng || estChefPolice || estChefMedical || estChefEnrolement;
   const estProfessionnel = estMedecin || estAgent || estPolice || estOng;
 
   const initiales = utilisateur.prenom
@@ -136,6 +183,22 @@ export function BoutonMenuMobile() {
     couleurSection = "text-terre";
     bgCercle = "bg-terre";
     titreSection = "Admin";
+  } else if (estChefOng) {
+    couleurSection = "text-ocre";
+    bgCercle = "bg-ocre";
+    titreSection = "Chef ONG";
+  } else if (estChefPolice) {
+    couleurSection = "text-terre";
+    bgCercle = "bg-terre";
+    titreSection = "Chef Police";
+  } else if (estChefMedical) {
+    couleurSection = "text-lagune";
+    bgCercle = "bg-lagune";
+    titreSection = "Chef Médical";
+  } else if (estChefEnrolement) {
+    couleurSection = "text-lagune";
+    bgCercle = "bg-lagune";
+    titreSection = "Chef Enrôlement";
   } else if (estMedecin) {
     couleurSection = "text-lagune";
     bgCercle = "bg-lagune";
@@ -356,6 +419,110 @@ export function BoutonMenuMobile() {
               )}
 
               {/* ============================================================ */}
+              {/* ✅ NOUVEAU : CHEFS DE DÉPARTEMENT */}
+              {/* ============================================================ */}
+
+              {/* Chef ONG */}
+              {estChefOng && (
+                <>
+                  <SectionPlieMobile titre="Chef ONG" couleur="text-ocre" initialOuvert={true}>
+                    <div className="pl-2">
+                      {LIENS_CHEF_ONG.map(({ href, libelle, Icone }) => {
+                        const actif = pathname === href || pathname.startsWith(href);
+                        return (
+                          <Link key={href} href={href} onClick={() => setOuvert(false)}
+                            className={clsx("flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                              actif ? "bg-sable text-ocre font-semibold" : "text-ardoise hover:bg-sable/60")}>
+                            <div className={clsx("w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                              actif ? "bg-ocre text-white" : "bg-sable-clair text-ardoise-clair")}>
+                              <Icone className="w-3.5 h-3.5" />
+                            </div>
+                            <span>{libelle}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </SectionPlieMobile>
+                  <MenuCitoyenComplet pathname={pathname} setOuvert={setOuvert} />
+                </>
+              )}
+
+              {/* Chef Police */}
+              {estChefPolice && (
+                <>
+                  <SectionPlieMobile titre="Chef Police" couleur="text-terre" initialOuvert={true}>
+                    <div className="pl-2">
+                      {LIENS_CHEF_POLICE.map(({ href, libelle, Icone }) => {
+                        const actif = pathname === href || pathname.startsWith(href);
+                        return (
+                          <Link key={href} href={href} onClick={() => setOuvert(false)}
+                            className={clsx("flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                              actif ? "bg-sable text-terre font-semibold" : "text-ardoise hover:bg-sable/60")}>
+                            <div className={clsx("w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                              actif ? "bg-terre text-white" : "bg-sable-clair text-ardoise-clair")}>
+                              <Icone className="w-3.5 h-3.5" />
+                            </div>
+                            <span>{libelle}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </SectionPlieMobile>
+                  <MenuCitoyenComplet pathname={pathname} setOuvert={setOuvert} />
+                </>
+              )}
+
+              {/* Chef Médical */}
+              {estChefMedical && (
+                <>
+                  <SectionPlieMobile titre="Chef Médical" couleur="text-lagune" initialOuvert={true}>
+                    <div className="pl-2">
+                      {LIENS_CHEF_MEDICAL.map(({ href, libelle, Icone }) => {
+                        const actif = pathname === href || pathname.startsWith(href);
+                        return (
+                          <Link key={href} href={href} onClick={() => setOuvert(false)}
+                            className={clsx("flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                              actif ? "bg-sable text-lagune font-semibold" : "text-ardoise hover:bg-sable/60")}>
+                            <div className={clsx("w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair")}>
+                              <Icone className="w-3.5 h-3.5" />
+                            </div>
+                            <span>{libelle}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </SectionPlieMobile>
+                  <MenuCitoyenComplet pathname={pathname} setOuvert={setOuvert} />
+                </>
+              )}
+
+              {/* Chef Enrôlement */}
+              {estChefEnrolement && (
+                <>
+                  <SectionPlieMobile titre="Chef Enrôlement" couleur="text-lagune" initialOuvert={true}>
+                    <div className="pl-2">
+                      {LIENS_CHEF_ENROLEMENT.map(({ href, libelle, Icone }) => {
+                        const actif = pathname === href || pathname.startsWith(href);
+                        return (
+                          <Link key={href} href={href} onClick={() => setOuvert(false)}
+                            className={clsx("flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                              actif ? "bg-sable text-lagune font-semibold" : "text-ardoise hover:bg-sable/60")}>
+                            <div className={clsx("w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair")}>
+                              <Icone className="w-3.5 h-3.5" />
+                            </div>
+                            <span>{libelle}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </SectionPlieMobile>
+                  <MenuCitoyenComplet pathname={pathname} setOuvert={setOuvert} />
+                </>
+              )}
+
+              {/* ============================================================ */}
               {/* RÔLES PROFESSIONNELS (Médecin, Agent, Police, ONG) */}
               {/* Chaque rôle a son menu pro + le menu citoyen complet */}
               {/* ============================================================ */}
@@ -497,7 +664,7 @@ export function BoutonMenuMobile() {
               {/* ============================================================ */}
               {/* CITOYEN — utilisateur normal */}
               {/* ============================================================ */}
-              {!estSuperAdminRole && !estAdminRole && !estProfessionnel && (
+              {!estSuperAdminRole && !estAdminRole && !estProfessionnel && !estChef && (
                 <div>
                   <SectionPlieMobile titre="Navigation" couleur="text-lagune" initialOuvert={true}>
                     <div className="pl-2">
@@ -598,7 +765,7 @@ export function BoutonMenuMobile() {
 }
 
 /**
- * Sous-composant : menu citoyen complet (réutilisé par les rôles professionnels)
+ * Sous-composant : menu citoyen complet (réutilisé par les rôles professionnels et les chefs)
  */
 function MenuCitoyenComplet({
   pathname,

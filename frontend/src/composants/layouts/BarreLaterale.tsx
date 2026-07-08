@@ -493,6 +493,8 @@ export function BarreLaterale() {
     liens = [
       { href: "/chef-police", libelle: "Tableau de bord", Icone: IconeAccueil },
       { href: "/chef-police/equipe", libelle: "Mon équipe", Icone: IconeUtilisateur },
+      { href: "/chef-police/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
+      { href: "/chef-police/recherche", libelle: "Recherche", Icone: IconeScan },
       { href: "/chef-police/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
       { href: "/chef-police/activites", libelle: "Activités", Icone: IconeJournal },
       { href: "/chef-police/rapports", libelle: "Rapports", Icone: IconePartage },
@@ -504,6 +506,8 @@ export function BarreLaterale() {
     liens = [
       { href: "/chef-medical", libelle: "Tableau de bord", Icone: IconeAccueil },
       { href: "/chef-medical/medecins", libelle: "Médecins", Icone: IconeUtilisateur },
+      { href: "/chef-medical/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
+      { href: "/chef-medical/recherche", libelle: "Recherche", Icone: IconeScan },
       { href: "/chef-medical/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
       { href: "/chef-medical/activites", libelle: "Activités", Icone: IconeJournal },
       { href: "/chef-medical/rapports", libelle: "Rapports", Icone: IconePartage },
@@ -528,6 +532,8 @@ export function BarreLaterale() {
     liens = [
       { href: "/chef-enrolement", libelle: "Tableau de bord", Icone: IconeAccueil },
       { href: "/chef-enrolement/agents", libelle: "Agents terrain", Icone: IconeUtilisateur },
+      { href: "/chef-enrolement/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
+      { href: "/chef-enrolement/recherche", libelle: "Recherche", Icone: IconeScan },
       { href: "/chef-enrolement/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
       { href: "/chef-enrolement/activites", libelle: "Activités", Icone: IconeJournal },
       { href: "/chef-enrolement/rapports", libelle: "Rapports", Icone: IconePartage },
