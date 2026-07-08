@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import select, func, and_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import Utilisateur
@@ -34,7 +35,34 @@ async def creer_invitation(
     donnees: InvitationCreate,
     cree_par: UUID,
 ) -> Invitation:
-    """Crée une nouvelle invitation."""
+    """
+    Crée une nouvelle invitation.
+    
+    Vérifications effectuées :
+    1. Un compte utilisateur n'existe pas déjà avec cet email
+    2. Une invitation en attente n'existe pas déjà pour cet email
+    
+    Lève :
+        ValueError si un compte existe déjà ou si une invitation est déjà en attente.
+    """
+    # ✅ VÉRIFICATION 1 : Un compte utilisateur existe-t-il déjà avec cet email ?
+    email_hash = hasher_email(donnees.email)
+    resultat_utilisateur = await session.execute(
+        select(Utilisateur).where(
+            and_(
+                Utilisateur.email_hash == email_hash,
+                Utilisateur.est_supprime == False,
+            )
+        )
+    )
+    utilisateur_existant = resultat_utilisateur.scalar_one_or_none()
+    if utilisateur_existant is not None:
+        raise ValueError(
+            f"Un compte existe déjà avec l'email {donnees.email}. "
+            f"Impossible de créer une invitation pour cet utilisateur."
+        )
+    
+    # ✅ VÉRIFICATION 2 : Une invitation en attente existe-t-elle déjà ?
     stmt = select(Invitation).where(
         and_(
             Invitation.email == donnees.email,
@@ -46,6 +74,7 @@ async def creer_invitation(
     if existante:
         raise ValueError(f"Une invitation en attente existe déjà pour {donnees.email}")
     
+    # Créer l'invitation
     invitation = Invitation(
         email=donnees.email,
         role=donnees.role,
@@ -57,7 +86,18 @@ async def creer_invitation(
         date_expiration=datetime.now(timezone.utc) + timedelta(days=donnees.duree_jours),
     )
     session.add(invitation)
-    await session.commit()
+    
+    try:
+        await session.commit()
+    except IntegrityError as e:
+        await session.rollback()
+        # Gestion des race conditions (deux invitations créées en même temps)
+        if "invitation" in str(e.orig).lower():
+            raise ValueError(
+                f"Une invitation existe déjà pour {donnees.email} (créée simultanément)."
+            )
+        raise
+    
     await session.refresh(invitation)
     return invitation
 
@@ -148,6 +188,24 @@ async def valider_invitation(
         await session.commit()
         raise ValueError("Invitation expirée")
     
+    # ✅ VÉRIFICATION SUPPLÉMENTAIRE : L'email n'a-t-il pas été utilisé entre-temps ?
+    email_hash = hasher_email(invitation.email)
+    resultat_utilisateur = await session.execute(
+        select(Utilisateur).where(
+            and_(
+                Utilisateur.email_hash == email_hash,
+                Utilisateur.est_supprime == False,
+            )
+        )
+    )
+    if resultat_utilisateur.scalar_one_or_none() is not None:
+        invitation.statut = "expiree"
+        await session.commit()
+        raise ValueError(
+            f"Un compte existe déjà avec l'email {invitation.email}. "
+            f"Cette invitation ne peut plus être utilisée."
+        )
+    
     token_inscription = secrets.token_urlsafe(32)
     invitation.statut = "acceptee"
     invitation.date_acceptation = datetime.now(timezone.utc)
@@ -168,7 +226,7 @@ async def accepter_invitation_service(
     # 1. Hasher l'email pour l'unicité
     email_hash = hasher_email(invitation.email)
     
-    # Vérifier que l'email n'existe pas déjà
+    # ✅ VÉRIFICATION FINALE : Un compte existe-t-il déjà ? (protection race condition)
     stmt = select(Utilisateur).where(
         and_(
             Utilisateur.email_hash == email_hash,
@@ -197,7 +255,7 @@ async def accepter_invitation_service(
         ville=donnees.ville,
         domaine_id=invitation.domaine_id,
         departement_id=invitation.departement_id,
-        digiid_public=_generer_digiid_public(),  # ✅ AJOUT IMPORTANT
+        digiid_public=_generer_digiid_public(),
         est_actif=True,
         est_email_verifie=True,
         est_supprime=False,
@@ -212,6 +270,22 @@ async def accepter_invitation_service(
     invitation.statut = "acceptee"
     invitation.date_acceptation = datetime.now(timezone.utc)
     
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as e:
+        await session.rollback()
+        # Gestion des race conditions (deux comptes créés en même temps)
+        if "email_hash" in str(e.orig).lower() or "ix_utilisateur_email_hash" in str(e.orig):
+            raise ValueError(
+                f"Un compte a été créé simultanément avec l'email {invitation.email}."
+            )
+        if "digiid_public" in str(e.orig).lower():
+            # Régénérer un DigiID et réessayer
+            utilisateur.digiid_public = _generer_digiid_public()
+            session.add(utilisateur)
+            await session.commit()
+        else:
+            raise
+    
     await session.refresh(utilisateur)
     return utilisateur
