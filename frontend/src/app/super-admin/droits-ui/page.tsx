@@ -1,15 +1,7 @@
 "use client";
 /**
  * Page Super Admin — Matrice des droits UI (version améliorée).
- * Permet au Super Admin de configurer finement les modules UI
- * accessibles par chaque rôle.
- *
- * Améliorations :
- *   - Vue tableau croisé (rôles × modules)
- *   - Statistiques en temps réel
- *   - Actions rapides (dupliquer, reset, exporter)
- *   - Recherche globale
- *   - Indicateurs visuels améliorés
+ * Navigation interactive par modules.
  */
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
@@ -82,18 +74,25 @@ function Contenu() {
   const [modules, setModules] = useState<ModulePermission[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
-  const [vue, setVue] = useState<"tableau" | "liste" | "overrides">("tableau");
   const [recherche, setRecherche] = useState("");
   const [filtreRole, setFiltreRole] = useState<string>("tous");
+  const [moduleSelectionne, setModuleSelectionne] = useState<string | null>(null);
   const [sauvegardeEnCours, setSauvegardeEnCours] = useState<string | null>(null);
   const [succesMessage, setSuccesMessage] = useState<string | null>(null);
-  const [modaleDupliquer, setModaleDupliquer] = useState<{ roleSource: string; roleCible: string } | null>(null);
 
-  // Overrides
-  const [overrideUtilisateurId, setOverrideUtilisateurId] = useState("");
-  const [overrideModules, setOverrideModules] = useState<Record<string, { is_enabled?: boolean; is_read_only?: boolean }>>({});
-  const [overrideEnCours, setOverrideEnCours] = useState(false);
-  const [overrideResultat, setOverrideResultat] = useState<string | null>(null);
+  // Stats
+  const stats = useMemo(() => {
+    const rolesUniques = new Set(modules.map((m) => m.role_name));
+    const modulesUniques = new Set(modules.map((m) => m.module_key));
+    const actives = modules.filter((m) => m.is_enabled).length;
+    return {
+      roles: rolesUniques.size,
+      modules: modulesUniques.size,
+      total: modules.length,
+      actives,
+      tauxActivation: modules.length > 0 ? Math.round((actives / modules.length) * 100) : 0,
+    };
+  }, [modules]);
 
   useEffect(() => {
     chargerMatrice();
@@ -114,31 +113,12 @@ function Contenu() {
         }
       }
       setModules(modulesFallback);
-      if (e instanceof ErreurAPI) {
-        console.warn("⚠️ Droits UI : API indisponible, utilisation du fallback local");
-      }
     } finally {
       setChargement(false);
     }
   };
 
-  // Statistiques
-  const stats = useMemo(() => {
-    const rolesUniques = new Set(modules.map((m) => m.role_name));
-    const modulesUniques = new Set(modules.map((m) => m.module_key));
-    const actives = modules.filter((m) => m.is_enabled).length;
-    const lectureSeule = modules.filter((m) => m.is_read_only).length;
-    return {
-      roles: rolesUniques.size,
-      modules: modulesUniques.size,
-      total: modules.length,
-      actives,
-      lectureSeule,
-      tauxActivation: modules.length > 0 ? Math.round((actives / modules.length) * 100) : 0,
-    };
-  }, [modules]);
-
-  // Modules uniques (lignes du tableau)
+  // Modules uniques filtrés
   const modulesUniques = useMemo(() => {
     const map = new Map<string, { key: string; label: string }>();
     for (const m of modules) {
@@ -154,24 +134,11 @@ function Contenu() {
     );
   }, [modules, recherche]);
 
-  // Rôles uniques (colonnes du tableau)
-  const rolesUniques = useMemo(() => {
-    const roles = Array.from(new Set(modules.map((m) => m.role_name)));
-    return roles
-      .filter((r) => filtreRole === "tous" || r === filtreRole)
-      .sort((a, b) => {
-        const ia = ORDRE_ROLES.indexOf(a);
-        const ib = ORDRE_ROLES.indexOf(b);
-        return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
-      });
-  }, [modules, filtreRole]);
-
-  // Helper : trouver un module par rôle + clé
-  const trouverModule = useCallback(
-    (roleName: string, moduleKey: string) =>
-      modules.find((m) => m.role_name === roleName && m.module_key === moduleKey),
-    [modules]
-  );
+  // Permissions du module sélectionné
+  const permissionsModule = useMemo(() => {
+    if (!moduleSelectionne) return null;
+    return modules.filter((m) => m.module_key === moduleSelectionne);
+  }, [modules, moduleSelectionne]);
 
   // Basculer un module
   const basculerModule = useCallback(
@@ -191,20 +158,12 @@ function Contenu() {
           payload.is_read_only = !module.is_read_only;
           if (payload.is_read_only) payload.is_enabled = true;
         }
-        const resultat = await mettreAJourModuleRole(module.role_name, payload);
-        setModules((prev) =>
-          prev.map((m) =>
-            m.role_name === module.role_name && m.module_key === module.module_key
-              ? { ...m, is_enabled: resultat.is_enabled, is_read_only: resultat.is_read_only }
-              : m
-          )
-        );
-        setSuccesMessage(
-          `${module.module_label || module.module_key} → ${COULEURS_ROLES[module.role_name]?.label || module.role_name} mis à jour`
-        );
+        await mettreAJourModuleRole(module.role_name, payload);
+        await chargerMatrice();
+        setSuccesMessage(`${module.module_label} mis à jour`);
         setTimeout(() => setSuccesMessage(null), 3000);
       } catch (e) {
-        setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la mise à jour");
+        setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur");
       } finally {
         setSauvegardeEnCours(null);
       }
@@ -212,104 +171,20 @@ function Contenu() {
     []
   );
 
-  // Dupliquer les permissions d'un rôle vers un autre
-  const dupliquerPermissions = async () => {
-    if (!modaleDupliquer) return;
-    const { roleSource, roleCible } = modaleDupliquer;
-    setSauvegardeEnCours("duplication");
-    try {
-      const modulesSource = modules.filter((m) => m.role_name === roleSource);
-      for (const mod of modulesSource) {
-        await mettreAJourModuleRole(roleCible, {
-          module_key: mod.module_key,
-          is_enabled: mod.is_enabled,
-          is_read_only: mod.is_read_only,
-        });
-      }
-      await chargerMatrice();
-      setSuccesMessage(`Permissions de "${COULEURS_ROLES[roleSource]?.label || roleSource}" dupliquées vers "${COULEURS_ROLES[roleCible]?.label || roleCible}"`);
-      setTimeout(() => setSuccesMessage(null), 4000);
-      setModaleDupliquer(null);
-    } catch (e) {
-      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la duplication");
-    } finally {
-      setSauvegardeEnCours(null);
-    }
-  };
-
-  // Overrides
-  const sauvegarderOverrides = async () => {
-    if (!overrideUtilisateurId) return;
-    setOverrideEnCours(true);
-    setOverrideResultat(null);
-    try {
-      const result = await modifierOverridesUtilisateur(overrideUtilisateurId, {
-        modules_overrides: overrideModules,
-      });
-      setOverrideResultat(result.message);
-      setOverrideUtilisateurId("");
-      setOverrideModules({});
-      setTimeout(() => setOverrideResultat(null), 5000);
-    } catch (e) {
-      setOverrideResultat(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la sauvegarde");
-    } finally {
-      setOverrideEnCours(false);
-    }
-  };
-
-  // Export CSV
-  const exporterCSV = () => {
-    const lignes = [["Rôle", "Module", "Clé", "Activé", "Lecture seule"]];
-    for (const m of modules) {
-      lignes.push([
-        m.role_name,
-        m.module_label || m.module_key,
-        m.module_key,
-        m.is_enabled ? "Oui" : "Non",
-        m.is_read_only ? "Oui" : "Non",
-      ]);
-    }
-    const csv = lignes.map((l) => l.join(",")).join("\n");
-    const bom = "\uFEFF";
-    const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `droits-ui-${new Date().toISOString().split("T")[0]}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <div className="space-y-4">
       {/* En-tête */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Super administration</p>
-          <h1 className="mt-1 text-2xl">🔐 Configuration des droits UI</h1>
-          <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
-            Configure les modules UI accessibles par chaque rôle. Un module peut être{" "}
-            <strong>activé/désactivé</strong> ou en <strong>lecture seule</strong>.
-          </p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <Bouton variante={vue === "tableau" ? "primaire" : "ghost"} taille="petit" onClick={() => setVue("tableau")}>
-            📊 Tableau
-          </Bouton>
-          <Bouton variante={vue === "liste" ? "primaire" : "ghost"} taille="petit" onClick={() => setVue("liste")}>
-            📋 Liste
-          </Bouton>
-          <Bouton variante={vue === "overrides" ? "primaire" : "ghost"} taille="petit" onClick={() => setVue("overrides")}>
-            👤 Overrides
-          </Bouton>
-        </div>
+      <div>
+        <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Super administration</p>
+        <h1 className="mt-1 text-2xl"> Configuration des droits UI</h1>
+        <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
+          Cliquez sur un module pour configurer ses permissions par rôle.
+        </p>
       </div>
 
       {/* Statistiques */}
       {!chargement && (
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
           <Carte className="text-center p-3">
             <p className="text-2xl font-bold text-lagune">{stats.roles}</p>
             <p className="text-[10px] uppercase text-ardoise-clair font-semibold">Rôles</p>
@@ -327,411 +202,172 @@ function Contenu() {
             <p className="text-[10px] uppercase text-ardoise-clair font-semibold">Activées</p>
           </Carte>
           <Carte className="text-center p-3">
-            <p className="text-2xl font-bold text-ocre">{stats.lectureSeule}</p>
-            <p className="text-[10px] uppercase text-ardoise-clair font-semibold">Lecture seule</p>
-          </Carte>
-          <Carte className="text-center p-3">
             <p className="text-2xl font-bold text-lagune">{stats.tauxActivation}%</p>
-            <p className="text-[10px] uppercase text-ardoise-clair font-semibold">Taux activation</p>
+            <p className="text-[10px] uppercase text-ardoise-clair font-semibold">Taux</p>
           </Carte>
         </div>
       )}
 
-      {/* Messages */}
-      {erreur && (
-        <Alerte variante="info" titre="Mode hors-ligne">
-          {erreur} — Les données affichées sont les valeurs par défaut.
-          <div className="mt-2">
-            <Bouton variante="ghost" taille="petit" onClick={chargerMatrice}>↻ Réessayer</Bouton>
-          </div>
-        </Alerte>
-      )}
-      {succesMessage && (
-        <Alerte variante="succes" titre="✓ Succès">{succesMessage}</Alerte>
-      )}
+      {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
+      {succesMessage && <Alerte variante="succes">{succesMessage}</Alerte>}
 
       {chargement ? (
-        <p className="text-ardoise-clair italic text-center py-6">Chargement de la matrice des droits UI...</p>
+        <p className="text-ardoise-clair italic text-center py-6">Chargement...</p>
       ) : (
-        <>
-          {/* Filtres et actions */}
-          <Carte>
-            <div className="flex flex-wrap gap-3 items-center">
-              <div className="flex-1 min-w-[200px]">
-                <ChampRecherche
-                  placeholder="Rechercher un module..."
-                  value={recherche}
-                  onChange={(e) => setRecherche(e.target.value)}
-                />
-              </div>
+        <div className="grid md:grid-cols-3 gap-4">
+          {/* Sidebar - Liste des modules */}
+          <Carte className="md:col-span-1">
+            <div className="space-y-3">
+              <ChampRecherche
+                placeholder="Rechercher un module..."
+                value={recherche}
+                onChange={(e) => {
+                  setRecherche(e.target.value);
+                  setModuleSelectionne(null);
+                }}
+              />
               <select
                 value={filtreRole}
                 onChange={(e) => setFiltreRole(e.target.value)}
-                className="px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
               >
                 <option value="tous">Tous les rôles</option>
-                {ORDRE_ROLES.filter((r) => rolesUniques.includes(r)).map((r) => (
+                {ORDRE_ROLES.map((r) => (
                   <option key={r} value={r}>
                     {COULEURS_ROLES[r]?.label || r}
                   </option>
                 ))}
               </select>
-              <Bouton variante="ghost" taille="petit" onClick={exporterCSV}>
-                📥 Exporter CSV
-              </Bouton>
-              <Bouton
-                variante="ghost"
-                taille="petit"
-                onClick={() => setModaleDupliquer({ roleSource: "", roleCible: "" })}
-              >
-                📋 Dupliquer
-              </Bouton>
             </div>
-          </Carte>
 
-          {/* Vue Tableau croisé */}
-          {vue === "tableau" && (
-            <Carte>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-ardoise-clair/20">
-                      <th className="text-left p-2 font-semibold text-ardoise sticky left-0 bg-white z-10 min-w-[200px]">
-                        Module
-                      </th>
-                      {rolesUniques.map((role) => {
-                        const couleur = COULEURS_ROLES[role];
-                        return (
-                          <th
-                            key={role}
-                            className={`p-2 text-center font-semibold text-xs uppercase ${couleur?.bg || "bg-gray-100"} ${couleur?.text || "text-gray-700"} min-w-[100px]`}
-                          >
-                            {couleur?.label || role}
-                          </th>
-                        );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {modulesUniques.map((mod) => (
-                      <tr key={mod.key} className="border-b border-ardoise-clair/10 hover:bg-sable/50">
-                        <td className="p-2 sticky left-0 bg-white z-10">
-                          <p className="font-semibold text-ardoise text-sm">{mod.label}</p>
-                          <p className="text-xs text-ardoise-clair font-mono">{mod.key}</p>
-                        </td>
-                        {rolesUniques.map((role) => {
-                          const m = trouverModule(role, mod.key);
-                          if (!m) {
-                            return (
-                              <td key={role} className="p-2 text-center">
-                                <span className="text-ardoise-clair/30">—</span>
-                              </td>
-                            );
-                          }
-                          const cleSauvegarde = `${m.role_name}:${m.module_key}`;
-                          const enSauvegarde = sauvegardeEnCours?.startsWith(cleSauvegarde);
-                          return (
-                            <td key={role} className="p-2 text-center">
-                              <CellulePermission
-                                module={m}
-                                enSauvegarde={!!enSauvegarde}
-                                onToggle={(champ) => basculerModule(m, champ)}
-                              />
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Carte>
-          )}
-
-          {/* Vue Liste */}
-          {vue === "liste" && (
-            <div className="space-y-4">
-              {rolesUniques.map((role) => {
-                const roleModules = modulesFiltresParRole(role, modules, recherche);
-                if (roleModules.length === 0) return null;
-                const couleur = COULEURS_ROLES[role];
+            <div className="mt-4 space-y-1 max-h-[600px] overflow-y-auto">
+              {modulesUniques.map((mod) => {
+                const isSelected = moduleSelectionne === mod.key;
                 return (
-                  <section key={role}>
-                    <div
-                      className={`inline-block px-3 py-1 rounded-lg border text-xs font-bold uppercase mb-2 ${couleur?.bg || "bg-gray-100"} ${couleur?.text || "text-gray-700"} ${couleur?.border || "border-gray-300"}`}
-                    >
-                      {couleur?.label || role}
-                    </div>
-                    <div className="space-y-1.5">
-                      {roleModules.map((mod) => {
-                        const cle = `${mod.role_name}:${mod.module_key}`;
-                        const enSauvegarde = sauvegardeEnCours?.startsWith(cle);
-                        return (
-                          <ModuleLigne
-                            key={cle}
-                            module={mod}
-                            enSauvegarde={!!enSauvegarde}
-                            onToggle={(champ) => basculerModule(mod, champ)}
-                          />
-                        );
-                      })}
-                    </div>
-                  </section>
+                  <button
+                    key={mod.key}
+                    onClick={() => setModuleSelectionne(mod.key)}
+                    className={`w-full text-left p-3 rounded-lg transition-all ${
+                      isSelected
+                        ? "bg-lagune/10 border-2 border-lagune"
+                        : "bg-sable hover:bg-sable/80 border-2 border-transparent"
+                    }`}
+                  >
+                    <p className={`font-semibold text-sm ${isSelected ? "text-lagune" : "text-ardoise"}`}>
+                      {mod.label}
+                    </p>
+                    <p className="text-xs text-ardoise-clair font-mono mt-1">{mod.key}</p>
+                  </button>
                 );
               })}
             </div>
-          )}
+          </Carte>
 
-          {/* Vue Overrides */}
-          {vue === "overrides" && (
-            <Carte titre="👤 Overrides individuels">
-              <p className="text-sm text-ardoise-clair mb-3">
-                Permet de définir des permissions UI spécifiques pour un utilisateur donné, outrepassant les permissions de son rôle.
-              </p>
-              <div className="space-y-3 max-w-lg">
-                <div>
-                  <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
-                    ID de l'utilisateur
-                  </label>
-                  <input
-                    type="text"
-                    value={overrideUtilisateurId}
-                    onChange={(e) => setOverrideUtilisateurId(e.target.value)}
-                    placeholder="UUID de l'utilisateur..."
-                    className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
-                    Modules (JSON)
-                  </label>
-                  <textarea
-                    value={JSON.stringify(overrideModules, null, 2)}
-                    onChange={(e) => {
-                      try {
-                        setOverrideModules(JSON.parse(e.target.value));
-                      } catch {}
-                    }}
-                    rows={6}
-                    className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm font-mono"
-                    placeholder='{"creation_dossier": {"is_enabled": false}}'
-                  />
-                </div>
-                {overrideResultat && (
-                  <div
-                    className={`p-2.5 rounded-lg text-sm ${
-                      overrideResultat.includes("succès")
-                        ? "bg-green-50 text-green-700 border border-green-300"
-                        : "bg-red-50 text-red-700 border border-red-300"
-                    }`}
-                  >
-                    {overrideResultat}
+          {/* Panneau de détails */}
+          <Carte className="md:col-span-2">
+            {moduleSelectionne && permissionsModule ? (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-ardoise">
+                      {permissionsModule[0]?.module_label || permissionsModule[0]?.module_key}
+                    </h2>
+                    <p className="text-sm text-ardoise-clair font-mono">
+                      {permissionsModule[0]?.module_key}
+                    </p>
                   </div>
-                )}
-                <Bouton
-                  variante="primaire"
-                  chargement={overrideEnCours}
-                  disabled={!overrideUtilisateurId}
-                  onClick={sauvegarderOverrides}
-                >
-                  💾 Sauvegarder les overrides
-                </Bouton>
-              </div>
-            </Carte>
-          )}
-        </>
-      )}
+                  <Bouton variante="ghost" taille="petit" onClick={() => setModuleSelectionne(null)}>
+                    ✕ Fermer
+                  </Bouton>
+                </div>
 
-      {/* Modale Duplication */}
-      {modaleDupliquer && (
-        <Modal
-          ouvert={true}
-          surFermeture={() => setModaleDupliquer(null)}
-          titre="📋 Dupliquer les permissions"
-          taille="moyen"
-        >
-          <div className="space-y-4">
-            <p className="text-sm text-ardoise-clair">
-              Copie toutes les permissions d'un rôle vers un autre. Les permissions existantes du rôle cible seront écrasées.
-            </p>
-            <div>
-              <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
-                Rôle source
-              </label>
-              <select
-                value={modaleDupliquer.roleSource}
-                onChange={(e) => setModaleDupliquer({ ...modaleDupliquer, roleSource: e.target.value })}
-                className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
-              >
-                <option value="">-- Sélectionner --</option>
-                {rolesUniques.map((r) => (
-                  <option key={r} value={r}>
-                    {COULEURS_ROLES[r]?.label || r}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
-                Rôle cible
-              </label>
-              <select
-                value={modaleDupliquer.roleCible}
-                onChange={(e) => setModaleDupliquer({ ...modaleDupliquer, roleCible: e.target.value })}
-                className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
-              >
-                <option value="">-- Sélectionner --</option>
-                {rolesUniques.map((r) => (
-                  <option key={r} value={r}>
-                    {COULEURS_ROLES[r]?.label || r}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex gap-2 justify-end pt-2">
-              <Bouton variante="ghost" onClick={() => setModaleDupliquer(null)}>
-                Annuler
-              </Bouton>
-              <Bouton
-                variante="primaire"
-                chargement={sauvegardeEnCours === "duplication"}
-                disabled={!modaleDupliquer.roleSource || !modaleDupliquer.roleCible || modaleDupliquer.roleSource === modaleDupliquer.roleCible}
-                onClick={dupliquerPermissions}
-              >
-                📋 Dupliquer
-              </Bouton>
-            </div>
-          </div>
-        </Modal>
+                <div className="space-y-2">
+                  {permissionsModule.map((perm) => {
+                    const roleConfig = COULEURS_ROLES[perm.role_name];
+                    const cleSauvegarde = `${perm.role_name}:${perm.module_key}`;
+                    const enSauvegarde = sauvegardeEnCours?.startsWith(cleSauvegarde);
+
+                    return (
+                      <div
+                        key={perm.role_name}
+                        className={`flex items-center justify-between p-3 rounded-lg border ${
+                          roleConfig?.bg || "bg-gray-100"
+                        } ${roleConfig?.border || "border-gray-300"}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className={`font-semibold text-sm ${roleConfig?.text || "text-gray-700"}`}>
+                            {roleConfig?.label || perm.role_name}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                          {/* Toggle Activé/Désactivé */}
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <span className="text-xs text-ardoise-clair">
+                              {perm.is_enabled ? "✓ Activé" : "✗ Désactivé"}
+                            </span>
+                            <button
+                              onClick={() => basculerModule(perm, "is_enabled")}
+                              disabled={enSauvegarde}
+                              className={`relative w-10 h-5 rounded-full transition-colors ${
+                                enSauvegarde ? "opacity-50" : perm.is_enabled ? "bg-succes" : "bg-gray-300"
+                              }`}
+                            >
+                              <span
+                                className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                                  perm.is_enabled ? "translate-x-5" : ""
+                                }`}
+                              />
+                            </button>
+                          </label>
+
+                          {/* Toggle Lecture seule */}
+                          {perm.is_enabled && (
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <span className="text-xs text-ardoise-clair">Lecture seule</span>
+                              <button
+                                onClick={() => basculerModule(perm, "is_read_only")}
+                                disabled={enSauvegarde}
+                                className={`relative w-8 h-4 rounded-full transition-colors ${
+                                  enSauvegarde ? "opacity-50" : perm.is_read_only ? "bg-ocre" : "bg-gray-300"
+                                }`}
+                              >
+                                <span
+                                  className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${
+                                    perm.is_read_only ? "translate-x-4" : ""
+                                  }`}
+                                />
+                              </button>
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-4xl mb-3">📋</p>
+                <p className="text-ardoise-clair italic">
+                  {modulesUniques.length === 0
+                    ? "Aucun module trouvé."
+                    : "Sélectionnez un module pour voir ses permissions"}
+                </p>
+              </div>
+            )}
+          </Carte>
+        </div>
       )}
 
       {/* Pied de page */}
       <div className="flex gap-2 pt-3 border-t border-ardoise-clair/10">
         <Link href="/super-admin/droits">
-          <Bouton variante="primaire" taille="petit">← Retour à la gestion des droits</Bouton>
+          <Bouton variante="primaire" taille="petit">← Retour</Bouton>
         </Link>
         <Link href="/super-admin/tableau-de-bord">
           <Bouton variante="ghost" taille="petit">Tableau de bord</Bouton>
         </Link>
-      </div>
-    </div>
-  );
-}
-
-// ---------- Helper : filtrer modules par rôle ----------
-function modulesFiltresParRole(role: string, modules: ModulePermission[], recherche: string) {
-  return modules.filter((m) => {
-    if (m.role_name !== role) return false;
-    if (!recherche) return true;
-    const terme = recherche.toLowerCase();
-    return (
-      (m.module_label || "").toLowerCase().includes(terme) ||
-      m.module_key.toLowerCase().includes(terme)
-    );
-  });
-}
-
-// ---------- Cellule de permission (tableau) ----------
-function CellulePermission({
-  module: mod,
-  enSauvegarde,
-  onToggle,
-}: {
-  module: ModulePermission;
-  enSauvegarde: boolean;
-  onToggle: (champ: "is_enabled" | "is_read_only") => void;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <button
-        onClick={() => onToggle("is_enabled")}
-        disabled={enSauvegarde}
-        title={mod.is_enabled ? "Désactiver" : "Activer"}
-        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
-          enSauvegarde
-            ? "opacity-50 cursor-wait"
-            : mod.is_enabled
-            ? "bg-succes/20 hover:bg-succes/30 text-succes"
-            : "bg-gray-100 hover:bg-gray-200 text-gray-400"
-        }`}
-      >
-        {mod.is_enabled ? "✓" : "✗"}
-      </button>
-      {mod.is_enabled && (
-        <button
-          onClick={() => onToggle("is_read_only")}
-          disabled={enSauvegarde}
-          title={mod.is_read_only ? "Lecture seule (cliquer pour édition)" : "Édition autorisée (cliquer pour lecture seule)"}
-          className={`text-[10px] px-1.5 py-0.5 rounded transition-all ${
-            enSauvegarde
-              ? "opacity-50"
-              : mod.is_read_only
-              ? "bg-ocre/20 text-ocre font-semibold"
-              : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-          }`}
-        >
-          {mod.is_read_only ? "RO" : "RW"}
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ---------- Ligne de module (vue liste) ----------
-function ModuleLigne({
-  module: mod,
-  enSauvegarde,
-  onToggle,
-}: {
-  module: ModulePermission;
-  enSauvegarde: boolean;
-  onToggle: (champ: "is_enabled" | "is_read_only") => void;
-}) {
-  return (
-    <div className="flex items-center justify-between p-2.5 bg-sable rounded-lg hover:bg-sable/80 transition-colors">
-      <div className="flex-1">
-        <p className="text-sm font-semibold text-ardoise">{mod.module_label || mod.module_key}</p>
-        <p className="text-xs text-ardoise-clair font-mono">{mod.module_key}</p>
-      </div>
-      <div className="flex items-center gap-3">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <span className={`text-xs ${mod.is_enabled ? "text-succes" : "text-terre"} font-semibold`}>
-            {mod.is_enabled ? "Activé" : "Désactivé"}
-          </span>
-          <button
-            onClick={() => onToggle("is_enabled")}
-            disabled={enSauvegarde}
-            className={`relative w-10 h-5 rounded-full transition-colors ${
-              enSauvegarde ? "opacity-50" : mod.is_enabled ? "bg-succes" : "bg-gray-300"
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                mod.is_enabled ? "translate-x-5" : ""
-              }`}
-            />
-          </button>
-        </label>
-        {mod.is_enabled && (
-          <label className="flex items-center gap-2 cursor-pointer">
-            <span className={`text-xs ${mod.is_read_only ? "text-ocre" : "text-ardoise-clair"} font-semibold`}>
-              R/O
-            </span>
-            <button
-              onClick={() => onToggle("is_read_only")}
-              disabled={enSauvegarde}
-              className={`relative w-8 h-4 rounded-full transition-colors ${
-                enSauvegarde ? "opacity-50" : mod.is_read_only ? "bg-ocre" : "bg-gray-300"
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${
-                  mod.is_read_only ? "translate-x-4" : ""
-                }`}
-              />
-            </button>
-          </label>
-        )}
       </div>
     </div>
   );
