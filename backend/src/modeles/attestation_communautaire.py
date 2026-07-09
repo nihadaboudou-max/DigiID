@@ -1,25 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 Modèle AttestationCommunautaire — Étape 4.
-
-Représente une attestation de confiance émise par un utilisateur (attestant)
-envers un autre utilisateur (attesté). Chaque attestation est horodatée,
-signée numériquement et contribue au score de confiance du destinataire.
-
-Relations :
-  - attestant_id → Utilisateur (celui qui atteste)
-  - atteste_id  → Utilisateur (celui qui reçoit l'attestation)
-
-Types d'attestation :
-  - identite    : "Je confirme connaître cette personne dans la vie réelle"
-  - competence  : "Je certifie les compétences professionnelles"
-  - moralite    : "Je certifie la bonne moralité"
-  - residence   : "Je confirme l'adresse de résidence"
-  - activite    : "Je confirme l'activité/l'emploi"
-  - personnalise: "Autre type d'attestation"
-
-Cycle de vie d'une attestation :
-  EN_ATTENTE → APPROUVEE | REFUSEE | EXPIREE
 """
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -34,9 +15,7 @@ from src.base_donnees.base import Base
 
 
 class AttestationCommunautaire(Base):
-    """
-    Attestation de confiance communautaire entre deux utilisateurs DigiID.
-    """
+    """Attestation de confiance communautaire entre deux utilisateurs DigiID."""
     __tablename__ = "attestations_communautaires"
 
     # --- Identifiants ---
@@ -45,13 +24,13 @@ class AttestationCommunautaire(Base):
     # --- Relations ---
     attestant_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("utilisateur.id", ondelete="CASCADE"),
+        ForeignKey("utilisateurs.id", ondelete="CASCADE"),  # ✅ Corrigé : utilisateurs (pluriel)
         nullable=False,
         index=True,
     )
     atteste_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("utilisateur.id", ondelete="CASCADE"),
+        ForeignKey("utilisateurs.id", ondelete="CASCADE"),  # ✅ Corrigé
         nullable=False,
         index=True,
     )
@@ -85,7 +64,7 @@ class AttestationCommunautaire(Base):
     lien_connu_depuis = Column(
         String(100),
         nullable=True,
-        comment="Depuis quand l'attestant connaît l'attesté (ex: '5 ans', 'enfance')",
+        comment="Depuis quand l'attestant connaît l'attesté",
     )
     lien_nature = Column(
         String(100),
@@ -93,21 +72,21 @@ class AttestationCommunautaire(Base):
         comment="Nature du lien (collègue, voisin, ami, famille, etc.)",
     )
 
-    # --- Cycle de vie ---
+    # --- Cycle de vie --- ✅ CORRIGÉ : minuscules cohérentes avec frontend
     statut = Column(
         SAEnum(
-            "EN_ATTENTE", "APPROUVEE", "REFUSEE", "EXPIREE",
+            "en_attente", "validee", "refusee", "expiree",  # ✅ minuscules
             name="statut_attestation_enum",
         ),
         nullable=False,
-        default="EN_ATTENTE",
+        default="en_attente",
         index=True,
         comment="Statut actuel de l'attestation",
     )
     motif_refus = Column(
         Text,
         nullable=True,
-        comment="Motif de refus (si statut = REFUSEE)",
+        comment="Motif de refus (si statut = refusee)",
     )
     date_soumission = Column(
         DateTime(timezone=True),
@@ -115,15 +94,21 @@ class AttestationCommunautaire(Base):
         default=lambda: datetime.now(timezone.utc),
         comment="Date de création/soumission",
     )
-    date_decision = Column(
+    date_validation = Column(  # ✅ CORRIGÉ : date_validation (cohérent avec routes)
         DateTime(timezone=True),
         nullable=True,
-        comment="Date de la décision (approbation/refus)",
+        comment="Date de la décision (validation/refus)",
+    )
+    valide_par = Column(  # ✅ AJOUTÉ : qui a validé/refusé
+        UUID(as_uuid=True),
+        ForeignKey("utilisateurs.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="ID du super admin qui a validé/refusé",
     )
     date_expiration = Column(
         DateTime(timezone=True),
         nullable=True,
-        comment="Date d'expiration (1 an après approbation si non précisé)",
+        comment="Date d'expiration (1 an après validation si non précisé)",
     )
 
     # --- Métriques ---
@@ -131,12 +116,12 @@ class AttestationCommunautaire(Base):
         Float,
         nullable=False,
         default=5.0,
-        comment="Points de score de confiance attribués à l'attesté si approuvée",
+        comment="Points de score attribués à l'attesté si validée",
     )
     signature_numerique = Column(
         Text,
         nullable=True,
-        comment="Signature numérique optionnelle pour non-répudiation",
+        comment="Signature numérique optionnelle",
     )
 
     # --- Flags ---
@@ -144,13 +129,13 @@ class AttestationCommunautaire(Base):
         Boolean,
         nullable=False,
         default=True,
-        comment="Si False, l'attestation est désactivée (visible mais inactive)",
+        comment="Si False, l'attestation est désactivée",
     )
     est_visible_public = Column(
         Boolean,
         nullable=False,
         default=False,
-        comment="Si True, visible sur le profil public de l'attesté",
+        comment="Si True, visible sur le profil public",
     )
 
     # --- Relations ORM ---
@@ -166,8 +151,14 @@ class AttestationCommunautaire(Base):
         backref="attestations_recues",
         lazy="selectin",
     )
+    valideur = relationship(  # ✅ AJOUTÉ
+        "Utilisateur",
+        foreign_keys=[valide_par],
+        backref="attestations_validees",
+        lazy="selectin",
+    )
 
-    # --- Contrainte : pas d'auto-attestation ---
+    # --- Contraintes ---
     __table_args__ = (
         CheckConstraint(
             "attestant_id != atteste_id",
@@ -192,26 +183,33 @@ class AttestationCommunautaire(Base):
             f"statut={self.statut})>"
         )
 
-    def approuver(self) -> None:
-        """Approuve l'attestation et calcule la date d'expiration (1 an)."""
-        self.statut = "APPROUVEE"
-        self.date_decision = datetime.now(timezone.utc)
+    def valider(self, valideur_id) -> None:
+        """Valide l'attestation et calcule la date d'expiration (1 an)."""
+        self.statut = "validee"
+        self.date_validation = datetime.now(timezone.utc)
+        self.valide_par = valideur_id
         if not self.date_expiration:
             self.date_expiration = datetime.now(timezone.utc) + timedelta(days=365)
         self.est_active = True
 
-    def refuser(self, motif: str) -> None:
+    def refuser(self, motif: str, valideur_id) -> None:
         """Refuse l'attestation avec un motif."""
-        self.statut = "REFUSEE"
-        self.date_decision = datetime.now(timezone.utc)
+        self.statut = "refusee"
+        self.date_validation = datetime.now(timezone.utc)
+        self.valide_par = valideur_id
         self.motif_refus = motif
         self.est_active = False
 
     def expirer(self) -> None:
         """Marque l'attestation comme expirée."""
-        self.statut = "EXPIREE"
+        self.statut = "expiree"
         self.est_active = False
 
     def desactiver(self) -> None:
         """Désactive l'attestation (sans changer son statut)."""
         self.est_active = False
+
+    def reactiver(self) -> None:
+        """Réactive une attestation validée."""
+        if self.statut == "validee":
+            self.est_active = True
