@@ -1,25 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 Modèle AttestationCommunautaire — Étape 4.
-
-Représente une attestation de confiance émise par un utilisateur (attestant)
-envers un autre utilisateur (attesté). Chaque attestation est horodatée,
-signée numériquement et contribue au score de confiance du destinataire.
-
-Relations :
-  - attestant_id → Utilisateur (celui qui atteste)
-  - atteste_id  → Utilisateur (celui qui reçoit l'attestation)
-
-Types d'attestation :
-  - identite    : "Je confirme connaître cette personne dans la vie réelle"
-  - competence  : "Je certifie les compétences professionnelles"
-  - moralite    : "Je certifie la bonne moralité"
-  - residence   : "Je confirme l'adresse de résidence"
-  - activite    : "Je confirme l'activité/l'emploi"
-  - personnalise: "Autre type d'attestation"
-
-Cycle de vie d'une attestation :
-  EN_ATTENTE → APPROUVEE | REFUSEE | EXPIREE
 """
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -34,25 +15,23 @@ from src.base_donnees.base import Base
 
 
 class AttestationCommunautaire(Base):
-    """
-    Attestation de confiance communautaire entre deux utilisateurs DigiID.
-    """
+    """Attestation de confiance communautaire entre deux utilisateurs DigiID."""
     __tablename__ = "attestations_communautaires"
 
     # --- Identifiants ---
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
 
     # --- Relations ---
-    # CORRECTION : "utilisateurs" (pluriel) — nom réel de la table
+    # ✅ CORRECTION : "utilisateur" (SINGULIER) — cohérent avec le modèle Utilisateur
     attestant_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("utilisateurs.id", ondelete="CASCADE"),
+        ForeignKey("utilisateur.id", ondelete="CASCADE"),  # ← SINGULIER
         nullable=False,
         index=True,
     )
     atteste_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("utilisateurs.id", ondelete="CASCADE"),
+        ForeignKey("utilisateur.id", ondelete="CASCADE"),  # ← SINGULIER
         nullable=False,
         index=True,
     )
@@ -86,7 +65,7 @@ class AttestationCommunautaire(Base):
     lien_connu_depuis = Column(
         String(100),
         nullable=True,
-        comment="Depuis quand l'attestant connaît l'attesté (ex: '5 ans', 'enfance')",
+        comment="Depuis quand l'attestant connaît l'attesté",
     )
     lien_nature = Column(
         String(100),
@@ -95,7 +74,6 @@ class AttestationCommunautaire(Base):
     )
 
     # --- Cycle de vie ---
-    # CONSERVÉ : MAJUSCULES (cohérent avec la base de données existante)
     statut = Column(
         SAEnum(
             "EN_ATTENTE", "APPROUVEE", "REFUSEE", "EXPIREE",
@@ -146,13 +124,13 @@ class AttestationCommunautaire(Base):
         Boolean,
         nullable=False,
         default=True,
-        comment="Si False, l'attestation est désactivée (visible mais inactive)",
+        comment="Si False, l'attestation est désactivée",
     )
     est_visible_public = Column(
         Boolean,
         nullable=False,
         default=False,
-        comment="Si True, visible sur le profil public de l'attesté",
+        comment="Si True, visible sur le profil public",
     )
 
     # --- Relations ORM ---
@@ -169,7 +147,7 @@ class AttestationCommunautaire(Base):
         lazy="selectin",
     )
 
-    # --- Contrainte : pas d'auto-attestation ---
+    # --- Contraintes ---
     __table_args__ = (
         CheckConstraint(
             "attestant_id != atteste_id",
