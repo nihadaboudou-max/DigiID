@@ -1294,14 +1294,24 @@ async def lister_admins_disponibles(
     
     return resultats
 
-#=============================================================================
-#ATTESTATIONS COMMUNAUTAIRES — Gestion complète
-#=============================================================================
+# =============================================================================
+# ATTESTATIONS COMMUNAUTAIRES — Gestion complète
+# =============================================================================
+# ⚠️ Cohérence avec le modèle AttestationCommunautaire :
+#   - Statuts : EN_ATTENTE | APPROUVEE | REFUSEE | EXPIREE (MAJUSCULES)
+#   - Types   : identite | competence | moralite | residence | activite | personnalise
+#   - Table   : attestations_communautaires
+#   - FK      : utilisateur.id (SINGULIER, cohérent avec Utilisateur.__tablename__)
+
+from src.modeles import AttestationCommunautaire
+from sqlalchemy import func, and_, or_
+from fastapi import HTTPException
+
 
 @routeur_super_admin.get(
     "/attestations",
     summary="Lister toutes les attestations communautaires",
-    description="Liste toutes les attestations avec pagination et filtres.",
+    description="Liste paginée avec filtres (statut, type, recherche).",
 )
 async def lister_attestations(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
@@ -1312,25 +1322,18 @@ async def lister_attestations(
     type_attestation: str | None = Query(default=None),
     recherche: str | None = Query(default=None),
 ):
-    """
-    Liste toutes les attestations communautaires du système.
-    Filtres disponibles :
-      - **statut** : en_attente, validee, refusee, expiree
-      - **type_attestation** : professionnelle, personnelle, communautaire, medicale
-      - **recherche** : texte libre dans titre, noms, emails
-    """
-    from src.modeles import AttestationCommunautaire
-    from sqlalchemy import select, func, and_, or_
-    
-    # Construire les conditions
+    """Liste toutes les attestations avec pagination et filtres."""
     conditions = []
-    
+
+    # Filtre statut (MAJUSCULES)
     if statut and statut != "tous":
         conditions.append(AttestationCommunautaire.statut == statut)
-    
+
+    # Filtre type
     if type_attestation and type_attestation != "tous":
         conditions.append(AttestationCommunautaire.type_attestation == type_attestation)
-    
+
+    # Recherche textuelle
     if recherche:
         recherche_lower = f"%{recherche.lower()}%"
         conditions.append(
@@ -1338,41 +1341,49 @@ async def lister_attestations(
                 AttestationCommunautaire.titre.ilike(recherche_lower),
             )
         )
-    
-    # Requête principale avec relations
+
+    # Requête principale
     stmt = select(AttestationCommunautaire)
     if conditions:
         stmt = stmt.where(and_(*conditions))
-    
     stmt = stmt.order_by(AttestationCommunautaire.date_soumission.desc())
     stmt = stmt.offset((page - 1) * par_page).limit(par_page)
-    
+
     result = await session.execute(stmt)
     attestations = result.scalars().all()
-    
-    # Compter le total
+
+    # Comptage total
     stmt_count = select(func.count(AttestationCommunautaire.id))
     if conditions:
         stmt_count = stmt_count.where(and_(*conditions))
-    
     total = (await session.execute(stmt_count)).scalar() or 0
-    
-    # Formater les résultats
+
+    # Formatage
     attestations_data = []
     for att in attestations:
         atteste_nom = ""
         attestant_nom = ""
         atteste_email = ""
         attestant_email = ""
-        
+
         if att.atteste:
-            atteste_nom = f"{dechiffrer_donnee(att.atteste.prenom_chiffre) if att.atteste.prenom_chiffre else ''} {dechiffrer_donnee(att.atteste.nom_chiffre) if att.atteste.nom_chiffre else ''}".strip()
-            atteste_email = dechiffrer_donnee(att.atteste.email_chiffre) if att.atteste.email_chiffre else ""
-        
+            atteste_nom = (
+                f"{dechiffrer_donnee(att.atteste.prenom_chiffre) if att.atteste.prenom_chiffre else ''} "
+                f"{dechiffrer_donnee(att.atteste.nom_chiffre) if att.atteste.nom_chiffre else ''}"
+            ).strip()
+            atteste_email = (
+                dechiffrer_donnee(att.atteste.email_chiffre) if att.atteste.email_chiffre else ""
+            )
+
         if att.attestant:
-            attestant_nom = f"{dechiffrer_donnee(att.attestant.prenom_chiffre) if att.attestant.prenom_chiffre else ''} {dechiffrer_donnee(att.attestant.nom_chiffre) if att.attestant.nom_chiffre else ''}".strip()
-            attestant_email = dechiffrer_donnee(att.attestant.email_chiffre) if att.attestant.email_chiffre else ""
-        
+            attestant_nom = (
+                f"{dechiffrer_donnee(att.attestant.prenom_chiffre) if att.attestant.prenom_chiffre else ''} "
+                f"{dechiffrer_donnee(att.attestant.nom_chiffre) if att.attestant.nom_chiffre else ''}"
+            ).strip()
+            attestant_email = (
+                dechiffrer_donnee(att.attestant.email_chiffre) if att.attestant.email_chiffre else ""
+            )
+
         attestations_data.append({
             "id": str(att.id),
             "type_attestation": att.type_attestation,
@@ -1391,11 +1402,11 @@ async def lister_attestations(
             "est_active": att.est_active,
             "date_soumission": att.date_soumission.isoformat(),
             "date_expiration": att.date_expiration.isoformat() if att.date_expiration else None,
-            "date_validation": att.date_validation.isoformat() if att.date_validation else None,
-            "valide_par": str(att.valide_par) if att.valide_par else None,
+            "date_validation": att.date_decision.isoformat() if att.date_decision else None,
+            "valide_par": None,
             "motif_refus": att.motif_refus or "",
         })
-    
+
     return {
         "attestations": attestations_data,
         "total": total,
@@ -1407,52 +1418,55 @@ async def lister_attestations(
 @routeur_super_admin.get(
     "/attestations/statistiques",
     summary="Statistiques des attestations",
-    description="Retourne les statistiques globales sur les attestations.",
+    description="Retourne les compteurs par statut.",
 )
 async def statistiques_attestations(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     _: Annotated[Utilisateur, Depends(super_admin_courant)],
 ):
-    """
-    Statistiques complètes sur les attestations communautaires.
-    """
-    from src.modeles import AttestationCommunautaire
-    from sqlalchemy import select, func, and_
-    
-    # Total
-    stmt_total = select(func.count(AttestationCommunautaire.id))
-    total = (await session.execute(stmt_total)).scalar() or 0
-    
-    # Par statut
-    stmt_en_attente = select(func.count(AttestationCommunautaire.id)).where(
-        AttestationCommunautaire.statut == "en_attente"
-    )
-    en_attente = (await session.execute(stmt_en_attente)).scalar() or 0
-    
-    stmt_validees = select(func.count(AttestationCommunautaire.id)).where(
-        AttestationCommunautaire.statut == "validee"
-    )
-    validees = (await session.execute(stmt_validees)).scalar() or 0
-    
-    stmt_refusees = select(func.count(AttestationCommunautaire.id)).where(
-        AttestationCommunautaire.statut == "refusee"
-    )
-    refusees = (await session.execute(stmt_refusees)).scalar() or 0
-    
-    stmt_expirees = select(func.count(AttestationCommunautaire.id)).where(
-        AttestationCommunautaire.statut == "expiree"
-    )
-    expirees = (await session.execute(stmt_expirees)).scalar() or 0
-    
-    # Actives (validées et non suspendues)
-    stmt_actives = select(func.count(AttestationCommunautaire.id)).where(
-        and_(
-            AttestationCommunautaire.statut == "validee",
-            AttestationCommunautaire.est_active == True
+    """Statistiques complètes sur les attestations (valeurs MAJUSCULES)."""
+    total = (
+        await session.execute(select(func.count(AttestationCommunautaire.id)))
+    ).scalar() or 0
+    en_attente = (
+        await session.execute(
+            select(func.count(AttestationCommunautaire.id)).where(
+                AttestationCommunautaire.statut == "EN_ATTENTE"
+            )
         )
-    )
-    actives = (await session.execute(stmt_actives)).scalar() or 0
-    
+    ).scalar() or 0
+    validees = (
+        await session.execute(
+            select(func.count(AttestationCommunautaire.id)).where(
+                AttestationCommunautaire.statut == "APPROUVEE"
+            )
+        )
+    ).scalar() or 0
+    refusees = (
+        await session.execute(
+            select(func.count(AttestationCommunautaire.id)).where(
+                AttestationCommunautaire.statut == "REFUSEE"
+            )
+        )
+    ).scalar() or 0
+    expirees = (
+        await session.execute(
+            select(func.count(AttestationCommunautaire.id)).where(
+                AttestationCommunautaire.statut == "EXPIREE"
+            )
+        )
+    ).scalar() or 0
+    actives = (
+        await session.execute(
+            select(func.count(AttestationCommunautaire.id)).where(
+                and_(
+                    AttestationCommunautaire.statut == "APPROUVEE",
+                    AttestationCommunautaire.est_active == True,
+                )
+            )
+        )
+    ).scalar() or 0
+
     return {
         "statistiques": {
             "total": total,
@@ -1467,164 +1481,133 @@ async def statistiques_attestations(
 
 @routeur_super_admin.post(
     "/attestations/{attestation_id}/valider",
-    summary="Valider une attestation",
-    description="Valide une attestation en attente.",
+    summary="Valider (approuver) une attestation",
 )
 async def valider_attestation(
-    requete: Request,
     attestation_id: UUID,
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     super_admin: Annotated[Utilisateur, Depends(super_admin_courant)],
 ):
-    """Valide une attestation communautaire."""
-    from src.modeles import AttestationCommunautaire
-    from sqlalchemy import select
-    from datetime import datetime, timezone
-    
+    """Approuve une attestation EN_ATTENTE."""
     result = await session.execute(
         select(AttestationCommunautaire).where(
             AttestationCommunautaire.id == attestation_id
         )
     )
     attestation = result.scalar_one_or_none()
-    
+
     if not attestation:
         raise HTTPException(status_code=404, detail="Attestation introuvable")
-    
-    if attestation.statut != "en_attente":
+
+    if attestation.statut != "EN_ATTENTE":
         raise HTTPException(
             status_code=400,
-            detail=f"Impossible de valider une attestation au statut '{attestation.statut}'"
+            detail=f"Impossible de valider une attestation au statut '{attestation.statut}'",
         )
-    
-    # Valider
-    attestation.statut = "validee"
-    attestation.date_validation = datetime.now(timezone.utc)
-    attestation.valide_par = super_admin.id
-    attestation.est_active = True
-    
+
+    # Utilise la méthode du modèle
+    attestation.approuver()
     await session.commit()
-    
+
     return {"message": "Attestation validée avec succès"}
 
 
 @routeur_super_admin.post(
     "/attestations/{attestation_id}/refuser",
     summary="Refuser une attestation",
-    description="Refuse une attestation avec un motif obligatoire.",
 )
 async def refuser_attestation(
-    requete: Request,
     attestation_id: UUID,
     donnees: dict,
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     super_admin: Annotated[Utilisateur, Depends(super_admin_courant)],
 ):
-    """Refuse une attestation communautaire."""
-    from src.modeles import AttestationCommunautaire
-    from sqlalchemy import select
-    from datetime import datetime, timezone
-    
-    motif = donnees.get("motif", "").strip()
+    """Refuse une attestation EN_ATTENTE avec un motif obligatoire."""
+    motif = (donnees.get("motif") or "").strip()
     if not motif:
         raise HTTPException(status_code=400, detail="Le motif de refus est obligatoire")
-    
+
     result = await session.execute(
         select(AttestationCommunautaire).where(
             AttestationCommunautaire.id == attestation_id
         )
     )
     attestation = result.scalar_one_or_none()
-    
+
     if not attestation:
         raise HTTPException(status_code=404, detail="Attestation introuvable")
-    
-    if attestation.statut != "en_attente":
+
+    if attestation.statut != "EN_ATTENTE":
         raise HTTPException(
             status_code=400,
-            detail=f"Impossible de refuser une attestation au statut '{attestation.statut}'"
+            detail=f"Impossible de refuser une attestation au statut '{attestation.statut}'",
         )
-    
-    # Refuser
-    attestation.statut = "refusee"
-    attestation.motif_refus = motif
-    attestation.date_validation = datetime.now(timezone.utc)
-    attestation.valide_par = super_admin.id
-    
+
+    attestation.refuser(motif)
     await session.commit()
-    
+
     return {"message": "Attestation refusée"}
 
 
 @routeur_super_admin.post(
     "/attestations/{attestation_id}/suspendre",
-    summary="Suspendre une attestation",
-    description="Suspend une attestation active.",
+    summary="Suspendre une attestation approuvée",
 )
 async def suspendre_attestation(
-    requete: Request,
     attestation_id: UUID,
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     super_admin: Annotated[Utilisateur, Depends(super_admin_courant)],
 ):
-    """Suspend une attestation validée."""
-    from src.modeles import AttestationCommunautaire
-    from sqlalchemy import select
-    
+    """Désactive une attestation APPROUVEE (sans changer son statut)."""
     result = await session.execute(
         select(AttestationCommunautaire).where(
             AttestationCommunautaire.id == attestation_id
         )
     )
     attestation = result.scalar_one_or_none()
-    
+
     if not attestation:
         raise HTTPException(status_code=404, detail="Attestation introuvable")
-    
-    if attestation.statut != "validee":
+
+    if attestation.statut != "APPROUVEE":
         raise HTTPException(
             status_code=400,
-            detail="Seules les attestations validées peuvent être suspendues"
+            detail="Seules les attestations approuvées peuvent être suspendues",
         )
-    
-    attestation.est_active = False
+
+    attestation.desactiver()
     await session.commit()
-    
+
     return {"message": "Attestation suspendue"}
 
 
 @routeur_super_admin.post(
     "/attestations/{attestation_id}/reactiver",
     summary="Réactiver une attestation suspendue",
-    description="Réactive une attestation précédemment suspendue.",
 )
 async def reactiver_attestation(
-    requete: Request,
     attestation_id: UUID,
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     super_admin: Annotated[Utilisateur, Depends(super_admin_courant)],
 ):
-    """Réactive une attestation suspendue."""
-    from src.modeles import AttestationCommunautaire
-    from sqlalchemy import select
-    
+    """Réactive une attestation APPROUVEE précédemment suspendue."""
     result = await session.execute(
         select(AttestationCommunautaire).where(
             AttestationCommunautaire.id == attestation_id
         )
     )
     attestation = result.scalar_one_or_none()
-    
+
     if not attestation:
         raise HTTPException(status_code=404, detail="Attestation introuvable")
-    
-    if attestation.statut != "validee":
+
+    if attestation.statut != "APPROUVEE":
         raise HTTPException(
             status_code=400,
-            detail="Seules les attestations validées peuvent être réactivées"
+            detail="Seules les attestations approuvées peuvent être réactivées",
         )
-    
+
     attestation.est_active = True
     await session.commit()
-    
+
     return {"message": "Attestation réactivée"}
