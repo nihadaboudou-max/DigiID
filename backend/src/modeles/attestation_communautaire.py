@@ -1,6 +1,26 @@
 # -*- coding: utf-8 -*-
 """
 Modèle AttestationCommunautaire — Étape 4.
+
+Représente une attestation de confiance émise par un utilisateur (attestant)
+envers un autre utilisateur (attesté). Chaque attestation est horodatée,
+signée numériquement et contribue au score de confiance du destinataire.
+
+Relations :
+  - attestant_id → Utilisateur (celui qui atteste)
+  - atteste_id  → Utilisateur (celui qui reçoit l'attestation)
+  - valide_par  → Utilisateur (le super admin qui a validé/refusé)
+
+Types d'attestation :
+  - identite    : "Je confirme connaître cette personne dans la vie réelle"
+  - competence  : "Je certifie les compétences professionnelles"
+  - moralite    : "Je certifie la bonne moralité"
+  - residence   : "Je confirme l'adresse de résidence"
+  - activite    : "Je confirme l'activité/l'emploi"
+  - personnalise: "Autre type d'attestation"
+
+Cycle de vie d'une attestation :
+  en_attente → validee | refusee | expiree
 """
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -15,24 +35,35 @@ from src.base_donnees.base import Base
 
 
 class AttestationCommunautaire(Base):
-    """Attestation de confiance communautaire entre deux utilisateurs DigiID."""
+    """
+    Attestation de confiance communautaire entre deux utilisateurs DigiID.
+    """
     __tablename__ = "attestations_communautaires"
 
     # --- Identifiants ---
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        index=True,
+        comment="Identifiant unique de l'attestation",
+    )
 
-    # --- Relations ---
+    # --- Relations (Foreign Keys) ---
+    # ✅ IMPORTANT : "utilisateurs" (pluriel) — cohérent avec la table réelle
     attestant_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("utilisateurs.id", ondelete="CASCADE"),  # ✅ Corrigé : utilisateurs (pluriel)
+        ForeignKey("utilisateurs.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+        comment="ID de l'utilisateur qui atteste",
     )
     atteste_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("utilisateurs.id", ondelete="CASCADE"),  # ✅ Corrigé
+        ForeignKey("utilisateurs.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+        comment="ID de l'utilisateur attesté",
     )
 
     # --- Contenu ---
@@ -64,7 +95,7 @@ class AttestationCommunautaire(Base):
     lien_connu_depuis = Column(
         String(100),
         nullable=True,
-        comment="Depuis quand l'attestant connaît l'attesté",
+        comment="Depuis quand l'attestant connaît l'attesté (ex: '5 ans', 'enfance')",
     )
     lien_nature = Column(
         String(100),
@@ -72,10 +103,11 @@ class AttestationCommunautaire(Base):
         comment="Nature du lien (collègue, voisin, ami, famille, etc.)",
     )
 
-    # --- Cycle de vie --- ✅ CORRIGÉ : minuscules cohérentes avec frontend
+    # --- Cycle de vie ---
+    # ✅ IMPORTANT : valeurs en MINUSCULES — cohérent avec le frontend
     statut = Column(
         SAEnum(
-            "en_attente", "validee", "refusee", "expiree",  # ✅ minuscules
+            "en_attente", "validee", "refusee", "expiree",
             name="statut_attestation_enum",
         ),
         nullable=False,
@@ -94,12 +126,12 @@ class AttestationCommunautaire(Base):
         default=lambda: datetime.now(timezone.utc),
         comment="Date de création/soumission",
     )
-    date_validation = Column(  # ✅ CORRIGÉ : date_validation (cohérent avec routes)
+    date_validation = Column(
         DateTime(timezone=True),
         nullable=True,
         comment="Date de la décision (validation/refus)",
     )
-    valide_par = Column(  # ✅ AJOUTÉ : qui a validé/refusé
+    valide_par = Column(
         UUID(as_uuid=True),
         ForeignKey("utilisateurs.id", ondelete="SET NULL"),
         nullable=True,
@@ -116,12 +148,12 @@ class AttestationCommunautaire(Base):
         Float,
         nullable=False,
         default=5.0,
-        comment="Points de score attribués à l'attesté si validée",
+        comment="Points de score de confiance attribués à l'attesté si validée",
     )
     signature_numerique = Column(
         Text,
         nullable=True,
-        comment="Signature numérique optionnelle",
+        comment="Signature numérique optionnelle pour non-répudiation",
     )
 
     # --- Flags ---
@@ -129,13 +161,13 @@ class AttestationCommunautaire(Base):
         Boolean,
         nullable=False,
         default=True,
-        comment="Si False, l'attestation est désactivée",
+        comment="Si False, l'attestation est désactivée (visible mais inactive)",
     )
     est_visible_public = Column(
         Boolean,
         nullable=False,
         default=False,
-        comment="Si True, visible sur le profil public",
+        comment="Si True, visible sur le profil public de l'attesté",
     )
 
     # --- Relations ORM ---
@@ -151,14 +183,14 @@ class AttestationCommunautaire(Base):
         backref="attestations_recues",
         lazy="selectin",
     )
-    valideur = relationship(  # ✅ AJOUTÉ
+    valideur = relationship(
         "Utilisateur",
         foreign_keys=[valide_par],
         backref="attestations_validees",
         lazy="selectin",
     )
 
-    # --- Contraintes ---
+    # --- Contraintes et Index ---
     __table_args__ = (
         CheckConstraint(
             "attestant_id != atteste_id",
