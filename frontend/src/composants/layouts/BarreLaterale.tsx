@@ -543,54 +543,8 @@ export function BarreLaterale() {
     accentColor = "bg-lagune";
   }
 
-  // ─── NOUVEAUX RÔLES : Agents Terrain ─────────────────────────────
-  else if (utilisateur.role === "agent_police") {
-    liens = [
-      { href: "/agent-police", libelle: "Tableau de bord", Icone: IconeAccueil },
-      { href: "/agent-police/verification", libelle: "Vérification", Icone: IconeBouclier },
-      { href: "/agent-police/recherche", libelle: "Recherche", Icone: IconeScan },
-      { href: "/agent-police/scan-qr", libelle: "Scan QR Code", Icone: IconeScan },
-      { href: "/agent-police/historique", libelle: "Historique", Icone: IconeJournal },
-    ];
-    titreSection = "Agent Police";
-    couleurLabel = "text-terre";
-    accentColor = "bg-terre";
-  } else if (utilisateur.role === "agent_medical") {
-    liens = [
-      { href: "/agent-medical", libelle: "Tableau de bord", Icone: IconeAccueil },
-      { href: "/agent-medical/nouveau-dossier", libelle: "Nouveau dossier", Icone: IconeUtilisateur },
-      { href: "/agent-medical/dossiers", libelle: "Dossiers patients", Icone: IconeStatistique },
-      { href: "/agent-medical/ordonnances", libelle: "Ordonnances", Icone: IconeJournal },
-      { href: "/agent-medical/historique", libelle: "Historique", Icone: IconeAlerte },
-    ];
-    titreSection = "Médecin";
-    couleurLabel = "text-lagune";
-    accentColor = "bg-lagune";
-  } else if (utilisateur.role === "agent_ong") {
-    liens = [
-      { href: "/agent-ong", libelle: "Tableau de bord", Icone: IconeAccueil },
-      { href: "/agent-ong/beneficiaires", libelle: "Bénéficiaires", Icone: IconeUtilisateur },
-      { href: "/agent-ong/missions", libelle: "Missions", Icone: IconeEnvoyer },
-      { href: "/agent-ong/historique", libelle: "Historique", Icone: IconeJournal },
-    ];
-    titreSection = "Agent ONG";
-    couleurLabel = "text-ocre";
-    accentColor = "bg-ocre";
-  } else if (utilisateur.role === "agent_terrain") {
-    liens = [
-      { href: "/agent-terrain", libelle: "Tableau de bord", Icone: IconeAccueil },
-      { href: "/agent-terrain/enrolement", libelle: "Enrôlement", Icone: IconeUtilisateur },
-      { href: "/agent-terrain/scan", libelle: "Scan CNI", Icone: IconeScan },
-      { href: "/agent-terrain/capture", libelle: "Capture biométrique", Icone: IconeIdentite },
-      { href: "/agent-terrain/historique", libelle: "Historique", Icone: IconeJournal },
-    ];
-    titreSection = "Agent Terrain";
-    couleurLabel = "text-lagune";
-    accentColor = "bg-lagune";
-  }
-
-  // ─── ANCIENS RÔLES (rétrocompatibilité) ──────────────────────────
-  else if (utilisateur.role === "medecin") {
+  // ─── RÔLES AGENTS  ──────────────────────────
+  else if (utilisateur.role === "agent_medical") {
     liens = [
       { href: "/medecin/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
       { href: "/medecin/nouveau-dossier", libelle: "Nouveau dossier", Icone: IconeUtilisateur },
@@ -600,10 +554,10 @@ export function BarreLaterale() {
       { href: "/medecin/calendrier", libelle: "Calendrier", Icone: IconeParametres },
       { href: "/medecin/historique", libelle: "Historique", Icone: IconeAlerte },
     ];
-    titreSection = "Espace médical";
+    titreSection = "agent_medical";
     couleurLabel = "text-lagune";
     accentColor = "bg-lagune";
-  } else if (utilisateur.role === "agent") {
+  } else if (utilisateur.role === "agent_terrain") {
     liens = [
       { href: "/agent/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
       { href: "/agent/enrolement", libelle: "Enrôlement", Icone: IconeUtilisateur },
@@ -613,7 +567,7 @@ export function BarreLaterale() {
     titreSection = "Agent terrain";
     couleurLabel = "text-lagune";
     accentColor = "bg-lagune";
-  } else if (utilisateur.role === "police") {
+  } else if (utilisateur.role === "agent_police") {
     liens = [
       { href: "/police/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
       { href: "/police/verification", libelle: "Vérification", Icone: IconeBouclier },
@@ -628,10 +582,10 @@ export function BarreLaterale() {
       { href: "/police/export", libelle: "Export rapports", Icone: IconePartage },
       { href: "/police/signalement", libelle: "Signalements", Icone: IconeAlerte },
     ];
-    titreSection = "Forces de l'ordre";
+    titreSection = "Agent Police";
     couleurLabel = "text-terre";
     accentColor = "bg-terre";
-  } else if (utilisateur.role === "ong") {
+  } else if (utilisateur.role === "agent_ong") {
     liens = [
       { href: "/ong/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
       { href: "/ong/beneficiaires", libelle: "Bénéficiaires", Icone: IconeUtilisateur },
@@ -639,7 +593,7 @@ export function BarreLaterale() {
       { href: "/ong/missions", libelle: "Missions terrain", Icone: IconeEnvoyer },
       { href: "/ong/attestations", libelle: "Attestations", Icone: IconeCheck },
     ];
-    titreSection = "ONG Partenaire";
+    titreSection = "Agent ONG";
     couleurLabel = "text-ocre";
     accentColor = "bg-ocre";
   }
