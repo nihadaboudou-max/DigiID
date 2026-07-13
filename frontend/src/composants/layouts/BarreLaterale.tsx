@@ -519,6 +519,7 @@ export function BarreLaterale() {
     liens = [
       { href: "/chef-ong", libelle: "Tableau de bord", Icone: IconeAccueil },
       { href: "/chef-ong/agents", libelle: "Agents ONG", Icone: IconeUtilisateur },
+      { href: "/chef-ong/programmes", libelle: "Programmes", Icone: IconeJournal },
       { href: "/chef-ong/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
       { href: "/chef-ong/recherche", libelle: "Recherche", Icone: IconeScan },
       { href: "/chef-ong/missions", libelle: "Missions", Icone: IconeEnvoyer },
