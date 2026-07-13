@@ -7,17 +7,13 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
-import { creerAgentPolice, listerInvitations, annulerInvitation, renvoyerInvitation } from "@/services/chefs";
-
-interface Invitation {
-  id: string;
-  email: string;
-  role: string;
-  statut: "en_attente" | "acceptee" | "expiree" | "annulee";
-  date_creation: string;
-  date_expiration: string;
-  date_acceptation: string | null;
-}
+import { 
+  inviterAgent, 
+  listerInvitations, 
+  annulerInvitation, 
+  renvoyerInvitation,
+  type InvitationResponse // ✅ On utilise le type du service, PAS d'interface locale
+} from "@/services/chefs";
 
 export default function ChefPoliceInvitationsPage() {
   return (
@@ -28,22 +24,18 @@ export default function ChefPoliceInvitationsPage() {
 }
 
 function Contenu() {
-  const [invitations, setInvitations] = useState<Invitation[]>([]);
+  // ✅ State typé avec InvitationResponse du service
+  const [invitations, setInvitations] = useState<InvitationResponse[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
   const [afficherFormulaire, setAfficherFormulaire] = useState(false);
   const [sauvegarde, setSauvegarde] = useState(false);
   const [filtreStatut, setFiltreStatut] = useState<string>("tous");
   const [recherche, setRecherche] = useState("");
+
+  // ✅ Formulaire simplifié : une invitation ne nécessite que l'email et un message optionnel
   const [formData, setFormData] = useState({
     email: "",
-    prenom: "",
-    nom: "",
-    telephone: "",
-    ville: "",
-    matricule: "",
-    grade: "",
-    commissariat: "",
     message: "",
   });
 
@@ -56,7 +48,7 @@ function Contenu() {
     setErreur("");
     try {
       const data = await listerInvitations({ par_page: 100 });
-      setInvitations(data.invitations || []);
+      setInvitations(data.invitations || []); // ✅ Plus de conflit de type ici
     } catch (error: any) {
       setErreur(error?.message || "Erreur de chargement des invitations");
     } finally {
@@ -65,23 +57,23 @@ function Contenu() {
   }
 
   async function handleInviter() {
-    if (!formData.email || !formData.matricule || !formData.grade) return;
+    if (!formData.email) {
+      setErreur("L'email est obligatoire pour envoyer une invitation.");
+      return;
+    }
+    
     setSauvegarde(true);
+    setErreur("");
     try {
-      await creerAgentPolice(formData);
-      setAfficherFormulaire(false);
-      setFormData({
-        email: "",
-        prenom: "",
-        nom: "",
-        telephone: "",
-        ville: "",
-        matricule: "",
-        grade: "",
-        commissariat: "",
-        message: "",
+      // ✅ CORRECTION : Utiliser inviterAgent au lieu de creerAgentPolice
+      await inviterAgent("police", {
+        email: formData.email,
+        message: formData.message || undefined,
       });
-      chargerInvitations();
+      
+      setAfficherFormulaire(false);
+      setFormData({ email: "", message: "" });
+      await chargerInvitations();
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors de l'envoi de l'invitation");
     } finally {
@@ -93,7 +85,7 @@ function Contenu() {
     if (!confirm("Annuler cette invitation ?")) return;
     try {
       await annulerInvitation(invitationId);
-      chargerInvitations();
+      await chargerInvitations();
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors de l'annulation");
     }
@@ -102,20 +94,20 @@ function Contenu() {
   async function handleRenvoyer(invitationId: string) {
     try {
       await renvoyerInvitation(invitationId);
-      chargerInvitations();
+      await chargerInvitations();
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors du renvoi");
     }
   }
 
   const getBadgeStatut = (statut: string) => {
-    const config: any = {
+    const config: Record<string, { couleur: any; label: string }> = {
       en_attente: { couleur: "ocre", label: "En attente" },
       acceptee: { couleur: "succes", label: "Acceptée" },
       expiree: { couleur: "terre", label: "Expirée" },
-      annulee: { couleur: "neutre", label: "Annulée" },
+      annulee: { couleur: "lagune", label: "Annulée" },
     };
-    const cfg = config[statut] || { couleur: "neutre", label: statut };
+    const cfg = config[statut] || { couleur: "lagune", label: statut };
     return <Badge variante={cfg.couleur} taille="petit">{cfg.label}</Badge>;
   };
 
@@ -136,8 +128,8 @@ function Contenu() {
     <div className="min-h-screen space-y-6 apparition pb-20">
       <div>
         <p className="text-terre font-semibold text-sm uppercase tracking-wider">✉️ Invitations</p>
-        <h1>Invitations Police</h1>
-        <p className="text-ardoise-clair mt-2">Envoyez des invitations pour créer des comptes agents de police</p>
+        <h1 className="text-3xl font-bold text-ardoise mt-1">Invitations Police</h1>
+        <p className="text-ardoise-clair mt-2">Envoyez des liens d'invitation pour que vos futurs agents de police créent leur compte.</p>
       </div>
 
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
@@ -181,7 +173,7 @@ function Contenu() {
           <option value="annulee">Annulées</option>
         </select>
         <Bouton variante="primaire" onClick={() => setAfficherFormulaire(true)}>
-          ️ Nouvelle invitation
+          ✉️ Nouvelle invitation
         </Bouton>
       </div>
 
@@ -239,12 +231,13 @@ function Contenu() {
         )}
       </Carte>
 
+      {/* Modal d'invitation simplifié */}
       {afficherFormulaire && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
             <div className="sticky top-0 bg-white border-b border-ardoise-clair/10 p-6 rounded-t-xl z-10">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-ardoise"> Inviter un agent de police</h2>
+                <h2 className="text-xl font-bold text-ardoise">✉️ Inviter un agent</h2>
                 <button
                   onClick={() => setAfficherFormulaire(false)}
                   className="text-ardoise-clair hover:text-ardoise transition-colors text-2xl leading-none"
@@ -253,68 +246,21 @@ function Contenu() {
                 </button>
               </div>
             </div>
+            
             <div className="p-6 space-y-4">
               <Alerte variante="info">
-                L'agent recevra un email avec un lien pour créer son compte lui-même.
+                L'agent recevra un email avec un lien sécurisé. Il remplira lui-même son nom, matricule, grade et autres détails lors de l'inscription.
               </Alerte>
+              
               <ChampSaisie
-                libelle="Email"
+                libelle="Email *"
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="agent@police.sn"
                 required
               />
-              <div className="grid grid-cols-2 gap-3">
-                <ChampSaisie
-                  libelle="Prénom"
-                  value={formData.prenom}
-                  onChange={(e) => setFormData({ ...formData, prenom: e.target.value })}
-                  placeholder="Prénom"
-                  required
-                />
-                <ChampSaisie
-                  libelle="Nom"
-                  value={formData.nom}
-                  onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
-                  placeholder="Nom"
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <ChampSaisie
-                  libelle="Matricule"
-                  value={formData.matricule}
-                  onChange={(e) => setFormData({ ...formData, matricule: e.target.value })}
-                  placeholder="Ex: POL-2026-001"
-                  required
-                />
-                <ChampSaisie
-                  libelle="Grade"
-                  value={formData.grade}
-                  onChange={(e) => setFormData({ ...formData, grade: e.target.value })}
-                  placeholder="Ex: Sergent, Lieutenant..."
-                  required
-                />
-              </div>
-              <ChampSaisie
-                libelle="Commissariat"
-                value={formData.commissariat}
-                onChange={(e) => setFormData({ ...formData, commissariat: e.target.value })}
-                placeholder="Ex: Commissariat central de Dakar"
-              />
-              <ChampSaisie
-                libelle="Téléphone"
-                value={formData.telephone}
-                onChange={(e) => setFormData({ ...formData, telephone: e.target.value })}
-                placeholder="+221 77 123 45 67"
-              />
-              <ChampSaisie
-                libelle="Ville"
-                value={formData.ville}
-                onChange={(e) => setFormData({ ...formData, ville: e.target.value })}
-                placeholder="Dakar"
-              />
+              
               <div>
                 <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
                   Message personnalisé (optionnel)
@@ -322,13 +268,20 @@ function Contenu() {
                 <textarea
                   value={formData.message}
                   onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                  className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-terre/30"
+                  className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-terre/30 resize-none"
                   rows={3}
-                  placeholder="Ajoutez un message personnalisé..."
+                  placeholder="Ex: Bienvenue dans l'équipe ! Cliquez sur le lien pour finaliser votre inscription."
                 />
               </div>
-              <div className="flex gap-3 pt-4 border-t border-ardoise-clair/10">
-                <Bouton variante="primaire" chargement={sauvegarde} onClick={handleInviter} className="flex-1">
+
+              <div className="flex gap-3 pt-2">
+                <Bouton 
+                  variante="primaire" 
+                  chargement={sauvegarde} 
+                  onClick={handleInviter} 
+                  className="flex-1"
+                  disabled={!formData.email}
+                >
                   Envoyer l'invitation
                 </Bouton>
                 <Bouton variante="ghost" onClick={() => setAfficherFormulaire(false)}>

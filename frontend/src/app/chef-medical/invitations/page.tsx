@@ -3,13 +3,16 @@
 import { useState, useEffect } from "react";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
+import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
+import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
-import {
-  listerInvitations,
-  annulerInvitation,
+import { 
+  inviterAgent, 
+  listerInvitations, 
+  annulerInvitation, 
   renvoyerInvitation,
-  type InvitationResponse, // ✅ On utilise le type du service, PAS d'interface locale
+  type InvitationResponse // ✅ On utilise le type du service, PAS d'interface locale
 } from "@/services/chefs";
 
 export default function ChefMedicalInvitationsPage() {
@@ -25,8 +28,16 @@ function Contenu() {
   const [invitations, setInvitations] = useState<InvitationResponse[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
+  const [afficherFormulaire, setAfficherFormulaire] = useState(false);
+  const [sauvegarde, setSauvegarde] = useState(false);
   const [filtreStatut, setFiltreStatut] = useState<string>("tous");
   const [recherche, setRecherche] = useState("");
+
+  // ✅ Formulaire simplifié : une invitation ne nécessite que l'email et un message optionnel
+  const [formData, setFormData] = useState({
+    email: "",
+    message: "",
+  });
 
   useEffect(() => {
     chargerInvitations();
@@ -37,12 +48,36 @@ function Contenu() {
     setErreur("");
     try {
       const data = await listerInvitations({ par_page: 100 });
-      // ✅ Plus de conflit de type ici car on utilise InvitationResponse
-      setInvitations(data.invitations || []);
+      setInvitations(data.invitations || []); // ✅ Plus de conflit de type ici
     } catch (error: any) {
       setErreur(error?.message || "Erreur de chargement des invitations");
     } finally {
       setChargement(false);
+    }
+  }
+
+  async function handleInviter() {
+    if (!formData.email) {
+      setErreur("L'email est obligatoire pour envoyer une invitation.");
+      return;
+    }
+    
+    setSauvegarde(true);
+    setErreur("");
+    try {
+      // ✅ CORRECTION : Utiliser inviterAgent au lieu de creerMedecin
+      await inviterAgent("medical", {
+        email: formData.email,
+        message: formData.message || undefined,
+      });
+      
+      setAfficherFormulaire(false);
+      setFormData({ email: "", message: "" });
+      await chargerInvitations();
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur lors de l'envoi de l'invitation");
+    } finally {
+      setSauvegarde(false);
     }
   }
 
@@ -94,7 +129,7 @@ function Contenu() {
       <div>
         <p className="text-lagune font-semibold text-sm uppercase tracking-wider">✉️ Invitations</p>
         <h1 className="text-3xl font-bold text-ardoise mt-1">Invitations Médicales</h1>
-        <p className="text-ardoise-clair mt-2">Suivez les invitations envoyées à vos futurs médecins et agents médicaux</p>
+        <p className="text-ardoise-clair mt-2">Envoyez des liens d'invitation pour que vos futurs médecins créent leur compte.</p>
       </div>
 
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
@@ -137,6 +172,9 @@ function Contenu() {
           <option value="expiree">Expirées</option>
           <option value="annulee">Annulées</option>
         </select>
+        <Bouton variante="primaire" onClick={() => setAfficherFormulaire(true)}>
+          ✉️ Nouvelle invitation
+        </Bouton>
       </div>
 
       <Carte titre={`${invitationsFiltrees.length} invitation(s)`}>
@@ -192,6 +230,68 @@ function Contenu() {
           </div>
         )}
       </Carte>
+
+      {/* Modal d'invitation simplifié */}
+      {afficherFormulaire && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div className="sticky top-0 bg-white border-b border-ardoise-clair/10 p-6 rounded-t-xl z-10">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-ardoise">✉️ Inviter un médecin</h2>
+                <button
+                  onClick={() => setAfficherFormulaire(false)}
+                  className="text-ardoise-clair hover:text-ardoise transition-colors text-2xl leading-none"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <Alerte variante="info">
+                Le médecin recevra un email avec un lien sécurisé. Il remplira lui-même son nom, spécialité, téléphone et autres détails lors de l'inscription.
+              </Alerte>
+              
+              <ChampSaisie
+                libelle="Email *"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="medecin@hopital.com"
+                required
+              />
+              
+              <div>
+                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
+                  Message personnalisé (optionnel)
+                </label>
+                <textarea
+                  value={formData.message}
+                  onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                  className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30 resize-none"
+                  rows={3}
+                  placeholder="Ex: Bienvenue dans l'équipe ! Cliquez sur le lien pour finaliser votre inscription."
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Bouton 
+                  variante="primaire" 
+                  chargement={sauvegarde} 
+                  onClick={handleInviter} 
+                  className="flex-1"
+                  disabled={!formData.email}
+                >
+                  Envoyer l'invitation
+                </Bouton>
+                <Bouton variante="ghost" onClick={() => setAfficherFormulaire(false)}>
+                  Annuler
+                </Bouton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
