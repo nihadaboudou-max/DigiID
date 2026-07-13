@@ -108,14 +108,25 @@ class MissionTerrain(Base):
     programme = relationship("ProgrammeONG", backref="missions")
     
 # Ajoute cette classe dans le fichier backend/src/modeles/ong.py
-
 class MissionAgent(Base):
     """Table de liaison entre missions et agents."""
     __tablename__ = "mission_agent"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    mission_id = Column(UUID(as_uuid=True), ForeignKey("mission_terrain.id", ondelete="CASCADE"), nullable=False)
-    agent_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id", ondelete="CASCADE"), nullable=False)
+    
+    # ⚠️ IMPORTANT : Vérifie que le nom de la table est bien "mission_terrain". 
+    # Si dans ton modèle MissionTerrain le __tablename__ est "missions", change "mission_terrain.id" en "missions.id"
+    mission_id = Column(
+        UUID(as_uuid=True), 
+        ForeignKey("mission_terrain.id", ondelete="CASCADE"), 
+        nullable=False
+    )
+    agent_id = Column(
+        UUID(as_uuid=True), 
+        ForeignKey("utilisateur.id", ondelete="CASCADE"), 
+        nullable=False
+    )
+    
     instructions = Column(Text, nullable=True)
     date_limite = Column(Date, nullable=True)
     statut = Column(String(50), default="assignee")  # assignee, en_cours, terminee, annulee
@@ -123,6 +134,18 @@ class MissionAgent(Base):
     date_debut = Column(DateTime(timezone=True), nullable=True)
     date_completion = Column(DateTime(timezone=True), nullable=True)
     
-    # Relations
-    mission = relationship("MissionTerrain", backref="agents_assignes")
-    agent = relationship("Utilisateur", backref="missions")
+    # ✅ CORRECTION : foreign_keys et primaryjoin explicites pour éviter l'erreur de jointure
+    mission = relationship(
+        "MissionTerrain",
+        foreign_keys=[mission_id],
+        primaryjoin="MissionAgent.mission_id == MissionTerrain.id",
+        backref="agents_assignes",
+        lazy="selectin",
+    )
+    agent = relationship(
+        "Utilisateur",
+        foreign_keys=[agent_id],
+        primaryjoin="MissionAgent.agent_id == Utilisateur.id",
+        backref="missions_assignees",
+        lazy="selectin",
+    )
