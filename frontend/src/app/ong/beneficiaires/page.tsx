@@ -22,7 +22,7 @@ interface Beneficiaire {
 
 export default function BeneficiairesPage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent_ong", "chef_ong", "super_administrateur"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_ong", "ong", "chef_ong", "super_administrateur"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
@@ -46,9 +46,7 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      const reponse = await fetch("/api/v1/ong/beneficiaires", {
-        credentials: "include",
-      });
+      const reponse = await fetch("/api/v1/ong/beneficiaires", { credentials: "include" });
       if (!reponse.ok) throw new Error("Erreur de chargement");
       const data = await reponse.json();
       setBeneficiaires(data);
@@ -68,13 +66,7 @@ function Contenu() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          nom,
-          digiid: digiid || undefined,
-          programme,
-          zone: zone || undefined,
-          notes: notes || undefined,
-        }),
+        body: JSON.stringify({ nom, digiid: digiid || undefined, programme, zone: zone || undefined, notes: notes || undefined }),
       });
       if (!reponse.ok) throw new Error("Erreur de création");
       await charger();
@@ -100,7 +92,7 @@ function Contenu() {
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <p className="text-ocre text-xs uppercase font-semibold tracking-wider">ONG</p>
+          <p className="text-ocre text-xs uppercase font-semibold tracking-wider">Agent ONG</p>
           <h1 className="mt-1 text-2xl">Bénéficiaires</h1>
           <p className="text-ardoise-clair mt-1 text-sm">{beneficiaires.length} bénéficiaire(s) inscrit(s)</p>
         </div>
@@ -112,56 +104,19 @@ function Contenu() {
       {afficherFormulaire && (
         <Carte titre="Ajouter un bénéficiaire">
           <div className="max-w-md space-y-3">
-            <ChampSaisie 
-              libelle="Nom complet" 
-              value={nom} 
-              onChange={(e) => setNom(e.target.value)} 
-              placeholder="Ex: Fatou Diallo"
-              required
-            />
-            <ChampSaisie 
-              libelle="DigiID (optionnel)" 
-              value={digiid} 
-              onChange={(e) => setDigiid(e.target.value)} 
-              placeholder="Ex: A1B2C3D4E5F6G7H8"
-            />
-            <ChampSaisie 
-              libelle="Programme" 
-              value={programme} 
-              onChange={(e) => setProgramme(e.target.value)} 
-              placeholder="Ex: Aide alimentaire"
-              required
-            />
-            <ChampSaisie 
-              libelle="Zone (optionnel)" 
-              value={zone} 
-              onChange={(e) => setZone(e.target.value)} 
-              placeholder="Ex: Dakar"
-            />
+            <ChampSaisie libelle="Nom complet *" value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Ex: Fatou Diallo" required />
+            <ChampSaisie libelle="DigiID (optionnel)" value={digiid} onChange={(e) => setDigiid(e.target.value)} placeholder="Ex: A1B2C3D4E5F6G7H8" />
+            <ChampSaisie libelle="Programme *" value={programme} onChange={(e) => setProgramme(e.target.value)} placeholder="Ex: Aide alimentaire" required />
+            <ChampSaisie libelle="Zone (optionnel)" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="Ex: Dakar" />
             <div>
-              <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
-                Notes (optionnel)
-              </label>
-              <textarea 
-                value={notes} 
-                onChange={(e) => setNotes(e.target.value)} 
-                rows={3}
-                className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm resize-none"
-                placeholder="Informations complémentaires..."
-              />
+              <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Notes (optionnel)</label>
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm resize-none" placeholder="Informations complémentaires..." />
             </div>
             <div className="flex gap-2 pt-2">
-              <Bouton 
-                variante="primaire" 
-                disabled={!nom || !programme || envoi} 
-                onClick={handleCreer}
-                chargement={envoi}
-              >
+              <Bouton variante="primaire" disabled={!nom || !programme || envoi} onClick={handleCreer} chargement={envoi}>
                 {envoi ? "Ajout..." : "Ajouter le bénéficiaire"}
               </Bouton>
-              <Bouton variante="ghost" onClick={() => setAfficherFormulaire(false)}>
-                Annuler
-              </Bouton>
+              <Bouton variante="ghost" onClick={() => setAfficherFormulaire(false)}>Annuler</Bouton>
             </div>
           </div>
         </Carte>
@@ -191,19 +146,14 @@ function Contenu() {
                   </div>
                   <div>
                     <p className="font-semibold text-ardoise">{b.nom}</p>
-                    <p className="text-xs text-ardoise-clair">
-                      {b.programme} · {b.zone || "Zone non spécifiée"}
-                      {b.digiid && ` · DigiID: ${b.digiid}`}
-                    </p>
+                    <p className="text-xs text-ardoise-clair">{b.programme} · {b.zone || "Zone non spécifiée"}{b.digiid && ` · DigiID: ${b.digiid}`}</p>
                   </div>
                 </div>
                 <Badge variante={b.statut === "actif" ? "succes" : "lagune"}>
                   {b.statut === "actif" ? "Actif" : "Inactif"}
                 </Badge>
               </div>
-              {b.notes && (
-                <p className="text-xs text-ardoise-clair mt-2 italic">{b.notes}</p>
-              )}
+              {b.notes && <p className="text-xs text-ardoise-clair mt-2 italic">{b.notes}</p>}
             </div>
           ))}
         </div>

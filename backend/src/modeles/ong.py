@@ -4,7 +4,7 @@ Modèles ONG — Bénéficiaires, programmes, missions terrain.
 Avec cloisonnement par domaine et département.
 """
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from sqlalchemy import Column, String, Text, Date, DateTime, ForeignKey, Integer, Float, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -106,3 +106,23 @@ class MissionTerrain(Base):
 
     ong = relationship("Utilisateur", backref="missions_terrain")
     programme = relationship("ProgrammeONG", backref="missions")
+    
+# Ajoute cette classe dans le fichier backend/src/modeles/ong.py
+
+class MissionAgent(Base):
+    """Table de liaison entre missions et agents."""
+    __tablename__ = "mission_agent"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    mission_id = Column(UUID(as_uuid=True), ForeignKey("mission_terrain.id", ondelete="CASCADE"), nullable=False)
+    agent_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id", ondelete="CASCADE"), nullable=False)
+    instructions = Column(Text, nullable=True)
+    date_limite = Column(Date, nullable=True)
+    statut = Column(String(50), default="assignee")  # assignee, en_cours, terminee, annulee
+    date_assignation = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    date_debut = Column(DateTime(timezone=True), nullable=True)
+    date_completion = Column(DateTime(timezone=True), nullable=True)
+    
+    # Relations
+    mission = relationship("MissionTerrain", backref="agents_assignes")
+    agent = relationship("Utilisateur", backref="missions")

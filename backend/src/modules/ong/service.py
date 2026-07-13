@@ -22,18 +22,17 @@ def _appliquer_filtres_cloisonnement(
     """Applique les filtres de cloisonnement selon le rôle de l'utilisateur."""
     if _est_super_admin(utilisateur):
         return query  # Super admin voit tout
-
+    
     conditions = []
     if utilisateur.domaine_id:
         conditions.append(modele.domaine_id == utilisateur.domaine_id)
-
     # Admin domaine voit tout son domaine
     if utilisateur.role not in ["admin_domaine"] and utilisateur.departement_id:
         conditions.append(modele.departement_id == utilisateur.departement_id)
-
+    
     if conditions:
         query = query.where(and_(*conditions))
-
+    
     return query
 
 
@@ -65,14 +64,14 @@ async def obtenir_beneficiaires(
 ) -> list[BeneficiaireONG]:
     """Liste les bénéficiaires avec cloisonnement."""
     query = select(BeneficiaireONG).order_by(BeneficiaireONG.date_inscription.desc())
-
-    # --- Cloisonnement (NOUVEAU) ---
+    
+    # --- Cloisonnement ---
     query = _appliquer_filtres_cloisonnement(query, utilisateur, BeneficiaireONG)
-
+    
     # Si ce n'est pas un super admin, on filtre aussi par ong_id
     if not _est_super_admin(utilisateur):
         query = query.where(BeneficiaireONG.ong_id == utilisateur.id)
-
+    
     result = await session.execute(query)
     return list(result.scalars().all())
 
@@ -83,13 +82,13 @@ async def compter_beneficiaires(
 ) -> int:
     """Compte les bénéficiaires avec cloisonnement."""
     query = select(func.count(BeneficiaireONG.id))
-
-    # --- Cloisonnement (NOUVEAU) ---
+    
+    # --- Cloisonnement ---
     query = _appliquer_filtres_cloisonnement(query, utilisateur, BeneficiaireONG)
-
+    
     if not _est_super_admin(utilisateur):
         query = query.where(BeneficiaireONG.ong_id == utilisateur.id)
-
+    
     result = await session.execute(query)
     return result.scalar() or 0
 
@@ -122,13 +121,13 @@ async def obtenir_programmes(
 ) -> list[ProgrammeONG]:
     """Liste les programmes avec cloisonnement."""
     query = select(ProgrammeONG).order_by(ProgrammeONG.date_debut.desc())
-
-    # --- Cloisonnement (NOUVEAU) ---
+    
+    # --- Cloisonnement ---
     query = _appliquer_filtres_cloisonnement(query, utilisateur, ProgrammeONG)
-
+    
     if not _est_super_admin(utilisateur):
         query = query.where(ProgrammeONG.ong_id == utilisateur.id)
-
+    
     result = await session.execute(query)
     return list(result.scalars().all())
 
@@ -161,12 +160,12 @@ async def obtenir_missions(
 ) -> list[MissionTerrain]:
     """Liste les missions avec cloisonnement."""
     query = select(MissionTerrain).order_by(MissionTerrain.date_depart.desc())
-
-    # --- Cloisonnement (NOUVEAU) ---
+    
+    # --- Cloisonnement ---
     query = _appliquer_filtres_cloisonnement(query, utilisateur, MissionTerrain)
-
+    
     if not _est_super_admin(utilisateur):
         query = query.where(MissionTerrain.ong_id == utilisateur.id)
-
+    
     result = await session.execute(query)
     return list(result.scalars().all())

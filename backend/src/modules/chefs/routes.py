@@ -26,6 +26,10 @@ from src.modules.chefs import service
 from src.noyau.constantes_roles import ROLES_CHEF
 from src.noyau.exceptions import ErreurAutorisation, ErreurValidation
 from src.noyau import dechiffrer_donnee
+from src.modules.ong.schemas import (
+    ProgrammeCreate,
+    ProgrammeResponse,
+)
 
 routeur_chefs = APIRouter(prefix="/api/v1/chefs", tags=["Chefs"])
 
@@ -407,6 +411,71 @@ async def supprimer_agent(
     except ErreurValidation as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+# =============================================================================
+# PROGRAMMES (pour Chef ONG)
+# =============================================================================
+
+@routeur_chefs.get(
+    "/ong/programmes",
+    response_model=list[ProgrammeResponse],
+)
+async def lister_programmes_ong(
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Liste les programmes de l'ONG du chef."""
+    chef = await verifier_est_chef(chef)
+    if chef.role != "chef_ong":
+        raise HTTPException(status_code=403, detail="Réservé aux chefs ONG")
+    
+    from src.modules.ong.service import obtenir_programmes
+    programmes = await obtenir_programmes(session, chef)
+    
+    return [
+        ProgrammeResponse(
+            id=p.id, ong_id=p.ong_id, nom=p.nom, description=p.description,
+            zone=p.zone, budget=p.budget, date_debut=p.date_debut,
+            date_fin=p.date_fin, statut=p.statut,
+            domaine_id=p.domaine_id, departement_id=p.departement_id,
+        )
+        for p in programmes
+    ]
+
+
+@routeur_chefs.post(
+    "/ong/programmes",
+    response_model=ProgrammeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def creer_programme_ong(
+    data: ProgrammeCreate,
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Crée un programme pour l'ONG du chef."""
+    chef = await verifier_est_chef(chef)
+    if chef.role != "chef_ong":
+        raise HTTPException(status_code=403, detail="Réservé aux chefs ONG")
+    
+    from src.modules.ong.service import creer_programme
+    from src.noyau.journal import enregistrer_evenement_audit
+    
+    p = await creer_programme(session, chef, data.model_dump())
+    
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="chef_programme_creation",
+        description=f"Programme {data.nom} créé par chef {chef.id}",
+        utilisateur_id=chef.id,
+        role_acteur=chef.role,
+    )
+    
+    return ProgrammeResponse(
+        id=p.id, ong_id=p.ong_id, nom=p.nom, description=p.description,
+        zone=p.zone, budget=p.budget, date_debut=p.date_debut,
+        date_fin=p.date_fin, statut=p.statut,
+        domaine_id=p.domaine_id, departement_id=p.departement_id,
+    )
 
 # =============================================================================
 # Invitations

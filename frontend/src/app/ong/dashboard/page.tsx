@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
-import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { Alerte } from "@/composants/commun/Alerte";
 
@@ -13,15 +12,6 @@ interface Stats {
   nb_programmes: number;
   nb_missions: number;
   zones: string[];
-}
-
-interface Beneficiaire {
-  id: string;
-  nom: string;
-  programme: string;
-  zone: string | null;
-  statut: string;
-  date_inscription: string;
 }
 
 interface Mission {
@@ -34,7 +24,7 @@ interface Mission {
 
 export default function OngDashboard() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent_ong", "chef_ong", "super_administrateur"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_ong", "ong", "chef_ong", "super_administrateur"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
@@ -42,7 +32,6 @@ export default function OngDashboard() {
 
 function Contenu() {
   const [stats, setStats] = useState<Stats | null>(null);
-  const [beneficiaires, setBeneficiaires] = useState<Beneficiaire[]>([]);
   const [missions, setMissions] = useState<Mission[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -53,24 +42,21 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      const [statsRes, benefRes, missionsRes] = await Promise.all([
+      const [statsRes, missionsRes] = await Promise.all([
         fetch("/api/v1/ong/stats", { credentials: "include" }),
-        fetch("/api/v1/ong/beneficiaires", { credentials: "include" }),
         fetch("/api/v1/ong/missions", { credentials: "include" }),
       ]);
 
-      if (!statsRes.ok || !benefRes.ok || !missionsRes.ok) {
-        throw new Error("Erreur de chargement des données");
+      if (!statsRes.ok || !missionsRes.ok) {
+        throw new Error("Erreur de chargement");
       }
 
-      const [statsData, benefData, missionsData] = await Promise.all([
+      const [statsData, missionsData] = await Promise.all([
         statsRes.json(),
-        benefRes.json(),
         missionsRes.json(),
       ]);
 
       setStats(statsData);
-      setBeneficiaires(benefData);
       setMissions(missionsData);
     } catch (error) {
       setErreur("Erreur de chargement du tableau de bord");
@@ -83,7 +69,7 @@ function Contenu() {
   if (chargement) {
     return (
       <div className="space-y-6 apparition">
-        <p className="text-ocre text-xs uppercase font-semibold tracking-wider">ONG Partenaire</p>
+        <p className="text-ocre text-xs uppercase font-semibold tracking-wider">Agent ONG</p>
         <h1 className="text-2xl">Tableau de bord</h1>
         <div className="text-center py-12">
           <div className="animate-spin w-8 h-8 border-4 border-ocre border-t-transparent rounded-full mx-auto mb-3"></div>
@@ -98,9 +84,9 @@ function Contenu() {
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
 
       <div>
-        <p className="text-ocre text-xs uppercase font-semibold tracking-wider">ONG Partenaire</p>
+        <p className="text-ocre text-xs uppercase font-semibold tracking-wider">Agent ONG</p>
         <h1 className="mt-1 text-2xl">Tableau de bord</h1>
-        <p className="text-ardoise-clair mt-1 text-sm">Gérez vos programmes d'aide humanitaire et vos bénéficiaires.</p>
+        <p className="text-ardoise-clair mt-1 text-sm">Gérez vos bénéficiaires et consultez vos missions.</p>
       </div>
 
       {/* Statistiques */}
@@ -119,7 +105,7 @@ function Contenu() {
         </Carte>
         <Carte className="text-center p-4">
           <p className="text-2xl font-bold text-terre">{stats?.zones?.length || 0}</p>
-          <p className="text-xs uppercase text-ardoise-clair font-semibold mt-1">Zones actives</p>
+          <p className="text-xs uppercase text-ardoise-clair font-semibold mt-1">Zones</p>
         </Carte>
       </div>
 
@@ -127,66 +113,42 @@ function Contenu() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <CarteAction 
           titre="Bénéficiaires" 
-          description="Gérer les bénéficiaires inscrits" 
+          description="Enregistrer et gérer les bénéficiaires" 
           href="/ong/beneficiaires" 
-          icone="" 
+          icone="👥" 
         />
         <CarteAction 
           titre="Programmes" 
-          description="Gérer les programmes d'aide" 
+          description="Consulter les programmes actifs" 
           href="/ong/programme" 
           icone="📋" 
         />
         <CarteAction 
-          titre="Missions terrain" 
-          description="Planifier et suivre les missions" 
+          titre="Missions" 
+          description="Voir mes missions assignées" 
           href="/ong/missions" 
           icone="🌍" 
         />
         <CarteAction 
           titre="Attestations" 
-          description="Certificats communautaires" 
+          description="Mes attestations reçues" 
           href="/ong/attestations" 
           icone="📜" 
         />
       </div>
 
-      {/* Derniers bénéficiaires */}
-      {beneficiaires.length > 0 && (
-        <Carte titre="Derniers bénéficiaires inscrits">
-          <div className="space-y-2">
-            {beneficiaires.slice(0, 5).map((b) => (
-              <div key={b.id} className="flex items-center justify-between p-3 bg-sable rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-ocre/10 flex items-center justify-center text-ocre font-bold">
-                    {b.nom.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-ardoise">{b.nom}</p>
-                    <p className="text-xs text-ardoise-clair">{b.programme} · {b.zone || "Zone non spécifiée"}</p>
-                  </div>
-                </div>
-                <Badge variante={b.statut === "actif" ? "succes" : "lagune"}>
-                  {b.statut === "actif" ? "Actif" : "Inactif"}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </Carte>
-      )}
-
-      {/* Missions en cours */}
+      {/* Missions récentes */}
       {missions.length > 0 && (
-        <Carte titre="Missions en cours">
+        <Carte titre="Missions récentes">
           <div className="space-y-2">
-            {missions.filter(m => m.statut === "en_cours" || m.statut === "planifiee").slice(0, 3).map((m) => (
+            {missions.slice(0, 5).map((m) => (
               <div key={m.id} className="flex items-center justify-between p-3 bg-sable rounded-lg">
                 <div>
                   <p className="text-sm font-semibold text-ardoise">{m.titre}</p>
                   <p className="text-xs text-ardoise-clair">{m.zone || "Zone non spécifiée"} · {new Date(m.date_depart).toLocaleDateString("fr-FR")}</p>
                 </div>
-                <Badge variante={m.statut === "en_cours" ? "succes" : "ocre"}>
-                  {m.statut === "en_cours" ? "En cours" : "Planifiée"}
+                <Badge variante={m.statut === "en_cours" ? "succes" : m.statut === "planifiee" ? "ocre" : "lagune"}>
+                  {m.statut === "en_cours" ? "En cours" : m.statut === "planifiee" ? "Planifiée" : "Terminée"}
                 </Badge>
               </div>
             ))}
@@ -194,11 +156,10 @@ function Contenu() {
         </Carte>
       )}
 
-      {/* Message de bienvenue si vide */}
-      {beneficiaires.length === 0 && missions.length === 0 && (
+      {missions.length === 0 && (
         <div className="bg-ocre/10 border-l-4 border-ocre p-4 rounded">
           <p className="text-sm text-ardoise">
-            <strong>Bienvenue sur DigiID ONG !</strong> Commencez par ajouter vos premiers bénéficiaires et programmes pour suivre vos activités humanitaires.
+            <strong>Bienvenue !</strong> Commencez par enregistrer vos premiers bénéficiaires.
           </p>
         </div>
       )}
