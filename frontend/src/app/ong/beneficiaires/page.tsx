@@ -13,7 +13,7 @@ import type { BeneficiaireONG } from "@/services/ong";
 
 export default function BeneficiairesPage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["ong"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent-ong"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

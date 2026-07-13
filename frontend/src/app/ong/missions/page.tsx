@@ -13,7 +13,7 @@ import type { MissionTerrain, ProgrammeONG } from "@/services/ong";
 
 export default function MissionsPage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["ong"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent-ong"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
