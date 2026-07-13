@@ -3,21 +3,14 @@
 import { useState, useEffect } from "react";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
-import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
-import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
-import { creerMedecin, listerInvitations, annulerInvitation, renvoyerInvitation } from "@/services/chefs";
-
-interface Invitation {
-  id: string;
-  email: string;
-  role: string;
-  statut: "en_attente" | "acceptee" | "expiree" | "annulee";
-  date_creation: string;
-  date_expiration: string;
-  date_acceptation: string | null;
-}
+import {
+  listerInvitations,
+  annulerInvitation,
+  renvoyerInvitation,
+  type InvitationResponse, // ✅ On utilise le type du service, PAS d'interface locale
+} from "@/services/chefs";
 
 export default function ChefMedicalInvitationsPage() {
   return (
@@ -28,22 +21,12 @@ export default function ChefMedicalInvitationsPage() {
 }
 
 function Contenu() {
-  const [invitations, setInvitations] = useState<Invitation[]>([]);
+  // ✅ State typé avec InvitationResponse du service
+  const [invitations, setInvitations] = useState<InvitationResponse[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
-  const [afficherFormulaire, setAfficherFormulaire] = useState(false);
-  const [sauvegarde, setSauvegarde] = useState(false);
   const [filtreStatut, setFiltreStatut] = useState<string>("tous");
   const [recherche, setRecherche] = useState("");
-  const [formData, setFormData] = useState({
-    email: "",
-    prenom: "",
-    nom: "",
-    telephone: "",
-    ville: "",
-    specialite: "",
-    message: "",
-  });
 
   useEffect(() => {
     chargerInvitations();
@@ -54,6 +37,7 @@ function Contenu() {
     setErreur("");
     try {
       const data = await listerInvitations({ par_page: 100 });
+      // ✅ Plus de conflit de type ici car on utilise InvitationResponse
       setInvitations(data.invitations || []);
     } catch (error: any) {
       setErreur(error?.message || "Erreur de chargement des invitations");
@@ -62,34 +46,11 @@ function Contenu() {
     }
   }
 
-  async function handleInviter() {
-    if (!formData.email) return;
-    setSauvegarde(true);
-    try {
-      await creerMedecin(formData);
-      setAfficherFormulaire(false);
-      setFormData({
-        email: "",
-        prenom: "",
-        nom: "",
-        telephone: "",
-        ville: "",
-        specialite: "",
-        message: "",
-      });
-      chargerInvitations();
-    } catch (error: any) {
-      setErreur(error?.message || "Erreur lors de l'envoi de l'invitation");
-    } finally {
-      setSauvegarde(false);
-    }
-  }
-
   async function handleAnnuler(invitationId: string) {
     if (!confirm("Annuler cette invitation ?")) return;
     try {
       await annulerInvitation(invitationId);
-      chargerInvitations();
+      await chargerInvitations();
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors de l'annulation");
     }
@@ -98,20 +59,20 @@ function Contenu() {
   async function handleRenvoyer(invitationId: string) {
     try {
       await renvoyerInvitation(invitationId);
-      chargerInvitations();
+      await chargerInvitations();
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors du renvoi");
     }
   }
 
   const getBadgeStatut = (statut: string) => {
-    const config: any = {
+    const config: Record<string, { couleur: any; label: string }> = {
       en_attente: { couleur: "ocre", label: "En attente" },
       acceptee: { couleur: "succes", label: "Acceptée" },
       expiree: { couleur: "terre", label: "Expirée" },
-      annulee: { couleur: "neutre", label: "Annulée" },
+      annulee: { couleur: "lagune", label: "Annulée" },
     };
-    const cfg = config[statut] || { couleur: "neutre", label: statut };
+    const cfg = config[statut] || { couleur: "lagune", label: statut };
     return <Badge variante={cfg.couleur} taille="petit">{cfg.label}</Badge>;
   };
 
@@ -132,8 +93,8 @@ function Contenu() {
     <div className="min-h-screen space-y-6 apparition pb-20">
       <div>
         <p className="text-lagune font-semibold text-sm uppercase tracking-wider">✉️ Invitations</p>
-        <h1>Invitations Médicales</h1>
-        <p className="text-ardoise-clair mt-2">Envoyez des invitations pour créer des comptes médecins</p>
+        <h1 className="text-3xl font-bold text-ardoise mt-1">Invitations Médicales</h1>
+        <p className="text-ardoise-clair mt-2">Suivez les invitations envoyées à vos futurs médecins et agents médicaux</p>
       </div>
 
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
@@ -163,12 +124,12 @@ function Contenu() {
           placeholder="Rechercher par email..."
           value={recherche}
           onChange={(e) => setRecherche(e.target.value)}
-          className="flex-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+          className="flex-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
         />
         <select
           value={filtreStatut}
           onChange={(e) => setFiltreStatut(e.target.value)}
-          className="px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+          className="px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
         >
           <option value="tous">Tous les statuts</option>
           <option value="en_attente">En attente</option>
@@ -176,18 +137,20 @@ function Contenu() {
           <option value="expiree">Expirées</option>
           <option value="annulee">Annulées</option>
         </select>
-        <Bouton variante="primaire" onClick={() => setAfficherFormulaire(true)}>
-          ✉️ Nouvelle invitation
-        </Bouton>
       </div>
 
       <Carte titre={`${invitationsFiltrees.length} invitation(s)`}>
         {chargement ? (
-          <p className="text-ardoise-clair italic text-center py-8">Chargement...</p>
+          <div className="text-center py-8">
+            <div className="animate-spin w-8 h-8 border-4 border-lagune border-t-transparent rounded-full mx-auto mb-3"></div>
+            <p className="text-ardoise-clair italic">Chargement...</p>
+          </div>
         ) : invitationsFiltrees.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-4xl mb-3">✉️</p>
-            <p className="text-ardoise-clair italic">Aucune invitation trouvée.</p>
+            <p className="text-ardoise-clair italic">
+              {recherche ? "Aucune invitation trouvée." : "Aucune invitation envoyée."}
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -211,13 +174,13 @@ function Contenu() {
                     <>
                       <button
                         onClick={() => handleRenvoyer(invitation.id)}
-                        className="px-3 py-1 text-xs bg-lagune text-white rounded hover:bg-lagune/90"
+                        className="px-3 py-1 text-xs bg-lagune text-white rounded hover:bg-lagune/90 transition-colors"
                       >
                         Renvoyer
                       </button>
                       <button
                         onClick={() => handleAnnuler(invitation.id)}
-                        className="px-3 py-1 text-xs bg-terre text-white rounded hover:bg-terre/90"
+                        className="px-3 py-1 text-xs bg-terre text-white rounded hover:bg-terre/90 transition-colors"
                       >
                         Annuler
                       </button>
@@ -229,91 +192,6 @@ function Contenu() {
           </div>
         )}
       </Carte>
-
-      {afficherFormulaire && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-ardoise-clair/10 p-6 rounded-t-xl">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-ardoise">✉️ Inviter un médecin</h2>
-                <button
-                  onClick={() => setAfficherFormulaire(false)}
-                  className="text-ardoise-clair hover:text-ardoise transition-colors text-2xl leading-none"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-            <div className="p-6 space-y-4">
-              <Alerte variante="info">
-                Le médecin recevra un email avec un lien pour créer son compte lui-même.
-              </Alerte>
-              <ChampSaisie
-                libelle="Email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="medecin@hopital.com"
-                required
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <ChampSaisie
-                  libelle="Prénom"
-                  value={formData.prenom}
-                  onChange={(e) => setFormData({ ...formData, prenom: e.target.value })}
-                  placeholder="Prénom"
-                  required
-                />
-                <ChampSaisie
-                  libelle="Nom"
-                  value={formData.nom}
-                  onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
-                  placeholder="Nom"
-                  required
-                />
-              </div>
-              <ChampSaisie
-                libelle="Spécialité"
-                value={formData.specialite}
-                onChange={(e) => setFormData({ ...formData, specialite: e.target.value })}
-                placeholder="Ex: Médecin généraliste, Cardiologue..."
-              />
-              <ChampSaisie
-                libelle="Téléphone"
-                value={formData.telephone}
-                onChange={(e) => setFormData({ ...formData, telephone: e.target.value })}
-                placeholder="+221 77 123 45 67"
-              />
-              <ChampSaisie
-                libelle="Ville"
-                value={formData.ville}
-                onChange={(e) => setFormData({ ...formData, ville: e.target.value })}
-                placeholder="Dakar"
-              />
-              <div>
-                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
-                  Message personnalisé (optionnel)
-                </label>
-                <textarea
-                  value={formData.message}
-                  onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                  className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
-                  rows={3}
-                  placeholder="Ajoutez un message personnalisé..."
-                />
-              </div>
-              <div className="flex gap-3 pt-4 border-t border-ardoise-clair/10">
-                <Bouton variante="primaire" chargement={sauvegarde} onClick={handleInviter} className="flex-1">
-                  Envoyer l'invitation
-                </Bouton>
-                <Bouton variante="ghost" onClick={() => setAfficherFormulaire(false)}>
-                  Annuler
-                </Bouton>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
