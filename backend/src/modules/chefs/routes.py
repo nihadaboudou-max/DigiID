@@ -166,7 +166,7 @@ async def lister_mon_equipe(
     chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     page: int = Query(1, ge=1),
-    par_page: int = Query(20, ge=1, le=100),
+    par_page: int = Query(20, ge=1, le=1000),
 ):
     """Liste les agents créés par le chef."""
     chef = await verifier_est_chef(chef)
@@ -191,7 +191,7 @@ async def lister_agents_ong(
     chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     page: int = Query(1, ge=1),
-    par_page: int = Query(20, ge=1, le=100),
+    par_page: int = Query(20, ge=1, le=1000),
 ):
     """Liste les agents ONG créés par le chef ONG."""
     chef = await verifier_est_chef(chef)
@@ -223,7 +223,7 @@ async def lister_agents_police(
     chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     page: int = Query(1, ge=1),
-    par_page: int = Query(20, ge=1, le=100),
+    par_page: int = Query(20, ge=1, le=1000),
 ):
     """Liste les agents police créés par le chef police."""
     chef = await verifier_est_chef(chef)
@@ -255,7 +255,7 @@ async def lister_medecins(
     chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     page: int = Query(1, ge=1),
-    par_page: int = Query(20, ge=1, le=100),
+    par_page: int = Query(20, ge=1, le=1000),
 ):
     """Liste les médecins créés par le chef médical."""
     chef = await verifier_est_chef(chef)
@@ -287,7 +287,7 @@ async def lister_agents_enrolement(
     chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     page: int = Query(1, ge=1),
-    par_page: int = Query(20, ge=1, le=100),
+    par_page: int = Query(20, ge=1, le=1000),
 ):
     """Liste les agents enrôlement créés par le chef enrôlement."""
     chef = await verifier_est_chef(chef)
@@ -496,7 +496,7 @@ async def lister_invitations_chef(
     chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     page: int = Query(1, ge=1),
-    par_page: int = Query(20, ge=1, le=100),
+    par_page: int = Query(20, ge=1, le=1000),
     statut: str | None = None,
 ):
     """Liste les invitations envoyées par le chef."""
