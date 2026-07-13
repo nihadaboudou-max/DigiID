@@ -13,7 +13,7 @@ import type { ProgrammeONG } from "@/services/ong";
 
 export default function ProgrammePage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent-ong"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_ong"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

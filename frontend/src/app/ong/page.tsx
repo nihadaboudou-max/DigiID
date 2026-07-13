@@ -16,7 +16,7 @@ export default function AccueilONG() {
   }, [router]);
 
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent-ong"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_ong"]}>
       <p className="text-ardoise-clair italic text-center py-12">
         Redirection vers le tableau de bord...
       </p>

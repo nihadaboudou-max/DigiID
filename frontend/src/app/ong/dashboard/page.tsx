@@ -12,7 +12,7 @@ import type { StatsONG, BeneficiaireONG, MissionTerrain } from "@/services/ong";
 
 export default function OngDashboard() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent-ong"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_ong"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

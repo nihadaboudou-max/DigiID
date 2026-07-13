@@ -8,7 +8,7 @@ import { useRoleUI } from "@/crochets/useRoleUI";
 
 export default function OngAttestationsPage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent-ong"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_ong"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
