@@ -13,7 +13,7 @@ import type { Enrolement } from "@/services/enrolement";
 
 export default function AgentDashboard() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_terrain"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

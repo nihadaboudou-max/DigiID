@@ -30,7 +30,7 @@ interface RendezVous {
 
 export default function CalendrierMedecin() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["medecin"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_medical"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

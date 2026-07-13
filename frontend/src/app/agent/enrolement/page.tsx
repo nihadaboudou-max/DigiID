@@ -11,7 +11,7 @@ import { creerEnrolement } from "@/services/enrolement";
 
 export default function EnrolementPage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_terrain"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

@@ -24,7 +24,7 @@ interface Activite {
 
 export default function HistoriqueMedecin() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["medecin"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_medical"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

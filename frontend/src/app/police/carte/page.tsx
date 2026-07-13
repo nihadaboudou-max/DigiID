@@ -18,7 +18,7 @@ const CarteInteractive = dynamic(
 
 export default function PageCarte() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["police"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_police"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

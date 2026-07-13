@@ -16,7 +16,7 @@ export default function AccueilMedecin() {
   }, [router]);
 
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["medecin"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_medical"]}>
       <p className="text-ardoise-clair italic text-center py-12">
         Redirection vers le tableau de bord...
       </p>

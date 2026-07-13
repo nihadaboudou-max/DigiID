@@ -20,7 +20,7 @@ import type { DossierMedical, Consultation, Ordonnance } from "@/services/medica
 
 export default function DossierDetailPage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["medecin"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_medical"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

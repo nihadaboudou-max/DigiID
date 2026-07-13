@@ -10,7 +10,7 @@ import { obtenirProfilPersonne } from "@/services/police";
 import type { ProfilPersonne } from "@/services/police";
 
 export default function PageProfilPersonne() {
-  return <EnvelopperEspaceProtege rolesAutorises={["police"]}><Contenu /></EnvelopperEspaceProtege>;
+  return <EnvelopperEspaceProtege rolesAutorises={["agent_police"]}><Contenu /></EnvelopperEspaceProtege>;
 }
 
 function Contenu() {

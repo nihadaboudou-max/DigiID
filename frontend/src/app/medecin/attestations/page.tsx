@@ -12,7 +12,7 @@ import type { DossierMedical } from "@/services/medical";
 
 export default function AttestationsPage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["medecin"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_medical"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

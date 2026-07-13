@@ -16,7 +16,7 @@ import type { ComparaisonPhotos } from "@/services/police";
 
 export default function PageComparaisonPhotos() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["police"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_police"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

@@ -16,7 +16,7 @@ export default function AccueilAgent() {
   }, [router]);
 
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_terrain"]}>
       <p className="text-ardoise-clair italic text-center py-12">
         Redirection vers le tableau de bord...
       </p>

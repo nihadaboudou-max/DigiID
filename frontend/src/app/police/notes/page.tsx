@@ -21,7 +21,7 @@ import type { NoteInterne } from "@/services/police";
 
 export default function PageNotes() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["police"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_police"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

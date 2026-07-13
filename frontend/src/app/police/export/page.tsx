@@ -14,7 +14,7 @@ import { genererRapport } from "@/services/police";
 
 export default function PageExport() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["police"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_police"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

@@ -13,7 +13,7 @@ import type { VerificationPatient } from "@/services/medical";
 
 export default function NouveauDossier() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["medecin"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_medical"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

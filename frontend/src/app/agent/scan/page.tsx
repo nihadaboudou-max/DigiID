@@ -13,7 +13,7 @@ import type { ReponseUploadCNI } from "@/services/verification_cni";
 
 export default function ScanPage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_terrain"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

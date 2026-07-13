@@ -16,7 +16,7 @@ export default function AccueilPolice() {
   }, [router]);
 
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["police"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_police"]}>
       <p className="text-ardoise-clair italic text-center py-12">
         Redirection vers le tableau de bord...
       </p>

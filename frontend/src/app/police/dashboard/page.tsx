@@ -13,7 +13,7 @@ import type { VerificationPolice, StatistiquesPolice } from "@/services/police";
 
 export default function PoliceDashboard() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["police"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_police"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

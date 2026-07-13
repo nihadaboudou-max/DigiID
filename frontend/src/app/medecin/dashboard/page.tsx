@@ -17,7 +17,7 @@ import type { DossierMedical } from "@/services/medical";
 
 export default function MedecinDashboard() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["medecin"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_medical"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

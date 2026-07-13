@@ -9,7 +9,7 @@ import { listerAlertes, marquerAlerteLue } from "@/services/police";
 import type { AlertePolice } from "@/services/police";
 
 export default function PageAlertes() {
-  return <EnvelopperEspaceProtege rolesAutorises={["police"]}><Contenu /></EnvelopperEspaceProtege>;
+  return <EnvelopperEspaceProtege rolesAutorises={["agent_police"]}><Contenu /></EnvelopperEspaceProtege>;
 }
 
 function Contenu() {

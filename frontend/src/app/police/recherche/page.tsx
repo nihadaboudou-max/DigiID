@@ -12,7 +12,7 @@ import type { PersonneRecherchee } from "@/services/police";
 
 export default function RecherchePage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["police"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_police"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

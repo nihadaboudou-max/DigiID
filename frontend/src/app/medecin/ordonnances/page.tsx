@@ -17,7 +17,7 @@ import type { Ordonnance, DossierMedical } from "@/services/medical";
 
 export default function OrdonnancesPage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["medecin"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_medical"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

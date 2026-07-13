@@ -12,7 +12,7 @@ import { useRoleUI } from "@/crochets/useRoleUI";
 
 export default function CapturePage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_terrain"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
