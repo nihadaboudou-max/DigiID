@@ -5,15 +5,11 @@
 import { clientAPI } from "./client_api";
 
 // =============================================================================
-// TYPES
+// TYPES (Alignés strictement avec backend/src/modules/chefs/schemas.py)
 // =============================================================================
 
 export interface InvitationAgentCreate {
   email: string;
-  prenom?: string;
-  nom?: string;
-  telephone?: string;
-  ville?: string;
   message?: string;
 }
 
@@ -44,7 +40,6 @@ export interface AgentONGCreate {
   ville?: string;
   pays?: string;
   mission?: string;
-  zone_intervention?: string;
 }
 
 export interface AgentEnrolementCreate {
@@ -67,7 +62,7 @@ export interface AgentResponse {
   departement_id: string | null;
   superieur_id: string | null;
   est_actif: boolean;
-  ville?: string;
+  ville: string | null;
   date_creation: string;
 }
 
@@ -75,7 +70,7 @@ export interface InvitationResponse {
   id: string;
   email: string;
   role: string;
-  statut: "en_attente" | "acceptee" | "expiree" | "annulee";
+  statut: string;
   date_creation: string;
   date_expiration: string;
   date_acceptation: string | null;
@@ -98,26 +93,20 @@ export interface StatistiquesChefResponse {
 }
 
 // =============================================================================
-// INVITATIONS - NOUVEAU !
+// INVITATIONS
 // =============================================================================
 
-/**
- * Envoie une invitation à un futur agent.
- */
 export async function inviterAgent(
   typeChef: "ong" | "police" | "medical" | "enrolement",
   data: InvitationAgentCreate
-): Promise<InvitationResponse> {
-  return clientAPI.post<InvitationResponse>(
+): Promise<any> {
+  return clientAPI.post<any>(
     `/api/v1/chefs/${typeChef}/invitations`,
     data,
     { authentifie: true }
   );
 }
 
-/**
- * Liste les invitations envoyées par le chef.
- */
 export async function listerInvitations(params?: {
   page?: number;
   par_page?: number;
@@ -132,9 +121,6 @@ export async function listerInvitations(params?: {
   );
 }
 
-/**
- * Annule une invitation en attente.
- */
 export async function annulerInvitation(invitationId: string): Promise<void> {
   return clientAPI.delete<void>(
     `/api/v1/chefs/invitations/${invitationId}`,
@@ -142,19 +128,16 @@ export async function annulerInvitation(invitationId: string): Promise<void> {
   );
 }
 
-/**
- * Renvoie une invitation.
- */
-export async function renvoyerInvitation(invitationId: string): Promise<InvitationResponse> {
-  return clientAPI.post<InvitationResponse>(
+export async function renvoyerInvitation(invitationId: string): Promise<any> {
+  return clientAPI.post<any>(
     `/api/v1/chefs/invitations/${invitationId}/renvoyer`,
-    undefined,
+    {},
     { authentifie: true }
   );
 }
 
 // =============================================================================
-// CRÉATION DIRECTE D'AGENTS (sans invitation)
+// CRÉATION DIRECTE D'AGENTS
 // =============================================================================
 
 export async function creerAgentPolice(
@@ -267,7 +250,7 @@ export async function listerAgentsEnrolement(params?: {
 }
 
 // =============================================================================
-// STATISTIQUES EN TEMPS RÉEL
+// STATISTIQUES
 // =============================================================================
 
 export async function obtenirStatistiquesChef(): Promise<StatistiquesChefResponse> {
@@ -284,7 +267,7 @@ export async function obtenirStatistiquesChef(): Promise<StatistiquesChefRespons
 export async function suspendreAgent(agentId: string): Promise<AgentResponse> {
   return clientAPI.patch<AgentResponse>(
     `/api/v1/chefs/agents/${agentId}/suspendre`,
-    undefined,
+    {},
     { authentifie: true }
   );
 }
@@ -292,7 +275,7 @@ export async function suspendreAgent(agentId: string): Promise<AgentResponse> {
 export async function reactiverAgent(agentId: string): Promise<AgentResponse> {
   return clientAPI.patch<AgentResponse>(
     `/api/v1/chefs/agents/${agentId}/reactiver`,
-    undefined,
+    {},
     { authentifie: true }
   );
 }

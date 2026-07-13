@@ -7,64 +7,38 @@ import { Badge } from "@/composants/commun/Badge";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
 import {
-  listerAgentsONG,
-  listerAgentsPolice,
-  listerMedecins,
-  listerAgentsEnrolement,
-  creerAgentONG,
-  creerAgentPolice,
-  creerMedecin,
-  creerAgentEnrolement,
-  inviterAgent,
-  listerInvitations,
-  annulerInvitation,
-  renvoyerInvitation,
-  type AgentResponse,
-  type InvitationResponse,
+  listerAgentsONG, listerAgentsPolice, listerMedecins, listerAgentsEnrolement,
+  creerAgentONG, creerAgentPolice, creerMedecin, creerAgentEnrolement,
+  inviterAgent, listerInvitations, annulerInvitation, renvoyerInvitation,
+  type AgentResponse, type InvitationResponse,
 } from "@/services/chefs";
 
 interface GestionAgentsChefProps {
   titre: string;
   sousTitre: string;
   typeAgent: "police" | "medical" | "ong" | "enrolement";
-  creerAgent: (data: any) => Promise<any>;
-  champsSupplementaires?: Array<{
-    nom: string;
-    label: string;
-    type: string;
-    required?: boolean;
-  }>;
 }
 
-export default function GestionAgentsChef({
-  titre,
-  sousTitre,
-  typeAgent,
-  creerAgent,
-  champsSupplementaires = [],
-}: GestionAgentsChefProps) {
+export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: GestionAgentsChefProps) {
   const [agents, setAgents] = useState<AgentResponse[]>([]);
   const [invitations, setInvitations] = useState<InvitationResponse[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
-  const [modeCreation, setModeCreation] = useState<"direct" | "invitation">(
-    "invitation"
-  );
+  const [modeCreation, setModeCreation] = useState<"direct" | "invitation">("invitation");
   const [afficherFormulaire, setAfficherFormulaire] = useState(false);
   const [sauvegarde, setSauvegarde] = useState(false);
   const [recherche, setRecherche] = useState("");
-  const [filtreStatut, setFiltreStatut] = useState<
-    "tous" | "actif" | "inactif"
-  >("tous");
+  const [filtreStatut, setFiltreStatut] = useState<"tous" | "actif" | "inactif">("tous");
 
-  // Formulaire
-  const [formData, setFormData] = useState<any>({
+  const [formData, setFormData] = useState({
     email: "",
     prenom: "",
     nom: "",
     telephone: "",
     ville: "",
-    message: "",
+    pays: "Sénégal",
+    mission: "", // Spécifique à ONG
+    message: "", // Pour l'invitation
   });
 
   useEffect(() => {
@@ -75,76 +49,77 @@ export default function GestionAgentsChef({
     setChargement(true);
     setErreur("");
     try {
-      const listerFonction = getListerFonction();
+      const listerFonction = {
+        police: listerAgentsPolice,
+        medical: listerMedecins,
+        ong: listerAgentsONG,
+        enrolement: listerAgentsEnrolement,
+      }[typeAgent];
+
       const [agentsData, invitationsData] = await Promise.all([
         listerFonction({ par_page: 100 }),
         listerInvitations({ par_page: 50 }),
       ]);
+      
       setAgents(agentsData.agents || []);
       setInvitations(invitationsData.invitations || []);
     } catch (error: any) {
-      setErreur(error?.message || "Erreur de chargement.");
+      setErreur(error?.message || "Erreur de chargement des données.");
     } finally {
       setChargement(false);
     }
   }
 
-  function getListerFonction() {
-    switch (typeAgent) {
-      case "police":
-        return listerAgentsPolice;
-      case "medical":
-        return listerMedecins;
-      case "ong":
-        return listerAgentsONG;
-      case "enrolement":
-        return listerAgentsEnrolement;
-      default:
-        return listerAgentsONG;
-    }
-  }
-
   function getCreerFonction() {
     switch (typeAgent) {
-      case "police":
-        return creerAgentPolice;
-      case "medical":
-        return creerMedecin;
-      case "ong":
-        return creerAgentONG;
-      case "enrolement":
-        return creerAgentEnrolement;
-      default:
-        return creerAgentONG;
+      case "police": return creerAgentPolice;
+      case "medical": return creerMedecin;
+      case "ong": return creerAgentONG;
+      case "enrolement": return creerAgentEnrolement;
+      default: return creerAgentONG;
     }
   }
 
   function ouvrirFormulaire(mode: "direct" | "invitation") {
     setModeCreation(mode);
-    setFormData({
-      email: "",
-      prenom: "",
-      nom: "",
-      telephone: "",
-      ville: "",
-      message: "",
-    });
+    setFormData({ email: "", prenom: "", nom: "", telephone: "", ville: "", pays: "Sénégal", mission: "", message: "" });
     setAfficherFormulaire(true);
+    setErreur("");
   }
 
   async function handleCreer() {
-    if (!formData.email || !formData.prenom || !formData.nom) return;
+    if (!formData.email || !formData.prenom || !formData.nom) {
+      setErreur("L'email, le prénom et le nom sont obligatoires.");
+      return;
+    }
+    
     setSauvegarde(true);
+    setErreur("");
+    
     try {
       if (modeCreation === "invitation") {
-        await inviterAgent(typeAgent, formData);
+        await inviterAgent(typeAgent, { email: formData.email, message: formData.message });
       } else {
-        await creerAgent(formData);
+        const creerFonction = getCreerFonction();
+        // On envoie uniquement les champs attendus par le schéma Pydantic
+        const payload: any = {
+          email: formData.email,
+          prenom: formData.prenom,
+          nom: formData.nom,
+          telephone: formData.telephone || undefined,
+          ville: formData.ville || undefined,
+          pays: formData.pays || "Sénégal",
+        };
+        if (typeAgent === "ong") {
+          payload.mission = formData.mission || undefined;
+        }
+        await creerFonction(payload);
       }
+      
       setAfficherFormulaire(false);
-      charger();
+      await charger();
     } catch (error: any) {
-      setErreur(error?.message || "Erreur lors de la création.");
+      setErreur(error?.message || "Une erreur est survenue lors de l'opération.");
     } finally {
       setSauvegarde(false);
     }
@@ -154,7 +129,7 @@ export default function GestionAgentsChef({
     if (!confirm("Annuler cette invitation ?")) return;
     try {
       await annulerInvitation(invitationId);
-      charger();
+      await charger();
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors de l'annulation.");
     }
@@ -163,7 +138,7 @@ export default function GestionAgentsChef({
   async function handleRenvoyerInvitation(invitationId: string) {
     try {
       await renvoyerInvitation(invitationId);
-      charger();
+      await charger();
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors du renvoi.");
     }
@@ -180,29 +155,22 @@ export default function GestionAgentsChef({
     return matchRecherche && matchStatut;
   });
 
-  const invitationsEnAttente = invitations.filter(
-    (inv) => inv.statut === "en_attente"
-  );
+  const invitationsEnAttente = invitations.filter((inv) => inv.statut === "en_attente");
 
   return (
     <div className="min-h-screen space-y-6 apparition pb-20">
-      {/* En-tête */}
       <div>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
-          Gestion
-        </p>
-        <h1>{titre}</h1>
+        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Gestion</p>
+        <h1 className="text-3xl font-bold text-ardoise mt-1">{titre}</h1>
         <p className="text-ardoise-clair mt-2">{sousTitre}</p>
       </div>
 
-      {/* Erreur */}
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
 
-      {/* Actions */}
       <div className="flex flex-col sm:flex-row gap-3">
         <input
           type="text"
-          placeholder="Rechercher un agent..."
+          placeholder="Rechercher par nom ou email..."
           value={recherche}
           onChange={(e) => setRecherche(e.target.value)}
           className="flex-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
@@ -217,55 +185,34 @@ export default function GestionAgentsChef({
           <option value="inactif">Inactifs</option>
         </select>
         <div className="flex gap-2">
-          <Bouton
-            variante={modeCreation === "invitation" ? "primaire" : "ghost"}
-            onClick={() => ouvrirFormulaire("invitation")}
-          >
+          <Bouton variante={modeCreation === "invitation" ? "primaire" : "ghost"} onClick={() => ouvrirFormulaire("invitation")}>
             ✉️ Inviter
           </Bouton>
-          <Bouton
-            variante={modeCreation === "direct" ? "primaire" : "ghost"}
-            onClick={() => ouvrirFormulaire("direct")}
-          >
+          <Bouton variante={modeCreation === "direct" ? "primaire" : "ghost"} onClick={() => ouvrirFormulaire("direct")}>
             + Créer
           </Bouton>
         </div>
       </div>
 
-      {/* Invitations en attente */}
       {invitationsEnAttente.length > 0 && (
         <Carte titre={`Invitations en attente (${invitationsEnAttente.length})`}>
           <div className="space-y-2">
             {invitationsEnAttente.map((invitation) => (
-              <div
-                key={invitation.id}
-                className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-ocre/5 rounded-lg gap-3"
-              >
+              <div key={invitation.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-ocre/5 rounded-lg gap-3">
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">✉️</span>
                   <div>
-                    <p className="font-semibold text-ardoise">
-                      {invitation.email}
-                    </p>
+                    <p className="font-semibold text-ardoise">{invitation.email}</p>
                     <p className="text-xs text-ardoise-clair">
-                      Envoyée le{" "}
-                      {new Date(invitation.date_creation).toLocaleDateString(
-                        "fr-FR"
-                      )}
+                      Envoyée le {new Date(invitation.date_creation).toLocaleDateString("fr-FR")}
                     </p>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => handleRenvoyerInvitation(invitation.id)}
-                    className="px-3 py-1 text-xs bg-lagune text-white rounded hover:bg-lagune/90 transition-colors"
-                  >
+                  <button onClick={() => handleRenvoyerInvitation(invitation.id)} className="px-3 py-1 text-xs bg-lagune text-white rounded hover:bg-lagune/90 transition-colors">
                     Renvoyer
                   </button>
-                  <button
-                    onClick={() => handleAnnulerInvitation(invitation.id)}
-                    className="px-3 py-1 text-xs bg-terre text-white rounded hover:bg-terre/90 transition-colors"
-                  >
+                  <button onClick={() => handleAnnulerInvitation(invitation.id)} className="px-3 py-1 text-xs bg-terre text-white rounded hover:bg-terre/90 transition-colors">
                     Annuler
                   </button>
                 </div>
@@ -275,7 +222,6 @@ export default function GestionAgentsChef({
         </Carte>
       )}
 
-      {/* Liste des agents */}
       <Carte titre={`${agentsFiltres.length} agent(s)`}>
         {chargement ? (
           <div className="text-center py-8">
@@ -290,39 +236,25 @@ export default function GestionAgentsChef({
         ) : (
           <div className="space-y-3">
             {agentsFiltres.map((agent) => (
-              <div
-                key={agent.id}
-                className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-sable rounded-lg hover:bg-sable/80 transition-colors gap-3"
-              >
+              <div key={agent.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-sable rounded-lg hover:bg-sable/80 transition-colors gap-3">
                 <div className="flex items-center gap-4 min-w-0 flex-1">
                   <div className="w-12 h-12 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold flex-shrink-0">
                     {(agent.prenom[0] || "") + (agent.nom[0] || "")}
                   </div>
                   <div className="min-w-0">
-                    <p className="font-bold text-ardoise truncate">
-                      {agent.prenom} {agent.nom}
-                    </p>
-                    <p className="text-sm text-ardoise-clair truncate">
-                      {agent.email}
-                    </p>
+                    <p className="font-bold text-ardoise truncate">{agent.prenom} {agent.nom}</p>
+                    <p className="text-sm text-ardoise-clair truncate">{agent.email}</p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <Badge
-                        variante={agent.est_actif ? "succes" : "terre"}
-                        taille="petit"
-                      >
+                      <Badge variante={agent.est_actif ? "succes" : "terre"} taille="petit">
                         {agent.est_actif ? "Actif" : "Inactif"}
                       </Badge>
-                      <span className="text-xs text-ardoise-clair font-mono">
-                        {agent.digiid_public}
-                      </span>
+                      <span className="text-xs text-ardoise-clair font-mono">{agent.digiid_public}</span>
                     </div>
                   </div>
                 </div>
                 <div className="text-xs text-ardoise-clair flex-shrink-0 sm:text-right">
                   <p>Créé le</p>
-                  <p className="font-medium">
-                    {new Date(agent.date_creation).toLocaleDateString("fr-FR")}
-                  </p>
+                  <p className="font-medium">{new Date(agent.date_creation).toLocaleDateString("fr-FR")}</p>
                 </div>
               </div>
             ))}
@@ -330,131 +262,49 @@ export default function GestionAgentsChef({
         )}
       </Carte>
 
-      {/* Modal de création/invitation - CORRIGÉ : Plein écran */}
       {afficherFormulaire && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            {/* Header sticky */}
             <div className="sticky top-0 bg-white border-b border-ardoise-clair/10 p-6 rounded-t-xl z-10">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-ardoise">
-                  {modeCreation === "invitation"
-                    ? "✉️ Inviter un nouvel agent"
-                    : "+ Créer un nouvel agent"}
+                  {modeCreation === "invitation" ? "✉️ Inviter un nouvel agent" : "+ Créer un nouvel agent"}
                 </h2>
-                <button
-                  onClick={() => setAfficherFormulaire(false)}
-                  className="text-ardoise-clair hover:text-ardoise transition-colors text-2xl leading-none"
-                  aria-label="Fermer"
-                >
-                  ✕
-                </button>
+                <button onClick={() => setAfficherFormulaire(false)} className="text-ardoise-clair hover:text-ardoise transition-colors text-2xl leading-none" aria-label="Fermer">✕</button>
               </div>
             </div>
 
-            {/* Contenu */}
             <div className="p-6 space-y-4">
               {modeCreation === "invitation" && (
-                <Alerte variante="info">
-                  L'agent recevra un email avec un lien pour créer son compte
-                  lui-même.
-                </Alerte>
+                <Alerte variante="info">L'agent recevra un email avec un lien pour créer son compte lui-même.</Alerte>
               )}
 
-              <ChampSaisie
-                libelle="Email"
-                type="email"
-                value={formData.email}
-                onChange={(e) =>
-                  setFormData({ ...formData, email: e.target.value })
-                }
-                placeholder="agent@exemple.com"
-                required
-              />
+              <ChampSaisie libelle="Email *" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="agent@exemple.com" required />
+              
               <div className="grid grid-cols-2 gap-3">
-                <ChampSaisie
-                  libelle="Prénom"
-                  value={formData.prenom}
-                  onChange={(e) =>
-                    setFormData({ ...formData, prenom: e.target.value })
-                  }
-                  placeholder="Prénom"
-                  required
-                />
-                <ChampSaisie
-                  libelle="Nom"
-                  value={formData.nom}
-                  onChange={(e) =>
-                    setFormData({ ...formData, nom: e.target.value })
-                  }
-                  placeholder="Nom"
-                  required
-                />
+                <ChampSaisie libelle="Prénom *" value={formData.prenom} onChange={(e) => setFormData({ ...formData, prenom: e.target.value })} placeholder="Prénom" required />
+                <ChampSaisie libelle="Nom *" value={formData.nom} onChange={(e) => setFormData({ ...formData, nom: e.target.value })} placeholder="Nom" required />
               </div>
-              <ChampSaisie
-                libelle="Téléphone"
-                value={formData.telephone}
-                onChange={(e) =>
-                  setFormData({ ...formData, telephone: e.target.value })
-                }
-                placeholder="+221 77 123 45 67"
-              />
-              <ChampSaisie
-                libelle="Ville"
-                value={formData.ville}
-                onChange={(e) =>
-                  setFormData({ ...formData, ville: e.target.value })
-                }
-                placeholder="Dakar"
-              />
-              {champsSupplementaires.map((champ) => (
-                <ChampSaisie
-                  key={champ.nom}
-                  libelle={champ.label}
-                  type={champ.type}
-                  value={formData[champ.nom] || ""}
-                  onChange={(e) =>
-                    setFormData({ ...formData, [champ.nom]: e.target.value })
-                  }
-                  placeholder={champ.label}
-                  required={champ.required}
-                />
-              ))}
+              
+              <ChampSaisie libelle="Téléphone" value={formData.telephone} onChange={(e) => setFormData({ ...formData, telephone: e.target.value })} placeholder="+221 77 123 45 67" />
+              <ChampSaisie libelle="Ville" value={formData.ville} onChange={(e) => setFormData({ ...formData, ville: e.target.value })} placeholder="Dakar" />
+              
+              {typeAgent === "ong" && modeCreation === "direct" && (
+                <ChampSaisie libelle="Mission (optionnel)" value={formData.mission} onChange={(e) => setFormData({ ...formData, mission: e.target.value })} placeholder="Ex: Distribution alimentaire" />
+              )}
+              
               {modeCreation === "invitation" && (
                 <div>
-                  <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
-                    Message personnalisé (optionnel)
-                  </label>
-                  <textarea
-                    value={formData.message}
-                    onChange={(e) =>
-                      setFormData({ ...formData, message: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
-                    rows={3}
-                    placeholder="Ajoutez un message personnalisé à l'invitation..."
-                  />
+                  <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Message personnalisé (optionnel)</label>
+                  <textarea value={formData.message} onChange={(e) => setFormData({ ...formData, message: e.target.value })} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30" rows={3} placeholder="Ajoutez un message personnalisé..." />
                 </div>
               )}
 
-              {/* Footer avec boutons */}
               <div className="flex gap-3 pt-4 border-t border-ardoise-clair/10">
-                <Bouton
-                  variante="primaire"
-                  chargement={sauvegarde}
-                  onClick={handleCreer}
-                  className="flex-1"
-                >
-                  {modeCreation === "invitation"
-                    ? "Envoyer l'invitation"
-                    : "Créer l'agent"}
+                <Bouton variante="primaire" chargement={sauvegarde} onClick={handleCreer} className="flex-1">
+                  {modeCreation === "invitation" ? "Envoyer l'invitation" : "Créer l'agent"}
                 </Bouton>
-                <Bouton
-                  variante="ghost"
-                  onClick={() => setAfficherFormulaire(false)}
-                >
-                  Annuler
-                </Bouton>
+                <Bouton variante="ghost" onClick={() => setAfficherFormulaire(false)}>Annuler</Bouton>
               </div>
             </div>
           </div>

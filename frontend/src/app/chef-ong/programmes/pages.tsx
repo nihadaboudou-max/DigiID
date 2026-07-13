@@ -6,11 +6,12 @@ import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspacePr
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
-import { Alerte } from "@/composants/commun/Alerte";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
+import { Alerte } from "@/composants/commun/Alerte";
 
 interface Programme {
   id: string;
+  ong_id: string;
   nom: string;
   description: string | null;
   zone: string | null;
@@ -18,6 +19,8 @@ interface Programme {
   date_debut: string;
   date_fin: string | null;
   statut: string;
+  domaine_id: string | null;
+  departement_id: string | null;
 }
 
 export default function ChefOngProgrammesPage() {
@@ -47,24 +50,20 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      const reponse = await fetch("/api/v1/chefs/ong/programmes", { 
+      // Le chef ONG utilise le module ONG (avec cloisonnement automatique)
+      const reponse = await fetch("/api/v1/ong/programmes", { 
         credentials: "include" 
       });
       
       if (!reponse.ok) {
-        if (reponse.status === 401) {
-          throw new Error("Session expirée");
-        }
-        if (reponse.status === 404) {
-          throw new Error("Endpoint non disponible");
-        }
+        if (reponse.status === 401) throw new Error("Session expirée");
         throw new Error("Erreur de chargement");
       }
       
       const data = await reponse.json();
       setProgrammes(Array.isArray(data) ? data : []);
     } catch (error) {
-      setErreur(error instanceof Error ? error.message : "Erreur de chargement");
+      setErreur(error instanceof Error ? error.message : "Erreur de chargement des programmes");
       console.error(error);
     } finally {
       setChargement(false);
@@ -75,7 +74,7 @@ function Contenu() {
     if (!nom || !date_debut) return;
     setEnvoi(true);
     try {
-      const reponse = await fetch("/api/v1/chefs/ong/programmes", {
+      const reponse = await fetch("/api/v1/ong/programmes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -89,13 +88,16 @@ function Contenu() {
         }),
       });
       
-      if (!reponse.ok) throw new Error("Erreur de création");
+      if (!reponse.ok) {
+        const err = await reponse.json().catch(() => ({}));
+        throw new Error(err.detail || "Erreur de création");
+      }
       
       await charger();
       setNom(""); setDescription(""); setZone(""); setBudget(""); setDateDebut(""); setDateFin("");
       setAfficherForm(false);
     } catch (error) {
-      setErreur("Erreur lors de la création du programme");
+      setErreur(error instanceof Error ? error.message : "Erreur lors de la création");
       console.error(error);
     } finally {
       setEnvoi(false);
@@ -155,8 +157,9 @@ function Contenu() {
       ) : programmes.length === 0 ? (
         <Carte>
           <div className="text-center py-8">
-            <p className="text-4xl mb-3"></p>
+            <p className="text-4xl mb-3">📋</p>
             <p className="text-ardoise-clair italic">Aucun programme enregistré.</p>
+            <p className="text-xs text-ardoise-clair mt-2">Créez votre premier programme pour commencer !</p>
           </div>
         </Carte>
       ) : (
