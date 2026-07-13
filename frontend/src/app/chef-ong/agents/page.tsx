@@ -7,42 +7,33 @@ import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { Alerte } from "@/composants/commun/Alerte";
-
-interface Agent {
-  id: string;
-  email: string;
-  prenom: string;
-  nom: string;
-  role: string;
-  est_actif: boolean;
-  date_creation: string;
-  ville: string | null;
-}
+import { listerAgentsONG, type AgentResponse } from "@/services/chefs";
 
 export default function ChefOngAgentsPage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["chef_ong", "super_administrateur"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["chef_ong", "super_administrateur", "admin_domaine"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
 }
 
 function Contenu() {
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [agents, setAgents] = useState<AgentResponse[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [recherche, setRecherche] = useState("");
 
-  useEffect(() => { charger(); }, []);
+  useEffect(() => { 
+    charger(); 
+  }, []);
 
   async function charger() {
     setChargement(true);
     setErreur(null);
     try {
-      const reponse = await fetch("/api/v1/chefs/ong/agents?par_page=100", { credentials: "include" });
-      if (!reponse.ok) throw new Error("Erreur de chargement");
-      const data = await reponse.json();
-      setAgents(Array.isArray(data.agents) ? data.agents : []);
+      // ✅ CORRECTION : Utilisation du service qui gère l'authentification automatiquement
+      const data = await listerAgentsONG({ par_page: 100 });
+      setAgents(data.agents || []);
     } catch (error: any) {
       setErreur(error?.message || "Erreur de chargement des agents");
     } finally {
@@ -80,10 +71,10 @@ function Contenu() {
           placeholder="Rechercher par nom ou email..."
           value={recherche}
           onChange={(e) => setRecherche(e.target.value)}
-          className="flex-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm"
+          className="flex-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ocre/30"
         />
         <Link href="/chef-ong/invitations">
-          <Bouton variante="primaire">️ Inviter</Bouton>
+          <Bouton variante="primaire">✉️ Inviter</Bouton>
         </Link>
       </div>
 
