@@ -11,7 +11,6 @@ import { Alerte } from "@/composants/commun/Alerte";
 
 interface Programme {
   id: string;
-  ong_id: string;
   nom: string;
   description: string | null;
   zone: string | null;
@@ -19,8 +18,6 @@ interface Programme {
   date_debut: string;
   date_fin: string | null;
   statut: string;
-  domaine_id: string | null;
-  departement_id: string | null;
 }
 
 export default function ChefOngProgrammesPage() {
@@ -40,8 +37,8 @@ function Contenu() {
   const [description, setDescription] = useState("");
   const [zone, setZone] = useState("");
   const [budget, setBudget] = useState("");
-  const [date_debut, setDateDebut] = useState("");
-  const [date_fin, setDateFin] = useState("");
+  const [dateDebut, setDateDebut] = useState("");
+  const [dateFin, setDateFin] = useState("");
   const [envoi, setEnvoi] = useState(false);
 
   useEffect(() => { charger(); }, []);
@@ -50,28 +47,19 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      // Le chef ONG utilise le module ONG (avec cloisonnement automatique)
-      const reponse = await fetch("/api/v1/ong/programmes", { 
-        credentials: "include" 
-      });
-      
-      if (!reponse.ok) {
-        if (reponse.status === 401) throw new Error("Session expirée");
-        throw new Error("Erreur de chargement");
-      }
-      
+      const reponse = await fetch("/api/v1/ong/programmes", { credentials: "include" });
+      if (!reponse.ok) throw new Error("Erreur de chargement");
       const data = await reponse.json();
       setProgrammes(Array.isArray(data) ? data : []);
-    } catch (error) {
-      setErreur(error instanceof Error ? error.message : "Erreur de chargement des programmes");
-      console.error(error);
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur de chargement des programmes");
     } finally {
       setChargement(false);
     }
   }
 
   async function handleCreer() {
-    if (!nom || !date_debut) return;
+    if (!nom || !dateDebut) return;
     setEnvoi(true);
     try {
       const reponse = await fetch("/api/v1/ong/programmes", {
@@ -83,22 +71,16 @@ function Contenu() {
           description: description || undefined, 
           zone: zone || undefined, 
           budget: budget ? parseFloat(budget) : undefined, 
-          date_debut,
-          date_fin: date_fin || undefined 
+          date_debut: dateDebut,
+          date_fin: dateFin || undefined 
         }),
       });
-      
-      if (!reponse.ok) {
-        const err = await reponse.json().catch(() => ({}));
-        throw new Error(err.detail || "Erreur de création");
-      }
-      
+      if (!reponse.ok) throw new Error("Erreur de création");
       await charger();
       setNom(""); setDescription(""); setZone(""); setBudget(""); setDateDebut(""); setDateFin("");
       setAfficherForm(false);
-    } catch (error) {
-      setErreur(error instanceof Error ? error.message : "Erreur lors de la création");
-      console.error(error);
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur lors de la création");
     } finally {
       setEnvoi(false);
     }
@@ -121,7 +103,7 @@ function Contenu() {
           <p className="text-ardoise-clair mt-1 text-sm">{programmes.length} programme(s)</p>
         </div>
         <Bouton variante="primaire" onClick={() => setAfficherForm(!afficherForm)}>
-          {afficherForm ? "✕ Annuler" : "+ Nouveau programme"}
+          {afficherForm ? " Annuler" : "+ Nouveau programme"}
         </Bouton>
       </div>
 
@@ -132,15 +114,15 @@ function Contenu() {
             <ChampSaisie libelle="Zone" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="Ex: Dakar" />
             <ChampSaisie libelle="Budget (FCFA)" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="Ex: 5000000" type="number" />
             <div className="grid grid-cols-2 gap-3">
-              <ChampSaisie libelle="Date de début *" value={date_debut} onChange={(e) => setDateDebut(e.target.value)} type="date" required />
-              <ChampSaisie libelle="Date de fin" value={date_fin} onChange={(e) => setDateFin(e.target.value)} type="date" />
+              <ChampSaisie libelle="Date de début *" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} type="date" required />
+              <ChampSaisie libelle="Date de fin" value={dateFin} onChange={(e) => setDateFin(e.target.value)} type="date" />
             </div>
             <div>
               <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Description</label>
               <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm resize-none" placeholder="Décrivez le programme..." />
             </div>
             <div className="flex gap-2 pt-2">
-              <Bouton variante="primaire" disabled={!nom || !date_debut || envoi} onClick={handleCreer} chargement={envoi}>
+              <Bouton variante="primaire" disabled={!nom || !dateDebut || envoi} onClick={handleCreer} chargement={envoi}>
                 {envoi ? "Création..." : "Créer le programme"}
               </Bouton>
               <Bouton variante="ghost" onClick={() => setAfficherForm(false)}>Annuler</Bouton>
@@ -159,7 +141,6 @@ function Contenu() {
           <div className="text-center py-8">
             <p className="text-4xl mb-3">📋</p>
             <p className="text-ardoise-clair italic">Aucun programme enregistré.</p>
-            <p className="text-xs text-ardoise-clair mt-2">Créez votre premier programme pour commencer !</p>
           </div>
         </Carte>
       ) : (
