@@ -24,12 +24,12 @@ from src.modeles.verification_police import VerificationPolice, SignalementFraud
 from src.modeles.document_identite import DocumentIdentite
 from src.modeles.ong import BeneficiaireONG, ProgrammeONG, MissionTerrain
 from src.modeles.token_reinitialisation import TokenReinitialisation
-# Ajouter à la fin du fichier
 from src.modeles.domaine import Domaine
 from src.modeles.departement import Departement
 from src.modeles.invitation import Invitation
 from src.modeles.equipe import Equipe
 from src.modeles.equipe_membre import equipe_membres
+from src.modeles.rapport import Rapport, TypeRapport, StatutRapport
 
 __all__ = [
     "Utilisateur",
@@ -66,4 +66,12 @@ __all__ = [
     "ProgrammeONG",
     "MissionTerrain",
     "TokenReinitialisation",
+    "Domaine",
+    "Departement",
+    "Invitation",
+    "Equipe",
+    "equipe_membres",
+    "Rapport",  # ← AJOUT
+    "TypeRapport",  # ← AJOUT
+    "StatutRapport",  # ← AJOUT
 ]

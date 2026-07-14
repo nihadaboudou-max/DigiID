@@ -24,7 +24,7 @@ class BeneficiaireONG(Base):
     statut = Column(String(20), default="actif")
     notes = Column(Text, nullable=True)
 
-    # --- Cloisonnement (NOUVEAU) ---
+    # --- Cloisonnement ---
     domaine_id = Column(
         UUID(as_uuid=True),
         ForeignKey("domaines.id", ondelete="SET NULL"),
@@ -56,7 +56,7 @@ class ProgrammeONG(Base):
     date_fin = Column(Date, nullable=True)
     statut = Column(String(20), default="actif")
 
-    # --- Cloisonnement (NOUVEAU) ---
+    # --- Cloisonnement ---
     domaine_id = Column(
         UUID(as_uuid=True),
         ForeignKey("domaines.id", ondelete="SET NULL"),
@@ -73,6 +73,8 @@ class ProgrammeONG(Base):
     )
 
     ong = relationship("Utilisateur", backref="programmes_ong")
+    # ✅ Relation avec les rapports
+    rapports = relationship("Rapport", back_populates="programme", lazy="select")
 
 
 class MissionTerrain(Base):
@@ -88,7 +90,7 @@ class MissionTerrain(Base):
     objectifs = Column(Text, nullable=True)
     statut = Column(String(20), default="planifiee")
 
-    # --- Cloisonnement (NOUVEAU) ---
+    # --- Cloisonnement ---
     domaine_id = Column(
         UUID(as_uuid=True),
         ForeignKey("domaines.id", ondelete="SET NULL"),
@@ -106,19 +108,20 @@ class MissionTerrain(Base):
 
     ong = relationship("Utilisateur", backref="missions_terrain")
     programme = relationship("ProgrammeONG", backref="missions")
-    
-# Ajoute cette classe dans le fichier backend/src/modeles/ong.py
+    # ✅ Relation avec les rapports
+    rapports = relationship("Rapport", back_populates="mission", lazy="select")
+
+
 class MissionAgent(Base):
     """Table de liaison entre missions et agents."""
     __tablename__ = "mission_agent"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
-    # ⚠️ IMPORTANT : Vérifie que le nom de la table est bien "mission_terrain". 
-    # Si dans ton modèle MissionTerrain le __tablename__ est "missions", change "mission_terrain.id" en "missions.id"
+    # ✅ CORRECTION : "missions_terrain.id" au lieu de "mission_terrain.id"
     mission_id = Column(
         UUID(as_uuid=True), 
-        ForeignKey("mission_terrain.id", ondelete="CASCADE"), 
+        ForeignKey("missions_terrain.id", ondelete="CASCADE"), 
         nullable=False
     )
     agent_id = Column(
@@ -134,7 +137,7 @@ class MissionAgent(Base):
     date_debut = Column(DateTime(timezone=True), nullable=True)
     date_completion = Column(DateTime(timezone=True), nullable=True)
     
-    # ✅ CORRECTION : foreign_keys et primaryjoin explicites pour éviter l'erreur de jointure
+    # ✅ Relations explicites
     mission = relationship(
         "MissionTerrain",
         foreign_keys=[mission_id],

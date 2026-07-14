@@ -949,3 +949,258 @@ async def renvoyer_invitation_chef(
         "statut": invitation.statut,
         "date_expiration": invitation.date_expiration.isoformat(),
     }
+    
+# =============================================================================
+# RAPPORTS (pour Chefs)
+# =============================================================================
+
+@routeur_chefs.get(
+    "/{type_chef}/rapports",
+    response_model=dict,
+)
+async def lister_rapports_chef(
+    type_chef: str,
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    page: int = Query(1, ge=1),
+    par_page: int = Query(20, ge=1, le=100),
+    type_rapport: str | None = None,
+    statut: str | None = None,
+):
+    """Liste les rapports du chef."""
+    chef = await verifier_est_chef(chef)
+    
+    # Mapping des types
+    mapping_roles = {
+        "ong": "chef_ong",
+        "police": "chef_police",
+        "medical": "chef_medical",
+        "enrolement": "chef_enrolement",
+    }
+    
+    role_attendu = mapping_roles.get(type_chef)
+    if not role_attendu:
+        raise HTTPException(status_code=400, detail=f"Type de chef invalide: {type_chef}")
+    
+    if chef.role != role_attendu:
+        raise HTTPException(status_code=403, detail=f"Réservé aux chefs {type_chef}")
+    
+    # Construire la requête
+    from sqlalchemy import select, func
+    from src.modeles import Rapport
+    
+    conditions = [
+        Rapport.cree_par == chef.id,
+    ]
+    
+    if type_rapport and type_rapport != "tous":
+        conditions.append(Rapport.type_rapport == type_rapport)
+    
+    if statut and statut != "tous":
+        conditions.append(Rapport.statut == statut)
+    
+    # Compter le total
+    stmt_count = select(func.count(Rapport.id)).where(*conditions)
+    result_count = await session.execute(stmt_count)
+    total = result_count.scalar() or 0
+    
+    # Récupérer les rapports
+    stmt = select(Rapport).where(*conditions).order_by(Rapport.date_creation.desc())
+    stmt = stmt.offset((page - 1) * par_page).limit(par_page)
+    
+    result = await session.execute(stmt)
+    rapports = result.scalars().all()
+    
+    # Charger les relations mission et programme si nécessaire
+    rapports_data = []
+    for rapport in rapports:
+        rapport_dict = {
+            "id": str(rapport.id),
+            "titre": rapport.titre,
+            "type": rapport.type_rapport,
+            "description": rapport.description,
+            "date_creation": rapport.date_creation.isoformat(),
+            "statut": rapport.statut,
+            "auteur": f"{rapport.cree_par_nom} {rapport.cree_par_prenom}" if hasattr(rapport, 'cree_par_nom') else "Chef",
+            "mission_id": str(rapport.mission_id) if rapport.mission_id else None,
+            "mission_titre": None,
+            "programme_id": str(rapport.programme_id) if rapport.programme_id else None,
+            "programme_nom": None,
+            "periode_debut": rapport.periode_debut.isoformat() if rapport.periode_debut else None,
+            "periode_fin": rapport.periode_fin.isoformat() if rapport.periode_fin else None,
+        }
+        
+        # Charger mission si existe
+        if rapport.mission_id:
+            from src.modeles.ong import MissionTerrain
+            stmt_mission = select(MissionTerrain).where(MissionTerrain.id == rapport.mission_id)
+            result_mission = await session.execute(stmt_mission)
+            mission = result_mission.scalar_one_or_none()
+            if mission:
+                rapport_dict["mission_titre"] = mission.titre
+        
+        # Charger programme si existe
+        if rapport.programme_id:
+            from src.modeles.ong import ProgrammeONG
+            stmt_programme = select(ProgrammeONG).where(ProgrammeONG.id == rapport.programme_id)
+            result_programme = await session.execute(stmt_programme)
+            programme = result_programme.scalar_one_or_none()
+            if programme:
+                rapport_dict["programme_nom"] = programme.nom
+        
+        rapports_data.append(rapport_dict)
+    
+    return {
+        "rapports": rapports_data,
+        "total": total,
+        "page": page,
+        "par_page": par_page,
+    }
+
+
+@routeur_chefs.post(
+    "/{type_chef}/rapports",
+    status_code=status.HTTP_201_CREATED,
+)
+async def creer_rapport_chef(
+    type_chef: str,
+    data: dict,
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Crée un rapport."""
+    chef = await verifier_est_chef(chef)
+    
+    from src.modeles import Rapport
+    from datetime import datetime
+    
+    # Validation selon le type
+    type_rapport = data.get("type")
+    
+    if type_rapport == "mission" and not data.get("mission_id"):
+        raise HTTPException(status_code=400, detail="Mission requise pour ce type de rapport")
+    
+    if type_rapport == "programme" and not data.get("programme_id"):
+        raise HTTPException(status_code=400, detail="Programme requis pour ce type de rapport")
+    
+    if type_rapport in ["hebdomadaire", "mensuel", "trimestriel"]:
+        if not data.get("periode_debut") or not data.get("periode_fin"):
+            raise HTTPException(status_code=400, detail="Période requise pour ce type de rapport")
+    
+    rapport = Rapport(
+        titre=data["titre"],
+        type_rapport=type_rapport,
+        description=data.get("description"),
+        statut="brouillon",
+        cree_par=chef.id,
+        mission_id=data.get("mission_id") if data.get("mission_id") else None,
+        programme_id=data.get("programme_id") if data.get("programme_id") else None,
+        periode_debut=datetime.fromisoformat(data["periode_debut"]) if data.get("periode_debut") else None,
+        periode_fin=datetime.fromisoformat(data["periode_fin"]) if data.get("periode_fin") else None,
+    )
+    
+    session.add(rapport)
+    await session.commit()
+    await session.refresh(rapport)
+    
+    return {
+        "id": str(rapport.id),
+        "titre": rapport.titre,
+        "type": rapport.type_rapport,
+        "statut": rapport.statut,
+    }
+
+
+@routeur_chefs.patch(
+    "/{type_chef}/rapports/{rapport_id}/valider",
+)
+async def valider_rapport_chef(
+    type_chef: str,
+    rapport_id: str,
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Valide un rapport."""
+    chef = await verifier_est_chef(chef)
+    
+    from sqlalchemy import select
+    from src.modeles import Rapport
+    from uuid import UUID
+    
+    stmt = select(Rapport).where(
+        Rapport.id == UUID(rapport_id),
+        Rapport.cree_par == chef.id,
+    )
+    result = await session.execute(stmt)
+    rapport = result.scalar_one_or_none()
+    
+    if not rapport:
+        raise HTTPException(status_code=404, detail="Rapport introuvable")
+    
+    rapport.statut = "valide"
+    await session.commit()
+    
+    return {"message": "Rapport validé"}
+
+
+@routeur_chefs.patch(
+    "/{type_chef}/rapports/{rapport_id}/archiver",
+)
+async def archiver_rapport_chef(
+    type_chef: str,
+    rapport_id: str,
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Archive un rapport."""
+    chef = await verifier_est_chef(chef)
+    
+    from sqlalchemy import select
+    from src.modeles import Rapport
+    from uuid import UUID
+    
+    stmt = select(Rapport).where(
+        Rapport.id == UUID(rapport_id),
+        Rapport.cree_par == chef.id,
+    )
+    result = await session.execute(stmt)
+    rapport = result.scalar_one_or_none()
+    
+    if not rapport:
+        raise HTTPException(status_code=404, detail="Rapport introuvable")
+    
+    rapport.statut = "archive"
+    await session.commit()
+    
+    return {"message": "Rapport archivé"}
+
+
+@routeur_chefs.delete(
+    "/{type_chef}/rapports/{rapport_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def supprimer_rapport_chef(
+    type_chef: str,
+    rapport_id: str,
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Supprime un rapport."""
+    chef = await verifier_est_chef(chef)
+    
+    from sqlalchemy import select
+    from src.modeles import Rapport
+    from uuid import UUID
+    
+    stmt = select(Rapport).where(
+        Rapport.id == UUID(rapport_id),
+        Rapport.cree_par == chef.id,
+    )
+    result = await session.execute(stmt)
+    rapport = result.scalar_one_or_none()
+    
+    if not rapport:
+        raise HTTPException(status_code=404, detail="Rapport introuvable")
+    
+    await session.delete(rapport)
+    await session.commit()
