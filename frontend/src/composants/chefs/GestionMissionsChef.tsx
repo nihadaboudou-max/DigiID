@@ -10,13 +10,12 @@ import { Alerte } from "@/composants/commun/Alerte";
 interface Mission {
   id: string;
   titre: string;
-  description?: string;
-  zone_intervention?: string;
-  statut: "planifiee" | "en_cours" | "terminee" | "annulee";
-  date_debut: string;
-  date_fin?: string;
-  date_creation: string;
-  agents_assignes?: number;
+  objectifs?: string;
+  zone?: string;
+  statut: string;
+  date_depart: string;
+  date_retour?: string;
+  programme_id?: string;
 }
 
 interface GestionMissionsChefProps {
@@ -39,68 +38,79 @@ export default function GestionMissionsChef({
 
   const [formData, setFormData] = useState({
     titre: "",
-    description: "",
-    zone_intervention: "",
-    date_debut: "",
-    date_fin: "",
+    objectifs: "",
+    zone: "",
+    date_depart: "",
+    date_retour: "",
   });
 
   useEffect(() => {
     chargerMissions();
-    const interval = setInterval(chargerMissions, 60000);
-    return () => clearInterval(interval);
   }, []);
 
   async function chargerMissions() {
     setChargement(true);
+    setErreur("");
     try {
-      // TODO: Remplacer par un appel API réel
-      setTimeout(() => {
-        setMissions([
-          {
-            id: "1",
-            titre: "Distribution de kits sanitaires",
-            description: "Distribution de kits dans les quartiers défavorisés",
-            zone_intervention: "Dakar, Parcelles Assainies",
-            statut: "en_cours",
-            date_debut: "2026-07-01",
-            date_fin: "2026-07-15",
-            date_creation: "2026-06-25",
-            agents_assignes: 5,
-          },
-        ]);
-        setChargement(false);
-      }, 500);
+      // ✅ Appel API réel avec les credentials d'authentification
+      const reponse = await fetch("/api/v1/ong/missions", {
+        credentials: "include",
+      });
+      
+      if (!reponse.ok) {
+        if (reponse.status === 401) throw new Error("Session expirée. Veuillez vous reconnecter.");
+        throw new Error("Erreur de chargement des missions");
+      }
+      
+      const data = await reponse.json();
+      setMissions(Array.isArray(data) ? data : []);
     } catch (error: any) {
       setErreur(error?.message || "Erreur de chargement.");
+    } finally {
       setChargement(false);
     }
   }
 
   async function handleCreer() {
-    if (!formData.titre || !formData.date_debut) return;
+    if (!formData.titre || !formData.date_depart) {
+      setErreur("Le titre et la date de début sont obligatoires.");
+      return;
+    }
+    
     setSauvegarde(true);
+    setErreur("");
+    
     try {
-      setTimeout(() => {
-        setSauvegarde(false);
-        setAfficherFormulaire(false);
-        setFormData({
-          titre: "",
-          description: "",
-          zone_intervention: "",
-          date_debut: "",
-          date_fin: "",
-        });
-        chargerMissions();
-      }, 1000);
+      const reponse = await fetch("/api/v1/ong/missions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          titre: formData.titre,
+          objectifs: formData.objectifs || undefined,
+          zone: formData.zone || undefined,
+          date_depart: formData.date_depart,
+          date_retour: formData.date_retour || undefined,
+        }),
+      });
+      
+      if (!reponse.ok) {
+        const errData = await reponse.json().catch(() => ({}));
+        throw new Error(errData.detail || "Erreur lors de la création.");
+      }
+      
+      setAfficherFormulaire(false);
+      setFormData({ titre: "", objectifs: "", zone: "", date_depart: "", date_retour: "" });
+      await chargerMissions();
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors de la création.");
+    } finally {
       setSauvegarde(false);
     }
   }
 
   const getBadgeStatut = (statut: string) => {
-    const config: any = {
+    const config: Record<string, { couleur: any; label: string }> = {
       planifiee: { couleur: "ocre", label: "Planifiée" },
       en_cours: { couleur: "lagune", label: "En cours" },
       terminee: { couleur: "succes", label: "Terminée" },
@@ -122,7 +132,7 @@ export default function GestionMissionsChef({
         <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
           📋 Missions
         </p>
-        <h1>{titre}</h1>
+        <h1 className="text-3xl font-bold text-ardoise mt-1">{titre}</h1>
         <p className="text-ardoise-clair mt-2">{sousTitre}</p>
       </div>
 
@@ -202,17 +212,14 @@ export default function GestionMissionsChef({
                       <h3 className="font-bold text-ardoise">{mission.titre}</h3>
                       {getBadgeStatut(mission.statut)}
                     </div>
-                    {mission.description && (
+                    {mission.objectifs && (
                       <p className="text-sm text-ardoise-clair mt-1">
-                        {mission.description}
+                        {mission.objectifs}
                       </p>
                     )}
                     <div className="flex flex-wrap gap-3 mt-2 text-xs text-ardoise-clair">
-                      {mission.zone_intervention && (
-                        <span>📍 {mission.zone_intervention}</span>
-                      )}
-                      {mission.agents_assignes && (
-                        <span>👥 {mission.agents_assignes} agent(s)</span>
+                      {mission.zone && (
+                        <span>📍 {mission.zone}</span>
                       )}
                     </div>
                   </div>
@@ -220,12 +227,12 @@ export default function GestionMissionsChef({
                 <div className="flex flex-wrap gap-4 mt-3 text-xs text-ardoise-clair pt-3 border-t border-ardoise-clair/10">
                   <span>
                     📅 Début:{" "}
-                    {new Date(mission.date_debut).toLocaleDateString("fr-FR")}
+                    {new Date(mission.date_depart).toLocaleDateString("fr-FR")}
                   </span>
-                  {mission.date_fin && (
+                  {mission.date_retour && (
                     <span>
                       📅 Fin:{" "}
-                      {new Date(mission.date_fin).toLocaleDateString("fr-FR")}
+                      {new Date(mission.date_retour).toLocaleDateString("fr-FR")}
                     </span>
                   )}
                 </div>
@@ -235,11 +242,10 @@ export default function GestionMissionsChef({
         )}
       </Carte>
 
-      {/* Modal de création - CORRIGÉ : Plein écran */}
+      {/* Modal de création */}
       {afficherFormulaire && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            {/* Header sticky */}
             <div className="sticky top-0 bg-white border-b border-ardoise-clair/10 p-6 rounded-t-xl z-10">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-ardoise">
@@ -255,10 +261,9 @@ export default function GestionMissionsChef({
               </div>
             </div>
 
-            {/* Contenu */}
             <div className="p-6 space-y-4">
               <ChampSaisie
-                libelle="Titre de la mission"
+                libelle="Titre de la mission *"
                 value={formData.titre}
                 onChange={(e) =>
                   setFormData({ ...formData, titre: e.target.value })
@@ -268,12 +273,12 @@ export default function GestionMissionsChef({
               />
               <div>
                 <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
-                  Description
+                  Objectifs / Description
                 </label>
                 <textarea
-                  value={formData.description}
+                  value={formData.objectifs}
                   onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
+                    setFormData({ ...formData, objectifs: e.target.value })
                   }
                   className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
                   rows={4}
@@ -282,42 +287,39 @@ export default function GestionMissionsChef({
               </div>
               <ChampSaisie
                 libelle="Zone d'intervention"
-                value={formData.zone_intervention}
+                value={formData.zone}
                 onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    zone_intervention: e.target.value,
-                  })
+                  setFormData({ ...formData, zone: e.target.value })
                 }
                 placeholder="Ex: Dakar, Thiès..."
               />
               <div className="grid grid-cols-2 gap-3">
                 <ChampSaisie
-                  libelle="Date de début"
+                  libelle="Date de début *"
                   type="date"
-                  value={formData.date_debut}
+                  value={formData.date_depart}
                   onChange={(e) =>
-                    setFormData({ ...formData, date_debut: e.target.value })
+                    setFormData({ ...formData, date_depart: e.target.value })
                   }
                   required
                 />
                 <ChampSaisie
                   libelle="Date de fin (optionnelle)"
                   type="date"
-                  value={formData.date_fin}
+                  value={formData.date_retour}
                   onChange={(e) =>
-                    setFormData({ ...formData, date_fin: e.target.value })
+                    setFormData({ ...formData, date_retour: e.target.value })
                   }
                 />
               </div>
 
-              {/* Footer avec boutons */}
               <div className="flex gap-3 pt-4 border-t border-ardoise-clair/10">
                 <Bouton
                   variante="primaire"
                   chargement={sauvegarde}
                   onClick={handleCreer}
                   className="flex-1"
+                  disabled={!formData.titre || !formData.date_depart}
                 >
                   Créer la mission
                 </Bouton>

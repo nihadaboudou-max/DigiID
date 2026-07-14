@@ -39,11 +39,15 @@ export default function DashboardChef({
 
   async function chargerDonnees() {
     try {
-      setChargement(true);
+      // On ne met chargement à true que si c'est le premier chargement
+      // pour éviter un clignotement de l'UI lors du rafraîchissement auto
+      if (!stats) setChargement(true);
+      
       const [statsData, equipeData] = await Promise.all([
         obtenirStatistiquesChef(),
         listerEquipe({ page: 1, par_page: 5 }),
       ]);
+      
       setStats(statsData);
       setAgentsRecents(equipeData.agents || []);
       setErreur("");
@@ -55,13 +59,13 @@ export default function DashboardChef({
   }
 
   const getTypeLabel = () => {
-    const labels = {
+    const labels: Record<string, string> = {
       police: "Police",
       medical: "Médical",
       ong: "ONG",
       enrolement: "Enrôlement",
     };
-    return labels[typeAgent];
+    return labels[typeAgent] || "Agents";
   };
 
   return (
@@ -72,7 +76,7 @@ export default function DashboardChef({
           <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
             {iconeDashboard} {titre}
           </p>
-          <h1 className="mt-1">{sousTitre}</h1>
+          <h1 className="mt-1 text-3xl font-bold text-ardoise">{sousTitre}</h1>
           <p className="text-ardoise-clair mt-2">
             Tableau de bord en temps réel
           </p>
@@ -94,7 +98,7 @@ export default function DashboardChef({
       {/* Erreur */}
       {erreur && (
         <div className="bg-terre/10 border-l-4 border-terre p-4 rounded">
-          <p className="text-sm text-terre">{erreur}</p>
+          <p className="text-sm text-terre font-medium">{erreur}</p>
         </div>
       )}
 
@@ -102,21 +106,21 @@ export default function DashboardChef({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Carte className="text-center p-6 hover:shadow-lg transition-shadow">
           <div className="text-4xl font-bold text-lagune mb-2">
-            {chargement ? "..." : stats?.total_agents || 0}
+            {chargement && !stats ? "..." : stats?.total_agents || 0}
           </div>
           <p className="text-xs uppercase text-ardoise-clair font-semibold">
             Total {getTypeLabel()}
           </p>
           <div className="mt-3">
             <Badge variante="lagune" taille="petit">
-              Actif
+              Effectif
             </Badge>
           </div>
         </Carte>
 
         <Carte className="text-center p-6 hover:shadow-lg transition-shadow">
           <div className="text-4xl font-bold text-succes mb-2">
-            {chargement ? "..." : stats?.agents_actifs || 0}
+            {chargement && !stats ? "..." : stats?.agents_actifs || 0}
           </div>
           <p className="text-xs uppercase text-ardoise-clair font-semibold">
             Agents actifs
@@ -124,7 +128,7 @@ export default function DashboardChef({
           <div className="mt-3">
             <BarreProgression
               valeur={
-                stats?.total_agents
+                stats && stats.total_agents > 0
                   ? (stats.agents_actifs / stats.total_agents) * 100
                   : 0
               }
@@ -135,7 +139,7 @@ export default function DashboardChef({
 
         <Carte className="text-center p-6 hover:shadow-lg transition-shadow">
           <div className="text-4xl font-bold text-ocre mb-2">
-            {chargement ? "..." : stats?.agents_crees_aujourdhui || 0}
+            {chargement && !stats ? "..." : stats?.agents_crees_aujourdhui || 0}
           </div>
           <p className="text-xs uppercase text-ardoise-clair font-semibold">
             Aujourd'hui
@@ -149,7 +153,7 @@ export default function DashboardChef({
 
         <Carte className="text-center p-6 hover:shadow-lg transition-shadow">
           <div className="text-4xl font-bold text-terre mb-2">
-            {chargement ? "..." : stats?.agents_inactifs || 0}
+            {chargement && !stats ? "..." : stats?.agents_inactifs || 0}
           </div>
           <p className="text-xs uppercase text-ardoise-clair font-semibold">
             Inactifs
@@ -164,7 +168,7 @@ export default function DashboardChef({
 
       {/* Agents récents */}
       <Carte titre="Derniers agents créés">
-        {chargement ? (
+        {chargement && !stats ? (
           <div className="text-center py-8">
             <div className="animate-spin w-8 h-8 border-4 border-lagune border-t-transparent rounded-full mx-auto"></div>
             <p className="text-ardoise-clair mt-2">Chargement...</p>
@@ -190,7 +194,7 @@ export default function DashboardChef({
               >
                 <div className="flex items-center gap-4 min-w-0 flex-1">
                   <div className="w-12 h-12 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold flex-shrink-0">
-                    {(agent.prenom[0] || "") + (agent.nom[0] || "")}
+                    {(agent.prenom?.[0] || "") + (agent.nom?.[0] || "")}
                   </div>
                   <div className="min-w-0">
                     <p className="font-bold text-ardoise truncate">
@@ -212,7 +216,7 @@ export default function DashboardChef({
                     </div>
                   </div>
                 </div>
-                <div className="text-xs text-ardoise-clair flex-shrink-0 ml-4">
+                <div className="text-xs text-ardoise-clair flex-shrink-0 ml-4 text-right">
                   <p>Créé le</p>
                   <p className="font-medium">
                     {new Date(agent.date_creation).toLocaleDateString("fr-FR")}
@@ -227,7 +231,7 @@ export default function DashboardChef({
       {/* Actions rapides */}
       <div className="grid md:grid-cols-3 gap-4">
         <Link href={`/chef-${typeAgent}/agents`}>
-          <Carte className="cursor-pointer hover:shadow-lg transition-all p-6">
+          <Carte className="cursor-pointer hover:shadow-lg transition-all p-6 h-full">
             <div className="text-3xl mb-3">👥</div>
             <h3 className="font-bold text-ardoise mb-1">Gérer les agents</h3>
             <p className="text-sm text-ardoise-clair">
@@ -237,7 +241,7 @@ export default function DashboardChef({
         </Link>
 
         <Link href={`/chef-${typeAgent}/missions`}>
-          <Carte className="cursor-pointer hover:shadow-lg transition-all p-6">
+          <Carte className="cursor-pointer hover:shadow-lg transition-all p-6 h-full">
             <div className="text-3xl mb-3">📋</div>
             <h3 className="font-bold text-ardoise mb-1">Missions</h3>
             <p className="text-sm text-ardoise-clair">
@@ -247,7 +251,7 @@ export default function DashboardChef({
         </Link>
 
         <Link href={`/chef-${typeAgent}/rapports`}>
-          <Carte className="cursor-pointer hover:shadow-lg transition-all p-6">
+          <Carte className="cursor-pointer hover:shadow-lg transition-all p-6 h-full">
             <div className="text-3xl mb-3">📊</div>
             <h3 className="font-bold text-ardoise mb-1">Rapports</h3>
             <p className="text-sm text-ardoise-clair">
