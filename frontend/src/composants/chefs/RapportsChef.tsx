@@ -6,14 +6,33 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
-import {
-  listerRapports,
-  creerRapport,
-  supprimerRapport,
-  validerRapport,
-  archiverRapport,
-  type Rapport,
-} from "../../services/rapports";
+import { clientAPI } from "@/services/client_api";
+
+interface Rapport {
+  id: string;
+  titre: string;
+  type: "activite" | "mission" | "programme" | "hebdomadaire" | "mensuel" | "trimestriel";
+  description?: string;
+  date_creation: string;
+  statut: "brouillon" | "valide" | "archive";
+  auteur: string;
+  mission_id?: string;
+  mission_titre?: string;
+  programme_id?: string;
+  programme_nom?: string;
+  periode_debut?: string;
+  periode_fin?: string;
+}
+
+interface Mission {
+  id: string;
+  titre: string;
+}
+
+interface Programme {
+  id: string;
+  nom: string;
+}
 
 interface RapportsChefProps {
   titre: string;
@@ -27,6 +46,8 @@ export default function RapportsChef({
   typeOrganisation,
 }: RapportsChefProps) {
   const [rapports, setRapports] = useState<Rapport[]>([]);
+  const [missions, setMissions] = useState<Mission[]>([]);
+  const [programmes, setProgrammes] = useState<Programme[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
   const [afficherFormulaire, setAfficherFormulaire] = useState(false);
@@ -37,12 +58,18 @@ export default function RapportsChef({
 
   const [formData, setFormData] = useState({
     titre: "",
-    type: "activite" as "activite" | "mission" | "financier" | "beneficiaires",
+    type: "activite" as "activite" | "mission" | "programme" | "hebdomadaire" | "mensuel" | "trimestriel",
     description: "",
+    mission_id: "",
+    programme_id: "",
+    periode_debut: "",
+    periode_fin: "",
   });
 
   useEffect(() => {
     chargerRapports();
+    chargerMissions();
+    chargerProgrammes();
   }, [typeOrganisation]);
 
   async function chargerRapports() {
@@ -53,7 +80,9 @@ export default function RapportsChef({
       if (filtreType !== "tous") params.type = filtreType;
       if (filtreStatut !== "tous") params.statut = filtreStatut;
 
-      const data = await listerRapports(typeOrganisation, params);
+      const data: any = await clientAPI.get(`/api/v1/chefs/${typeOrganisation}/rapports`, {
+        authentifie: true,
+      });
       setRapports(data.rapports || []);
     } catch (error: any) {
       setErreur(error?.message || "Erreur de chargement des rapports.");
@@ -62,17 +91,73 @@ export default function RapportsChef({
     }
   }
 
+  async function chargerMissions() {
+    try {
+      const data: any = await clientAPI.get(`/api/v1/chefs/${typeOrganisation}/missions`, {
+        authentifie: true,
+      });
+      setMissions(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Erreur chargement missions:", error);
+    }
+  }
+
+  async function chargerProgrammes() {
+    try {
+      const data: any = await clientAPI.get(`/api/v1/chefs/${typeOrganisation}/programmes`, {
+        authentifie: true,
+      });
+      setProgrammes(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Erreur chargement programmes:", error);
+    }
+  }
+
   async function handleCreer() {
     if (!formData.titre) {
       setErreur("Le titre est obligatoire.");
       return;
     }
+
+    // Validation selon le type
+    if (formData.type === "mission" && !formData.mission_id) {
+      setErreur("Veuillez sélectionner une mission.");
+      return;
+    }
+    if (formData.type === "programme" && !formData.programme_id) {
+      setErreur("Veuillez sélectionner un programme.");
+      return;
+    }
+    if (["hebdomadaire", "mensuel", "trimestriel"].includes(formData.type)) {
+      if (!formData.periode_debut || !formData.periode_fin) {
+        setErreur("Veuillez définir la période du rapport.");
+        return;
+      }
+    }
+
     setSauvegarde(true);
     setErreur("");
     try {
-      await creerRapport(typeOrganisation, formData);
+      await clientAPI.post(`/api/v1/chefs/${typeOrganisation}/rapports`, {
+        titre: formData.titre,
+        type: formData.type,
+        description: formData.description || null,
+        mission_id: formData.mission_id || null,
+        programme_id: formData.programme_id || null,
+        periode_debut: formData.periode_debut || null,
+        periode_fin: formData.periode_fin || null,
+      }, { authentifie: true });
+      
       setAfficherFormulaire(false);
-      setFormData({ titre: "", type: "activite", description: "" });
+      setFormData({ 
+        titre: "", 
+        type: "activite", 
+        description: "",
+        mission_id: "",
+        programme_id: "",
+        periode_debut: "",
+        periode_fin: "",
+      });
       await chargerRapports();
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors de la création du rapport.");
@@ -84,7 +169,9 @@ export default function RapportsChef({
   async function handleSupprimer(rapportId: string) {
     if (!confirm("Supprimer ce rapport ?")) return;
     try {
-      await supprimerRapport(typeOrganisation, rapportId);
+      await clientAPI.delete(`/api/v1/chefs/${typeOrganisation}/rapports/${rapportId}`, {
+        authentifie: true,
+      });
       await chargerRapports();
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors de la suppression.");
@@ -93,7 +180,9 @@ export default function RapportsChef({
 
   async function handleValider(rapportId: string) {
     try {
-      await validerRapport(typeOrganisation, rapportId);
+      await clientAPI.patch(`/api/v1/chefs/${typeOrganisation}/rapports/${rapportId}/valider`, {}, {
+        authentifie: true,
+      });
       await chargerRapports();
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors de la validation.");
@@ -102,7 +191,9 @@ export default function RapportsChef({
 
   async function handleArchiver(rapportId: string) {
     try {
-      await archiverRapport(typeOrganisation, rapportId);
+      await clientAPI.patch(`/api/v1/chefs/${typeOrganisation}/rapports/${rapportId}/archiver`, {}, {
+        authentifie: true,
+      });
       await chargerRapports();
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors de l'archivage.");
@@ -123,32 +214,33 @@ export default function RapportsChef({
     const types: Record<string, string> = {
       activite: "📋 Activité",
       mission: "🎯 Mission",
-      financier: "💰 Financier",
-      beneficiaires: " Bénéficiaires",
+      programme: "📁 Programme",
+      hebdomadaire: "📅 Hebdomadaire",
+      mensuel: "📆 Mensuel",
+      trimestriel: "📊 Trimestriel",
     };
     return types[type] || type;
   };
 
   const getTypeIcon = (type: string) => {
     const icons: Record<string, string> = {
-      activite: "📋",
+      activite: "",
       mission: "🎯",
-      financier: "💰",
-      beneficiaires: "👥",
+      programme: "📁",
+      hebdomadaire: "📅",
+      mensuel: "📆",
+      trimestriel: "📊",
     };
     return icons[type] || "📄";
   };
 
   const rapportsFiltres = rapports.filter((rapport) => {
     const matchType = filtreType === "tous" || rapport.type === filtreType;
-    const matchStatut =
-      filtreStatut === "tous" || rapport.statut === filtreStatut;
+    const matchStatut = filtreStatut === "tous" || rapport.statut === filtreStatut;
     const matchRecherche =
       recherche.trim() === "" ||
       rapport.titre.toLowerCase().includes(recherche.toLowerCase()) ||
-      (rapport.description || "")
-        .toLowerCase()
-        .includes(recherche.toLowerCase()) ||
+      (rapport.description || "").toLowerCase().includes(recherche.toLowerCase()) ||
       rapport.auteur.toLowerCase().includes(recherche.toLowerCase());
     return matchType && matchStatut && matchRecherche;
   });
@@ -216,9 +308,11 @@ export default function RapportsChef({
         >
           <option value="tous">Tous les types</option>
           <option value="activite">📋 Activité</option>
-          <option value="mission"> Mission</option>
-          <option value="financier">💰 Financier</option>
-          <option value="beneficiaires">👥 Bénéficiaires</option>
+          <option value="mission">🎯 Mission</option>
+          <option value="programme">📁 Programme</option>
+          <option value="hebdomadaire">📅 Hebdomadaire</option>
+          <option value="mensuel">📆 Mensuel</option>
+          <option value="trimestriel">📊 Trimestriel</option>
         </select>
         <select
           value={filtreStatut}
@@ -244,7 +338,7 @@ export default function RapportsChef({
           </div>
         ) : rapportsFiltres.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-4xl mb-3"></p>
+            <p className="text-4xl mb-3">📄</p>
             <p className="text-ardoise-clair italic">
               {recherche
                 ? "Aucun rapport ne correspond à votre recherche."
@@ -284,11 +378,29 @@ export default function RapportsChef({
                       <span className="text-xs text-ardoise-clair">
                         {getTypeLabel(rapport.type)}
                       </span>
+                      {rapport.mission_titre && (
+                        <>
+                          <span className="text-ardoise-clair">•</span>
+                          <span className="text-xs text-lagune">🎯 {rapport.mission_titre}</span>
+                        </>
+                      )}
+                      {rapport.programme_nom && (
+                        <>
+                          <span className="text-ardoise-clair">•</span>
+                          <span className="text-xs text-ocre"> {rapport.programme_nom}</span>
+                        </>
+                      )}
+                      {rapport.periode_debut && rapport.periode_fin && (
+                        <>
+                          <span className="text-ardoise-clair">•</span>
+                          <span className="text-xs text-ardoise-clair">
+                             Du {new Date(rapport.periode_debut).toLocaleDateString("fr-FR")} au {new Date(rapport.periode_fin).toLocaleDateString("fr-FR")}
+                          </span>
+                        </>
+                      )}
                       <span className="text-ardoise-clair">•</span>
                       <span className="text-xs text-ardoise-clair">
-                        {new Date(rapport.date_creation).toLocaleDateString(
-                          "fr-FR"
-                        )}
+                        {new Date(rapport.date_creation).toLocaleDateString("fr-FR")}
                       </span>
                       <span className="text-ardoise-clair">•</span>
                       <span className="text-xs text-ardoise-clair">
@@ -297,7 +409,7 @@ export default function RapportsChef({
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 sm:ml-4 flex-shrink-0">
+                <div className="flex items-center gap-2 sm:ml-4 flex-shrink-0 flex-wrap">
                   {getBadgeStatut(rapport.statut)}
                   {rapport.statut === "brouillon" && (
                     <button
@@ -334,11 +446,11 @@ export default function RapportsChef({
       {/* Modal de création */}
       {afficherFormulaire && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-ardoise-clair/10 p-6 rounded-t-xl z-10">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-ardoise">
-                  📄 Nouveau rapport
+                   Nouveau rapport
                 </h2>
                 <button
                   onClick={() => setAfficherFormulaire(false)}
@@ -357,41 +469,107 @@ export default function RapportsChef({
                 onChange={(e) =>
                   setFormData({ ...formData, titre: e.target.value })
                 }
-                placeholder="Ex: Rapport mensuel d'activité"
+                placeholder="Ex: Rapport d'activité - Juin 2026"
                 required
               />
+              
               <div>
-                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
-                  Type de rapport
+                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
+                  Type de rapport *
                 </label>
                 <select
                   value={formData.type}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      type: e.target.value as any,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
+                  onChange={(e) => {
+                    const newType = e.target.value as any;
+                    setFormData({ 
+                      ...formData, 
+                      type: newType,
+                      // Réinitialiser les champs spécifiques si type change
+                      mission_id: newType === "mission" ? formData.mission_id : "",
+                      programme_id: newType === "programme" ? formData.programme_id : "",
+                    });
+                  }}
+                  className="w-full px-4 py-3 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
                 >
-                  <option value="activite">📋 Activité</option>
-                  <option value="mission">🎯 Mission</option>
-                  <option value="financier"> Financier</option>
-                  <option value="beneficiaires">👥 Bénéficiaires</option>
+                  <option value="activite">📋 Rapport d'activité (général)</option>
+                  <option value="mission">🎯 Rapport de mission</option>
+                  <option value="programme">📁 Rapport de programme</option>
+                  <option value="hebdomadaire">📅 Rapport hebdomadaire</option>
+                  <option value="mensuel">📆 Rapport mensuel</option>
+                  <option value="trimestriel">📊 Rapport trimestriel</option>
                 </select>
               </div>
+
+              {/* Sélection de mission */}
+              {formData.type === "mission" && (
+                <div>
+                  <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
+                    Mission concernée *
+                  </label>
+                  <select
+                    value={formData.mission_id}
+                    onChange={(e) => setFormData({ ...formData, mission_id: e.target.value })}
+                    className="w-full px-4 py-3 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
+                  >
+                    <option value="">Sélectionner une mission</option>
+                    {missions.map((m) => (
+                      <option key={m.id} value={m.id}>{m.titre}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Sélection de programme */}
+              {formData.type === "programme" && (
+                <div>
+                  <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
+                    Programme concerné *
+                  </label>
+                  <select
+                    value={formData.programme_id}
+                    onChange={(e) => setFormData({ ...formData, programme_id: e.target.value })}
+                    className="w-full px-4 py-3 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
+                  >
+                    <option value="">Sélectionner un programme</option>
+                    {programmes.map((p) => (
+                      <option key={p.id} value={p.id}>{p.nom}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Période pour rapports temporels */}
+              {["hebdomadaire", "mensuel", "trimestriel"].includes(formData.type) && (
+                <div className="grid grid-cols-2 gap-4">
+                  <ChampSaisie
+                    libelle="Date de début de période *"
+                    type="date"
+                    value={formData.periode_debut}
+                    onChange={(e) => setFormData({ ...formData, periode_debut: e.target.value })}
+                    required
+                  />
+                  <ChampSaisie
+                    libelle="Date de fin de période *"
+                    type="date"
+                    value={formData.periode_fin}
+                    onChange={(e) => setFormData({ ...formData, periode_fin: e.target.value })}
+                    required
+                  />
+                </div>
+              )}
+
               <div>
-                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
-                  Description
+                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
+                  Description / Contenu
                 </label>
                 <textarea
                   value={formData.description}
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
+                  className="w-full px-4 py-3 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
                   rows={5}
-                  placeholder="Décrivez le contenu du rapport..."
+                  placeholder="Décrivez le contenu du rapport, les résultats, les observations..."
                 />
               </div>
 
