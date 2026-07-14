@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
@@ -188,7 +189,6 @@ async def lister_mon_equipe(
         par_page=par_page,
     )
 
-
 @routeur_chefs.get(
     "/ong/agents",
     response_model=ListeAgentsResponse,
@@ -199,23 +199,40 @@ async def lister_agents_ong(
     page: int = Query(1, ge=1),
     par_page: int = Query(20, ge=1, le=1000),
 ):
-    """Liste les agents ONG créés par le chef ONG."""
+    """Liste TOUS les agents ONG du domaine du chef."""
     chef = await verifier_est_chef(chef)
-    
+
     if chef.role != "chef_ong":
         raise HTTPException(status_code=403, detail="Seul un chef ONG peut accéder à cette ressource")
+
+    # ✅ CORRECTION : Récupérer TOUS les agents du domaine
+    from sqlalchemy import select
+    from src.modeles import Utilisateur
     
-    # ✅ CORRECTION : Pas de type_agent, on filtre après récupération
-    agents, total = await service.lister_agents_chef(session, chef, page, par_page)
+    # Compter le total d'abord
+    stmt_count = select(func.count(Utilisateur.id)).where(
+        Utilisateur.role.in_(["agent_ong", "ong"]),
+        Utilisateur.domaine_id == chef.domaine_id,
+        Utilisateur.est_actif == True,
+    )
+    result_count = await session.execute(stmt_count)
+    total = result_count.scalar() or 0
+
+    # Récupérer les agents avec pagination
+    stmt = select(Utilisateur).where(
+        Utilisateur.role.in_(["agent_ong", "ong"]),
+        Utilisateur.domaine_id == chef.domaine_id,
+        Utilisateur.est_actif == True,
+    ).offset((page - 1) * par_page).limit(par_page)
     
-    # Filtrer pour ne garder que les agents ONG
-    agents = [a for a in agents if a.role in ("agent_ong", "ong")]
-    
+    result = await session.execute(stmt)
+    agents = result.scalars().all()
+
     agents_response = [_dechiffrer_agent(agent) for agent in agents]
-    
+
     return ListeAgentsResponse(
         agents=agents_response,
-        total=len(agents_response),
+        total=total,
         page=page,
         par_page=par_page,
     )
