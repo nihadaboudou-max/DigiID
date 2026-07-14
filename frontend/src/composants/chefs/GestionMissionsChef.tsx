@@ -6,7 +6,7 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
-import { clientAPI } from "@/services/client_api"; // ✅ Import du client authentifié
+import { clientAPI } from "@/services/client_api";
 
 interface Mission {
   id: string;
@@ -17,6 +17,12 @@ interface Mission {
   date_depart: string;
   date_retour?: string;
   programme_id?: string;
+  programme_nom?: string;
+}
+
+interface Programme {
+  id: string;
+  nom: string;
 }
 
 interface GestionMissionsChefProps {
@@ -31,9 +37,12 @@ export default function GestionMissionsChef({
   typeOrganisation,
 }: GestionMissionsChefProps) {
   const [missions, setMissions] = useState<Mission[]>([]);
+  const [programmes, setProgrammes] = useState<Programme[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
   const [afficherFormulaire, setAfficherFormulaire] = useState(false);
+  const [modeEdition, setModeEdition] = useState(false);
+  const [missionEnCours, setMissionEnCours] = useState<string | null>(null);
   const [sauvegarde, setSauvegarde] = useState(false);
   const [filtreStatut, setFiltreStatut] = useState<string>("tous");
 
@@ -43,17 +52,19 @@ export default function GestionMissionsChef({
     zone: "",
     date_depart: "",
     date_retour: "",
+    programme_id: "",
+    statut: "planifiee",
   });
 
   useEffect(() => {
     chargerMissions();
+    chargerProgrammes();
   }, [typeOrganisation]);
 
   async function chargerMissions() {
     setChargement(true);
     setErreur("");
     try {
-      // ✅ Utilisation de clientAPI avec authentifie: true
       const data = await clientAPI.get(`/api/v1/chefs/${typeOrganisation}/missions`, {
         authentifie: true,
       });
@@ -62,6 +73,17 @@ export default function GestionMissionsChef({
       setErreur(error?.message || "Erreur de chargement des missions.");
     } finally {
       setChargement(false);
+    }
+  }
+
+  async function chargerProgrammes() {
+    try {
+      const data = await clientAPI.get(`/api/v1/chefs/${typeOrganisation}/programmes`, {
+        authentifie: true,
+      });
+      setProgrammes(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Erreur chargement programmes:", error);
     }
   }
 
@@ -75,19 +97,17 @@ export default function GestionMissionsChef({
     setErreur("");
     
     try {
-      // ✅ Utilisation de clientAPI avec authentifie: true
       await clientAPI.post(`/api/v1/chefs/${typeOrganisation}/missions`, {
         titre: formData.titre,
         objectifs: formData.objectifs || undefined,
         zone: formData.zone || undefined,
         date_depart: formData.date_depart,
         date_retour: formData.date_retour || undefined,
-      }, { 
-        authentifie: true 
-      });
+        programme_id: formData.programme_id || undefined,
+      }, { authentifie: true });
       
       setAfficherFormulaire(false);
-      setFormData({ titre: "", objectifs: "", zone: "", date_depart: "", date_retour: "" });
+      reinitialiserFormulaire();
       await chargerMissions();
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors de la création de la mission.");
@@ -96,16 +116,100 @@ export default function GestionMissionsChef({
     }
   }
 
-  const getBadgeStatut = (statut: string) => {
+  async function handleModifier() {
+    if (!missionEnCours || !formData.titre || !formData.date_depart) {
+      setErreur("Le titre et la date de début sont obligatoires.");
+      return;
+    }
+    
+    setSauvegarde(true);
+    setErreur("");
+    
+    try {
+      await clientAPI.patch(`/api/v1/chefs/${typeOrganisation}/missions/${missionEnCours}`, {
+        titre: formData.titre,
+        objectifs: formData.objectifs || undefined,
+        zone: formData.zone || undefined,
+        date_depart: formData.date_depart,
+        date_retour: formData.date_retour || undefined,
+        programme_id: formData.programme_id || undefined,
+        statut: formData.statut || undefined,
+      }, { authentifie: true });
+      
+      setAfficherFormulaire(false);
+      reinitialiserFormulaire();
+      await chargerMissions();
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur lors de la modification de la mission.");
+    } finally {
+      setSauvegarde(false);
+    }
+  }
+
+  async function handleSupprimer(missionId: string) {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer cette mission ?")) return;
+    
+    try {
+      await clientAPI.delete(`/api/v1/chefs/${typeOrganisation}/missions/${missionId}`, {
+        authentifie: true,
+      });
+      await chargerMissions();
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur lors de la suppression.");
+    }
+  }
+
+  async function handleChangerStatut(missionId: string, nouveauStatut: string) {
+    try {
+      await clientAPI.patch(`/api/v1/chefs/${typeOrganisation}/missions/${missionId}`, {
+        statut: nouveauStatut,
+      }, { authentifie: true });
+      await chargerMissions();
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur lors du changement de statut.");
+    }
+  }
+
+  function ouvrirFormulaireEdition(mission: Mission) {
+    setMissionEnCours(mission.id);
+    setFormData({
+      titre: mission.titre,
+      objectifs: mission.objectifs || "",
+      zone: mission.zone || "",
+      date_depart: mission.date_depart.split('T')[0],
+      date_retour: mission.date_retour ? mission.date_retour.split('T')[0] : "",
+      programme_id: mission.programme_id || "",
+      statut: mission.statut || "planifiee",
+    });
+    setModeEdition(true);
+    setAfficherFormulaire(true);
+  }
+
+  function reinitialiserFormulaire() {
+    setMissionEnCours(null);
+    setFormData({
+      titre: "",
+      objectifs: "",
+      zone: "",
+      date_depart: "",
+      date_retour: "",
+      programme_id: "",
+      statut: "planifiee",
+    });
+    setModeEdition(false);
+  }
+
+  function getBadgeStatut(statut: string) {
     const config: Record<string, { couleur: any; label: string }> = {
       planifiee: { couleur: "ocre", label: "Planifiée" },
       en_cours: { couleur: "lagune", label: "En cours" },
       terminee: { couleur: "succes", label: "Terminée" },
       annulee: { couleur: "terre", label: "Annulée" },
+      archivee: { couleur: "ardoise", label: "Archivée" },
     };
     const cfg = config[statut] || { couleur: "lagune", label: statut };
     return <Badge variante={cfg.couleur} taille="petit">{cfg.label}</Badge>;
-  };
+  }
 
   const missionsFiltrees =
     filtreStatut === "tous"
@@ -114,18 +218,14 @@ export default function GestionMissionsChef({
 
   return (
     <div className="min-h-screen space-y-6 apparition pb-20">
-      {/* En-tête */}
       <div>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
-          📋 Missions
-        </p>
+        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">📋 Missions</p>
         <h1 className="text-3xl font-bold text-ardoise mt-1">{titre}</h1>
         <p className="text-ardoise-clair mt-2">{sousTitre}</p>
       </div>
 
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
 
-      {/* Filtres et actions */}
       <div className="flex flex-col sm:flex-row gap-3">
         <select
           value={filtreStatut}
@@ -137,14 +237,14 @@ export default function GestionMissionsChef({
           <option value="en_cours">En cours</option>
           <option value="terminee">Terminées</option>
           <option value="annulee">Annulées</option>
+          <option value="archivee">Archivées</option>
         </select>
         <div className="flex-1"></div>
-        <Bouton variante="primaire" onClick={() => setAfficherFormulaire(true)}>
+        <Bouton variante="primaire" onClick={() => { setModeEdition(false); setAfficherFormulaire(true); }}>
           + Nouvelle mission
         </Bouton>
       </div>
 
-      {/* Statistiques rapides */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Carte className="text-center p-4">
           <p className="text-2xl font-bold text-ocre">
@@ -172,7 +272,6 @@ export default function GestionMissionsChef({
         </Carte>
       </div>
 
-      {/* Liste des missions */}
       <Carte titre={`${missionsFiltrees.length} mission(s)`}>
         {chargement ? (
           <div className="text-center py-8">
@@ -181,10 +280,8 @@ export default function GestionMissionsChef({
           </div>
         ) : missionsFiltrees.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-4xl mb-3">📋</p>
-            <p className="text-ardoise-clair italic">
-              Aucune mission planifiée.
-            </p>
+            <p className="text-4xl mb-3"></p>
+            <p className="text-ardoise-clair italic">Aucune mission planifiée.</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -198,30 +295,61 @@ export default function GestionMissionsChef({
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <h3 className="font-bold text-ardoise">{mission.titre}</h3>
                       {getBadgeStatut(mission.statut)}
+                      {mission.programme_nom && (
+                        <Badge variante="lagune" taille="petit">📁 {mission.programme_nom}</Badge>
+                      )}
                     </div>
                     {mission.objectifs && (
-                      <p className="text-sm text-ardoise-clair mt-1">
-                        {mission.objectifs}
-                      </p>
+                      <p className="text-sm text-ardoise-clair mt-1">{mission.objectifs}</p>
                     )}
                     <div className="flex flex-wrap gap-3 mt-2 text-xs text-ardoise-clair">
-                      {mission.zone && (
-                        <span>📍 {mission.zone}</span>
+                      {mission.zone && <span>📍 {mission.zone}</span>}
+                      <span>📅 Début: {new Date(mission.date_depart).toLocaleDateString("fr-FR")}</span>
+                      {mission.date_retour && (
+                        <span>📅 Fin: {new Date(mission.date_retour).toLocaleDateString("fr-FR")}</span>
                       )}
                     </div>
                   </div>
-                </div>
-                <div className="flex flex-wrap gap-4 mt-3 text-xs text-ardoise-clair pt-3 border-t border-ardoise-clair/10">
-                  <span>
-                    📅 Début:{" "}
-                    {new Date(mission.date_depart).toLocaleDateString("fr-FR")}
-                  </span>
-                  {mission.date_retour && (
-                    <span>
-                      📅 Fin:{" "}
-                      {new Date(mission.date_retour).toLocaleDateString("fr-FR")}
-                    </span>
-                  )}
+                  <div className="flex flex-wrap gap-2 sm:ml-4">
+                    {mission.statut === "planifiee" && (
+                      <button
+                        onClick={() => handleChangerStatut(mission.id, "en_cours")}
+                        className="px-3 py-1 text-xs bg-lagune text-white rounded hover:bg-lagune/90"
+                      >
+                        ▶️ Démarrer
+                      </button>
+                    )}
+                    {mission.statut === "en_cours" && (
+                      <button
+                        onClick={() => handleChangerStatut(mission.id, "terminee")}
+                        className="px-3 py-1 text-xs bg-succes text-white rounded hover:bg-succes/90"
+                      >
+                        ✅ Terminer
+                      </button>
+                    )}
+                    {mission.statut !== "archivee" && (
+                      <>
+                        <button
+                          onClick={() => ouvrirFormulaireEdition(mission)}
+                          className="px-3 py-1 text-xs bg-ocre text-white rounded hover:bg-ocre/90"
+                        >
+                          ✏️ Modifier
+                        </button>
+                        <button
+                          onClick={() => handleChangerStatut(mission.id, "archivee")}
+                          className="px-3 py-1 text-xs bg-ardoise text-white rounded hover:bg-ardoise/90"
+                        >
+                          📦 Archiver
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={() => handleSupprimer(mission.id)}
+                      className="px-3 py-1 text-xs bg-terre text-white rounded hover:bg-terre/90"
+                    >
+                      🗑️ Supprimer
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -229,21 +357,19 @@ export default function GestionMissionsChef({
         )}
       </Carte>
 
-      {/* Modal de création */}
       {afficherFormulaire && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-ardoise-clair/10 p-6 rounded-t-xl z-10">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-ardoise">
-                  📋 Nouvelle mission
+                  {modeEdition ? "✏️ Modifier la mission" : "+ Nouvelle mission"}
                 </h2>
                 <button
-                  onClick={() => setAfficherFormulaire(false)}
+                  onClick={() => { setAfficherFormulaire(false); reinitialiserFormulaire(); }}
                   className="text-ardoise-clair hover:text-ardoise transition-colors text-2xl leading-none"
-                  aria-label="Fermer"
                 >
-                  ✕ {/* ✅ Correction : Ajout de la croix de fermeture */}
+                  ✕
                 </button>
               </div>
             </div>
@@ -252,51 +378,60 @@ export default function GestionMissionsChef({
               <ChampSaisie
                 libelle="Titre de la mission *"
                 value={formData.titre}
-                onChange={(e) =>
-                  setFormData({ ...formData, titre: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, titre: e.target.value })}
                 placeholder="Ex: Distribution de kits sanitaires"
                 required
               />
+              
               <div>
-                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
+                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
+                  Programme (optionnel)
+                </label>
+                <select
+                  value={formData.programme_id}
+                  onChange={(e) => setFormData({ ...formData, programme_id: e.target.value })}
+                  className="w-full px-4 py-3 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
+                >
+                  <option value="">Aucun programme</option>
+                  {programmes.map((p) => (
+                    <option key={p.id} value={p.id}>{p.nom}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
                   Objectifs / Description
                 </label>
                 <textarea
                   value={formData.objectifs}
-                  onChange={(e) =>
-                    setFormData({ ...formData, objectifs: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
+                  onChange={(e) => setFormData({ ...formData, objectifs: e.target.value })}
+                  className="w-full px-4 py-3 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
                   rows={4}
                   placeholder="Décrivez la mission..."
                 />
               </div>
+
               <ChampSaisie
                 libelle="Zone d'intervention"
                 value={formData.zone}
-                onChange={(e) =>
-                  setFormData({ ...formData, zone: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, zone: e.target.value })}
                 placeholder="Ex: Dakar, Thiès..."
               />
-              <div className="grid grid-cols-2 gap-3">
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <ChampSaisie
                   libelle="Date de début *"
                   type="date"
                   value={formData.date_depart}
-                  onChange={(e) =>
-                    setFormData({ ...formData, date_depart: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, date_depart: e.target.value })}
                   required
                 />
                 <ChampSaisie
                   libelle="Date de fin (optionnelle)"
                   type="date"
                   value={formData.date_retour}
-                  onChange={(e) =>
-                    setFormData({ ...formData, date_retour: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, date_retour: e.target.value })}
                 />
               </div>
 
@@ -304,15 +439,15 @@ export default function GestionMissionsChef({
                 <Bouton
                   variante="primaire"
                   chargement={sauvegarde}
-                  onClick={handleCreer}
+                  onClick={modeEdition ? handleModifier : handleCreer}
                   className="flex-1"
                   disabled={!formData.titre || !formData.date_depart}
                 >
-                  Créer la mission
+                  {sauvegarde ? "Enregistrement..." : (modeEdition ? "Modifier" : "Créer")}
                 </Bouton>
                 <Bouton
                   variante="ghost"
-                  onClick={() => setAfficherFormulaire(false)}
+                  onClick={() => { setAfficherFormulaire(false); reinitialiserFormulaire(); }}
                 >
                   Annuler
                 </Bouton>

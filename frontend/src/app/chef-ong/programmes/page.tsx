@@ -19,8 +19,6 @@ interface Programme {
   date_debut: string;
   date_fin: string | null;
   statut: string;
-  domaine_id: string | null;
-  departement_id: string | null;
 }
 
 export default function ChefOngProgrammesPage() {
@@ -140,11 +138,6 @@ function Contenu() {
     setAfficherForm(true);
   }
 
-  function ouvrirFormulaireCreation() {
-    setModeEdition(false);
-    setAfficherForm(true);
-  }
-
   function reinitialiserFormulaire() {
     setProgrammeEnCours(null);
     setNom("");
@@ -155,20 +148,11 @@ function Contenu() {
     setDateFin("");
     setAfficherForm(false);
     setModeEdition(false);
-  }
-
-  function getStatutBadge(statut: string) {
-    const config: Record<string, { couleur: any; label: string }> = {
-      actif: { couleur: "succes", label: "Actif" },
-      termine: { couleur: "lagune", label: "Terminé" },
-      en_cours: { couleur: "ocre", label: "En cours" },
-    };
-    const cfg = config[statut] || { couleur: "lagune", label: statut };
-    return <Badge variante={cfg.couleur} taille="petit">{cfg.label}</Badge>;
+    setErreur(null);
   }
 
   return (
-    <div className="space-y-6 apparition">
+    <div className="space-y-6 apparition pb-20">
       <nav className="text-sm text-ardoise-clair">
         <Link href="/chef-ong" className="hover:text-ocre">Tableau de bord</Link>
         <span className="mx-2">/</span>
@@ -183,7 +167,7 @@ function Contenu() {
           <h1 className="mt-1 text-2xl font-bold text-ardoise">Programmes</h1>
           <p className="text-ardoise-clair mt-1 text-sm">{programmes.length} programme(s)</p>
         </div>
-        <Bouton variante="primaire" onClick={ouvrirFormulaireCreation}>
+        <Bouton variante="primaire" onClick={() => { setModeEdition(false); setAfficherForm(true); }}>
           + Nouveau programme
         </Bouton>
       </div>
@@ -198,7 +182,6 @@ function Contenu() {
           <div className="text-center py-8">
             <p className="text-4xl mb-3"></p>
             <p className="text-ardoise-clair italic">Aucun programme enregistré.</p>
-            <p className="text-xs text-ardoise-clair mt-2">Créez votre premier programme pour commencer !</p>
           </div>
         </Carte>
       ) : (
@@ -214,19 +197,18 @@ function Contenu() {
                     {p.date_fin && ` · Fin: ${new Date(p.date_fin).toLocaleDateString("fr-FR")}`}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  {getStatutBadge(p.statut)}
+                <div className="flex items-center gap-2 flex-shrink-0">
                   <button
                     onClick={() => ouvrirFormulaireEdition(p)}
                     className="px-3 py-1 text-xs bg-lagune text-white rounded hover:bg-lagune/90 transition-colors"
                   >
-                    ✏️ Modifier
+                    ️ Modifier
                   </button>
                   <button
                     onClick={() => handleSupprimer(p.id)}
                     className="px-3 py-1 text-xs bg-terre text-white rounded hover:bg-terre/90 transition-colors"
                   >
-                    🗑️ Supprimer
+                    ️ Supprimer
                   </button>
                 </div>
               </div>
@@ -238,7 +220,7 @@ function Contenu() {
       {/* Modal Création/Édition */}
       {afficherForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-ardoise-clair/10 p-6 rounded-t-xl z-10">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-ardoise">
@@ -253,32 +235,76 @@ function Contenu() {
               </div>
             </div>
 
-            <div className="p-6 space-y-3">
-              <ChampSaisie libelle="Nom *" value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Ex: Aide alimentaire 2026" required />
-              <ChampSaisie libelle="Zone" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="Ex: Dakar" />
-              <ChampSaisie libelle="Budget (FCFA)" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="Ex: 5000000" type="number" />
-              <div className="grid grid-cols-2 gap-3">
-                <ChampSaisie libelle="Date de début *" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} type="date" required />
-                <ChampSaisie libelle="Date de fin" value={dateFin} onChange={(e) => setDateFin(e.target.value)} type="date" />
+            <div className="p-6 space-y-4">
+              <ChampSaisie 
+                libelle="Nom *" 
+                value={nom} 
+                onChange={(e) => setNom(e.target.value)} 
+                placeholder="Ex: Aide alimentaire 2026" 
+                required 
+              />
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <ChampSaisie 
+                  libelle="Zone" 
+                  value={zone} 
+                  onChange={(e) => setZone(e.target.value)} 
+                  placeholder="Ex: Dakar" 
+                />
+                <ChampSaisie 
+                  libelle="Budget (FCFA)" 
+                  value={budget} 
+                  onChange={(e) => setBudget(e.target.value)} 
+                  placeholder="Ex: 5000000" 
+                  type="number" 
+                />
               </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <ChampSaisie 
+                  libelle="Date de début *" 
+                  value={dateDebut} 
+                  onChange={(e) => setDateDebut(e.target.value)} 
+                  type="date" 
+                  required 
+                />
+                <ChampSaisie 
+                  libelle="Date de fin" 
+                  value={dateFin} 
+                  onChange={(e) => setDateFin(e.target.value)} 
+                  type="date" 
+                />
+              </div>
+
               <div>
-                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Description</label>
-                <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm resize-none" placeholder="Décrivez le programme..." />
+                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">Description</label>
+                <textarea 
+                  value={description} 
+                  onChange={(e) => setDescription(e.target.value)} 
+                  rows={4} 
+                  className="w-full px-4 py-3 border border-ardoise-clair/20 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-lagune/30" 
+                  placeholder="Décrivez le programme..." 
+                />
               </div>
-              <div className="flex gap-2 pt-2">
-                <Bouton variante="primaire" disabled={!nom || !dateDebut || envoi} onClick={modeEdition ? handleModifier : handleCreer} chargement={envoi}>
+
+              <div className="flex gap-3 pt-4 border-t border-ardoise-clair/10">
+                <Bouton 
+                  variante="primaire" 
+                  disabled={!nom || !dateDebut || envoi} 
+                  onClick={modeEdition ? handleModifier : handleCreer} 
+                  chargement={envoi}
+                  className="flex-1"
+                >
                   {envoi ? "Enregistrement..." : (modeEdition ? "Modifier" : "Créer")}
                 </Bouton>
-                <Bouton variante="ghost" onClick={reinitialiserFormulaire}>Annuler</Bouton>
+                <Bouton variante="ghost" onClick={reinitialiserFormulaire}>
+                  Annuler
+                </Bouton>
               </div>
             </div>
           </div>
         </div>
       )}
-
-      <Link href="/chef-ong">
-        <Bouton variante="ghost">← Retour au tableau de bord</Bouton>
-      </Link>
     </div>
   );
 }
