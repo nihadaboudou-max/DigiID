@@ -53,7 +53,7 @@ export default function GestionMissionsChef({
     setErreur("");
     try {
       // ✅ Utiliser l'endpoint du module chefs qui fonctionne
-      const reponse = await fetch("/api/v1/chefs/ong/missions", {
+      const reponse = await fetch("/api/v1/ong/missions", {
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
@@ -85,7 +85,7 @@ export default function GestionMissionsChef({
     
     try {
       // ✅ Utiliser l'endpoint du module chefs
-      const reponse = await fetch("/api/v1/chefs/ong/missions", {
+      const reponse = await fetch("/api/v1/ong/missions", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
