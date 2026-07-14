@@ -7,6 +7,7 @@ import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { Alerte } from "@/composants/commun/Alerte";
+import { clientAPI } from "@/services/client_api"; // ✅ Import ajouté
 
 interface Mission {
   id: string;
@@ -38,12 +39,17 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      const reponse = await fetch("/api/v1/ong/missions", { credentials: "include" });
-      if (!reponse.ok) throw new Error("Erreur de chargement");
-      const data = await reponse.json();
-      setMissions(data);
-    } catch (error) {
-      setErreur("Erreur de chargement des missions");
+      // ✅ Utilisation de clientAPI avec typage 'any' pour éviter les erreurs TS
+      const response: any = await clientAPI.get("/api/v1/ong/missions", { authentifie: true });
+      
+      // ✅ Sécurisation de l'extraction du tableau
+      const dataArray = Array.isArray(response) 
+        ? response 
+        : (response.missions || response.data || []);
+        
+      setMissions(dataArray);
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur de chargement des missions");
       console.error(error);
     } finally {
       setChargement(false);
@@ -92,7 +98,7 @@ function Contenu() {
                     {m.date_retour ? ` au ${new Date(m.date_retour).toLocaleDateString("fr-FR")}` : ""}
                   </p>
                   {m.objectifs && (
-                    <p className="text-xs text-ardoise-clair mt-2 italic">{m.objectifs}</p>
+                    <p className="text-xs text-ardoise-clair mt-2 italic">🎯 {m.objectifs}</p>
                   )}
                 </div>
                 <Badge 

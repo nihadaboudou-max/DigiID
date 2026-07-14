@@ -7,6 +7,7 @@ import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { Alerte } from "@/composants/commun/Alerte";
+import { clientAPI } from "@/services/client_api"; // ✅ Import ajouté
 
 interface Programme {
   id: string;
@@ -38,12 +39,17 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      const reponse = await fetch("/api/v1/ong/programmes", { credentials: "include" });
-      if (!reponse.ok) throw new Error("Erreur de chargement");
-      const data = await reponse.json();
-      setProgrammes(data);
-    } catch (error) {
-      setErreur("Erreur de chargement des programmes");
+      // ✅ Utilisation de clientAPI avec typage 'any' pour éviter les erreurs TS
+      const response: any = await clientAPI.get("/api/v1/ong/programmes", { authentifie: true });
+      
+      // ✅ Sécurisation de l'extraction du tableau
+      const dataArray = Array.isArray(response) 
+        ? response 
+        : (response.programmes || response.data || []);
+        
+      setProgrammes(dataArray);
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur de chargement des programmes");
       console.error(error);
     } finally {
       setChargement(false);

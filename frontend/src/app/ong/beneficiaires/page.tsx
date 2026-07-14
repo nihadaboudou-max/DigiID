@@ -8,6 +8,7 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
+import { clientAPI } from "@/services/client_api";
 
 interface Beneficiaire {
   id: string;
@@ -33,6 +34,7 @@ function Contenu() {
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [afficherFormulaire, setAfficherFormulaire] = useState(false);
+  
   const [nom, setNom] = useState("");
   const [digiid, setDigiid] = useState("");
   const [programme, setProgramme] = useState("");
@@ -46,12 +48,11 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      const reponse = await fetch("/api/v1/ong/beneficiaires", { credentials: "include" });
-      if (!reponse.ok) throw new Error("Erreur de chargement");
-      const data = await reponse.json();
-      setBeneficiaires(data);
-    } catch (error) {
-      setErreur("Erreur de chargement des bénéficiaires");
+      const response: any = await clientAPI.get("/api/v1/ong/beneficiaires", { authentifie: true });
+      const dataArray = Array.isArray(response) ? response : (response.beneficiaires || response.data || []);
+      setBeneficiaires(dataArray);
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur de chargement des bénéficiaires");
       console.error(error);
     } finally {
       setChargement(false);
@@ -59,21 +60,26 @@ function Contenu() {
   }
 
   async function handleCreer() {
-    if (!nom || !programme) return;
+    if (!nom || !programme) {
+      setErreur("Le nom et le programme sont obligatoires.");
+      return;
+    }
     setEnvoi(true);
+    setErreur(null);
     try {
-      const reponse = await fetch("/api/v1/ong/beneficiaires", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ nom, digiid: digiid || undefined, programme, zone: zone || undefined, notes: notes || undefined }),
-      });
-      if (!reponse.ok) throw new Error("Erreur de création");
+      await clientAPI.post("/api/v1/ong/beneficiaires", {
+        nom,
+        digiid: digiid || null,
+        programme,
+        zone: zone || null,
+        notes: notes || null,
+      }, { authentifie: true });
+      
       await charger();
       setNom(""); setDigiid(""); setProgramme(""); setZone(""); setNotes("");
       setAfficherFormulaire(false);
-    } catch (error) {
-      setErreur("Erreur lors de la création du bénéficiaire");
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur lors de la création du bénéficiaire");
       console.error(error);
     } finally {
       setEnvoi(false);
@@ -142,7 +148,7 @@ function Contenu() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-ocre/10 flex items-center justify-center text-ocre font-bold">
-                    {b.nom.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                    {(b.nom || "U").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                   </div>
                   <div>
                     <p className="font-semibold text-ardoise">{b.nom}</p>
@@ -153,7 +159,7 @@ function Contenu() {
                   {b.statut === "actif" ? "Actif" : "Inactif"}
                 </Badge>
               </div>
-              {b.notes && <p className="text-xs text-ardoise-clair mt-2 italic">{b.notes}</p>}
+              {b.notes && <p className="text-xs text-ardoise-clair mt-2 italic">📝 {b.notes}</p>}
             </div>
           ))}
         </div>

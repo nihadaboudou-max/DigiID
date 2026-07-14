@@ -6,6 +6,7 @@ import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspacePr
 import { Carte } from "@/composants/commun/Carte";
 import { Badge } from "@/composants/commun/Badge";
 import { Alerte } from "@/composants/commun/Alerte";
+import { clientAPI } from "@/services/client_api";
 
 interface Stats {
   nb_beneficiaires: number;
@@ -42,24 +43,23 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      const [statsRes, missionsRes] = await Promise.all([
-        fetch("/api/v1/ong/stats", { credentials: "include" }),
-        fetch("/api/v1/ong/missions", { credentials: "include" }),
+      // ✅ On récupère les réponses brutes en 'any'
+      const [statsResponse, missionsResponse]: any[] = await Promise.all([
+        clientAPI.get("/api/v1/ong/stats", { authentifie: true }),
+        clientAPI.get("/api/v1/ong/missions", { authentifie: true }),
       ]);
 
-      if (!statsRes.ok || !missionsRes.ok) {
-        throw new Error("Erreur de chargement");
-      }
+      // ✅ On sécurise l'extraction des données pour éviter toute erreur TS ou Runtime
+      const safeStats: Stats = (statsResponse && typeof statsResponse === 'object') ? statsResponse : { nb_beneficiaires: 0, nb_programmes: 0, nb_missions: 0, zones: [] };
+      
+      const safeMissions: Mission[] = Array.isArray(missionsResponse) 
+        ? missionsResponse 
+        : (missionsResponse.missions || missionsResponse.data || []);
 
-      const [statsData, missionsData] = await Promise.all([
-        statsRes.json(),
-        missionsRes.json(),
-      ]);
-
-      setStats(statsData);
-      setMissions(missionsData);
-    } catch (error) {
-      setErreur("Erreur de chargement du tableau de bord");
+      setStats(safeStats);
+      setMissions(safeMissions);
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur de chargement du tableau de bord");
       console.error(error);
     } finally {
       setChargement(false);
@@ -111,30 +111,10 @@ function Contenu() {
 
       {/* Actions rapides */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <CarteAction 
-          titre="Bénéficiaires" 
-          description="Enregistrer et gérer les bénéficiaires" 
-          href="/ong/beneficiaires" 
-          icone="👥" 
-        />
-        <CarteAction 
-          titre="Programmes" 
-          description="Consulter les programmes actifs" 
-          href="/ong/programme" 
-          icone="📋" 
-        />
-        <CarteAction 
-          titre="Missions" 
-          description="Voir mes missions assignées" 
-          href="/ong/missions" 
-          icone="🌍" 
-        />
-        <CarteAction 
-          titre="Attestations" 
-          description="Mes attestations reçues" 
-          href="/ong/attestations" 
-          icone="📜" 
-        />
+        <CarteAction titre="Bénéficiaires" description="Enregistrer et gérer les bénéficiaires" href="/ong/beneficiaires" icone="👥" />
+        <CarteAction titre="Programmes" description="Consulter les programmes actifs" href="/ong/programmes" icone="📋" />
+        <CarteAction titre="Missions" description="Voir mes missions assignées" href="/ong/missions" icone="🌍" />
+        <CarteAction titre="Attestations" description="Mes attestations reçues" href="/ong/attestations" icone="📜" />
       </div>
 
       {/* Missions récentes */}
@@ -156,10 +136,10 @@ function Contenu() {
         </Carte>
       )}
 
-      {missions.length === 0 && (
+      {missions.length === 0 && !erreur && (
         <div className="bg-ocre/10 border-l-4 border-ocre p-4 rounded">
           <p className="text-sm text-ardoise">
-            <strong>Bienvenue !</strong> Commencez par enregistrer vos premiers bénéficiaires.
+            <strong>Bienvenue !</strong> Commencez par enregistrer vos premiers bénéficiaires ou consultez les programmes disponibles.
           </p>
         </div>
       )}

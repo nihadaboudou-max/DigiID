@@ -7,6 +7,7 @@ import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { Alerte } from "@/composants/commun/Alerte";
+import { clientAPI } from "@/services/client_api";
 
 interface Attestation {
   id: string;
@@ -37,14 +38,14 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      const reponse = await fetch("/api/v1/attestations/mes-attestations", { 
-        credentials: "include" 
-      });
-      if (!reponse.ok) throw new Error("Erreur de chargement");
-      const data = await reponse.json();
-      setAttestations(data);
-    } catch (error) {
-      setErreur("Impossible de charger vos attestations");
+      // ✅ On récupère la réponse brute en 'any' pour éviter les erreurs TS
+      const response: any = await clientAPI.get("/api/v1/attestations/mes-attestations", { authentifie: true });
+      
+      // ✅ On sécurise l'extraction du tableau
+      const dataArray = Array.isArray(response) ? response : (response.attestations || response.data || []);
+      setAttestations(dataArray);
+    } catch (error: any) {
+      setErreur(error?.message || "Impossible de charger vos attestations");
       console.error(error);
     } finally {
       setChargement(false);
@@ -58,9 +59,9 @@ function Contenu() {
       "moralite": "ocre",
       "residence": "terre",
       "activite": "lagune",
-      "personnalise": "lagune", // ← Correction : "lagune" au lieu de "ardoise"
+      "personnalise": "lagune",
     };
-    return colors[type] || "lagune"; // ← Correction : valeur par défaut valide
+    return colors[type] || "lagune";
   };
 
   return (
