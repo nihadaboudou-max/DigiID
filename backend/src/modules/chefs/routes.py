@@ -29,6 +29,8 @@ from src.noyau import dechiffrer_donnee
 from src.modules.ong.schemas import (
     ProgrammeCreate,
     ProgrammeResponse,
+    MissionCreate,  
+    MissionResponse,    
 )
 
 routeur_chefs = APIRouter(prefix="/api/v1/chefs", tags=["Chefs"])
@@ -475,6 +477,72 @@ async def creer_programme_ong(
         zone=p.zone, budget=p.budget, date_debut=p.date_debut,
         date_fin=p.date_fin, statut=p.statut,
         domaine_id=p.domaine_id, departement_id=p.departement_id,
+    )
+
+# =============================================================================
+# MISSIONS (pour Chef ONG)
+# =============================================================================
+
+@routeur_chefs.get(
+    "/ong/missions",
+    response_model=list[MissionResponse],
+)
+async def lister_missions_ong(
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Liste les missions de l'ONG du chef."""
+    chef = await verifier_est_chef(chef)
+    if chef.role != "chef_ong":
+        raise HTTPException(status_code=403, detail="Réservé aux chefs ONG")
+    
+    from src.modules.ong.service import obtenir_missions
+    missions = await obtenir_missions(session, chef)
+    
+    return [
+        MissionResponse(
+            id=m.id, ong_id=m.ong_id, programme_id=m.programme_id,
+            titre=m.titre, zone=m.zone, date_depart=m.date_depart,
+            date_retour=m.date_retour, objectifs=m.objectifs, statut=m.statut,
+            domaine_id=m.domaine_id, departement_id=m.departement_id,
+        )
+        for m in missions
+    ]
+
+
+@routeur_chefs.post(
+    "/ong/missions",
+    response_model=MissionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def creer_mission_ong(
+    data: MissionCreate,
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Crée une mission pour l'ONG du chef."""
+    chef = await verifier_est_chef(chef)
+    if chef.role != "chef_ong":
+        raise HTTPException(status_code=403, detail="Réservé aux chefs ONG")
+    
+    from src.modules.ong.service import creer_mission
+    from src.noyau.journal import enregistrer_evenement_audit
+    
+    m = await creer_mission(session, chef, data.model_dump())
+    
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="chef_mission_creation",
+        description=f"Mission {data.titre} créée par chef {chef.id}",
+        utilisateur_id=chef.id,
+        role_acteur=chef.role,
+    )
+    
+    return MissionResponse(
+        id=m.id, ong_id=m.ong_id, programme_id=m.programme_id,
+        titre=m.titre, zone=m.zone, date_depart=m.date_depart,
+        date_retour=m.date_retour, objectifs=m.objectifs, statut=m.statut,
+        domaine_id=m.domaine_id, departement_id=m.departement_id,
     )
 
 # =============================================================================
