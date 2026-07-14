@@ -25,6 +25,21 @@ interface Programme {
   nom: string;
 }
 
+interface AgentResponse {
+  id: string;
+  digiid_public: string;
+  email: string;
+  prenom: string;
+  nom: string;
+  role: string;
+  domaine_id: string | null;
+  departement_id: string | null;
+  est_actif: boolean;
+  ville: string | null;
+  telephone: string | null;
+  date_creation: string;
+}
+
 interface GestionMissionsChefProps {
   titre: string;
   sousTitre: string;
@@ -49,10 +64,11 @@ export default function GestionMissionsChef({
   // États pour l'assignation
   const [afficherAssignation, setAfficherAssignation] = useState(false);
   const [missionAssignation, setMissionAssignation] = useState<string | null>(null);
-  const [agentsDisponibles, setAgentsDisponibles] = useState<any[]>([]);
+  const [agentsDisponibles, setAgentsDisponibles] = useState<AgentResponse[]>([]);
   const [agentsSelectionnes, setAgentsSelectionnes] = useState<string[]>([]);
   const [instructions, setInstructions] = useState("");
   const [agentsMission, setAgentsMission] = useState<any[]>([]);
+  const [rechercheAgent, setRechercheAgent] = useState("");
 
   const [formData, setFormData] = useState({
     titre: "",
@@ -73,7 +89,7 @@ export default function GestionMissionsChef({
     setChargement(true);
     setErreur("");
     try {
-      const data = await clientAPI.get(`/api/v1/chefs/${typeOrganisation}/missions`, {
+      const data: any = await clientAPI.get(`/api/v1/chefs/${typeOrganisation}/missions`, {
         authentifie: true,
       });
       setMissions(Array.isArray(data) ? data : []);
@@ -86,7 +102,7 @@ export default function GestionMissionsChef({
 
   async function chargerProgrammes() {
     try {
-      const data = await clientAPI.get(`/api/v1/chefs/${typeOrganisation}/programmes`, {
+      const data: any = await clientAPI.get(`/api/v1/chefs/${typeOrganisation}/programmes`, {
         authentifie: true,
       });
       setProgrammes(Array.isArray(data) ? data : []);
@@ -97,10 +113,10 @@ export default function GestionMissionsChef({
 
   async function chargerAgentsDisponibles() {
     try {
-      const data = await clientAPI.get(`/api/v1/chefs/${typeOrganisation}/agents?par_page=1000`, {
+      const data: any = await clientAPI.get(`/api/v1/chefs/${typeOrganisation}/agents?par_page=1000`, {
         authentifie: true,
       });
-      setAgentsDisponibles(Array.isArray(data) ? data : []);
+      setAgentsDisponibles(data.agents || []);
     } catch (error) {
       console.error("Erreur chargement agents:", error);
     }
@@ -108,7 +124,7 @@ export default function GestionMissionsChef({
 
   async function chargerAgentsMission(missionId: string) {
     try {
-      const data = await clientAPI.get(`/api/v1/chefs/${typeOrganisation}/missions/${missionId}/agents`, {
+      const data: any = await clientAPI.get(`/api/v1/chefs/${typeOrganisation}/missions/${missionId}/agents`, {
         authentifie: true,
       });
       setAgentsMission(Array.isArray(data) ? data : []);
@@ -204,6 +220,7 @@ export default function GestionMissionsChef({
     setMissionAssignation(mission.id);
     setAgentsSelectionnes([]);
     setInstructions("");
+    setRechercheAgent("");
     setAfficherAssignation(true);
     chargerAgentsDisponibles();
     chargerAgentsMission(mission.id);
@@ -255,6 +272,37 @@ export default function GestionMissionsChef({
       statut: "planifiee",
     });
     setModeEdition(false);
+  }
+
+  // Filtrage des agents selon la recherche
+  const agentsFiltres = agentsDisponibles.filter((agent) => {
+    const search = rechercheAgent.toLowerCase();
+    return (
+      agent.prenom?.toLowerCase().includes(search) ||
+      agent.nom?.toLowerCase().includes(search) ||
+      agent.email?.toLowerCase().includes(search) ||
+      agent.digiid_public?.toLowerCase().includes(search)
+    );
+  });
+
+  // Vérifier si tous les agents filtrés sont sélectionnés
+  const tousSelectionnes = agentsFiltres.length > 0 && 
+    agentsFiltres.every((agent) => agentsSelectionnes.includes(agent.id));
+
+  // Fonction pour sélectionner/désélectionner tous
+  function toggleSelectionTous() {
+    const idsDejaAssignes = agentsMission.map((a) => a.id);
+    if (tousSelectionnes) {
+      // Désélectionner tous les agents filtrés
+      const idsAFiltrer = agentsFiltres.map(a => a.id);
+      setAgentsSelectionnes(agentsSelectionnes.filter(id => !idsAFiltrer.includes(id)));
+    } else {
+      // Sélectionner tous les agents filtrés (sauf ceux déjà assignés)
+      const nouveauxAgents = agentsFiltres
+        .filter(a => !idsDejaAssignes.includes(a.id))
+        .map(a => a.id);
+      setAgentsSelectionnes([...new Set([...agentsSelectionnes, ...nouveauxAgents])]);
+    }
   }
 
   function getBadgeStatut(statut: string) {
@@ -338,7 +386,7 @@ export default function GestionMissionsChef({
           </div>
         ) : missionsFiltrees.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-4xl mb-3"></p>
+            <p className="text-4xl mb-3">📋</p>
             <p className="text-ardoise-clair italic">Aucune mission planifiée.</p>
           </div>
         ) : (
@@ -361,8 +409,8 @@ export default function GestionMissionsChef({
                       <p className="text-sm text-ardoise-clair mt-1">{mission.objectifs}</p>
                     )}
                     <div className="flex flex-wrap gap-3 mt-2 text-xs text-ardoise-clair">
-                      {mission.zone && <span>📍 {mission.zone}</span>}
-                      <span> Début: {new Date(mission.date_depart).toLocaleDateString("fr-FR")}</span>
+                      {mission.zone && <span> {mission.zone}</span>}
+                      <span>📅 Début: {new Date(mission.date_depart).toLocaleDateString("fr-FR")}</span>
                       {mission.date_retour && (
                         <span>📅 Fin: {new Date(mission.date_retour).toLocaleDateString("fr-FR")}</span>
                       )}
@@ -397,7 +445,7 @@ export default function GestionMissionsChef({
                           onClick={() => ouvrirFormulaireEdition(mission)}
                           className="px-3 py-1 text-xs bg-ocre text-white rounded hover:bg-ocre/90"
                         >
-                          ️ Modifier
+                          ✏️ Modifier
                         </button>
                         <button
                           onClick={() => handleChangerStatut(mission.id, "archivee")}
@@ -434,7 +482,7 @@ export default function GestionMissionsChef({
                   onClick={() => { setAfficherFormulaire(false); reinitialiserFormulaire(); }}
                   className="text-ardoise-clair hover:text-ardoise transition-colors text-2xl leading-none"
                 >
-                  ✕
+                  
                 </button>
               </div>
             </div>
@@ -522,89 +570,178 @@ export default function GestionMissionsChef({
         </div>
       )}
 
-      {/* Modal d'Assignation */}
+      {/* Modal d'Assignation - VERSION ERGONOMIQUE */}
       {afficherAssignation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-ardoise-clair/10 p-6 rounded-t-xl z-10">
-              <div className="flex items-center justify-between">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-ardoise-clair/10">
+              <div>
                 <h2 className="text-xl font-bold text-ardoise">👥 Assigner des agents</h2>
-                <button
-                  onClick={() => setAfficherAssignation(false)}
-                  className="text-ardoise-clair hover:text-ardoise transition-colors text-2xl leading-none"
-                >
-                  ✕
-                </button>
+                <p className="text-sm text-ardoise-clair mt-1">
+                  Sélectionnez les agents à assigner à cette mission
+                </p>
               </div>
+              <button
+                onClick={() => setAfficherAssignation(false)}
+                className="text-ardoise-clair hover:text-ardoise transition-colors text-2xl"
+              >
+                ✕
+              </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            {/* Contenu scrollable */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {/* Agents déjà assignés */}
               {agentsMission.length > 0 && (
-                <div className="bg-sable p-3 rounded-lg">
-                  <p className="text-sm font-semibold text-ardoise mb-2">Agents déjà assignés :</p>
+                <div className="bg-lagune/5 border border-lagune/20 rounded-lg p-4">
+                  <p className="text-sm font-semibold text-ardoise mb-2">
+                    ✅ Agents déjà assignés ({agentsMission.length})
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {agentsMission.map((agent: any) => (
-                      <Badge key={agent.id} variante="lagune" taille="petit">
-                        {agent.prenom} {agent.nom}
-                      </Badge>
+                      <div
+                        key={agent.id}
+                        className="flex items-center gap-2 px-3 py-1 bg-lagune/10 rounded-full text-sm"
+                      >
+                        <span className="font-medium">{agent.prenom} {agent.nom}</span>
+                        {agent.instructions && (
+                          <span className="text-xs text-ardoise-clair">📝</span>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
-                  Sélectionner des agents
-                </label>
-                <div className="space-y-2 max-h-60 overflow-y-auto border border-ardoise-clair/20 rounded-lg p-3">
-                  {agentsDisponibles.map((agent) => (
-                    <label key={agent.id} className="flex items-center gap-3 cursor-pointer p-2 hover:bg-sable rounded">
-                      <input
-                        type="checkbox"
-                        checked={agentsSelectionnes.includes(agent.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setAgentsSelectionnes([...agentsSelectionnes, agent.id]);
-                          } else {
-                            setAgentsSelectionnes(agentsSelectionnes.filter(id => id !== agent.id));
-                          }
-                        }}
-                        className="rounded text-lagune focus:ring-lagune"
-                      />
-                      <div className="flex-1">
-                        <p className="font-medium text-ardoise">{agent.prenom} {agent.nom}</p>
-                        <p className="text-xs text-ardoise-clair">{agent.email}</p>
-                      </div>
-                    </label>
-                  ))}
+              {/* Barre de recherche */}
+              <div className="sticky top-0 bg-white z-10">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="🔍 Rechercher un agent (nom, email, matricule)..."
+                    value={rechercheAgent}
+                    onChange={(e) => setRechercheAgent(e.target.value)}
+                    className="w-full px-4 py-3 pl-11 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
+                  />
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ardoise-clair">
+                    
+                  </span>
+                  {rechercheAgent && (
+                    <button
+                      onClick={() => setRechercheAgent("")}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-ardoise-clair hover:text-ardoise"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center justify-between mt-2 text-xs text-ardoise-clair">
+                  <span>{agentsFiltres.length} agent(s) trouvé(s)</span>
+                  <button
+                    onClick={toggleSelectionTous}
+                    className="text-lagune hover:underline"
+                  >
+                    {tousSelectionnes ? "Désélectionner tout" : "Sélectionner tout"}
+                  </button>
                 </div>
               </div>
 
+              {/* Liste des agents */}
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {agentsFiltres.length === 0 ? (
+                  <div className="text-center py-8 text-ardoise-clair">
+                    <p className="text-4xl mb-2">😕</p>
+                    <p>Aucun agent trouvé</p>
+                  </div>
+                ) : (
+                  agentsFiltres.map((agent) => {
+                    const estDejaAssigne = agentsMission.some((a) => a.id === agent.id);
+                    const estSelectionne = agentsSelectionnes.includes(agent.id);
+
+                    return (
+                      <label
+                        key={agent.id}
+                        className={`flex items-center gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                          estDejaAssigne
+                            ? "bg-lagune/5 border-lagune/20 opacity-60"
+                            : estSelectionne
+                            ? "bg-lagune/10 border-lagune"
+                            : "bg-sable border-transparent hover:bg-sable/80"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={estSelectionne}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setAgentsSelectionnes([...agentsSelectionnes, agent.id]);
+                            } else {
+                              setAgentsSelectionnes(agentsSelectionnes.filter(id => id !== agent.id));
+                            }
+                          }}
+                          disabled={estDejaAssigne}
+                          className="w-5 h-5 rounded text-lagune focus:ring-lagune disabled:opacity-50"
+                        />
+                        <div className="w-12 h-12 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold flex-shrink-0">
+                          {(agent.prenom?.[0] || "") + (agent.nom?.[0] || "")}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-ardoise truncate">
+                            {agent.prenom} {agent.nom}
+                          </p>
+                          <p className="text-sm text-ardoise-clair truncate">{agent.email}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            {agent.ville && (
+                              <span className="text-xs text-ardoise-clair">📍 {agent.ville}</span>
+                            )}
+                            {agent.telephone && (
+                              <span className="text-xs text-ardoise-clair"> {agent.telephone}</span>
+                            )}
+                          </div>
+                        </div>
+                        {estDejaAssigne && (
+                          <Badge variante="succes" taille="petit">Déjà assigné</Badge>
+                        )}
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Instructions */}
               <div>
                 <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
-                  Instructions (optionnel)
+                  Instructions pour cette mission (optionnel)
                 </label>
                 <textarea
                   value={instructions}
                   onChange={(e) => setInstructions(e.target.value)}
-                  className="w-full px-4 py-3 border border-ardoise-clair/20 rounded-lg text-sm resize-none"
+                  className="w-full px-4 py-3 border border-ardoise-clair/20 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-lagune/30"
                   rows={3}
-                  placeholder="Instructions spécifiques pour cette mission..."
+                  placeholder="Ex: Se présenter au point de rendez-vous à 8h00. Apporter le matériel nécessaire..."
                 />
               </div>
+            </div>
 
-              <div className="flex gap-3 pt-4 border-t border-ardoise-clair/10">
-                <Bouton
-                  variante="primaire"
-                  onClick={handleAssignerAgents}
-                  disabled={agentsSelectionnes.length === 0}
-                  className="flex-1"
-                >
-                  Assigner {agentsSelectionnes.length} agent(s)
-                </Bouton>
-                <Bouton variante="ghost" onClick={() => setAfficherAssignation(false)}>
-                  Annuler
-                </Bouton>
+            {/* Footer fixe */}
+            <div className="border-t border-ardoise-clair/10 p-6 bg-white">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm text-ardoise-clair">
+                  <span className="font-semibold text-lagune">{agentsSelectionnes.length}</span> agent(s) sélectionné(s)
+                </div>
+                <div className="flex gap-3">
+                  <Bouton variante="ghost" onClick={() => setAfficherAssignation(false)}>
+                    Annuler
+                  </Bouton>
+                  <Bouton
+                    variante="primaire"
+                    onClick={handleAssignerAgents}
+                    disabled={agentsSelectionnes.length === 0}
+                  >
+                    Assigner {agentsSelectionnes.length} agent(s)
+                  </Bouton>
+                </div>
               </div>
             </div>
           </div>
