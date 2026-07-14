@@ -18,6 +18,8 @@ interface Programme {
   date_debut: string;
   date_fin: string | null;
   statut: string;
+  domaine_id: string | null;
+  departement_id: string | null;
 }
 
 export default function ChefOngProgrammesPage() {
@@ -47,8 +49,18 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      const reponse = await fetch("/api/v1/ong/programmes", { credentials: "include" });
-      if (!reponse.ok) throw new Error("Erreur de chargement");
+      // ✅ Utilise l'endpoint du module chefs (authentifié via clientAPI)
+      const reponse = await fetch("/api/v1/chefs/ong/programmes", {
+        credentials: "include",
+        headers: { "Content-Type": "application/json" }
+      });
+      
+      if (!reponse.ok) {
+        if (reponse.status === 401) throw new Error("Session expirée. Reconnectez-vous.");
+        if (reponse.status === 403) throw new Error("Accès refusé.");
+        throw new Error("Erreur de chargement des programmes");
+      }
+      
       const data = await reponse.json();
       setProgrammes(Array.isArray(data) ? data : []);
     } catch (error: any) {
@@ -59,23 +71,32 @@ function Contenu() {
   }
 
   async function handleCreer() {
-    if (!nom || !dateDebut) return;
+    if (!nom || !dateDebut) {
+      setErreur("Le nom et la date de début sont obligatoires.");
+      return;
+    }
     setEnvoi(true);
+    setErreur(null);
     try {
-      const reponse = await fetch("/api/v1/ong/programmes", {
+      const reponse = await fetch("/api/v1/chefs/ong/programmes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ 
-          nom, 
-          description: description || undefined, 
-          zone: zone || undefined, 
-          budget: budget ? parseFloat(budget) : undefined, 
+        body: JSON.stringify({
+          nom,
+          description: description || null,
+          zone: zone || null,
+          budget: budget ? parseFloat(budget) : null,
           date_debut: dateDebut,
-          date_fin: dateFin || undefined 
+          date_fin: dateFin || null,
         }),
       });
-      if (!reponse.ok) throw new Error("Erreur de création");
+      
+      if (!reponse.ok) {
+        const errData = await reponse.json().catch(() => ({}));
+        throw new Error(errData.detail || "Erreur lors de la création");
+      }
+      
       await charger();
       setNom(""); setDescription(""); setZone(""); setBudget(""); setDateDebut(""); setDateFin("");
       setAfficherForm(false);
@@ -99,11 +120,11 @@ function Contenu() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <p className="text-ocre text-xs uppercase font-semibold tracking-wider">Chef ONG</p>
-          <h1 className="mt-1 text-2xl">Programmes</h1>
+          <h1 className="mt-1 text-2xl font-bold text-ardoise">Programmes</h1>
           <p className="text-ardoise-clair mt-1 text-sm">{programmes.length} programme(s)</p>
         </div>
         <Bouton variante="primaire" onClick={() => setAfficherForm(!afficherForm)}>
-          {afficherForm ? " Annuler" : "+ Nouveau programme"}
+          {afficherForm ? "✕ Annuler" : "+ Nouveau programme"}
         </Bouton>
       </div>
 
@@ -141,6 +162,7 @@ function Contenu() {
           <div className="text-center py-8">
             <p className="text-4xl mb-3">📋</p>
             <p className="text-ardoise-clair italic">Aucun programme enregistré.</p>
+            <p className="text-xs text-ardoise-clair mt-2">Créez votre premier programme pour commencer !</p>
           </div>
         </Carte>
       ) : (

@@ -52,9 +52,12 @@ export default function GestionMissionsChef({
     setChargement(true);
     setErreur("");
     try {
-      // ✅ Appel API réel avec les credentials d'authentification
-      const reponse = await fetch("/api/v1/ong/missions", {
+      // ✅ Utiliser l'endpoint du module chefs qui fonctionne
+      const reponse = await fetch("/api/v1/chefs/ong/missions", {
         credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
       });
       
       if (!reponse.ok) {
@@ -81,9 +84,12 @@ export default function GestionMissionsChef({
     setErreur("");
     
     try {
-      const reponse = await fetch("/api/v1/ong/missions", {
+      // ✅ Utiliser l'endpoint du module chefs
+      const reponse = await fetch("/api/v1/chefs/ong/missions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+        },
         credentials: "include",
         body: JSON.stringify({
           titre: formData.titre,
@@ -226,7 +232,7 @@ export default function GestionMissionsChef({
                 </div>
                 <div className="flex flex-wrap gap-4 mt-3 text-xs text-ardoise-clair pt-3 border-t border-ardoise-clair/10">
                   <span>
-                    📅 Début:{" "}
+                     Début:{" "}
                     {new Date(mission.date_depart).toLocaleDateString("fr-FR")}
                   </span>
                   {mission.date_retour && (
@@ -256,7 +262,7 @@ export default function GestionMissionsChef({
                   className="text-ardoise-clair hover:text-ardoise transition-colors text-2xl leading-none"
                   aria-label="Fermer"
                 >
-                  ✕
+                  
                 </button>
               </div>
             </div>
