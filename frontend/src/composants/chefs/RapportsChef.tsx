@@ -6,16 +6,14 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
-
-interface Rapport {
-  id: string;
-  titre: string;
-  type: "activite" | "mission" | "financier" | "beneficiaires";
-  description?: string;
-  date_creation: string;
-  statut: "brouillon" | "valide" | "archive";
-  auteur: string;
-}
+import {
+  listerRapports,
+  creerRapport,
+  supprimerRapport,
+  validerRapport,
+  archiverRapport,
+  type Rapport,
+} from "@/services/rapports";
 
 interface RapportsChefProps {
   titre: string;
@@ -45,46 +43,40 @@ export default function RapportsChef({
 
   useEffect(() => {
     chargerRapports();
-  }, []);
+  }, [typeOrganisation]);
 
   async function chargerRapports() {
     setChargement(true);
     setErreur("");
     try {
-      // TODO: Remplacer par un appel API réel
-      setTimeout(() => {
-        setRapports([
-          {
-            id: "1",
-            titre: "Rapport d'activité - Juin 2026",
-            type: "activite",
-            description: "Résumé des activités du mois de juin",
-            date_creation: "2026-06-30",
-            statut: "valide",
-            auteur: "Chef ONG",
-          },
-        ]);
-        setChargement(false);
-      }, 500);
+      const params: any = { par_page: 100 };
+      if (filtreType !== "tous") params.type = filtreType;
+      if (filtreStatut !== "tous") params.statut = filtreStatut;
+
+      const data = await listerRapports(typeOrganisation, params);
+      setRapports(data.rapports || []);
     } catch (error: any) {
-      setErreur(error?.message || "Erreur de chargement.");
+      setErreur(error?.message || "Erreur de chargement des rapports.");
+    } finally {
       setChargement(false);
     }
   }
 
   async function handleCreer() {
-    if (!formData.titre) return;
+    if (!formData.titre) {
+      setErreur("Le titre est obligatoire.");
+      return;
+    }
     setSauvegarde(true);
+    setErreur("");
     try {
-      // TODO: Appel API réel
-      setTimeout(() => {
-        setSauvegarde(false);
-        setAfficherFormulaire(false);
-        setFormData({ titre: "", type: "activite", description: "" });
-        chargerRapports();
-      }, 1000);
+      await creerRapport(typeOrganisation, formData);
+      setAfficherFormulaire(false);
+      setFormData({ titre: "", type: "activite", description: "" });
+      await chargerRapports();
     } catch (error: any) {
-      setErreur(error?.message || "Erreur lors de la création.");
+      setErreur(error?.message || "Erreur lors de la création du rapport.");
+    } finally {
       setSauvegarde(false);
     }
   }
@@ -92,35 +84,53 @@ export default function RapportsChef({
   async function handleSupprimer(rapportId: string) {
     if (!confirm("Supprimer ce rapport ?")) return;
     try {
-      // TODO: Appel API réel
-      chargerRapports();
+      await supprimerRapport(typeOrganisation, rapportId);
+      await chargerRapports();
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors de la suppression.");
     }
   }
 
+  async function handleValider(rapportId: string) {
+    try {
+      await validerRapport(typeOrganisation, rapportId);
+      await chargerRapports();
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur lors de la validation.");
+    }
+  }
+
+  async function handleArchiver(rapportId: string) {
+    try {
+      await archiverRapport(typeOrganisation, rapportId);
+      await chargerRapports();
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur lors de l'archivage.");
+    }
+  }
+
   const getBadgeStatut = (statut: string) => {
-    const config: any = {
-      brouillon: { couleur: "neutre", label: "Brouillon" },
+    const config: Record<string, { couleur: any; label: string }> = {
+      brouillon: { couleur: "lagune", label: "Brouillon" },
       valide: { couleur: "succes", label: "Validé" },
       archive: { couleur: "ocre", label: "Archivé" },
     };
-    const cfg = config[statut] || { couleur: "neutre", label: statut };
+    const cfg = config[statut] || { couleur: "lagune", label: statut };
     return <Badge variante={cfg.couleur} taille="petit">{cfg.label}</Badge>;
   };
 
   const getTypeLabel = (type: string) => {
-    const types: any = {
+    const types: Record<string, string> = {
       activite: "📋 Activité",
       mission: "🎯 Mission",
       financier: "💰 Financier",
-      beneficiaires: "👥 Bénéficiaires",
+      beneficiaires: " Bénéficiaires",
     };
     return types[type] || type;
   };
 
   const getTypeIcon = (type: string) => {
-    const icons: any = {
+    const icons: Record<string, string> = {
       activite: "📋",
       mission: "🎯",
       financier: "💰",
@@ -131,11 +141,14 @@ export default function RapportsChef({
 
   const rapportsFiltres = rapports.filter((rapport) => {
     const matchType = filtreType === "tous" || rapport.type === filtreType;
-    const matchStatut = filtreStatut === "tous" || rapport.statut === filtreStatut;
+    const matchStatut =
+      filtreStatut === "tous" || rapport.statut === filtreStatut;
     const matchRecherche =
       recherche.trim() === "" ||
       rapport.titre.toLowerCase().includes(recherche.toLowerCase()) ||
-      (rapport.description || "").toLowerCase().includes(recherche.toLowerCase()) ||
+      (rapport.description || "")
+        .toLowerCase()
+        .includes(recherche.toLowerCase()) ||
       rapport.auteur.toLowerCase().includes(recherche.toLowerCase());
     return matchType && matchStatut && matchRecherche;
   });
@@ -154,7 +167,7 @@ export default function RapportsChef({
         <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
           📄 Rapports
         </p>
-        <h1>{titre}</h1>
+        <h1 className="text-3xl font-bold text-ardoise mt-1">{titre}</h1>
         <p className="text-ardoise-clair mt-2">{sousTitre}</p>
       </div>
 
@@ -168,15 +181,21 @@ export default function RapportsChef({
           <p className="text-xs text-ardoise-clair">Total</p>
         </Carte>
         <Carte className="text-center p-4 hover:shadow-lg transition-shadow">
-          <p className="text-2xl font-bold text-ocre">{statsRapports.brouillons}</p>
+          <p className="text-2xl font-bold text-ocre">
+            {statsRapports.brouillons}
+          </p>
           <p className="text-xs text-ardoise-clair">Brouillons</p>
         </Carte>
         <Carte className="text-center p-4 hover:shadow-lg transition-shadow">
-          <p className="text-2xl font-bold text-succes">{statsRapports.valides}</p>
+          <p className="text-2xl font-bold text-succes">
+            {statsRapports.valides}
+          </p>
           <p className="text-xs text-ardoise-clair">Validés</p>
         </Carte>
         <Carte className="text-center p-4 hover:shadow-lg transition-shadow">
-          <p className="text-2xl font-bold text-terre">{statsRapports.archives}</p>
+          <p className="text-2xl font-bold text-terre">
+            {statsRapports.archives}
+          </p>
           <p className="text-xs text-ardoise-clair">Archivés</p>
         </Carte>
       </div>
@@ -197,7 +216,7 @@ export default function RapportsChef({
         >
           <option value="tous">Tous les types</option>
           <option value="activite">📋 Activité</option>
-          <option value="mission">🎯 Mission</option>
+          <option value="mission"> Mission</option>
           <option value="financier">💰 Financier</option>
           <option value="beneficiaires">👥 Bénéficiaires</option>
         </select>
@@ -225,7 +244,7 @@ export default function RapportsChef({
           </div>
         ) : rapportsFiltres.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-4xl mb-3">📄</p>
+            <p className="text-4xl mb-3"></p>
             <p className="text-ardoise-clair italic">
               {recherche
                 ? "Aucun rapport ne correspond à votre recherche."
@@ -267,7 +286,9 @@ export default function RapportsChef({
                       </span>
                       <span className="text-ardoise-clair">•</span>
                       <span className="text-xs text-ardoise-clair">
-                        {new Date(rapport.date_creation).toLocaleDateString("fr-FR")}
+                        {new Date(rapport.date_creation).toLocaleDateString(
+                          "fr-FR"
+                        )}
                       </span>
                       <span className="text-ardoise-clair">•</span>
                       <span className="text-xs text-ardoise-clair">
@@ -278,6 +299,24 @@ export default function RapportsChef({
                 </div>
                 <div className="flex items-center gap-2 sm:ml-4 flex-shrink-0">
                   {getBadgeStatut(rapport.statut)}
+                  {rapport.statut === "brouillon" && (
+                    <button
+                      onClick={() => handleValider(rapport.id)}
+                      className="p-2 text-succes hover:bg-succes/10 rounded-lg transition-colors"
+                      title="Valider"
+                    >
+                      ✅
+                    </button>
+                  )}
+                  {rapport.statut === "valide" && (
+                    <button
+                      onClick={() => handleArchiver(rapport.id)}
+                      className="p-2 text-ocre hover:bg-ocre/10 rounded-lg transition-colors"
+                      title="Archiver"
+                    >
+                      📦
+                    </button>
+                  )}
                   <button
                     onClick={() => handleSupprimer(rapport.id)}
                     className="p-2 text-terre hover:bg-terre/10 rounded-lg transition-colors"
@@ -292,11 +331,10 @@ export default function RapportsChef({
         )}
       </Carte>
 
-      {/* Modal de création - CORRIGÉ : Plein écran */}
+      {/* Modal de création */}
       {afficherFormulaire && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            {/* Header sticky */}
             <div className="sticky top-0 bg-white border-b border-ardoise-clair/10 p-6 rounded-t-xl z-10">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-ardoise">
@@ -312,12 +350,13 @@ export default function RapportsChef({
               </div>
             </div>
 
-            {/* Contenu */}
             <div className="p-6 space-y-4">
               <ChampSaisie
-                libelle="Titre du rapport"
+                libelle="Titre du rapport *"
                 value={formData.titre}
-                onChange={(e) => setFormData({ ...formData, titre: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, titre: e.target.value })
+                }
                 placeholder="Ex: Rapport mensuel d'activité"
                 required
               />
@@ -337,7 +376,7 @@ export default function RapportsChef({
                 >
                   <option value="activite">📋 Activité</option>
                   <option value="mission">🎯 Mission</option>
-                  <option value="financier">💰 Financier</option>
+                  <option value="financier"> Financier</option>
                   <option value="beneficiaires">👥 Bénéficiaires</option>
                 </select>
               </div>
@@ -356,13 +395,13 @@ export default function RapportsChef({
                 />
               </div>
 
-              {/* Footer avec boutons */}
               <div className="flex gap-3 pt-4 border-t border-ardoise-clair/10">
                 <Bouton
                   variante="primaire"
                   chargement={sauvegarde}
                   onClick={handleCreer}
                   className="flex-1"
+                  disabled={!formData.titre}
                 >
                   Créer le rapport
                 </Bouton>
