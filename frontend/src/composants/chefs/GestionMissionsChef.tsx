@@ -45,6 +45,14 @@ export default function GestionMissionsChef({
   const [missionEnCours, setMissionEnCours] = useState<string | null>(null);
   const [sauvegarde, setSauvegarde] = useState(false);
   const [filtreStatut, setFiltreStatut] = useState<string>("tous");
+  
+  // États pour l'assignation
+  const [afficherAssignation, setAfficherAssignation] = useState(false);
+  const [missionAssignation, setMissionAssignation] = useState<string | null>(null);
+  const [agentsDisponibles, setAgentsDisponibles] = useState<any[]>([]);
+  const [agentsSelectionnes, setAgentsSelectionnes] = useState<string[]>([]);
+  const [instructions, setInstructions] = useState("");
+  const [agentsMission, setAgentsMission] = useState<any[]>([]);
 
   const [formData, setFormData] = useState({
     titre: "",
@@ -84,6 +92,28 @@ export default function GestionMissionsChef({
       setProgrammes(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Erreur chargement programmes:", error);
+    }
+  }
+
+  async function chargerAgentsDisponibles() {
+    try {
+      const data = await clientAPI.get(`/api/v1/chefs/${typeOrganisation}/agents?par_page=1000`, {
+        authentifie: true,
+      });
+      setAgentsDisponibles(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Erreur chargement agents:", error);
+    }
+  }
+
+  async function chargerAgentsMission(missionId: string) {
+    try {
+      const data = await clientAPI.get(`/api/v1/chefs/${typeOrganisation}/missions/${missionId}/agents`, {
+        authentifie: true,
+      });
+      setAgentsMission(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Erreur chargement agents mission:", error);
     }
   }
 
@@ -133,7 +163,7 @@ export default function GestionMissionsChef({
         date_depart: formData.date_depart,
         date_retour: formData.date_retour || undefined,
         programme_id: formData.programme_id || undefined,
-        statut: formData.statut || undefined,
+        statut: formData.statut,
       }, { authentifie: true });
       
       setAfficherFormulaire(false);
@@ -167,6 +197,34 @@ export default function GestionMissionsChef({
       await chargerMissions();
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors du changement de statut.");
+    }
+  }
+
+  function ouvrirAssignation(mission: Mission) {
+    setMissionAssignation(mission.id);
+    setAgentsSelectionnes([]);
+    setInstructions("");
+    setAfficherAssignation(true);
+    chargerAgentsDisponibles();
+    chargerAgentsMission(mission.id);
+  }
+
+  async function handleAssignerAgents() {
+    if (!missionAssignation || agentsSelectionnes.length === 0) {
+      setErreur("Veuillez sélectionner au moins un agent.");
+      return;
+    }
+    
+    try {
+      await clientAPI.post(`/api/v1/chefs/${typeOrganisation}/missions/${missionAssignation}/assigner-agents`, {
+        agent_ids: agentsSelectionnes,
+        instructions: instructions || null,
+      }, { authentifie: true });
+      
+      setAfficherAssignation(false);
+      await chargerMissions();
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur lors de l'assignation.");
     }
   }
 
@@ -304,13 +362,19 @@ export default function GestionMissionsChef({
                     )}
                     <div className="flex flex-wrap gap-3 mt-2 text-xs text-ardoise-clair">
                       {mission.zone && <span>📍 {mission.zone}</span>}
-                      <span>📅 Début: {new Date(mission.date_depart).toLocaleDateString("fr-FR")}</span>
+                      <span> Début: {new Date(mission.date_depart).toLocaleDateString("fr-FR")}</span>
                       {mission.date_retour && (
                         <span>📅 Fin: {new Date(mission.date_retour).toLocaleDateString("fr-FR")}</span>
                       )}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 sm:ml-4">
+                    <button
+                      onClick={() => ouvrirAssignation(mission)}
+                      className="px-3 py-1 text-xs bg-lagune text-white rounded hover:bg-lagune/90"
+                    >
+                      👥 Assigner
+                    </button>
                     {mission.statut === "planifiee" && (
                       <button
                         onClick={() => handleChangerStatut(mission.id, "en_cours")}
@@ -333,7 +397,7 @@ export default function GestionMissionsChef({
                           onClick={() => ouvrirFormulaireEdition(mission)}
                           className="px-3 py-1 text-xs bg-ocre text-white rounded hover:bg-ocre/90"
                         >
-                          ✏️ Modifier
+                          ️ Modifier
                         </button>
                         <button
                           onClick={() => handleChangerStatut(mission.id, "archivee")}
@@ -357,6 +421,7 @@ export default function GestionMissionsChef({
         )}
       </Carte>
 
+      {/* Modal Création/Édition */}
       {afficherFormulaire && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -449,6 +514,95 @@ export default function GestionMissionsChef({
                   variante="ghost"
                   onClick={() => { setAfficherFormulaire(false); reinitialiserFormulaire(); }}
                 >
+                  Annuler
+                </Bouton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal d'Assignation */}
+      {afficherAssignation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-ardoise-clair/10 p-6 rounded-t-xl z-10">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-ardoise">👥 Assigner des agents</h2>
+                <button
+                  onClick={() => setAfficherAssignation(false)}
+                  className="text-ardoise-clair hover:text-ardoise transition-colors text-2xl leading-none"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {agentsMission.length > 0 && (
+                <div className="bg-sable p-3 rounded-lg">
+                  <p className="text-sm font-semibold text-ardoise mb-2">Agents déjà assignés :</p>
+                  <div className="flex flex-wrap gap-2">
+                    {agentsMission.map((agent: any) => (
+                      <Badge key={agent.id} variante="lagune" taille="petit">
+                        {agent.prenom} {agent.nom}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
+                  Sélectionner des agents
+                </label>
+                <div className="space-y-2 max-h-60 overflow-y-auto border border-ardoise-clair/20 rounded-lg p-3">
+                  {agentsDisponibles.map((agent) => (
+                    <label key={agent.id} className="flex items-center gap-3 cursor-pointer p-2 hover:bg-sable rounded">
+                      <input
+                        type="checkbox"
+                        checked={agentsSelectionnes.includes(agent.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setAgentsSelectionnes([...agentsSelectionnes, agent.id]);
+                          } else {
+                            setAgentsSelectionnes(agentsSelectionnes.filter(id => id !== agent.id));
+                          }
+                        }}
+                        className="rounded text-lagune focus:ring-lagune"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-ardoise">{agent.prenom} {agent.nom}</p>
+                        <p className="text-xs text-ardoise-clair">{agent.email}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">
+                  Instructions (optionnel)
+                </label>
+                <textarea
+                  value={instructions}
+                  onChange={(e) => setInstructions(e.target.value)}
+                  className="w-full px-4 py-3 border border-ardoise-clair/20 rounded-lg text-sm resize-none"
+                  rows={3}
+                  placeholder="Instructions spécifiques pour cette mission..."
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-ardoise-clair/10">
+                <Bouton
+                  variante="primaire"
+                  onClick={handleAssignerAgents}
+                  disabled={agentsSelectionnes.length === 0}
+                  className="flex-1"
+                >
+                  Assigner {agentsSelectionnes.length} agent(s)
+                </Bouton>
+                <Bouton variante="ghost" onClick={() => setAfficherAssignation(false)}>
                   Annuler
                 </Bouton>
               </div>

@@ -633,6 +633,112 @@ async def creer_mission_ong(
         raise HTTPException(status_code=400, detail=str(e))
 
 # =============================================================================
+# MISSIONS - Modification et suppression (pour Chef ONG)
+# =============================================================================
+
+@routeur_chefs.patch(
+    "/ong/missions/{mission_id}",
+    response_model=dict,
+)
+async def mettre_a_jour_mission_ong(
+    mission_id: UUID,
+    data: dict,
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Met à jour une mission."""
+    chef = await verifier_est_chef(chef)
+    if chef.role != "chef_ong":
+        raise HTTPException(status_code=403, detail="Réservé aux chefs ONG")
+
+    from src.modules.ong.service import mettre_a_jour_mission
+    
+    try:
+        mission = await mettre_a_jour_mission(session, mission_id, chef, data)
+        
+        return {
+            "id": str(mission.id),
+            "titre": mission.titre,
+            "statut": mission.statut,
+            "date_depart": mission.date_depart.isoformat(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@routeur_chefs.delete(
+    "/ong/missions/{mission_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def supprimer_mission_ong(
+    mission_id: UUID,
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Supprime une mission."""
+    chef = await verifier_est_chef(chef)
+    if chef.role != "chef_ong":
+        raise HTTPException(status_code=403, detail="Réservé aux chefs ONG")
+
+    from src.modules.ong.service import supprimer_mission
+    
+    try:
+        await supprimer_mission(session, mission_id, chef)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@routeur_chefs.post(
+    "/ong/missions/{mission_id}/assigner-agents",
+    response_model=list,
+)
+async def assigner_agents_mission_ong(
+    mission_id: UUID,
+    data: dict,
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Assigne des agents à une mission."""
+    chef = await verifier_est_chef(chef)
+    if chef.role != "chef_ong":
+        raise HTTPException(status_code=403, detail="Réservé aux chefs ONG")
+
+    from src.modules.ong.service import assigner_agents_a_mission
+    
+    agent_ids = data.get("agent_ids", [])
+    instructions = data.get("instructions")
+    
+    try:
+        assignations = await assigner_agents_a_mission(
+            session, mission_id, chef, agent_ids, instructions
+        )
+        return [{"agent_id": str(a.agent_id), "mission_id": str(a.mission_id)} for a in assignations]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@routeur_chefs.get(
+    "/ong/missions/{mission_id}/agents",
+    response_model=list,
+)
+async def obtenir_agents_mission_ong(
+    mission_id: UUID,
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Récupère les agents assignés à une mission."""
+    chef = await verifier_est_chef(chef)
+    if chef.role != "chef_ong":
+        raise HTTPException(status_code=403, detail="Réservé aux chefs ONG")
+
+    from src.modules.ong.service import obtenir_agents_mission
+    
+    try:
+        return await obtenir_agents_mission(session, mission_id, chef)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# =============================================================================
 # Invitations
 # =============================================================================
 
