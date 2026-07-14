@@ -19,6 +19,8 @@ interface Programme {
   date_debut: string;
   date_fin: string | null;
   statut: string;
+  domaine_id: string | null;
+  departement_id: string | null;
 }
 
 export default function ChefOngProgrammesPage() {
@@ -34,6 +36,9 @@ function Contenu() {
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [afficherForm, setAfficherForm] = useState(false);
+  const [modeEdition, setModeEdition] = useState(false);
+  const [programmeEnCours, setProgrammeEnCours] = useState<string | null>(null);
+  
   const [nom, setNom] = useState("");
   const [description, setDescription] = useState("");
   const [zone, setZone] = useState("");
@@ -48,7 +53,6 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      // ✅ Utilise clientAPI pour l'authentification automatique
       const data = await clientAPI.get("/api/v1/chefs/ong/programmes", {
         authentifie: true,
       });
@@ -78,13 +82,89 @@ function Contenu() {
       }, { authentifie: true });
       
       await charger();
-      setNom(""); setDescription(""); setZone(""); setBudget(""); setDateDebut(""); setDateFin("");
-      setAfficherForm(false);
+      reinitialiserFormulaire();
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors de la création");
     } finally {
       setEnvoi(false);
     }
+  }
+
+  async function handleModifier() {
+    if (!programmeEnCours || !nom || !dateDebut) {
+      setErreur("Le nom et la date de début sont obligatoires.");
+      return;
+    }
+    setEnvoi(true);
+    setErreur(null);
+    try {
+      await clientAPI.patch(`/api/v1/chefs/ong/programmes/${programmeEnCours}`, {
+        nom,
+        description: description || null,
+        zone: zone || null,
+        budget: budget ? parseFloat(budget) : null,
+        date_debut: dateDebut,
+        date_fin: dateFin || null,
+      }, { authentifie: true });
+      
+      await charger();
+      reinitialiserFormulaire();
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur lors de la modification");
+    } finally {
+      setEnvoi(false);
+    }
+  }
+
+  async function handleSupprimer(programmeId: string) {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer ce programme ?")) return;
+    try {
+      await clientAPI.delete(`/api/v1/chefs/ong/programmes/${programmeId}`, {
+        authentifie: true,
+      });
+      await charger();
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur lors de la suppression");
+    }
+  }
+
+  function ouvrirFormulaireEdition(programme: Programme) {
+    setProgrammeEnCours(programme.id);
+    setNom(programme.nom);
+    setDescription(programme.description || "");
+    setZone(programme.zone || "");
+    setBudget(programme.budget?.toString() || "");
+    setDateDebut(programme.date_debut.split('T')[0]);
+    setDateFin(programme.date_fin ? programme.date_fin.split('T')[0] : "");
+    setModeEdition(true);
+    setAfficherForm(true);
+  }
+
+  function ouvrirFormulaireCreation() {
+    setModeEdition(false);
+    setAfficherForm(true);
+  }
+
+  function reinitialiserFormulaire() {
+    setProgrammeEnCours(null);
+    setNom("");
+    setDescription("");
+    setZone("");
+    setBudget("");
+    setDateDebut("");
+    setDateFin("");
+    setAfficherForm(false);
+    setModeEdition(false);
+  }
+
+  function getStatutBadge(statut: string) {
+    const config: Record<string, { couleur: any; label: string }> = {
+      actif: { couleur: "succes", label: "Actif" },
+      termine: { couleur: "lagune", label: "Terminé" },
+      en_cours: { couleur: "ocre", label: "En cours" },
+    };
+    const cfg = config[statut] || { couleur: "lagune", label: statut };
+    return <Badge variante={cfg.couleur} taille="petit">{cfg.label}</Badge>;
   }
 
   return (
@@ -103,34 +183,10 @@ function Contenu() {
           <h1 className="mt-1 text-2xl font-bold text-ardoise">Programmes</h1>
           <p className="text-ardoise-clair mt-1 text-sm">{programmes.length} programme(s)</p>
         </div>
-        <Bouton variante="primaire" onClick={() => setAfficherForm(!afficherForm)}>
-          {afficherForm ? "✕ Annuler" : "+ Nouveau programme"}
+        <Bouton variante="primaire" onClick={ouvrirFormulaireCreation}>
+          + Nouveau programme
         </Bouton>
       </div>
-
-      {afficherForm && (
-        <Carte titre="Créer un programme">
-          <div className="max-w-md space-y-3">
-            <ChampSaisie libelle="Nom *" value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Ex: Aide alimentaire 2026" required />
-            <ChampSaisie libelle="Zone" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="Ex: Dakar" />
-            <ChampSaisie libelle="Budget (FCFA)" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="Ex: 5000000" type="number" />
-            <div className="grid grid-cols-2 gap-3">
-              <ChampSaisie libelle="Date de début *" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} type="date" required />
-              <ChampSaisie libelle="Date de fin" value={dateFin} onChange={(e) => setDateFin(e.target.value)} type="date" />
-            </div>
-            <div>
-              <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Description</label>
-              <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm resize-none" placeholder="Décrivez le programme..." />
-            </div>
-            <div className="flex gap-2 pt-2">
-              <Bouton variante="primaire" disabled={!nom || !dateDebut || envoi} onClick={handleCreer} chargement={envoi}>
-                {envoi ? "Création..." : "Créer le programme"}
-              </Bouton>
-              <Bouton variante="ghost" onClick={() => setAfficherForm(false)}>Annuler</Bouton>
-            </div>
-          </div>
-        </Carte>
-      )}
 
       {chargement ? (
         <div className="text-center py-12">
@@ -140,7 +196,7 @@ function Contenu() {
       ) : programmes.length === 0 ? (
         <Carte>
           <div className="text-center py-8">
-            <p className="text-4xl mb-3">📋</p>
+            <p className="text-4xl mb-3"></p>
             <p className="text-ardoise-clair italic">Aucun programme enregistré.</p>
             <p className="text-xs text-ardoise-clair mt-2">Créez votre premier programme pour commencer !</p>
           </div>
@@ -158,12 +214,65 @@ function Contenu() {
                     {p.date_fin && ` · Fin: ${new Date(p.date_fin).toLocaleDateString("fr-FR")}`}
                   </p>
                 </div>
-                <Badge variante={p.statut === "actif" ? "succes" : "lagune"}>
-                  {p.statut === "actif" ? "Actif" : "Terminé"}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {getStatutBadge(p.statut)}
+                  <button
+                    onClick={() => ouvrirFormulaireEdition(p)}
+                    className="px-3 py-1 text-xs bg-lagune text-white rounded hover:bg-lagune/90 transition-colors"
+                  >
+                    ✏️ Modifier
+                  </button>
+                  <button
+                    onClick={() => handleSupprimer(p.id)}
+                    className="px-3 py-1 text-xs bg-terre text-white rounded hover:bg-terre/90 transition-colors"
+                  >
+                    🗑️ Supprimer
+                  </button>
+                </div>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Modal Création/Édition */}
+      {afficherForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-ardoise-clair/10 p-6 rounded-t-xl z-10">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-ardoise">
+                  {modeEdition ? "✏️ Modifier le programme" : "+ Nouveau programme"}
+                </h2>
+                <button
+                  onClick={reinitialiserFormulaire}
+                  className="text-ardoise-clair hover:text-ardoise transition-colors text-2xl leading-none"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-3">
+              <ChampSaisie libelle="Nom *" value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Ex: Aide alimentaire 2026" required />
+              <ChampSaisie libelle="Zone" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="Ex: Dakar" />
+              <ChampSaisie libelle="Budget (FCFA)" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="Ex: 5000000" type="number" />
+              <div className="grid grid-cols-2 gap-3">
+                <ChampSaisie libelle="Date de début *" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} type="date" required />
+                <ChampSaisie libelle="Date de fin" value={dateFin} onChange={(e) => setDateFin(e.target.value)} type="date" />
+              </div>
+              <div>
+                <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Description</label>
+                <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm resize-none" placeholder="Décrivez le programme..." />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Bouton variante="primaire" disabled={!nom || !dateDebut || envoi} onClick={modeEdition ? handleModifier : handleCreer} chargement={envoi}>
+                  {envoi ? "Enregistrement..." : (modeEdition ? "Modifier" : "Créer")}
+                </Bouton>
+                <Bouton variante="ghost" onClick={reinitialiserFormulaire}>Annuler</Bouton>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

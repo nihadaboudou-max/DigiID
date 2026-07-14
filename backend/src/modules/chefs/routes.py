@@ -480,6 +480,79 @@ async def creer_programme_ong(
     )
 
 # =============================================================================
+# PROGRAMMES - Mise à jour et suppression (pour Chef ONG)
+# =============================================================================
+
+@routeur_chefs.patch(
+    "/ong/programmes/{programme_id}",
+    response_model=ProgrammeResponse,
+)
+async def mettre_a_jour_programme_ong(
+    programme_id: UUID,
+    data: ProgrammeCreate,
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Met à jour un programme pour l'ONG du chef."""
+    chef = await verifier_est_chef(chef)
+    if chef.role != "chef_ong":
+        raise HTTPException(status_code=403, detail="Réservé aux chefs ONG")
+
+    from src.modules.ong.service import mettre_a_jour_programme
+    from src.noyau.journal import enregistrer_evenement_audit
+
+    try:
+        p = await mettre_a_jour_programme(session, programme_id, chef, data.model_dump())
+        
+        await enregistrer_evenement_audit(
+            session=session,
+            type_evenement="chef_programme_modification",
+            description=f"Programme {data.nom} modifié par chef {chef.id}",
+            utilisateur_id=chef.id,
+            role_acteur=chef.role,
+        )
+        
+        return ProgrammeResponse(
+            id=p.id, ong_id=p.ong_id, nom=p.nom, description=p.description,
+            zone=p.zone, budget=p.budget, date_debut=p.date_debut,
+            date_fin=p.date_fin, statut=p.statut,
+            domaine_id=p.domaine_id, departement_id=p.departement_id,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@routeur_chefs.delete(
+    "/ong/programmes/{programme_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def supprimer_programme_ong(
+    programme_id: UUID,
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Supprime un programme de l'ONG du chef."""
+    chef = await verifier_est_chef(chef)
+    if chef.role != "chef_ong":
+        raise HTTPException(status_code=403, detail="Réservé aux chefs ONG")
+
+    from src.modules.ong.service import supprimer_programme
+    from src.noyau.journal import enregistrer_evenement_audit
+
+    try:
+        await supprimer_programme(session, programme_id, chef)
+        
+        await enregistrer_evenement_audit(
+            session=session,
+            type_evenement="chef_programme_suppression",
+            description=f"Programme {programme_id} supprimé par chef {chef.id}",
+            utilisateur_id=chef.id,
+            role_acteur=chef.role,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# =============================================================================
 # MISSIONS (pour Chef ONG)
 # =============================================================================
 
