@@ -485,7 +485,7 @@ async def creer_programme_ong(
 
 @routeur_chefs.get(
     "/ong/missions",
-    response_model=list[MissionResponse],
+    response_model=list,
 )
 async def lister_missions_ong(
     chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
@@ -497,6 +497,8 @@ async def lister_missions_ong(
         raise HTTPException(status_code=403, detail="Réservé aux chefs ONG")
     
     from src.modules.ong.service import obtenir_missions
+    from src.modules.ong.schemas import MissionResponse
+    
     missions = await obtenir_missions(session, chef)
     
     return [
@@ -512,11 +514,11 @@ async def lister_missions_ong(
 
 @routeur_chefs.post(
     "/ong/missions",
-    response_model=MissionResponse,
+    response_model=dict,
     status_code=status.HTTP_201_CREATED,
 )
 async def creer_mission_ong(
-    data: MissionCreate,
+    data: dict,
     chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
@@ -526,24 +528,36 @@ async def creer_mission_ong(
         raise HTTPException(status_code=403, detail="Réservé aux chefs ONG")
     
     from src.modules.ong.service import creer_mission
+    from src.modules.ong.schemas import MissionCreate
     from src.noyau.journal import enregistrer_evenement_audit
     
-    m = await creer_mission(session, chef, data.model_dump())
-    
-    await enregistrer_evenement_audit(
-        session=session,
-        type_evenement="chef_mission_creation",
-        description=f"Mission {data.titre} créée par chef {chef.id}",
-        utilisateur_id=chef.id,
-        role_acteur=chef.role,
-    )
-    
-    return MissionResponse(
-        id=m.id, ong_id=m.ong_id, programme_id=m.programme_id,
-        titre=m.titre, zone=m.zone, date_depart=m.date_depart,
-        date_retour=m.date_retour, objectifs=m.objectifs, statut=m.statut,
-        domaine_id=m.domaine_id, departement_id=m.departement_id,
-    )
+    try:
+        mission_data = MissionCreate(**data)
+        m = await creer_mission(session, chef, mission_data.model_dump())
+        
+        await enregistrer_evenement_audit(
+            session=session,
+            type_evenement="chef_mission_creation",
+            description=f"Mission {data.get('titre')} créée par chef {chef.id}",
+            utilisateur_id=chef.id,
+            role_acteur=chef.role,
+        )
+        
+        return {
+            "id": str(m.id),
+            "ong_id": str(m.ong_id),
+            "programme_id": str(m.programme_id) if m.programme_id else None,
+            "titre": m.titre,
+            "zone": m.zone,
+            "date_depart": m.date_depart.isoformat(),
+            "date_retour": m.date_retour.isoformat() if m.date_retour else None,
+            "objectifs": m.objectifs,
+            "statut": m.statut,
+            "domaine_id": str(m.domaine_id) if m.domaine_id else None,
+            "departement_id": str(m.departement_id) if m.departement_id else None,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # =============================================================================
 # Invitations
