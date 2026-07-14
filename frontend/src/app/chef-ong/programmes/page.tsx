@@ -8,6 +8,7 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
+import { clientAPI } from "@/services/client_api";
 
 interface Programme {
   id: string;
@@ -18,8 +19,6 @@ interface Programme {
   date_debut: string;
   date_fin: string | null;
   statut: string;
-  domaine_id: string | null;
-  departement_id: string | null;
 }
 
 export default function ChefOngProgrammesPage() {
@@ -49,19 +48,10 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      // ✅ Utilise l'endpoint du module chefs (authentifié via clientAPI)
-      const reponse = await fetch("/api/v1/chefs/ong/programmes", {
-        credentials: "include",
-        headers: { "Content-Type": "application/json" }
+      // ✅ Utilise clientAPI pour l'authentification automatique
+      const data = await clientAPI.get("/api/v1/chefs/ong/programmes", {
+        authentifie: true,
       });
-      
-      if (!reponse.ok) {
-        if (reponse.status === 401) throw new Error("Session expirée. Reconnectez-vous.");
-        if (reponse.status === 403) throw new Error("Accès refusé.");
-        throw new Error("Erreur de chargement des programmes");
-      }
-      
-      const data = await reponse.json();
       setProgrammes(Array.isArray(data) ? data : []);
     } catch (error: any) {
       setErreur(error?.message || "Erreur de chargement des programmes");
@@ -78,24 +68,14 @@ function Contenu() {
     setEnvoi(true);
     setErreur(null);
     try {
-      const reponse = await fetch("/api/v1/chefs/ong/programmes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          nom,
-          description: description || null,
-          zone: zone || null,
-          budget: budget ? parseFloat(budget) : null,
-          date_debut: dateDebut,
-          date_fin: dateFin || null,
-        }),
-      });
-      
-      if (!reponse.ok) {
-        const errData = await reponse.json().catch(() => ({}));
-        throw new Error(errData.detail || "Erreur lors de la création");
-      }
+      await clientAPI.post("/api/v1/chefs/ong/programmes", {
+        nom,
+        description: description || null,
+        zone: zone || null,
+        budget: budget ? parseFloat(budget) : null,
+        date_debut: dateDebut,
+        date_fin: dateFin || null,
+      }, { authentifie: true });
       
       await charger();
       setNom(""); setDescription(""); setZone(""); setBudget(""); setDateDebut(""); setDateFin("");

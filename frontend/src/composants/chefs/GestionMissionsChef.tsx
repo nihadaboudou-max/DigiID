@@ -6,6 +6,7 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
+import { clientAPI } from "@/services/client_api"; // ✅ Import du client authentifié
 
 interface Mission {
   id: string;
@@ -46,29 +47,19 @@ export default function GestionMissionsChef({
 
   useEffect(() => {
     chargerMissions();
-  }, []);
+  }, [typeOrganisation]);
 
   async function chargerMissions() {
     setChargement(true);
     setErreur("");
     try {
-      // ✅ Utiliser l'endpoint du module chefs qui fonctionne
-      const reponse = await fetch("/api/v1/ong/missions", {
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
+      // ✅ Utilisation de clientAPI avec authentifie: true
+      const data = await clientAPI.get(`/api/v1/chefs/${typeOrganisation}/missions`, {
+        authentifie: true,
       });
-      
-      if (!reponse.ok) {
-        if (reponse.status === 401) throw new Error("Session expirée. Veuillez vous reconnecter.");
-        throw new Error("Erreur de chargement des missions");
-      }
-      
-      const data = await reponse.json();
       setMissions(Array.isArray(data) ? data : []);
     } catch (error: any) {
-      setErreur(error?.message || "Erreur de chargement.");
+      setErreur(error?.message || "Erreur de chargement des missions.");
     } finally {
       setChargement(false);
     }
@@ -84,32 +75,22 @@ export default function GestionMissionsChef({
     setErreur("");
     
     try {
-      // ✅ Utiliser l'endpoint du module chefs
-      const reponse = await fetch("/api/v1/ong/missions", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          titre: formData.titre,
-          objectifs: formData.objectifs || undefined,
-          zone: formData.zone || undefined,
-          date_depart: formData.date_depart,
-          date_retour: formData.date_retour || undefined,
-        }),
+      // ✅ Utilisation de clientAPI avec authentifie: true
+      await clientAPI.post(`/api/v1/chefs/${typeOrganisation}/missions`, {
+        titre: formData.titre,
+        objectifs: formData.objectifs || undefined,
+        zone: formData.zone || undefined,
+        date_depart: formData.date_depart,
+        date_retour: formData.date_retour || undefined,
+      }, { 
+        authentifie: true 
       });
-      
-      if (!reponse.ok) {
-        const errData = await reponse.json().catch(() => ({}));
-        throw new Error(errData.detail || "Erreur lors de la création.");
-      }
       
       setAfficherFormulaire(false);
       setFormData({ titre: "", objectifs: "", zone: "", date_depart: "", date_retour: "" });
       await chargerMissions();
     } catch (error: any) {
-      setErreur(error?.message || "Erreur lors de la création.");
+      setErreur(error?.message || "Erreur lors de la création de la mission.");
     } finally {
       setSauvegarde(false);
     }
@@ -122,7 +103,7 @@ export default function GestionMissionsChef({
       terminee: { couleur: "succes", label: "Terminée" },
       annulee: { couleur: "terre", label: "Annulée" },
     };
-    const cfg = config[statut] || { couleur: "neutre", label: statut };
+    const cfg = config[statut] || { couleur: "lagune", label: statut };
     return <Badge variante={cfg.couleur} taille="petit">{cfg.label}</Badge>;
   };
 
@@ -232,7 +213,7 @@ export default function GestionMissionsChef({
                 </div>
                 <div className="flex flex-wrap gap-4 mt-3 text-xs text-ardoise-clair pt-3 border-t border-ardoise-clair/10">
                   <span>
-                     Début:{" "}
+                    📅 Début:{" "}
                     {new Date(mission.date_depart).toLocaleDateString("fr-FR")}
                   </span>
                   {mission.date_retour && (
@@ -262,7 +243,7 @@ export default function GestionMissionsChef({
                   className="text-ardoise-clair hover:text-ardoise transition-colors text-2xl leading-none"
                   aria-label="Fermer"
                 >
-                  
+                  ✕ {/* ✅ Correction : Ajout de la croix de fermeture */}
                 </button>
               </div>
             </div>

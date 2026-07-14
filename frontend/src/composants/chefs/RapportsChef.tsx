@@ -13,7 +13,7 @@ import {
   validerRapport,
   archiverRapport,
   type Rapport,
-} from "@/services/rapports";
+} from "../../services/rapports";
 
 interface RapportsChefProps {
   titre: string;
