@@ -25,6 +25,6 @@ class RapportMission(Base):
     # Date
     date_rapport = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     
-    # Relations ORM
-    mission = relationship("MissionTerrain", backref="rapports")
+    # ✅ CORRECTION : Renommer le backref pour éviter le conflit avec Rapport
+    mission = relationship("MissionTerrain", backref="rapports_mission")
     agent = relationship("Utilisateur", foreign_keys=[agent_id], lazy="select")
