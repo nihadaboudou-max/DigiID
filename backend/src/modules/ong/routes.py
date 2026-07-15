@@ -79,8 +79,23 @@ async def lister_programmes(
     ong: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    """Liste les programmes avec cloisonnement."""
-    programmes = await service.obtenir_programmes(session, ong)
+    """Liste les programmes : tous pour le chef, ceux du domaine pour l'agent."""
+    from sqlalchemy import select
+    from src.modeles.ong import ProgrammeONG
+    
+    # ✅ Si c'est un agent ONG, on filtre par domaine (pas par ong_id)
+    if ong.role in ("agent_ong", "ong"):
+        stmt = select(ProgrammeONG).where(
+            ProgrammeONG.domaine_id == ong.domaine_id,
+            ProgrammeONG.statut == "actif",
+        ).order_by(ProgrammeONG.date_debut.desc())
+        
+        result = await session.execute(stmt)
+        programmes = result.scalars().all()
+    else:
+        # ✅ Chef ONG : comportement existant (programmes de son ONG)
+        programmes = await service.obtenir_programmes(session, ong)
+    
     return [
         ProgrammeResponse(
             id=p.id, ong_id=p.ong_id, nom=p.nom, description=p.description,
@@ -90,7 +105,7 @@ async def lister_programmes(
         )
         for p in programmes
     ]
-
+    
 @routeur_ong.post("/programmes", response_model=ProgrammeResponse, status_code=201)
 async def creer_programme(
     data: ProgrammeCreate,
