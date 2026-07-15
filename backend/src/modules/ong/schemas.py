@@ -14,6 +14,7 @@ class BeneficiaireCreate(BaseModel):
     nom: str
     digiid: Optional[str] = None
     programme: str
+    mission_id: Optional[UUID] = None
     zone: Optional[str] = None
     notes: Optional[str] = None
 
@@ -24,6 +25,8 @@ class BeneficiaireResponse(BaseModel):
     nom: str
     digiid: Optional[str] = None
     programme: str
+    mission_id: Optional[UUID] = None  
+    mission_titre: Optional[str] = None
     zone: Optional[str] = None
     date_inscription: datetime
     statut: str

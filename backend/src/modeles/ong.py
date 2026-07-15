@@ -24,6 +24,15 @@ class BeneficiaireONG(Base):
     statut = Column(String(20), default="actif")
     notes = Column(Text, nullable=True)
 
+    # ✅ AJOUT : Lien vers une mission (optionnel)
+    mission_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("missions_terrain.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Mission associée (optionnel)"
+    )
+
     # --- Cloisonnement ---
     domaine_id = Column(
         UUID(as_uuid=True),
@@ -41,6 +50,8 @@ class BeneficiaireONG(Base):
     )
 
     ong = relationship("Utilisateur", backref="beneficiaires_ong")
+    # ✅ AJOUT : Relation avec MissionTerrain
+    mission = relationship("MissionTerrain", backref="beneficiaires", lazy="select")
 
 
 class ProgrammeONG(Base):

@@ -105,7 +105,8 @@ async def lister_programmes(
         )
         for p in programmes
     ]
-    
+
+
 @routeur_ong.post("/programmes", response_model=ProgrammeResponse, status_code=201)
 async def creer_programme(
     data: ProgrammeCreate,
@@ -128,6 +129,7 @@ async def creer_programme(
         domaine_id=p.domaine_id, departement_id=p.departement_id,
     )
 
+
 # =============================================================================
 # MISSIONS
 # =============================================================================
@@ -139,8 +141,7 @@ async def lister_missions(
 ):
     """Liste les missions : toutes pour le chef, seulement assignées pour l'agent."""
     from sqlalchemy import select
-    from src.modeles.ong import MissionAgent
-    from src.modeles.ong import MissionTerrain
+    from src.modeles.ong import MissionAgent, MissionTerrain
     
     # ✅ Si c'est un agent ONG (pas chef), on filtre par assignation
     if ong.role in ("agent_ong", "ong"):
@@ -175,7 +176,8 @@ async def lister_missions(
         )
         for m in missions
     ]
-    
+
+
 @routeur_ong.post("/missions", response_model=MissionResponse, status_code=201)
 async def creer_mission(
     data: MissionCreate,
