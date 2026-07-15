@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modeles.ong import MissionTerrain
 from src.base_donnees.session import obtenir_session
 from src.modeles import Utilisateur
 from src.modules.authentification.dependances import utilisateur_courant
@@ -91,7 +92,6 @@ async def lister_programmes(
         for p in programmes
     ]
 
-
 @routeur_ong.post("/programmes", response_model=ProgrammeResponse, status_code=201)
 async def creer_programme(
     data: ProgrammeCreate,
@@ -124,8 +124,34 @@ async def lister_missions(
     ong: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    """Liste les missions avec cloisonnement."""
-    missions = await service.obtenir_missions(session, ong)
+    """Liste les missions : toutes pour le chef, seulement assignées pour l'agent."""
+    from sqlalchemy import select
+    from src.modeles.ong import MissionAgent
+    
+    # ✅ Si c'est un agent ONG (pas chef), on filtre par assignation
+    if ong.role in ("agent_ong", "ong"):
+        # Récupérer les IDs des missions où l'agent est assigné
+        stmt_assignations = select(MissionAgent.mission_id).where(
+            MissionAgent.agent_id == ong.id,
+            MissionAgent.statut != "annulee",
+        )
+        result_assignations = await session.execute(stmt_assignations)
+        mission_ids = [row[0] for row in result_assignations.all()]
+        
+        if not mission_ids:
+            return []
+        
+        # Récupérer les missions correspondantes
+        stmt = select(MissionTerrain).where(
+            MissionTerrain.id.in_(mission_ids)
+        ).order_by(MissionTerrain.date_depart.desc())
+        
+        result = await session.execute(stmt)
+        missions = result.scalars().all()
+    else:
+        # ✅ Chef ONG ou admin : toutes les missions (comportement existant)
+        missions = await service.obtenir_missions(session, ong)
+    
     return [
         MissionResponse(
             id=m.id, ong_id=m.ong_id, programme_id=m.programme_id,
@@ -135,29 +161,6 @@ async def lister_missions(
         )
         for m in missions
     ]
-
-
-@routeur_ong.post("/missions", response_model=MissionResponse, status_code=201)
-async def creer_mission(
-    data: MissionCreate,
-    ong: Annotated[Utilisateur, Depends(utilisateur_courant)],
-    session: Annotated[AsyncSession, Depends(obtenir_session)],
-):
-    """Crée une mission avec cloisonnement automatique."""
-    m = await service.creer_mission(session, ong, data.model_dump())
-    await enregistrer_evenement_audit(
-        session=session,
-        type_evenement="ong_mission_creation",
-        description=f"Mission {data.titre} créée (zone: {data.zone})",
-        utilisateur_id=ong.id,
-        role_acteur=ong.role,
-    )
-    return MissionResponse(
-        id=m.id, ong_id=m.ong_id, programme_id=m.programme_id,
-        titre=m.titre, zone=m.zone, date_depart=m.date_depart,
-        date_retour=m.date_retour, objectifs=m.objectifs, statut=m.statut,
-        domaine_id=m.domaine_id, departement_id=m.departement_id,
-    )
 
 
 # =============================================================================
