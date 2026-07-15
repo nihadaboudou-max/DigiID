@@ -239,20 +239,19 @@ async def mettre_a_jour_statut_mission(
     )
 
 
-# Route pour ajouter un rapport de mission
 @routeur_ong.post("/missions/{mission_id}/rapport", response_model=dict)
 async def ajouter_rapport_mission(
     mission_id: UUID,
-    data: dict,  # {"rapport": "texte du rapport", "resultats": "résultats obtenus"}
+    data: dict,
     ong: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    """Ajoute un rapport d'exécution à une mission."""
-    from src.modeles.ong import MissionTerrain, RapportMission
+    """Ajoute un rapport d'exécution à une mission (version simplifiée sans nouvelle table)."""
+    from src.modeles.ong import MissionTerrain
     from sqlalchemy import select
     from datetime import datetime
     
-    # Vérifier que la mission existe
+    # Vérifier que la mission existe et appartient au domaine de l'agent
     stmt = select(MissionTerrain).where(
         MissionTerrain.id == mission_id,
         MissionTerrain.domaine_id == ong.domaine_id
@@ -263,19 +262,22 @@ async def ajouter_rapport_mission(
     if not mission:
         raise HTTPException(status_code=404, detail="Mission introuvable")
     
-    # Créer le rapport
-    rapport = RapportMission(
-        mission_id=mission_id,
-        agent_id=ong.id,
-        rapport=data.get("rapport", ""),
-        resultats=data.get("resultats", ""),
-        date_rapport=datetime.utcnow(),
-    )
+    # Mettre à jour le statut de la mission à "terminee"
+    mission.statut = "terminee"
+    mission.date_retour = datetime.utcnow().date()
     
-    session.add(rapport)
+    # Stocker le rapport dans un champ dédié ou dans objectifs
+    rapport_texte = data.get("rapport", "")
+    if rapport_texte:
+        # Option 1: Ajouter dans objectifs (solution rapide)
+        if mission.objectifs:
+            mission.objectifs = f"{mission.objectifs}\n\n--- RAPPORT DE MISSION ---\n{rapport_texte}"
+        else:
+            mission.objectifs = f"--- RAPPORT DE MISSION ---\n{rapport_texte}"
+    
     await session.commit()
     
-    return {"message": "Rapport ajouté avec succès", "id": str(rapport.id)}
+    return {"message": "Mission terminée et rapport enregistré avec succès"}
 
 # =============================================================================
 # STATISTIQUES DE BASE

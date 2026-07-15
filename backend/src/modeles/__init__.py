@@ -30,7 +30,6 @@ from src.modeles.invitation import Invitation
 from src.modeles.equipe import Equipe
 from src.modeles.equipe_membre import equipe_membres
 from src.modeles.rapport import Rapport, TypeRapport, StatutRapport
-from src.modeles.rapport_mission import RapportMission
 
 __all__ = [
     "Utilisateur",
@@ -75,5 +74,4 @@ __all__ = [
     "Rapport",
     "TypeRapport",
     "StatutRapport", 
-    "RapportMission",
 ]
