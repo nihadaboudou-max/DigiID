@@ -7,11 +7,10 @@ import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { Alerte } from "@/composants/commun/Alerte";
-import { clientAPI } from "@/services/client_api"; // ✅ Import ajouté
+import { clientAPI } from "@/services/client_api";
 
 interface Mission {
   id: string;
-  programme_id: string | null;
   titre: string;
   zone: string | null;
   date_depart: string;
@@ -32,21 +31,18 @@ function Contenu() {
   const [missions, setMissions] = useState<Mission[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [missionEnCours, setMissionEnCours] = useState<string | null>(null);
+  const [rapport, setRapport] = useState("");
+  const [afficherFormulaire, setAfficherFormulaire] = useState(false);
 
-  useEffect(() => { charger(); }, []);
+  useEffect(() => { chargerMissions(); }, []);
 
-  async function charger() {
+  async function chargerMissions() {
     setChargement(true);
     setErreur(null);
     try {
-      // ✅ Utilisation de clientAPI avec typage 'any' pour éviter les erreurs TS
       const response: any = await clientAPI.get("/api/v1/ong/missions", { authentifie: true });
-      
-      // ✅ Sécurisation de l'extraction du tableau
-      const dataArray = Array.isArray(response) 
-        ? response 
-        : (response.missions || response.data || []);
-        
+      const dataArray = Array.isArray(response) ? response : (response.missions || response.data || []);
       setMissions(dataArray);
     } catch (error: any) {
       setErreur(error?.message || "Erreur de chargement des missions");
@@ -54,6 +50,64 @@ function Contenu() {
     } finally {
       setChargement(false);
     }
+  }
+
+  async function changerStatut(missionId: string, nouveauStatut: string) {
+    try {
+      await clientAPI.patch(`/api/v1/ong/missions/${missionId}/statut`, 
+        { statut: nouveauStatut }, 
+        { authentifie: true }
+      );
+      await chargerMissions();
+      setMissionEnCours(null);
+      setAfficherFormulaire(false);
+      setRapport("");
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur lors de la mise à jour");
+      console.error(error);
+    }
+  }
+
+  async function demarrerMission(missionId: string) {
+    if (!confirm("Confirmez-vous le démarrage de cette mission ?")) return;
+    await changerStatut(missionId, "en_cours");
+  }
+
+  async function terminerMission(missionId: string) {
+    setMissionEnCours(missionId);
+    setAfficherFormulaire(true);
+  }
+
+  async function soumettreRapport(missionId: string) {
+    if (!rapport.trim()) {
+      alert("Veuillez ajouter un rapport d'exécution");
+      return;
+    }
+    
+    try {
+      await clientAPI.post(`/api/v1/ong/missions/${missionId}/rapport`, 
+        { 
+          rapport: rapport,
+          resultats: "Mission exécutée avec succès"
+        }, 
+        { authentifie: true }
+      );
+      await changerStatut(missionId, "terminee");
+    } catch (error: any) {
+      setErreur(error?.message || "Erreur lors de l'envoi du rapport");
+      console.error(error);
+    }
+  }
+
+  function getBadgeStatut(statut: string) {
+    const config: Record<string, { couleur: "lagune" | "succes" | "ocre" | "terre"; label: string }> = {
+      "planifiee": { couleur: "ocre", label: "Planifiée" },
+      "en_cours": { couleur: "lagune", label: "En cours" },
+      "terminee": { couleur: "succes", label: "Terminée" },
+      "annulee": { couleur: "terre", label: "Annulée" },
+    };
+    const cfg = config[statut] || { couleur: "lagune", label: statut };
+    return <Badge variante={cfg.couleur} taille="petit">{cfg.label}</Badge>;
   }
 
   return (
@@ -86,33 +140,98 @@ function Contenu() {
           </div>
         </Carte>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {missions.map((m) => (
             <div key={m.id} className="carte p-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex-1">
-                  <h3 className="font-bold text-ardoise">{m.titre}</h3>
-                  <p className="text-xs text-ardoise-clair mt-1">{m.zone || "Zone non spécifiée"}</p>
-                  <p className="text-xs text-ardoise-clair">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="font-bold text-ardoise text-lg">{m.titre}</h3>
+                    {getBadgeStatut(m.statut)}
+                  </div>
+                  <p className="text-sm text-ardoise-clair">{m.zone || "Zone non spécifiée"}</p>
+                  <p className="text-xs text-ardoise-clair mt-1">
                     Du {new Date(m.date_depart).toLocaleDateString("fr-FR")}
-                    {m.date_retour ? ` au ${new Date(m.date_retour).toLocaleDateString("fr-FR")}` : ""}
+                    {m.date_retour && ` au ${new Date(m.date_retour).toLocaleDateString("fr-FR")}`}
                   </p>
                   {m.objectifs && (
-                    <p className="text-xs text-ardoise-clair mt-2 italic">🎯 {m.objectifs}</p>
+                    <p className="text-sm text-ardoise mt-2 bg-sable p-3 rounded">
+                      <strong>Objectifs :</strong> {m.objectifs}
+                    </p>
                   )}
                 </div>
-                <Badge 
-                  variante={
-                    m.statut === "en_cours" ? "succes" : 
-                    m.statut === "planifiee" ? "ocre" : "lagune"
-                  }
-                >
-                  {m.statut === "en_cours" ? "En cours" : 
-                   m.statut === "planifiee" ? "Planifiée" : "Terminée"}
-                </Badge>
+                
+                {/* Actions selon le statut */}
+                <div className="flex flex-col gap-2">
+                  {m.statut === "planifiee" && (
+                    <Bouton 
+                      variante="primaire" 
+                      onClick={() => demarrerMission(m.id)}
+                      className="w-full sm:w-auto"
+                    >
+                      ▶️ Démarrer
+                    </Bouton>
+                  )}
+                  
+                  {m.statut === "en_cours" && (
+                    <Bouton 
+                      variante="succes" 
+                      onClick={() => terminerMission(m.id)}
+                      className="w-full sm:w-auto"
+                    >
+                      ✅ Terminer
+                    </Bouton>
+                  )}
+                  
+                  {m.statut === "terminee" && (
+                    <p className="text-xs text-succes font-semibold text-center">
+                      ✓ Mission terminée
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Modal pour ajouter un rapport */}
+      {afficherFormulaire && missionEnCours && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
+            <h2 className="text-xl font-bold text-ardoise mb-4">📝 Rapport de mission</h2>
+            <p className="text-sm text-ardoise-clair mb-4">
+              Décrivez le déroulement de la mission avant de la terminer.
+            </p>
+            
+            <textarea
+              value={rapport}
+              onChange={(e) => setRapport(e.target.value)}
+              className="w-full px-4 py-3 border border-ardoise-clair/20 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-lagune/30 mb-4"
+              rows={6}
+              placeholder="Décrivez les activités réalisées, les résultats obtenus, les difficultés rencontrées..."
+            />
+            
+            <div className="flex gap-3">
+              <Bouton 
+                variante="primaire" 
+                onClick={() => soumettreRapport(missionEnCours)}
+                className="flex-1"
+              >
+                ✅ Terminer et envoyer
+              </Bouton>
+              <Bouton 
+                variante="ghost" 
+                onClick={() => {
+                  setAfficherFormulaire(false);
+                  setMissionEnCours(null);
+                  setRapport("");
+                }}
+              >
+                Annuler
+              </Bouton>
+            </div>
+          </div>
         </div>
       )}
 

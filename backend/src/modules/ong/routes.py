@@ -200,6 +200,82 @@ async def creer_mission(
         domaine_id=m.domaine_id, departement_id=m.departement_id,
     )
 
+# Route pour mettre à jour le statut d'une mission
+@routeur_ong.patch("/missions/{mission_id}/statut", response_model=MissionResponse)
+async def mettre_a_jour_statut_mission(
+    mission_id: UUID,
+    data: dict,  # {"statut": "en_cours" | "terminee" | "planifiee"}
+    ong: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Met à jour le statut d'une mission (réservé à l'agent qui l'exécute)."""
+    from src.modeles.ong import MissionTerrain
+    from sqlalchemy import select
+    
+    # Vérifier que la mission existe et appartient au domaine de l'agent
+    stmt = select(MissionTerrain).where(
+        MissionTerrain.id == mission_id,
+        MissionTerrain.domaine_id == ong.domaine_id
+    )
+    result = await session.execute(stmt)
+    mission = result.scalar_one_or_none()
+    
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission introuvable")
+    
+    # Mettre à jour le statut
+    nouveau_statut = data.get("statut")
+    if nouveau_statut not in ["planifiee", "en_cours", "terminee", "annulee"]:
+        raise HTTPException(status_code=400, detail="Statut invalide")
+    
+    mission.statut = nouveau_statut
+    await session.commit()
+    
+    return MissionResponse(
+        id=mission.id, ong_id=mission.ong_id, programme_id=mission.programme_id,
+        titre=mission.titre, zone=mission.zone, date_depart=mission.date_depart,
+        date_retour=mission.date_retour, objectifs=mission.objectifs, statut=mission.statut,
+        domaine_id=mission.domaine_id, departement_id=mission.departement_id,
+    )
+
+
+# Route pour ajouter un rapport de mission
+@routeur_ong.post("/missions/{mission_id}/rapport", response_model=dict)
+async def ajouter_rapport_mission(
+    mission_id: UUID,
+    data: dict,  # {"rapport": "texte du rapport", "resultats": "résultats obtenus"}
+    ong: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Ajoute un rapport d'exécution à une mission."""
+    from src.modeles.ong import MissionTerrain, RapportMission
+    from sqlalchemy import select
+    from datetime import datetime
+    
+    # Vérifier que la mission existe
+    stmt = select(MissionTerrain).where(
+        MissionTerrain.id == mission_id,
+        MissionTerrain.domaine_id == ong.domaine_id
+    )
+    result = await session.execute(stmt)
+    mission = result.scalar_one_or_none()
+    
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission introuvable")
+    
+    # Créer le rapport
+    rapport = RapportMission(
+        mission_id=mission_id,
+        agent_id=ong.id,
+        rapport=data.get("rapport", ""),
+        resultats=data.get("resultats", ""),
+        date_rapport=datetime.utcnow(),
+    )
+    
+    session.add(rapport)
+    await session.commit()
+    
+    return {"message": "Rapport ajouté avec succès", "id": str(rapport.id)}
 
 # =============================================================================
 # STATISTIQUES DE BASE
