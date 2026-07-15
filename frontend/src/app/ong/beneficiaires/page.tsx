@@ -15,10 +15,23 @@ interface Beneficiaire {
   nom: string;
   digiid: string | null;
   programme: string;
+  mission_id: string | null;
+  mission_titre: string | null;
   zone: string | null;
   date_inscription: string;
   statut: string;
   notes: string | null;
+}
+
+interface Programme {
+  id: string;
+  nom: string;
+}
+
+interface Mission {
+  id: string;
+  titre: string;
+  statut: string;
 }
 
 export default function BeneficiairesPage() {
@@ -31,6 +44,9 @@ export default function BeneficiairesPage() {
 
 function Contenu() {
   const [beneficiaires, setBeneficiaires] = useState<Beneficiaire[]>([]);
+  const [programmes, setProgrammes] = useState<Programme[]>([]);
+  const [missions, setMissions] = useState<Mission[]>([]);
+  
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [afficherFormulaire, setAfficherFormulaire] = useState(false);
@@ -38,11 +54,16 @@ function Contenu() {
   const [nom, setNom] = useState("");
   const [digiid, setDigiid] = useState("");
   const [programme, setProgramme] = useState("");
+  const [missionId, setMissionId] = useState("");
   const [zone, setZone] = useState("");
   const [notes, setNotes] = useState("");
   const [envoi, setEnvoi] = useState(false);
 
-  useEffect(() => { charger(); }, []);
+  useEffect(() => { 
+    charger(); 
+    chargerProgrammes();
+    chargerMissions();
+  }, []);
 
   async function charger() {
     setChargement(true);
@@ -59,6 +80,29 @@ function Contenu() {
     }
   }
 
+  async function chargerProgrammes() {
+    try {
+      const response: any = await clientAPI.get("/api/v1/ong/programmes", { authentifie: true });
+      const dataArray = Array.isArray(response) ? response : (response.programmes || response.data || []);
+      setProgrammes(dataArray);
+    } catch (error) {
+      console.error("Erreur chargement programmes:", error);
+    }
+  }
+
+  async function chargerMissions() {
+    try {
+      const response: any = await clientAPI.get("/api/v1/ong/missions", { authentifie: true });
+      const dataArray = Array.isArray(response) ? response : (response.missions || response.data || []);
+      
+      // On garde toutes les missions pour le Chef, mais on peut filtrer si besoin
+      // Le backend filtre déjà automatiquement : le Chef voit tout, l'Agent voit seulement ses missions assignées.
+      setMissions(dataArray);
+    } catch (error) {
+      console.error("Erreur chargement missions:", error);
+    }
+  }
+
   async function handleCreer() {
     if (!nom || !programme) {
       setErreur("Le nom et le programme sont obligatoires.");
@@ -71,12 +115,14 @@ function Contenu() {
         nom,
         digiid: digiid || null,
         programme,
+        mission_id: missionId || null,
         zone: zone || null,
         notes: notes || null,
       }, { authentifie: true });
       
       await charger();
-      setNom(""); setDigiid(""); setProgramme(""); setZone(""); setNotes("");
+      // Réinitialisation du formulaire
+      setNom(""); setDigiid(""); setProgramme(""); setMissionId(""); setZone(""); setNotes("");
       setAfficherFormulaire(false);
     } catch (error: any) {
       setErreur(error?.message || "Erreur lors de la création du bénéficiaire");
@@ -98,7 +144,7 @@ function Contenu() {
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <p className="text-ocre text-xs uppercase font-semibold tracking-wider">Agent ONG</p>
+          <p className="text-ocre text-xs uppercase font-semibold tracking-wider">Gestion ONG</p>
           <h1 className="mt-1 text-2xl">Bénéficiaires</h1>
           <p className="text-ardoise-clair mt-1 text-sm">{beneficiaires.length} bénéficiaire(s) inscrit(s)</p>
         </div>
@@ -109,18 +155,65 @@ function Contenu() {
 
       {afficherFormulaire && (
         <Carte titre="Ajouter un bénéficiaire">
-          <div className="max-w-md space-y-3">
+          <div className="max-w-md space-y-4">
             <ChampSaisie libelle="Nom complet *" value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Ex: Fatou Diallo" required />
             <ChampSaisie libelle="DigiID (optionnel)" value={digiid} onChange={(e) => setDigiid(e.target.value)} placeholder="Ex: A1B2C3D4E5F6G7H8" />
-            <ChampSaisie libelle="Programme *" value={programme} onChange={(e) => setProgramme(e.target.value)} placeholder="Ex: Aide alimentaire" required />
+            
+            {/* Sélection du programme */}
+            <div>
+              <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Programme *</label>
+              <select
+                value={programme}
+                onChange={(e) => setProgramme(e.target.value)}
+                className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30 bg-white"
+                required
+              >
+                <option value="">Sélectionner un programme</option>
+                {programmes.map((p) => (
+                  <option key={p.id} value={p.nom}>{p.nom}</option>
+                ))}
+                <option value="activite_quotidienne">📋 Activité quotidienne</option>
+              </select>
+            </div>
+
+            {/* Sélection de la mission */}
+            <div>
+              <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Mission (optionnel)</label>
+              <select
+                value={missionId}
+                onChange={(e) => setMissionId(e.target.value)}
+                className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30 bg-white"
+              >
+                <option value="">Aucune mission</option>
+                {missions.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.titre} {m.statut === 'en_cours' ? '(En cours)' : '(Planifiée)'}
+                  </option>
+                ))}
+              </select>
+              {missions.length === 0 && (
+                <p className="text-xs text-ardoise-clair mt-1 italic">
+                  ℹ️ Aucune mission disponible. (En tant qu'agent, vous ne voyez que vos missions assignées).
+                </p>
+              )}
+            </div>
+
             <ChampSaisie libelle="Zone (optionnel)" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="Ex: Dakar" />
+            
             <div>
               <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Notes (optionnel)</label>
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm resize-none" placeholder="Informations complémentaires..." />
+              <textarea 
+                value={notes} 
+                onChange={(e) => setNotes(e.target.value)} 
+                rows={3} 
+                className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-lagune/30" 
+                placeholder="Informations complémentaires..." 
+              />
             </div>
+            
             <div className="flex gap-2 pt-2">
-              <Bouton variante="primaire" disabled={!nom || !programme || envoi} onClick={handleCreer} chargement={envoi}>
-                {envoi ? "Ajout..." : "Ajouter le bénéficiaire"}
+              <Bouton variante="primaire" disabled={!nom || !programme || envoi} onClick={handleCreer} chargement={envoi} className="flex-1">
+                {envoi ? "Ajout en cours..." : "Ajouter le bénéficiaire"}
               </Bouton>
               <Bouton variante="ghost" onClick={() => setAfficherFormulaire(false)}>Annuler</Bouton>
             </div>
@@ -147,19 +240,23 @@ function Contenu() {
             <div key={b.id} className="carte p-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-ocre/10 flex items-center justify-center text-ocre font-bold">
+                  <div className="w-10 h-10 rounded-full bg-ocre/10 flex items-center justify-center text-ocre font-bold flex-shrink-0">
                     {(b.nom || "U").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                   </div>
                   <div>
                     <p className="font-semibold text-ardoise">{b.nom}</p>
-                    <p className="text-xs text-ardoise-clair">{b.programme} · {b.zone || "Zone non spécifiée"}{b.digiid && ` · DigiID: ${b.digiid}`}</p>
+                    <p className="text-xs text-ardoise-clair">
+                      {b.programme} 
+                      {b.mission_titre && <span className="text-lagune font-medium"> · 📋 {b.mission_titre}</span>}
+                      {b.zone && <span> · 📍 {b.zone}</span>}
+                    </p>
                   </div>
                 </div>
                 <Badge variante={b.statut === "actif" ? "succes" : "lagune"}>
                   {b.statut === "actif" ? "Actif" : "Inactif"}
                 </Badge>
               </div>
-              {b.notes && <p className="text-xs text-ardoise-clair mt-2 italic">📝 {b.notes}</p>}
+              {b.notes && <p className="text-xs text-ardoise-clair mt-3 italic bg-sable p-2 rounded">📝 {b.notes}</p>}
             </div>
           ))}
         </div>
