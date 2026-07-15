@@ -204,24 +204,54 @@ async def creer_mission(
 # =============================================================================
 # STATISTIQUES DE BASE
 # =============================================================================
-
 @routeur_ong.get("/stats", response_model=StatsONGResponse)
 async def stats_ong(
     ong: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    """Statistiques du module ONG avec cloisonnement."""
-    nb_beneficiaires = await service.compter_beneficiaires(session, ong)
-    programmes = await service.obtenir_programmes(session, ong)
-    missions = await service.obtenir_missions(session, ong)
+    """Statistiques adaptées au rôle : le Chef voit ses créations, l'Agent voit tout son domaine."""
+    from sqlalchemy import select, func
+    from src.modeles.ong import BeneficiaireONG, ProgrammeONG, MissionTerrain
+
+    # ✅ LOGIQUE POUR L'AGENT ONG (Voir tout le domaine)
+    if ong.role in ("agent_ong", "ong"):
+        # 1. Compter les bénéficiaires du domaine
+        stmt_b = select(func.count(BeneficiaireONG.id)).where(BeneficiaireONG.domaine_id == ong.domaine_id)
+        nb_beneficiaires = (await session.execute(stmt_b)).scalar() or 0
+        
+        # 2. Compter les programmes actifs du domaine
+        stmt_p = select(func.count(ProgrammeONG.id)).where(
+            ProgrammeONG.domaine_id == ong.domaine_id, 
+            ProgrammeONG.statut == "actif"
+        )
+        nb_programmes = (await session.execute(stmt_p)).scalar() or 0
+        
+        # 3. Compter les missions du domaine
+        stmt_m = select(func.count(MissionTerrain.id)).where(MissionTerrain.domaine_id == ong.domaine_id)
+        nb_missions = (await session.execute(stmt_m)).scalar() or 0
+        
+        # 4. Récupérer les zones uniques des programmes du domaine
+        stmt_z = select(ProgrammeONG.zone).where(
+            ProgrammeONG.domaine_id == ong.domaine_id, 
+            ProgrammeONG.zone != None
+        ).distinct()
+        zones = [row[0] for row in (await session.execute(stmt_z)).all() if row[0]]
+
+    # ✅ LOGIQUE POUR LE CHEF ONG (Voir ses propres créations - code existant)
+    else:
+        nb_beneficiaires = await service.compter_beneficiaires(session, ong)
+        programmes = await service.obtenir_programmes(session, ong)
+        missions = await service.obtenir_missions(session, ong)
+        nb_programmes = len(programmes)
+        nb_missions = len(missions)
+        zones = list(set(p.zone for p in programmes if p.zone))
     
     return StatsONGResponse(
         nb_beneficiaires=nb_beneficiaires,
-        nb_programmes=len(programmes),
-        nb_missions=len(missions),
-        zones=list(set(p.zone for p in programmes if p.zone)),
+        nb_programmes=nb_programmes,
+        nb_missions=nb_missions,
+        zones=zones,
     )
-
 
 # =============================================================================
 # AGENTS - Liste des agents de l'équipe (CHEF ONG UNIQUEMENT)
