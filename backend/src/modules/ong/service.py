@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modeles import Utilisateur
 from src.modeles.ong import BeneficiaireONG, ProgrammeONG, MissionTerrain, MissionAgent
 from src.noyau.exceptions import ErreurValidation, ErreurAutorisation
+from datetime import datetime
 
 
 # ─── Fonctions utilitaires de cloisonnement ──────────────────────────
@@ -426,3 +427,192 @@ async def obtenir_agents_mission(
         })
     
     return agents
+
+
+# =============================================================================
+# AGENTS - Fonctions pour la gestion d'équipe
+# =============================================================================
+
+async def obtenir_agents_equipe(
+    session: AsyncSession,
+    chef: Utilisateur,
+) -> list[Utilisateur]:
+    """Liste tous les agents de l'équipe du chef."""
+    roles_agents = ["agent_ong", "ong"]
+    
+    stmt = select(Utilisateur).where(
+        Utilisateur.domaine_id == chef.domaine_id,
+        Utilisateur.role.in_(roles_agents),
+        Utilisateur.est_actif == True,
+    ).order_by(Utilisateur.date_creation.desc())
+    
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def verifier_agent_existe(
+    session: AsyncSession,
+    agent_id: UUID | None = None,
+    agent_email: str | None = None,
+) -> Utilisateur | None:
+    """Vérifie si un agent existe par ID ou email."""
+    if agent_id:
+        stmt = select(Utilisateur).where(
+            Utilisateur.id == agent_id,
+            Utilisateur.est_actif == True,
+        )
+    elif agent_email:
+        stmt = select(Utilisateur).where(
+            Utilisateur.email == agent_email,
+            Utilisateur.est_actif == True,
+        )
+    else:
+        return None
+    
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def assigner_mission_a_agent(
+    session: AsyncSession,
+    chef: Utilisateur,
+    mission_id: UUID,
+    agent: Utilisateur,
+    instructions: str | None = None,
+    date_limite: datetime | None = None,
+) -> dict:
+    """Assigne une mission à un agent spécifique."""
+    # Vérifier que la mission existe
+    stmt_mission = select(MissionTerrain).where(
+        MissionTerrain.id == mission_id,
+        MissionTerrain.domaine_id == chef.domaine_id,
+    )
+    result_mission = await session.execute(stmt_mission)
+    mission = result_mission.scalar_one_or_none()
+    
+    if not mission:
+        raise ErreurValidation(f"Mission {mission_id} introuvable")
+    
+    # Vérifier si l'agent est déjà assigné
+    stmt_exist = select(MissionAgent).where(
+        MissionAgent.mission_id == mission_id,
+        MissionAgent.agent_id == agent.id,
+    )
+    result_exist = await session.execute(stmt_exist)
+    
+    if result_exist.scalar_one_or_none():
+        raise ErreurValidation("Cet agent est déjà assigné à cette mission")
+    
+    # Créer l'assignation
+    assignation = MissionAgent(
+        mission_id=mission_id,
+        agent_id=agent.id,
+        instructions=instructions,
+        date_limite=date_limite,
+        statut="assignee",
+    )
+    
+    session.add(assignation)
+    await session.commit()
+    await session.refresh(assignation)
+    
+    return {
+        "id": assignation.id,
+        "mission": mission,
+        "agent": agent,
+        "date_assignation": assignation.date_assignation,
+    }
+
+
+async def obtenir_assignations_mission(
+    session: AsyncSession,
+    chef: Utilisateur,
+    mission_id: UUID,
+) -> list[tuple[MissionAgent, Utilisateur]]:
+    """Récupère toutes les assignations d'une mission avec les détails des agents."""
+    # Vérifier que la mission existe
+    stmt_mission = select(MissionTerrain).where(
+        MissionTerrain.id == mission_id,
+        MissionTerrain.domaine_id == chef.domaine_id,
+    )
+    result_mission = await session.execute(stmt_mission)
+    mission = result_mission.scalar_one_or_none()
+    
+    if not mission:
+        raise ErreurValidation(f"Mission {mission_id} introuvable")
+    
+    # Récupérer les assignations avec les agents
+    stmt = (
+        select(MissionAgent, Utilisateur)
+        .join(Utilisateur, MissionAgent.agent_id == Utilisateur.id)
+        .where(MissionAgent.mission_id == mission_id)
+        .order_by(MissionAgent.date_assignation.desc())
+    )
+    
+    result = await session.execute(stmt)
+    return list(result.all())
+
+
+# =============================================================================
+# STATISTIQUES
+# =============================================================================
+
+async def obtenir_statistiques_chef_ong(
+    session: AsyncSession,
+    chef: Utilisateur,
+) -> dict:
+    """Obtient les statistiques complètes pour le dashboard du chef ONG."""
+    roles_agents = ["agent_ong", "ong"]
+    
+    # Total des agents du domaine
+    stmt_total = select(func.count(Utilisateur.id)).where(
+        Utilisateur.domaine_id == chef.domaine_id,
+        Utilisateur.role.in_(roles_agents),
+    )
+    total_agents = (await session.execute(stmt_total)).scalar() or 0
+    
+    # Agents actifs
+    stmt_actifs = select(func.count(Utilisateur.id)).where(
+        Utilisateur.domaine_id == chef.domaine_id,
+        Utilisateur.role.in_(roles_agents),
+        Utilisateur.est_actif == True,
+    )
+    agents_actifs = (await session.execute(stmt_actifs)).scalar() or 0
+    
+    # Agents inactifs
+    agents_inactifs = total_agents - agents_actifs
+    
+    # Agents créés aujourd'hui
+    aujourdhui = datetime.utcnow().date()
+    stmt_aujourdhui = select(func.count(Utilisateur.id)).where(
+        Utilisateur.domaine_id == chef.domaine_id,
+        Utilisateur.role.in_(roles_agents),
+        func.date(Utilisateur.date_creation) == aujourdhui,
+    )
+    agents_crees_aujourdhui = (await session.execute(stmt_aujourdhui)).scalar() or 0
+    
+    # Agents créés ce mois-ci
+    debut_mois = aujourdhui.replace(day=1)
+    stmt_mois = select(func.count(Utilisateur.id)).where(
+        Utilisateur.domaine_id == chef.domaine_id,
+        Utilisateur.role.in_(roles_agents),
+        func.date(Utilisateur.date_creation) >= debut_mois,
+    )
+    agents_crees_ce_mois = (await session.execute(stmt_mois)).scalar() or 0
+    
+    # Dernier agent créé
+    stmt_dernier = select(Utilisateur).where(
+        Utilisateur.domaine_id == chef.domaine_id,
+        Utilisateur.role.in_(roles_agents),
+    ).order_by(Utilisateur.date_creation.desc()).limit(1)
+    
+    dernier_agent = (await session.execute(stmt_dernier)).scalar_one_or_none()
+    
+    return {
+        "total_agents": total_agents,
+        "agents_actifs": agents_actifs,
+        "agents_inactifs": agents_inactifs,
+        "agents_crees_aujourdhui": agents_crees_aujourdhui,
+        "agents_crees_ce_mois": agents_crees_ce_mois,
+        "dernier_agent_cree": dernier_agent,
+    }

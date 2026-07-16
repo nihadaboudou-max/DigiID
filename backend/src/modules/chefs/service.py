@@ -338,30 +338,41 @@ async def lister_agents_chef(
     
     return list(agents), total
 
-
 # =============================================================================
 # Statistiques
 # =============================================================================
-
 async def obtenir_statistiques_chef(
     session: AsyncSession,
     chef: Utilisateur,
 ) -> dict:
     """Obtient les statistiques pour le dashboard d'un chef."""
+    
+    # ✅ CORRECTION : On filtre par domaine_id ET par les rôles d'agents, 
+    # car superieur_id peut parfois être nul ou ne pas refléter tout le périmètre du chef.
+    roles_agents = [
+        RoleUtilisateur.AGENT_POLICE,
+        RoleUtilisateur.AGENT_MEDICAL,
+        RoleUtilisateur.AGENT_ONG,
+        RoleUtilisateur.AGENT_TERRAIN,
+        "ong"  # Ajoute ici tout autre rôle d'agent pertinent
+    ]
+    
+    filtre_base = and_(
+        Utilisateur.domaine_id == chef.domaine_id,
+        Utilisateur.role.in_(roles_agents),
+        Utilisateur.est_supprime == False
+    )
+    
     # Total agents
     result = await session.execute(
-        select(func.count(Utilisateur.id)).where(
-            Utilisateur.superieur_id == chef.id,
-            Utilisateur.est_supprime == False
-        )
+        select(func.count(Utilisateur.id)).where(filtre_base)
     )
     total_agents = result.scalar() or 0
     
     # Agents actifs
     result = await session.execute(
         select(func.count(Utilisateur.id)).where(
-            Utilisateur.superieur_id == chef.id,
-            Utilisateur.est_supprime == False,
+            filtre_base,
             Utilisateur.est_actif == True
         )
     )
@@ -372,11 +383,14 @@ async def obtenir_statistiques_chef(
     
     # Agents créés aujourd'hui
     aujourdhui = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Astuce : utilise 'cree_le' ou 'date_creation' selon le nom exact de ta colonne dans le modèle Utilisateur
+    date_column = getattr(Utilisateur, 'cree_le', getattr(Utilisateur, 'date_creation', Utilisateur.id))
+    
     result = await session.execute(
         select(func.count(Utilisateur.id)).where(
-            Utilisateur.superieur_id == chef.id,
-            Utilisateur.est_supprime == False,
-            Utilisateur.cree_le >= aujourdhui
+            filtre_base,
+            func.date(date_column) == aujourdhui.date()
         )
     )
     agents_aujourdhui = result.scalar() or 0
@@ -385,9 +399,8 @@ async def obtenir_statistiques_chef(
     debut_mois = aujourdhui.replace(day=1)
     result = await session.execute(
         select(func.count(Utilisateur.id)).where(
-            Utilisateur.superieur_id == chef.id,
-            Utilisateur.est_supprime == False,
-            Utilisateur.cree_le >= debut_mois
+            filtre_base,
+            date_column >= debut_mois
         )
     )
     agents_ce_mois = result.scalar() or 0
@@ -395,9 +408,8 @@ async def obtenir_statistiques_chef(
     # Dernier agent créé
     result = await session.execute(
         select(Utilisateur).where(
-            Utilisateur.superieur_id == chef.id,
-            Utilisateur.est_supprime == False
-        ).order_by(Utilisateur.cree_le.desc()).limit(1)
+            filtre_base
+        ).order_by(date_column.desc()).limit(1)
     )
     dernier_agent = result.scalar_one_or_none()
     

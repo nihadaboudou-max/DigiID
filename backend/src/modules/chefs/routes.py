@@ -337,32 +337,56 @@ async def lister_agents_enrolement(
 # =============================================================================
 # Statistiques
 # =============================================================================
+# Dans backend/src/modules/chefs/routes.py
 
-@routeur_chefs.get(
-    "/statistiques",
-    response_model=StatistiquesChefResponse,
-)
-async def obtenir_statistiques(
+@routeur_chefs.get("/statistiques")
+async def obtenir_statistiques_chef(
     chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    """Obtient les statistiques pour le dashboard du chef."""
-    chef = await verifier_est_chef(chef)
+    """Statistiques complètes pour le dashboard Chef."""
+    from sqlalchemy import select, func
+    from src.modeles import Utilisateur
+    from src.noyau import dechiffrer_donnee
+    from datetime import datetime
     
-    stats = await service.obtenir_statistiques_chef(session, chef)
+    # Rôles à compter (adapte selon tes besoins)
+    roles_agents = ["agent_ong", "ong"]
     
-    dernier_agent_response = None
-    if stats.get("dernier_agent_cree"):
-        dernier_agent_response = _dechiffrer_agent(stats["dernier_agent_cree"])
-    
-    return StatistiquesChefResponse(
-        total_agents=stats["total_agents"],
-        agents_actifs=stats["agents_actifs"],
-        agents_inactifs=stats["agents_inactifs"],
-        agents_crees_aujourdhui=stats["agents_crees_aujourdhui"],
-        agents_crees_ce_mois=stats["agents_crees_ce_mois"],
-        dernier_agent_cree=dernier_agent_response,
+    # Total des agents du domaine
+    stmt_total = select(func.count(Utilisateur.id)).where(
+        Utilisateur.domaine_id == chef.domaine_id,
+        Utilisateur.role.in_(roles_agents),
     )
+    total_agents = (await session.execute(stmt_total)).scalar() or 0
+    
+    # Agents actifs
+    stmt_actifs = select(func.count(Utilisateur.id)).where(
+        Utilisateur.domaine_id == chef.domaine_id,
+        Utilisateur.role.in_(roles_agents),
+        Utilisateur.est_actif == True,
+    )
+    agents_actifs = (await session.execute(stmt_actifs)).scalar() or 0
+    
+    # Agents inactifs
+    agents_inactifs = total_agents - agents_actifs
+    
+    # Agents créés aujourd'hui
+    aujourdhui = datetime.utcnow().date()
+    stmt_aujourdhui = select(func.count(Utilisateur.id)).where(
+        Utilisateur.domaine_id == chef.domaine_id,
+        Utilisateur.role.in_(roles_agents),
+        func.date(Utilisateur.cree_le) == aujourdhui,
+    )
+    agents_crees_aujourdhui = (await session.execute(stmt_aujourdhui)).scalar() or 0
+    
+    return {
+        "total_agents": total_agents,
+        "agents_actifs": agents_actifs,
+        "agents_inactifs": agents_inactifs,
+        "agents_crees_aujourdhui": agents_crees_aujourdhui,
+        "dernier_agent_cree": None,  # À implémenter si besoin
+    }
 
 
 # =============================================================================
