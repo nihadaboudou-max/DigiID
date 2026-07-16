@@ -493,6 +493,7 @@ export function BarreLaterale() {
     liens = [
       { href: "/chef-police", libelle: "Tableau de bord", Icone: IconeAccueil },
       { href: "/chef-police/equipe", libelle: "Mon équipe", Icone: IconeUtilisateur },
+      { href: "/chef-police/audit", libelle: "Audit & Traçabilité", Icone: IconeJournal },
       { href: "/chef-police/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
       { href: "/chef-police/recherche", libelle: "Recherche", Icone: IconeScan },
       { href: "/chef-police/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
@@ -505,7 +506,8 @@ export function BarreLaterale() {
   } else if (utilisateur.role === "chef_medical") {
     liens = [
       { href: "/chef-medical", libelle: "Tableau de bord", Icone: IconeAccueil },
-      { href: "/chef-medical/medecins", libelle: "Médecins", Icone: IconeUtilisateur },
+      { href: "/chef-medical/equipe", libelle: "Médecins", Icone: IconeUtilisateur },
+      { href: "/chef-medical/audit", libelle: "Audit & Traçabilité", Icone: IconeJournal },
       { href: "/chef-medical/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
       { href: "/chef-medical/recherche", libelle: "Recherche", Icone: IconeScan },
       { href: "/chef-medical/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
@@ -519,6 +521,7 @@ export function BarreLaterale() {
     liens = [
       { href: "/chef-ong", libelle: "Tableau de bord", Icone: IconeAccueil },
       { href: "/chef-ong/agents", libelle: "Agents ONG", Icone: IconeUtilisateur },
+      { href: "/chef-ong/audit", libelle: "Audit & Traçabilité", Icone: IconeJournal },
       { href: "/chef-ong/programmes", libelle: "Programmes", Icone: IconeStatistique },
       { href: "/chef-ong/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
       { href: "/chef-ong/recherche", libelle: "Recherche", Icone: IconeScan },
@@ -532,7 +535,8 @@ export function BarreLaterale() {
   } else if (utilisateur.role === "chef_agent") {
     liens = [
       { href: "/chef-enrolement", libelle: "Tableau de bord", Icone: IconeAccueil },
-      { href: "/chef-enrolement/agents", libelle: "Agents terrain", Icone: IconeUtilisateur },
+      { href: "/chef-enrolement/equipe", libelle: "Agents terrain", Icone: IconeUtilisateur },
+      { href: "/chef-enrolement/audit", libelle: "Audit & Traçabilité", Icone: IconeJournal },
       { href: "/chef-enrolement/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
       { href: "/chef-enrolement/recherche", libelle: "Recherche", Icone: IconeScan },
       { href: "/chef-enrolement/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
