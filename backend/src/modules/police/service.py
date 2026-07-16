@@ -125,10 +125,6 @@ async def obtenir_verification_par_id(
     return result.scalar_one_or_none()
 
 
-# =============================================================================
-# RECHERCHE AVANCÉE
-# =============================================================================
-
 async def rechercher_personne(
     session: AsyncSession,
     query: str,
@@ -139,7 +135,7 @@ async def rechercher_personne(
     filtre_ville: Optional[str] = None,
     limite: int = 20,
     page: int = 1,
-    utilisateur: Optional[Utilisateur] = None,  # Changé de officier_id à utilisateur complet
+    utilisateur: Optional[Utilisateur] = None,
 ) -> tuple[list[dict], int, float]:
     """
     Recherche avancée de personnes avec filtres et cloisonnement.
@@ -149,28 +145,29 @@ async def rechercher_personne(
     query_clean = query.strip()
     query_lower = query_clean.lower()
     resultats: list[dict] = []
-    utilisateurs_vus: set = set()
-
+    utilisateurs_vus: set = set()  # ✅ Initialisation manquante
+    
+    # ✅ Gestion du filtre de statut
     etat_filtre = None
     if filtre_statut == "actif":
         etat_filtre = True
     elif filtre_statut == "inactif":
         etat_filtre = False
-
+    
     base_query = select(Utilisateur)
     if etat_filtre is not None:
         base_query = base_query.where(Utilisateur.est_actif == etat_filtre)
     
-    # --- Cloisonnement : filtrer les utilisateurs par domaine/département (NOUVEAU) ---
+    # --- Cloisonnement : filtrer les utilisateurs par domaine/département ---
     if utilisateur and not _est_super_admin(utilisateur):
         if utilisateur.domaine_id:
             base_query = base_query.where(Utilisateur.domaine_id == utilisateur.domaine_id)
         if utilisateur.role not in ["admin_domaine"] and utilisateur.departement_id:
             base_query = base_query.where(Utilisateur.departement_id == utilisateur.departement_id)
-
+    
     result = await session.execute(base_query)
     utilisateurs_list = result.scalars().all()
-
+    
     for utilisateur_cible in utilisateurs_list:
         digiid = utilisateur_cible.digiid_public or ""
         prenom = dechiffrer_donnee(utilisateur_cible.prenom_chiffre) if utilisateur_cible.prenom_chiffre else ""
@@ -178,30 +175,30 @@ async def rechercher_personne(
         email = dechiffrer_donnee(utilisateur_cible.email_chiffre) if utilisateur_cible.email_chiffre else ""
         telephone = dechiffrer_donnee(utilisateur_cible.telephone_chiffre) if utilisateur_cible.telephone_chiffre else ""
         nom_complet = f"{prenom} {nom}".strip().lower()
-
+        
         correspond = False
         score_similarite = 0.0
-
+        
         if type_recherche in ("tout", "nom"):
             if query_lower in nom_complet or query_lower in prenom.lower() or query_lower in nom.lower():
                 correspond = True
                 score_similarite = max(score_similarite, _calculer_similarite(query_lower, nom_complet), _calculer_similarite(query_lower, prenom.lower()))
-
+        
         if type_recherche in ("tout", "digiid"):
             if query_lower in digiid.lower():
                 correspond = True
                 score_similarite = max(score_similarite, _calculer_similarite(query_lower, digiid.lower()))
-
+        
         if type_recherche in ("tout", "email"):
             if query_lower in email.lower():
                 correspond = True
                 score_similarite = max(score_similarite, _calculer_similarite(query_lower, email.lower()))
-
+        
         if type_recherche in ("tout", "telephone"):
             if telephone and query_lower in telephone.lower():
                 correspond = True
                 score_similarite = max(score_similarite, _calculer_similarite(query_lower, telephone.lower()))
-
+        
         if type_recherche in ("tout", "cni"):
             result_cni = await session.execute(
                 select(VerificationCNI)
@@ -211,28 +208,28 @@ async def rechercher_personne(
             if result_cni.scalar_one_or_none():
                 correspond = True
                 score_similarite = max(score_similarite, 0.95)
-
+        
         if not correspond:
             continue
-
+        
         if filtre_score_min is not None and (utilisateur_cible.score_actuel or 0) < filtre_score_min:
             continue
         if filtre_score_max is not None and (utilisateur_cible.score_actuel or 0) > filtre_score_max:
             continue
         if filtre_ville and filtre_ville.lower() not in (utilisateur_cible.ville or "").lower():
             continue
-
         if utilisateur_cible.id in utilisateurs_vus:
             continue
+        
         utilisateurs_vus.add(utilisateur_cible.id)
-
+        
         docs = await session.execute(
             select(DocumentIdentite).where(DocumentIdentite.utilisateur_id == utilisateur_cible.id, DocumentIdentite.est_actif == True)
         )
         documents = docs.scalars().all()
         a_permis = any(d.type_document == "permis" for d in documents)
         a_assurance = any(d.type_document == "assurance" for d in documents)
-
+        
         result_cni = await session.execute(
             select(VerificationCNI)
             .where(VerificationCNI.utilisateur_id == utilisateur_cible.id, VerificationCNI.est_supprime == False)
@@ -240,7 +237,7 @@ async def rechercher_personne(
             .limit(1)
         )
         verif_cni = result_cni.scalar_one_or_none()
-
+        
         resultats.append({
             "digiid": digiid,
             "nom": nom_complet.title(),
@@ -257,16 +254,16 @@ async def rechercher_personne(
             "a_assurance": a_assurance,
             "score_similarite": round(score_similarite, 4),
         })
-
+    
     resultats.sort(key=lambda r: r["score_similarite"] or 0, reverse=True)
     total = len(resultats)
     offset = (page - 1) * limite
     resultats_page = resultats[offset:offset + limite]
     temps = (time.time() - debut) * 1000
-
+    
     if utilisateur:
         await _enregistrer_recherche(session, utilisateur.id, type_recherche, query_clean, total, utilisateur)
-
+    
     return resultats_page, total, round(temps, 2)
 
 
