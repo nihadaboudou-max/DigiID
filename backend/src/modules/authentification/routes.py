@@ -1,21 +1,18 @@
 # -*- coding: utf-8 -*-
 """
 Routes API d'authentification — endpoints publics.
-
 Préfixe : /api/v1/auth
-
 Endpoints :
-  POST   /inscription          Inscription d'un nouvel utilisateur
-  POST   /connexion            Connexion (retourne tokens)
-  POST   /deconnexion          Déconnexion (révoque la session)
-  POST   /rafraichir           Rafraîchit le token d'accès
-  GET    /moi                  Profil minimal de l'utilisateur connecté
+POST   /inscription          Inscription d'un nouvel utilisateur
+POST   /connexion            Connexion (retourne tokens)
+POST   /deconnexion          Déconnexion (révoque la session)
+POST   /rafraichir           Rafraîchit le token d'accès
+GET    /moi                  Profil minimal de l'utilisateur connecté
+GET    /me/ui-config         Configuration UI selon le rôle
 """
 from typing import Annotated
-
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.base_donnees.session import obtenir_session
 from src.config import parametres
 from src.modeles import Utilisateur
@@ -38,7 +35,6 @@ from src.schemas.authentification import (
     MotDePasseOublieRequete, MotDePasseOublieReponse,
     MotDePasseReinitialisationRequete, MotDePasseReinitialisationReponse,
 )
-
 
 routeur_authentification = APIRouter(
     prefix="/api/v1/auth",
@@ -92,7 +88,6 @@ async def inscription(
         code_parrainage=donnees.code_parrainage,
         adresse_ip=obtenir_ip_client(requete),
     )
-
     # Créer une session automatiquement après inscription
     token_acces, token_rafraichissement = await service.creer_session_apres_inscription(
         session=session,
@@ -100,7 +95,6 @@ async def inscription(
         adresse_ip=obtenir_ip_client(requete),
         agent_utilisateur=obtenir_agent_utilisateur(requete),
     )
-
     return InscriptionReponse(
         utilisateur=_construire_utilisateur_reponse(utilisateur),
         jetons=JetonsReponse(
@@ -192,6 +186,109 @@ async def moi(
 
 
 # =============================================================================
+# NOUVEAU : Configuration UI selon le rôle
+# =============================================================================
+
+@routeur_authentification.get(
+    "/me/ui-config",
+    summary="Configuration UI selon le rôle de l'utilisateur",
+)
+async def obtenir_ui_config(
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+):
+    """
+    Retourne la configuration UI pour l'utilisateur connecté.
+    Inclut les permissions selon le rôle pour afficher/masquer les fonctionnalités.
+    """
+    # Définir les permissions selon le rôle
+    permissions = {
+        "verifyIdentity": False,
+        "searchPerson": False,
+        "viewPoliceAudit": False,
+        "manageAgents": False,
+        "manageMissions": False,
+        "manageRapports": False,
+    }
+    
+    role = utilisateur.role
+    
+    # Permissions Agent Police
+    if role in ("agent_police", "police"):
+        permissions.update({
+            "verifyIdentity": True,
+            "searchPerson": True,
+            "viewPoliceAudit": True,
+        })
+    
+    # Permissions Chef Police
+    elif role == "chef_police":
+        permissions.update({
+            "verifyIdentity": True,
+            "searchPerson": True,
+            "viewPoliceAudit": True,
+            "manageAgents": True,
+            "manageMissions": True,
+            "manageRapports": True,
+        })
+    
+    # Permissions Agent ONG
+    elif role in ("agent_ong", "ong"):
+        permissions.update({
+            "manageMissions": True,
+        })
+    
+    # Permissions Chef ONG
+    elif role == "chef_ong":
+        permissions.update({
+            "manageAgents": True,
+            "manageMissions": True,
+            "manageRapports": True,
+        })
+    
+    # Permissions Agent Médical
+    elif role in ("agent_medical", "medecin"):
+        permissions.update({
+            "verifyIdentity": True,
+        })
+    
+    # Permissions Chef Médical
+    elif role == "chef_medical":
+        permissions.update({
+            "verifyIdentity": True,
+            "manageAgents": True,
+            "manageRapports": True,
+        })
+    
+    # Permissions Agent Enrôlement
+    elif role in ("agent_terrain", "agent"):
+        permissions.update({
+            "verifyIdentity": True,
+        })
+    
+    # Permissions Chef Enrôlement
+    elif role == "chef_agent":
+        permissions.update({
+            "verifyIdentity": True,
+            "manageAgents": True,
+            "manageRapports": True,
+        })
+    
+    # Super admin et administrateur voient tout
+    if role in ("super_administrateur", "administrateur"):
+        permissions = {k: True for k in permissions}
+    
+    # Déchiffrer le nom complet
+    prenom = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else ""
+    nom = dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else ""
+    
+    return {
+        "role": role,
+        "nom": f"{prenom} {nom}".strip(),
+        "permissions": permissions,
+    }
+
+
+# =============================================================================
 # Vérification email — envoi et validation de code
 # =============================================================================
 
@@ -208,7 +305,6 @@ async def envoyer_code_verification(
 ):
     """
     Envoie un code de vérification à l'utilisateur connecté.
-
     Si l'email est déjà vérifié, renvoie simplement un message d'info.
     Utile pour renvoyer le code si l'utilisateur ne l'a pas reçu.
     """
@@ -219,10 +315,8 @@ async def envoyer_code_verification(
             destination_masquee="",
             duree_validite_minutes=0,
         )
-
     email = dechiffrer_donnee(utilisateur.email_chiffre)
     telephone = dechiffrer_donnee(utilisateur.telephone_chiffre) if utilisateur.telephone_chiffre else None
-
     resultat = await service_verification.renvoyer_code(
         session=session,
         utilisateur=utilisateur,
@@ -231,7 +325,6 @@ async def envoyer_code_verification(
         canal=donnees.canal,
         type_verification="inscription",
     )
-
     return VerifEnvoyerRep(
         succes=True,
         message="Code de vérification envoyé.",
@@ -263,14 +356,12 @@ async def verifier_code_verification(
         type_verification="inscription",
         activer_compte=True,
     )
-
     if resultat["est_email_verifie"]:
         message = "Email vérifié avec succès ! Ton compte est maintenant actif."
     elif resultat["est_actif"]:
         message = "Téléphone vérifié avec succès ! Ton compte est maintenant actif."
     else:
         message = "Code vérifié mais une erreur est survenue. Contacte le support."
-
     return VerifVerifierRep(
         succes=resultat["succes"],
         message=message,
@@ -312,7 +403,6 @@ async def mot_de_passe_oublie(
 ):
     """
     Envoie un email avec un lien de réinitialisation si le compte existe.
-
     La réponse est délibérément identique que l'email existe ou non
     pour éviter l'énumération des comptes existants.
     """
@@ -367,6 +457,7 @@ async def mot_de_passe_reinitialiser(
 
 from pydantic import BaseModel, Field
 
+
 class InitialisationRequete(BaseModel):
     """Requête pour créer/récupérer le super admin."""
     cle_secrete: str | None = Field(
@@ -398,10 +489,8 @@ async def initialiser_super_admin(
 ):
     """
     ⚠️ ENDPOINT D'URGENCE — Crée/récupère le super admin.
-
     Usage simple (sans clé) :
         curl -X POST https://digiid-backend.onrender.com/api/v1/auth/initialiser
-
     Cela créera le super admin avec les identifiants par défaut :
         admin@digiid.africa / Admin@DigiID2025!
     """
@@ -410,7 +499,7 @@ async def initialiser_super_admin(
     from src.modeles import Utilisateur
     from src.config.constantes import RolesUtilisateur
     from src.base_donnees.seed import creer_super_admin_initial, semer_roles
-
+    
     try:
         # Vérifier si le super admin existe déjà
         resultat = await session.execute(
@@ -420,7 +509,6 @@ async def initialiser_super_admin(
             )
         )
         existant = resultat.scalar_one_or_none()
-
         if existant:
             return InitialisationReponse(
                 succes=True,
@@ -431,11 +519,9 @@ async def initialiser_super_admin(
                     "id": str(existant.id),
                 }
             )
-
         # Seed des rôles puis création
         await semer_roles()
         await creer_super_admin_initial()
-
         return InitialisationReponse(
             succes=True,
             message="✅ Super administrateur créé avec succès !",
@@ -445,9 +531,8 @@ async def initialiser_super_admin(
                 "alerte": "Change ce mot de passe après la première connexion !",
             }
         )
-
     except Exception as erreur:
         return InitialisationReponse(
             succes=False,
-            message=f"❌ Échec de la création : {erreur}",
+            message=f" Échec de la création : {erreur}",
         )
