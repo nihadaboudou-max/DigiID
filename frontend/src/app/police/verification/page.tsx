@@ -16,7 +16,7 @@ import type { ReponseUploadCNI } from "@/services/verification_cni";
 
 export default function VerificationPage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent_police"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_police", "chef_police"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

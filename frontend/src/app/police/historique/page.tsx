@@ -17,7 +17,7 @@ import type { VerificationPolice } from "@/services/police";
 
 export default function PageHistorique() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent_police"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_police", "chef_police"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

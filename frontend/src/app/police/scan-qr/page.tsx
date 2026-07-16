@@ -9,7 +9,7 @@ import { Html5Qrcode, Html5QrcodeScanType } from "html5-qrcode";
 
 export default function ScanQRPage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent_police", "admin", "super_admin"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_police", "chef_police","admin", "super_admin"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

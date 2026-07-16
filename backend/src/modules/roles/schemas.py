@@ -10,8 +10,10 @@ from pydantic import BaseModel, Field
 
 
 RoleDemandable = Literal[
-    "citoyen", "agent", "medecin", "police", "ong",
-    "administrateur", "super_administrateur",
+    "citoyen",
+    "agent_police", "agent_medical", "agent_terrain","agent_ong",
+    "chef_police", "chef_ong", "chef_agent", "chef_medical",
+    "admin_domaine", "administrateur", "super_administrateur",
 ]
 
 

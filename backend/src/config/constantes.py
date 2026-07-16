@@ -4,6 +4,7 @@ Constantes métier de DigiID.
 Tout ce qui ne change jamais en cours d'exécution se trouve ici :
 énumérations de rôles, niveaux de risque, codes d'événements, etc.
 """
+import hashlib
 from enum import Enum
 
 
@@ -13,19 +14,17 @@ class RolesUtilisateur(str, Enum):
 
     Chaque rôle a son propre espace, ses permissions, ses routes.
     L'enum est `str` pour faciliter la sérialisation JSON.
-
-    Hiérarchie (ordre croissant de privilèges) :
-        citoyen < ong < medecin < agent < police < chef_* < administrateur < super_administrateur
     """
     CITOYEN = "citoyen"
-    ONG = "ong"
-    MEDECIN = "medecin"
-    AGENT = "agent"
-    POLICE = "police"
+    AGENT_POLICE = "agent_police"
+    AGENT_MEDICAL = "agent_medical"
+    AGENT_TERRAIN = "agent_terrain"
+    AGENT_ONG = "agent_ong"
     CHEF_POLICE = "chef_police"
-    CHEF_MEDICAL = "chef_medical"
     CHEF_ONG = "chef_ong"
     CHEF_AGENT = "chef_agent"
+    CHEF_MEDICAL = "chef_medical"
+    ADMIN_DOMAINE = "admin_domaine"
     ADMINISTRATEUR = "administrateur"
     SUPER_ADMINISTRATEUR = "super_administrateur"
 
@@ -34,20 +33,18 @@ class RolesUtilisateur(str, Enum):
         """
         Niveau hiérarchique de chaque rôle.
         Plus le chiffre est élevé, plus le rôle a de pouvoirs.
-        
-        Note : Les chefs de département sont des rôles fonctionnels
-        (supervision au sein d'un domaine), pas des rôles administratifs.
         """
         return {
             cls.CITOYEN: 1,
-            cls.ONG: 2,
-            cls.MEDECIN: 3,
-            cls.AGENT: 4,
-            cls.POLICE: 5,
+            cls.AGENT_ONG: 2,
+            cls.AGENT_MEDICAL: 3,
+            cls.AGENT_TERRAIN: 4,
+            cls.AGENT_POLICE: 5,
             cls.CHEF_POLICE: 6,
             cls.CHEF_MEDICAL: 6,
             cls.CHEF_ONG: 6,
             cls.CHEF_AGENT: 6,
+            cls.ADMIN_DOMAINE: 7,
             cls.ADMINISTRATEUR: 10,
             cls.SUPER_ADMINISTRATEUR: 100,
         }
@@ -60,7 +57,11 @@ class RolesUtilisateur(str, Enum):
     @classmethod
     def roles_administratifs(cls) -> list[str]:
         """Retourne les rôles considérés comme administrateurs système."""
-        return [cls.ADMINISTRATEUR.value, cls.SUPER_ADMINISTRATEUR.value]
+        return [
+            cls.ADMIN_DOMAINE.value,
+            cls.ADMINISTRATEUR.value, 
+            cls.SUPER_ADMINISTRATEUR.value
+        ]
 
     @classmethod
     def roles_chefs(cls) -> list[str]:
@@ -76,14 +77,15 @@ class RolesUtilisateur(str, Enum):
     def roles_institutionnels(cls) -> list[str]:
         """Retourne les rôles liés à des institutions (hors citoyen et admins)."""
         return [
-            cls.AGENT.value,
-            cls.MEDECIN.value,
-            cls.POLICE.value,
-            cls.ONG.value,
+            cls.AGENT_POLICE.value,
+            cls.AGENT_MEDICAL.value,
+            cls.AGENT_TERRAIN.value,
+            cls.AGENT_ONG.value,
             cls.CHEF_POLICE.value,
             cls.CHEF_MEDICAL.value,
             cls.CHEF_ONG.value,
             cls.CHEF_AGENT.value,
+            cls.ADMIN_DOMAINE.value,
         ]
 
     @classmethod
@@ -93,14 +95,15 @@ class RolesUtilisateur(str, Enum):
         (reconnaissance faciale, documents officiels).
         """
         return [
-            cls.MEDECIN.value,
-            cls.POLICE.value,
-            cls.ONG.value,
+            cls.AGENT_POLICE.value,
+            cls.AGENT_MEDICAL.value,
+            cls.AGENT_TERRAIN.value,
+            cls.AGENT_ONG.value,
             cls.CHEF_POLICE.value,
             cls.CHEF_MEDICAL.value,
             cls.CHEF_ONG.value,
-            cls.AGENT.value,
             cls.CHEF_AGENT.value,
+            cls.ADMIN_DOMAINE.value,
             cls.ADMINISTRATEUR.value,
             cls.SUPER_ADMINISTRATEUR.value,
         ]
@@ -191,7 +194,6 @@ PREFIXE_API_ADMIN = "/api/v1/admin"
 PREFIXE_API_SUPER_ADMIN = "/api/v1/super-admin"
 PREFIXE_API_PUBLIC = "/api/v1/public"
 
-import hashlib
 
 def hasher_email(email: str) -> str:
     """Hash SHA-256 de l'email pour la recherche en base."""

@@ -11,7 +11,7 @@ import type { VerificationPolice } from "@/services/police";
 
 export default function AuditPage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent_police"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_police", "chef_police"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

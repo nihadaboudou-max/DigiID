@@ -13,7 +13,7 @@ import type { SignalementFraude } from "@/services/police";
 
 export default function SignalementFraudePage() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent_police"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_police", "chef_police"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
