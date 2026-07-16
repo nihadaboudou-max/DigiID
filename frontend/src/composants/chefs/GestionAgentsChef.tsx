@@ -38,6 +38,7 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
     ville: "",
     pays: "Sénégal",
     mission: "", // Spécifique à ONG
+    specialite: "", // Spécifique à Médical
     message: "", // Pour l'invitation
   });
 
@@ -82,7 +83,17 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
 
   function ouvrirFormulaire(mode: "direct" | "invitation") {
     setModeCreation(mode);
-    setFormData({ email: "", prenom: "", nom: "", telephone: "", ville: "", pays: "Sénégal", mission: "", message: "" });
+    setFormData({ 
+      email: "", 
+      prenom: "", 
+      nom: "", 
+      telephone: "", 
+      ville: "", 
+      pays: "Sénégal", 
+      mission: "", 
+      specialite: "", 
+      message: "" 
+    });
     setAfficherFormulaire(true);
     setErreur("");
   }
@@ -101,7 +112,6 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
         await inviterAgent(typeAgent, { email: formData.email, message: formData.message });
       } else {
         const creerFonction = getCreerFonction();
-        // On envoie uniquement les champs attendus par le schéma Pydantic
         const payload: any = {
           email: formData.email,
           prenom: formData.prenom,
@@ -110,9 +120,15 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
           ville: formData.ville || undefined,
           pays: formData.pays || "Sénégal",
         };
+        
+        // ✅ Champs spécifiques selon le type d'agent
         if (typeAgent === "ong") {
           payload.mission = formData.mission || undefined;
         }
+        if (typeAgent === "medical") {
+          payload.specialite = formData.specialite || undefined;
+        }
+        
         await creerFonction(payload);
       }
       
@@ -147,20 +163,33 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
   const agentsFiltres = agents.filter((agent) => {
     const matchRecherche =
       agent.email.toLowerCase().includes(recherche.toLowerCase()) ||
-      `${agent.prenom} ${agent.nom}`.toLowerCase().includes(recherche.toLowerCase());
+      `${agent.prenom} ${agent.nom}`.toLowerCase().includes(recherche.toLowerCase()) ||
+      agent.digiid_public.toLowerCase().includes(recherche.toLowerCase());
+      
     const matchStatut =
       filtreStatut === "tous" ||
       (filtreStatut === "actif" && agent.est_actif) ||
       (filtreStatut === "inactif" && !agent.est_actif);
+      
     return matchRecherche && matchStatut;
   });
 
   const invitationsEnAttente = invitations.filter((inv) => inv.statut === "en_attente");
 
+  const getLibelleType = () => {
+    switch (typeAgent) {
+      case "police": return "Agent Police";
+      case "medical": return "Médecin";
+      case "ong": return "Agent ONG";
+      case "enrolement": return "Agent d'Enrôlement";
+      default: return "Agent";
+    }
+  };
+
   return (
     <div className="min-h-screen space-y-6 apparition pb-20">
       <div>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Gestion</p>
+        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Gestion d'équipe</p>
         <h1 className="text-3xl font-bold text-ardoise mt-1">{titre}</h1>
         <p className="text-ardoise-clair mt-2">{sousTitre}</p>
       </div>
@@ -170,7 +199,7 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
       <div className="flex flex-col sm:flex-row gap-3">
         <input
           type="text"
-          placeholder="Rechercher par nom ou email..."
+          placeholder={`Rechercher un ${getLibelleType().toLowerCase()}...`}
           value={recherche}
           onChange={(e) => setRecherche(e.target.value)}
           className="flex-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
@@ -222,7 +251,7 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
         </Carte>
       )}
 
-      <Carte titre={`${agentsFiltres.length} agent(s)`}>
+      <Carte titre={`${agentsFiltres.length} ${getLibelleType().toLowerCase()}(s)`}>
         {chargement ? (
           <div className="text-center py-8">
             <div className="animate-spin w-8 h-8 border-4 border-lagune border-t-transparent rounded-full mx-auto mb-3"></div>
@@ -249,6 +278,7 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
                         {agent.est_actif ? "Actif" : "Inactif"}
                       </Badge>
                       <span className="text-xs text-ardoise-clair font-mono">{agent.digiid_public}</span>
+                      {agent.ville && <span className="text-xs text-ardoise-clair">📍 {agent.ville}</span>}
                     </div>
                   </div>
                 </div>
@@ -268,7 +298,7 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
             <div className="sticky top-0 bg-white border-b border-ardoise-clair/10 p-6 rounded-t-xl z-10">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-ardoise">
-                  {modeCreation === "invitation" ? "✉️ Inviter un nouvel agent" : "+ Créer un nouvel agent"}
+                  {modeCreation === "invitation" ? "✉️ Inviter un nouvel agent" : `+ Créer un nouveau ${getLibelleType().toLowerCase()}`}
                 </h2>
                 <button onClick={() => setAfficherFormulaire(false)} className="text-ardoise-clair hover:text-ardoise transition-colors text-2xl leading-none" aria-label="Fermer">✕</button>
               </div>
@@ -276,7 +306,7 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
 
             <div className="p-6 space-y-4">
               {modeCreation === "invitation" && (
-                <Alerte variante="info">L'agent recevra un email avec un lien pour créer son compte lui-même.</Alerte>
+                <Alerte variante="info">L'agent recevra un email avec un lien sécurisé pour créer son compte lui-même.</Alerte>
               )}
 
               <ChampSaisie libelle="Email *" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="agent@exemple.com" required />
@@ -289,20 +319,32 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
               <ChampSaisie libelle="Téléphone" value={formData.telephone} onChange={(e) => setFormData({ ...formData, telephone: e.target.value })} placeholder="+221 77 123 45 67" />
               <ChampSaisie libelle="Ville" value={formData.ville} onChange={(e) => setFormData({ ...formData, ville: e.target.value })} placeholder="Dakar" />
               
+              {/* ✅ Champ spécifique ONG */}
               {typeAgent === "ong" && modeCreation === "direct" && (
                 <ChampSaisie libelle="Mission (optionnel)" value={formData.mission} onChange={(e) => setFormData({ ...formData, mission: e.target.value })} placeholder="Ex: Distribution alimentaire" />
+              )}
+
+              {/* ✅ Champ spécifique Médical */}
+              {typeAgent === "medical" && modeCreation === "direct" && (
+                <ChampSaisie libelle="Spécialité (optionnel)" value={formData.specialite} onChange={(e) => setFormData({ ...formData, specialite: e.target.value })} placeholder="Ex: Médecine générale" />
               )}
               
               {modeCreation === "invitation" && (
                 <div>
                   <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Message personnalisé (optionnel)</label>
-                  <textarea value={formData.message} onChange={(e) => setFormData({ ...formData, message: e.target.value })} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30" rows={3} placeholder="Ajoutez un message personnalisé..." />
+                  <textarea 
+                    value={formData.message} 
+                    onChange={(e) => setFormData({ ...formData, message: e.target.value })} 
+                    className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30" 
+                    rows={3} 
+                    placeholder="Ajoutez un message personnalisé à l'invitation..." 
+                  />
                 </div>
               )}
 
               <div className="flex gap-3 pt-4 border-t border-ardoise-clair/10">
                 <Bouton variante="primaire" chargement={sauvegarde} onClick={handleCreer} className="flex-1">
-                  {modeCreation === "invitation" ? "Envoyer l'invitation" : "Créer l'agent"}
+                  {modeCreation === "invitation" ? "Envoyer l'invitation" : `Créer le ${getLibelleType().toLowerCase()}`}
                 </Bouton>
                 <Bouton variante="ghost" onClick={() => setAfficherFormulaire(false)}>Annuler</Bouton>
               </div>

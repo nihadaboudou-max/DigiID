@@ -12,7 +12,7 @@ from src.base_donnees.base import Base
 
 class AlertePolice(Base):
     __tablename__ = "alertes_police"
-
+    
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     officier_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
     type_alerte = Column(String(50), nullable=False)
@@ -24,100 +24,8 @@ class AlertePolice(Base):
     donnees_liees = Column(JSON, nullable=True)
     date_creation = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     date_lecture = Column(DateTime(timezone=True), nullable=True)
-
-    # --- Cloisonnement (NOUVEAU) ---
-    domaine_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("domaines.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-        comment="Domaine de rattachement"
-    )
-    departement_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("departements.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-        comment="Département de rattachement"
-    )
-
-    # Ajoute après les colonnes existantes :
-    domaine_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("domaines.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    departement_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("departements.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-
-    officier = relationship("Utilisateur", backref="alertes_police")
-
-
-class NoteInternePolice(Base):
-    __tablename__ = "notes_internes"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    officier_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
-    personne_digiid = Column(String(50), nullable=False, index=True)
-    titre = Column(String(200), nullable=False)
-    contenu = Column(Text, nullable=True)
-    categorie = Column(String(50), nullable=False, default="general")
-    est_important = Column(Boolean, nullable=False, default=False)
-    est_partagee = Column(Boolean, nullable=False, default=False)
-    date_creation = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    date_modification = Column(DateTime(timezone=True), nullable=True)
-
-    # --- Cloisonnement (NOUVEAU) ---
-    domaine_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("domaines.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-        comment="Domaine de rattachement"
-    )
-    departement_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("departements.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-        comment="Département de rattachement"
-    )
-
-    # Ajoute après les colonnes existantes :
-    domaine_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("domaines.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    departement_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("departements.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-
-    officier = relationship("Utilisateur", backref="notes_internes")
-
-
-class HistoriqueRecherchePolice(Base):
-    __tablename__ = "historique_recherches_police"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    officier_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
-    personne_digiid = Column(String(50), nullable=True, index=True)
-    type_recherche = Column(String(50), nullable=False, default="digiid")
-    terme_recherche = Column(String(255), nullable=True)
-    criteres_recherche = Column(JSON, nullable=True)
-    resultats_trouves = Column(Text, nullable=True)
-    date_recherche = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-
-    # --- Cloisonnement (NOUVEAU) ---
+    
+    # --- Cloisonnement ---
     domaine_id = Column(
         UUID(as_uuid=True),
         ForeignKey("domaines.id", ondelete="SET NULL"),
@@ -133,26 +41,76 @@ class HistoriqueRecherchePolice(Base):
         comment="Département de rattachement"
     )
     
-    # Ajoute après les colonnes existantes :
+    officier = relationship("Utilisateur", backref="alertes_police")
+
+
+class NoteInternePolice(Base):
+    __tablename__ = "notes_internes"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    officier_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
+    personne_digiid = Column(String(50), nullable=False, index=True)
+    titre = Column(String(200), nullable=False)
+    contenu = Column(Text, nullable=True)
+    categorie = Column(String(50), nullable=False, default="general")
+    est_important = Column(Boolean, nullable=False, default=False)
+    est_partagee = Column(Boolean, nullable=False, default=False)
+    date_creation = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    date_modification = Column(DateTime(timezone=True), nullable=True)
+    
+    # --- Cloisonnement ---
     domaine_id = Column(
         UUID(as_uuid=True),
         ForeignKey("domaines.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+        comment="Domaine de rattachement"
     )
     departement_id = Column(
         UUID(as_uuid=True),
         ForeignKey("departements.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-    )    
+        comment="Département de rattachement"
+    )
+    
+    officier = relationship("Utilisateur", backref="notes_internes")
 
+
+class HistoriqueRecherchePolice(Base):
+    __tablename__ = "historique_recherches_police"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    officier_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
+    personne_digiid = Column(String(50), nullable=True, index=True)
+    type_recherche = Column(String(50), nullable=False, default="digiid")
+    terme_recherche = Column(String(255), nullable=True)
+    criteres_recherche = Column(JSON, nullable=True)
+    resultats_trouves = Column(Text, nullable=True)
+    date_recherche = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    
+    # --- Cloisonnement ---
+    domaine_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("domaines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Domaine de rattachement"
+    )
+    departement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("departements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Département de rattachement"
+    )
+    
     officier = relationship("Utilisateur", backref="historique_recherches")
 
 
 class EnrolementPolice(Base):
     __tablename__ = "enrolements_police"
-
+    
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     officier_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
     personne_digiid = Column(String(50), nullable=True)
@@ -164,8 +122,8 @@ class EnrolementPolice(Base):
     notes = Column(Text, nullable=True)
     date_enrolement = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     date_completion = Column(DateTime(timezone=True), nullable=True)
-
-    # --- Cloisonnement (NOUVEAU) ---
+    
+    # --- Cloisonnement ---
     domaine_id = Column(
         UUID(as_uuid=True),
         ForeignKey("domaines.id", ondelete="SET NULL"),
@@ -180,27 +138,13 @@ class EnrolementPolice(Base):
         index=True,
         comment="Département de rattachement"
     )
-
-    # Ajoute après les colonnes existantes :
-    domaine_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("domaines.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    departement_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("departements.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-
+    
     officier = relationship("Utilisateur", backref="enrolements_police")
 
 
 class VerificationPolice(Base):
     __tablename__ = "verifications_police"
-
+    
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     officier_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
     personne_digiid = Column(String(50), nullable=False, index=True)
@@ -210,8 +154,8 @@ class VerificationPolice(Base):
     notes = Column(Text, nullable=True)
     date_verification = Column(DateTime, default=datetime.utcnow, nullable=False)
     est_signalement_fraude = Column(Boolean, default=False)
-
-    # --- Cloisonnement (NOUVEAU) ---
+    
+    # --- Cloisonnement ---
     domaine_id = Column(
         UUID(as_uuid=True),
         ForeignKey("domaines.id", ondelete="SET NULL"),
@@ -226,27 +170,13 @@ class VerificationPolice(Base):
         index=True,
         comment="Département de rattachement"
     )
-
-    # Ajoute après les colonnes existantes :
-    domaine_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("domaines.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    departement_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("departements.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-
+    
     officier = relationship("Utilisateur", backref="verifications_police")
 
 
 class SignalementFraude(Base):
     __tablename__ = "signalements_fraude"
-
+    
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     officier_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
     personne_digiid = Column(String(50), nullable=False, index=True)
@@ -255,8 +185,8 @@ class SignalementFraude(Base):
     statut = Column(String(20), default="en_cours")
     date_signalement = Column(DateTime, default=datetime.utcnow, nullable=False)
     date_traitement = Column(DateTime, nullable=True)
-
-    # --- Cloisonnement (NOUVEAU) ---
+    
+    # --- Cloisonnement ---
     domaine_id = Column(
         UUID(as_uuid=True),
         ForeignKey("domaines.id", ondelete="SET NULL"),
@@ -271,19 +201,5 @@ class SignalementFraude(Base):
         index=True,
         comment="Département de rattachement"
     )
-
-    # Ajoute après les colonnes existantes :
-    domaine_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("domaines.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    departement_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("departements.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-
+    
     officier = relationship("Utilisateur", backref="signalements_fraude")

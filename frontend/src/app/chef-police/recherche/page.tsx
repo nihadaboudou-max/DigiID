@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useEffect } from "react";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
@@ -103,9 +102,7 @@ function Contenu() {
         <h1>Recherche d'agents de police</h1>
         <p className="text-ardoise-clair mt-2">Recherchez des agents par nom, email, DigiID, matricule ou ville</p>
       </div>
-
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
-
       <Carte>
         <div className="space-y-4">
           <div>
@@ -149,7 +146,6 @@ function Contenu() {
           </div>
         </div>
       </Carte>
-
       {resultats.length > 0 && (
         <div className="grid grid-cols-3 gap-4">
           <Carte className="text-center p-4"><p className="text-2xl font-bold text-lagune">{stats.total}</p><p className="text-xs text-ardoise-clair">Résultats</p></Carte>
@@ -157,7 +153,6 @@ function Contenu() {
           <Carte className="text-center p-4"><p className="text-2xl font-bold text-terre">{stats.inactifs}</p><p className="text-xs text-ardoise-clair">Inactifs</p></Carte>
         </div>
       )}
-
       <Carte titre="Résultats de la recherche">
         {chargement ? (
           <div className="text-center py-8">
@@ -166,7 +161,7 @@ function Contenu() {
           </div>
         ) : resultats.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-4xl mb-3">🔍</p>
+            <p className="text-4xl mb-3"></p>
             <p className="text-ardoise-clair italic">{recherche ? "Aucun résultat trouvé." : "Commencez une recherche."}</p>
           </div>
         ) : (
@@ -195,7 +190,6 @@ function Contenu() {
           </div>
         )}
       </Carte>
-
       <Carte titre="💡 Astuces de recherche">
         <div className="grid md:grid-cols-2 gap-4 text-sm text-ardoise-clair">
           <div>

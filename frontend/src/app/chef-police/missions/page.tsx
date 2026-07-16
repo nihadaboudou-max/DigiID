@@ -1,5 +1,4 @@
 "use client";
-
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import GestionMissionsChef from "@/composants/chefs/GestionMissionsChef";
 

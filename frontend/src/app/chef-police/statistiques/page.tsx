@@ -1,5 +1,4 @@
 "use client";
-
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import StatistiquesChef from "@/composants/chefs/StatistiquesChef";
 

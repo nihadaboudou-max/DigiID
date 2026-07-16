@@ -8,10 +8,8 @@ import string
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
-
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.modeles import Utilisateur
 from src.noyau import dechiffrer_donnee, chiffrer_donnee, journal
 from src.noyau.constantes_roles import (
@@ -41,12 +39,6 @@ def _generer_mot_de_passe_temporaire() -> str:
 async def _verifier_chef_peut_creer(chef: Utilisateur, role_cible: str) -> bool:
     """
     Vérifie si un chef peut créer un agent avec le rôle cible.
-    
-    Règles :
-    - chef_police peut créer agent_police
-    - chef_medical peut créer agent_medical
-    - chef_ong peut créer agent_ong
-    - chef_agent peut créer agent_terrain
     """
     if chef.role == RoleUtilisateur.CHEF_POLICE:
         return role_cible == RoleUtilisateur.AGENT_POLICE
@@ -82,31 +74,23 @@ async def creer_agent_police(
     chef: Utilisateur,
     data: dict,
 ) -> Utilisateur:
-    """
-    Crée un agent police par un chef police.
-    L'agent est automatiquement assigné au département du chef.
-    """
-    # Vérifier les permissions
+    """Crée un agent police par un chef police."""
     if not await _verifier_chef_peut_creer(chef, RoleUtilisateur.AGENT_POLICE):
         raise ErreurAutorisation(
             "Vous n'avez pas l'autorisation de créer des agents police.",
             message_utilisateur="Seuls les chefs police peuvent créer des agents police."
         )
     
-    # Vérifier que l'email n'existe pas déjà
     if await _email_existe_deja(session, data["email"]):
         raise ErreurValidation(
             f"L'email {data['email']} est déjà utilisé.",
             message_utilisateur="Cet email est déjà associé à un compte."
         )
     
-    # Générer les identifiants
     digiid = _generer_digiid()
     mot_de_passe = _generer_mot_de_passe_temporaire()
     
-    # Créer l'utilisateur
     from src.config.constantes import hasher_mdp, hasher_email
-    from src.modeles.utilisateur import Utilisateur
     
     agent = Utilisateur(
         digiid_public=digiid,
@@ -136,8 +120,6 @@ async def creer_agent_police(
         f"Agent police créé | chef={chef.id} | agent={agent.id} | "
         f"digiid={digiid} | email={data['email']}"
     )
-    
-    # TODO: Envoyer email d'invitation avec mot de passe temporaire
     
     return agent
 
@@ -317,9 +299,18 @@ async def lister_agents_chef(
     page: int = 1,
     par_page: int = 20,
 ) -> tuple[list[Utilisateur], int]:
-    """Liste les agents créés par un chef."""
+    """Liste TOUS les agents du domaine du chef (pas seulement ceux qu'il a créés)."""
+    # ✅ CORRECTION : Filtrer par domaine_id, pas par superieur_id
+    roles_agents = [
+        RoleUtilisateur.AGENT_POLICE,
+        RoleUtilisateur.AGENT_MEDICAL,
+        RoleUtilisateur.AGENT_ONG,
+        RoleUtilisateur.AGENT_TERRAIN,
+    ]
+    
     query = select(Utilisateur).where(
-        Utilisateur.superieur_id == chef.id,
+        Utilisateur.domaine_id == chef.domaine_id,
+        Utilisateur.role.in_(roles_agents),
         Utilisateur.est_supprime == False
     )
     
@@ -338,23 +329,22 @@ async def lister_agents_chef(
     
     return list(agents), total
 
+
 # =============================================================================
 # Statistiques
 # =============================================================================
+
 async def obtenir_statistiques_chef(
     session: AsyncSession,
     chef: Utilisateur,
 ) -> dict:
     """Obtient les statistiques pour le dashboard d'un chef."""
-    
-    # ✅ CORRECTION : On filtre par domaine_id ET par les rôles d'agents, 
-    # car superieur_id peut parfois être nul ou ne pas refléter tout le périmètre du chef.
+    # ✅ CORRECTION : Filtrer par domaine_id pour voir TOUS les agents du domaine
     roles_agents = [
         RoleUtilisateur.AGENT_POLICE,
         RoleUtilisateur.AGENT_MEDICAL,
         RoleUtilisateur.AGENT_ONG,
         RoleUtilisateur.AGENT_TERRAIN,
-        "ong"  # Ajoute ici tout autre rôle d'agent pertinent
     ]
     
     filtre_base = and_(
@@ -384,7 +374,6 @@ async def obtenir_statistiques_chef(
     # Agents créés aujourd'hui
     aujourdhui = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     
-    # Astuce : utilise 'cree_le' ou 'date_creation' selon le nom exact de ta colonne dans le modèle Utilisateur
     date_column = getattr(Utilisateur, 'cree_le', getattr(Utilisateur, 'date_creation', Utilisateur.id))
     
     result = await session.execute(
