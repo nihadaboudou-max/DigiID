@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useEffect } from "react";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
@@ -7,6 +6,7 @@ import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { listerMedecins } from "@/services/chefs";
 import type { AgentResponse } from "@/services/chefs";
+import { Alerte } from "@/composants/commun/Alerte";
 
 export default function ChefMedicalRecherchePage() {
   return (
@@ -26,9 +26,7 @@ function Contenu() {
   const [tousLesAgents, setTousLesAgents] = useState<AgentResponse[]>([]);
   const [villesDisponibles, setVillesDisponibles] = useState<string[]>([]);
 
-  useEffect(() => {
-    chargerTousLesAgents();
-  }, []);
+  useEffect(() => { chargerTousLesAgents(); }, []);
 
   async function chargerTousLesAgents() {
     try {
@@ -41,9 +39,7 @@ function Contenu() {
     }
   }
 
-  useEffect(() => {
-    effectuerRecherche();
-  }, [recherche, filtreVille, filtreStatut]);
+  useEffect(() => { effectuerRecherche(); }, [recherche, filtreVille, filtreStatut]);
 
   function effectuerRecherche() {
     setChargement(true);
@@ -58,17 +54,10 @@ function Contenu() {
             const email = agent.email.toLowerCase();
             const digiid = agent.digiid_public.toLowerCase();
             const ville = (agent.ville || "").toLowerCase();
-            return (
-              nomComplet.includes(termeRecherche) ||
-              email.includes(termeRecherche) ||
-              digiid.includes(termeRecherche) ||
-              ville.includes(termeRecherche)
-            );
+            return nomComplet.includes(termeRecherche) || email.includes(termeRecherche) || digiid.includes(termeRecherche) || ville.includes(termeRecherche);
           });
         }
-        if (filtreVille) {
-          resultatsFiltres = resultatsFiltres.filter((agent) => agent.ville === filtreVille);
-        }
+        if (filtreVille) resultatsFiltres = resultatsFiltres.filter((agent) => agent.ville === filtreVille);
         if (filtreStatut !== "tous") {
           const estActif = filtreStatut === "actif";
           resultatsFiltres = resultatsFiltres.filter((agent) => agent.est_actif === estActif);
@@ -83,10 +72,7 @@ function Contenu() {
   }
 
   function reinitialiserFiltres() {
-    setRecherche("");
-    setFiltreVille("");
-    setFiltreStatut("tous");
-    setResultats(tousLesAgents);
+    setRecherche(""); setFiltreVille(""); setFiltreStatut("tous"); setResultats(tousLesAgents);
   }
 
   const stats = {
@@ -99,42 +85,32 @@ function Contenu() {
     <div className="min-h-screen space-y-6 apparition pb-20">
       <div>
         <p className="text-lagune font-semibold text-sm uppercase tracking-wider">🔍 Recherche</p>
-        <h1>Recherche de médecins</h1>
+        <h1>Recherche d'agents médicaux</h1>
         <p className="text-ardoise-clair mt-2">Recherchez des médecins par nom, email, DigiID ou ville</p>
       </div>
-
-      {erreur && <div className="bg-terre/10 border-l-4 border-terre p-4 rounded"><p className="text-sm text-terre">{erreur}</p></div>}
-
+      {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
+      
       <Carte>
         <div className="space-y-4">
           <div>
             <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-2">Terme de recherche</label>
             <div className="relative">
-              <input
-                type="text"
-                placeholder="Rechercher par nom, prénom, email, DigiID ou ville..."
-                value={recherche}
-                onChange={(e) => setRecherche(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-ardoise-clair/20 rounded-lg text-sm"
-                autoFocus
-              />
+              <input type="text" placeholder="Rechercher..." value={recherche} onChange={(e) => setRecherche(e.target.value)} className="w-full pl-10 pr-4 py-3 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30" autoFocus />
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ardoise-clair">🔍</span>
-              {recherche && (
-                <button onClick={() => setRecherche("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-ardoise-clair hover:text-ardoise">✕</button>
-              )}
+              {recherche && <button onClick={() => setRecherche("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-ardoise-clair hover:text-ardoise">✕</button>}
             </div>
           </div>
           <div className="grid md:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Ville</label>
-              <select value={filtreVille} onChange={(e) => setFiltreVille(e.target.value)} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm">
+              <select value={filtreVille} onChange={(e) => setFiltreVille(e.target.value)} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30">
                 <option value="">Toutes les villes</option>
                 {villesDisponibles.map((ville) => (<option key={ville} value={ville}>{ville}</option>))}
               </select>
             </div>
             <div>
               <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Statut</label>
-              <select value={filtreStatut} onChange={(e) => setFiltreStatut(e.target.value as any)} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm">
+              <select value={filtreStatut} onChange={(e) => setFiltreStatut(e.target.value as any)} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30">
                 <option value="tous">Tous les statuts</option>
                 <option value="actif">Actifs</option>
                 <option value="inactif">Inactifs</option>
@@ -165,7 +141,7 @@ function Contenu() {
         ) : (
           <div className="space-y-3">
             {resultats.map((agent) => (
-              <div key={agent.id} className="flex items-center justify-between p-4 bg-sable rounded-lg hover:bg-sable/80 transition-colors">
+              <div key={agent.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-sable rounded-lg hover:bg-sable/80 transition-colors gap-3">
                 <div className="flex items-center gap-4 min-w-0 flex-1">
                   <div className="w-12 h-12 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold flex-shrink-0">{(agent.prenom[0] || "") + (agent.nom[0] || "")}</div>
                   <div className="min-w-0">

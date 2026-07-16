@@ -286,3 +286,28 @@ export async function supprimerAgent(agentId: string): Promise<void> {
     { authentifie: true }
   );
 }
+
+export interface AuditLog {
+  id: string;
+  date_evenement: string;
+  agent_nom: string;
+  agent_role: string;
+  type_evenement: string;
+  description: string;
+  adresse_ip: string | null;
+  donnees_supplementaires: Record<string, unknown> | null;
+}
+
+export async function listerAuditChef(params?: {
+  date_debut?: string;
+  date_fin?: string;
+  agent_id?: string;
+  type_action?: string;
+  page?: number;
+  par_page?: number;
+}): Promise<{ logs: AuditLog[]; total: number; page: number; par_page: number }> {
+  return clientAPI.get("/api/v1/chefs/audit", {
+    authentifie: true,
+    params,
+  });
+}

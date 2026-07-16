@@ -18,7 +18,8 @@ from src.noyau.constantes_roles import (
     obtenir_type_departement_depuis_role,
 )
 from src.noyau.exceptions import ErreurValidation, ErreurAutorisation
-
+from src.modeles import JournalAudit
+from datetime import datetime
 
 # =============================================================================
 # Fonctions utilitaires
@@ -410,3 +411,78 @@ async def obtenir_statistiques_chef(
         "agents_crees_ce_mois": agents_ce_mois,
         "dernier_agent_cree": dernier_agent,
     }
+    
+
+async def obtenir_audit_chef(
+    session: AsyncSession,
+    chef: Utilisateur,
+    date_debut: Optional[datetime] = None,
+    date_fin: Optional[datetime] = None,
+    agent_id: Optional[UUID] = None,
+    type_action: Optional[str] = None,
+    page: int = 1,
+    par_page: int = 50,
+) -> tuple[list[dict], int]:
+    """Obtient le journal d'audit de tous les agents sous la supervision du chef."""
+    
+    # 1. Identifier tous les agents du domaine/département du chef
+    # On inclut les rôles d'agents génériques et spécifiques
+    roles_agents = ["agent_police", "agent_ong", "agent_medical", "agent_terrain", "police", "ong", "medecin", "agent"]
+    
+    agent_query = select(Utilisateur.id).where(
+        Utilisateur.domaine_id == chef.domaine_id,
+        Utilisateur.departement_id == chef.departement_id,
+        Utilisateur.role.in_(roles_agents),
+        Utilisateur.est_actif == True
+    )
+    
+    if agent_id:
+        agent_query = agent_query.where(Utilisateur.id == agent_id)
+
+    agent_result = await session.execute(agent_query)
+    agent_ids = [row[0] for row in agent_result.all()]
+
+    if not agent_ids:
+        return [], 0
+
+    # 2. Interroger le JournalAudit pour ces agents
+    query = select(JournalAudit, Utilisateur).join(
+        Utilisateur, JournalAudit.utilisateur_id == Utilisateur.id
+    ).where(
+        JournalAudit.utilisateur_id.in_(agent_ids)
+    )
+
+    if date_debut:
+        query = query.where(JournalAudit.date_evenement >= date_debut)
+    if date_fin:
+        query = query.where(JournalAudit.date_evenement <= date_fin)
+    if type_action:
+        query = query.where(JournalAudit.type_evenement == type_action)
+
+    query = query.order_by(JournalAudit.date_evenement.desc())
+
+    # Compter le total pour la pagination
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await session.execute(count_query)).scalar() or 0
+
+    # Paginer
+    query = query.offset((page - 1) * par_page).limit(par_page)
+    result = await session.execute(query)
+
+    logs = []
+    for audit, agent in result.all():
+        prenom = dechiffrer_donnee(agent.prenom_chiffre) if agent.prenom_chiffre else ""
+        nom = dechiffrer_donnee(agent.nom_chiffre) if agent.nom_chiffre else ""
+        
+        logs.append({
+            "id": str(audit.id),
+            "date_evenement": audit.date_evenement.isoformat() if audit.date_evenement else None,
+            "agent_nom": f"{prenom} {nom}".strip() or "Agent Inconnu",
+            "agent_role": agent.role,
+            "type_evenement": audit.type_evenement,
+            "description": audit.description,
+            "adresse_ip": audit.adresse_ip,
+            "donnees_supplementaires": audit.donnees_supplementaires,
+        })
+        
+    return logs, total

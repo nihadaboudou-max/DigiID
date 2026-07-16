@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Badge } from "@/composants/commun/Badge";
@@ -99,7 +100,7 @@ function Contenu() {
   return (
     <div className="min-h-screen space-y-6 apparition pb-20">
       <div>
-        <p className="text-lagune font-semibold text-sm uppercase tracking-wider"> Recherche</p>
+        <p className="text-terre font-semibold text-sm uppercase tracking-wider">🔍 Recherche</p>
         <h1>Recherche d'agents terrain</h1>
         <p className="text-ardoise-clair mt-2">Recherchez des agents par nom, email, DigiID ou ville</p>
       </div>
@@ -116,7 +117,7 @@ function Contenu() {
                 placeholder="Rechercher par nom, prénom, email, DigiID ou ville..."
                 value={recherche}
                 onChange={(e) => setRecherche(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30"
+                className="w-full pl-10 pr-4 py-3 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-terre/30"
                 autoFocus
               />
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ardoise-clair">🔍</span>
@@ -128,14 +129,14 @@ function Contenu() {
           <div className="grid md:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Ville</label>
-              <select value={filtreVille} onChange={(e) => setFiltreVille(e.target.value)} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30">
+              <select value={filtreVille} onChange={(e) => setFiltreVille(e.target.value)} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-terre/30">
                 <option value="">Toutes les villes</option>
                 {villesDisponibles.map((ville) => (<option key={ville} value={ville}>{ville}</option>))}
               </select>
             </div>
             <div>
               <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Statut</label>
-              <select value={filtreStatut} onChange={(e) => setFiltreStatut(e.target.value as any)} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-lagune/30">
+              <select value={filtreStatut} onChange={(e) => setFiltreStatut(e.target.value as any)} className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-terre/30">
                 <option value="tous">Tous les statuts</option>
                 <option value="actif">Actifs</option>
                 <option value="inactif">Inactifs</option>
@@ -161,7 +162,7 @@ function Contenu() {
       <Carte titre="Résultats de la recherche">
         {chargement ? (
           <div className="text-center py-8">
-            <div className="animate-spin w-8 h-8 border-4 border-lagune border-t-transparent rounded-full mx-auto mb-3"></div>
+            <div className="animate-spin w-8 h-8 border-4 border-terre border-t-transparent rounded-full mx-auto mb-3"></div>
             <p className="text-ardoise-clair">Recherche en cours...</p>
           </div>
         ) : resultats.length === 0 ? (
@@ -174,7 +175,9 @@ function Contenu() {
             {resultats.map((agent) => (
               <div key={agent.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-sable rounded-lg hover:bg-sable/80 transition-colors gap-3">
                 <div className="flex items-center gap-4 min-w-0 flex-1">
-                  <div className="w-12 h-12 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold flex-shrink-0">{(agent.prenom[0] || "") + (agent.nom[0] || "")}</div>
+                  <div className="w-12 h-12 rounded-full bg-terre/10 flex items-center justify-center text-terre font-bold flex-shrink-0">
+                    {(agent.prenom[0] || "") + (agent.nom[0] || "")}
+                  </div>
                   <div className="min-w-0">
                     <p className="font-bold text-ardoise truncate">{agent.prenom} {agent.nom}</p>
                     <p className="text-sm text-ardoise-clair truncate">{agent.email}</p>
@@ -186,9 +189,12 @@ function Contenu() {
                   </div>
                 </div>
                 <div className="flex-shrink-0">
-                  <button className="px-3 py-1 text-xs bg-lagune text-white rounded hover:bg-lagune/90 transition-colors">
-                    Voir profil
-                  </button>
+                  {/* ✅ Amélioration : Le bouton est maintenant un lien vers la page de l'équipe */}
+                  <Link href="/chef-enrolement/equipe">
+                    <button className="px-3 py-1 text-xs bg-terre text-white rounded hover:bg-terre/90 transition-colors">
+                      Voir profil
+                    </button>
+                  </Link>
                 </div>
               </div>
             ))}

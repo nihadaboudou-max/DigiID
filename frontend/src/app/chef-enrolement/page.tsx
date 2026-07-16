@@ -1,5 +1,4 @@
 "use client";
-
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import DashboardChef from "@/composants/chefs/DashboardChef";
 
@@ -8,7 +7,7 @@ export default function ChefEnrolementPage() {
     <EnvelopperEspaceProtege rolesAutorises={["chef_agent", "super_administrateur", "admin_domaine"]}>
       <DashboardChef
         titre="Chef Enrôlement"
-        sousTitre="Gestion des agents terrain d'enrôlement"
+        sousTitre="Gestion des agents de terrain et d'enrôlement"
         typeAgent="enrolement"
         iconeDashboard="📋"
       />

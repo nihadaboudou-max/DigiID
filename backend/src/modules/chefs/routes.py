@@ -1228,3 +1228,44 @@ async def supprimer_rapport_chef(
     
     await session.delete(rapport)
     await session.commit()
+    
+
+@routeur_chefs.get(
+    "/audit",
+)
+async def obtenir_audit_equipe(
+    chef: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    date_debut: str | None = Query(None),
+    date_fin: str | None = Query(None),
+    agent_id: str | None = Query(None),
+    type_action: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    par_page: int = Query(50, ge=1, le=200),
+):
+    """
+    Obtient le journal d'audit de tous les agents sous la supervision du chef.
+    """
+    chef = await verifier_est_chef(chef)
+    
+    dt_debut = datetime.fromisoformat(date_debut) if date_debut else None
+    dt_fin = datetime.fromisoformat(date_fin) if date_fin else None
+    uuid_agent = UUID(agent_id) if agent_id else None
+
+    logs, total = await service.obtenir_audit_chef(
+        session=session,
+        chef=chef,
+        date_debut=dt_debut,
+        date_fin=dt_fin,
+        agent_id=uuid_agent,
+        type_action=type_action,
+        page=page,
+        par_page=par_page,
+    )
+
+    return {
+        "logs": logs,
+        "total": total,
+        "page": page,
+        "par_page": par_page,
+    }

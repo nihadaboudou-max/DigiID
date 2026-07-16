@@ -1,14 +1,13 @@
 "use client";
-
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import GestionAgentsChef from "@/composants/chefs/GestionAgentsChef";
 
-export default function ChefMedicalAgentsPage() {
+export default function ChefMedicalEquipePage() {
   return (
     <EnvelopperEspaceProtege rolesAutorises={["chef_medical", "super_administrateur", "admin_domaine"]}>
       <GestionAgentsChef
-        titre="Médecins & Agents Médicaux"
-        sousTitre="Gérez votre équipe de médecins et agents médicaux"
+        titre="Équipe Médicale"
+        sousTitre="Gérez vos médecins et agents de santé"
         typeAgent="medical"
       />
     </EnvelopperEspaceProtege>
