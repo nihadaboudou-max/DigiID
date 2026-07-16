@@ -119,13 +119,13 @@ class VerificationCNI(Base, MelangeTracabilite):
 
     # --- MRZ ---
     mrz_ligne_1: Mapped[Optional[str]] = mapped_column(
-        String(30), nullable=True, doc="Ligne 1 de la MRZ (30 car.)"
+        String(50), nullable=True, doc="Ligne 1 de la MRZ (30 car.)"
     )
     mrz_ligne_2: Mapped[Optional[str]] = mapped_column(
-        String(30), nullable=True, doc="Ligne 2 de la MRZ (30 car.)"
+        String(50), nullable=True, doc="Ligne 2 de la MRZ (30 car.)"
     )
     mrz_ligne_3: Mapped[Optional[str]] = mapped_column(
-        String(30), nullable=True, doc="Ligne 3 de la MRZ (30 car.)"
+        String(50), nullable=True, doc="Ligne 3 de la MRZ (30 car.)"
     )
 
     # --- Métadonnées OCR ---
