@@ -39,18 +39,13 @@ def _appliquer_filtres_cloisonnement(
     """Applique les filtres de cloisonnement selon le rôle de l'utilisateur."""
     if _est_super_admin(utilisateur):
         return query  # Super admin voit tout
-    
     conditions = []
     if utilisateur.domaine_id:
         conditions.append(modele.domaine_id == utilisateur.domaine_id)
-    
-    # Admin domaine voit tout son domaine, pas besoin de filtrer par département
     if utilisateur.role not in ["admin_domaine"] and utilisateur.departement_id:
         conditions.append(modele.departement_id == utilisateur.departement_id)
-    
     if conditions:
         query = query.where(and_(*conditions))
-    
     return query
 
 
@@ -60,7 +55,7 @@ def _appliquer_filtres_cloisonnement(
 
 async def creer_verification(
     session: AsyncSession,
-    officier: Utilisateur,  # Changé de officier_id à officier complet
+    officier: Utilisateur,
     data: dict,
 ) -> VerificationPolice:
     """Crée une nouvelle vérification d'identité avec motif et cloisonnement."""
@@ -78,10 +73,9 @@ async def creer_verification(
                 data["personne_email"] = dechiffrer_donnee(utilisateur.email_chiffre) if utilisateur.email_chiffre else ""
             if not data.get("personne_telephone"):
                 data["personne_telephone"] = dechiffrer_donnee(utilisateur.telephone_chiffre) if utilisateur.telephone_chiffre else ""
-    
-    data.pop("personne_id", None)
-    
-    # --- Cloisonnement automatique (NOUVEAU) ---
+        data.pop("personne_id", None)
+
+    # --- Cloisonnement automatique ---
     verification = VerificationPolice(
         officier_id=officier.id,
         domaine_id=officier.domaine_id,
@@ -560,19 +554,30 @@ async def supprimer_note(session: AsyncSession, note_id: UUID, utilisateur: Util
 # ALERTES EN TEMPS RÉEL
 # =============================================================================
 
-async def creer_alerte(session: AsyncSession, officier: Utilisateur, data: dict) -> AlertePolice:
-    """Crée une alerte pour un officier avec cloisonnement."""
-    alerte = AlertePolice(
-        officier_id=officier.id,
-        domaine_id=officier.domaine_id,
-        departement_id=officier.departement_id,
-        **data
-    )
-    session.add(alerte)
+async def creer_alerte_pour_tous(
+    session: AsyncSession, type_alerte: str, titre: str, message: str,
+    niveau: str = "info", donnees_liees: Optional[dict] = None,
+) -> int:
+    """Crée une alerte pour TOUS les officiers de police."""
+    result = await session.execute(select(Utilisateur).where(Utilisateur.role == "police", Utilisateur.est_actif == True))
+    officiers = result.scalars().all()
+    nb_alertes = 0
+    for off in officiers:
+        alerte = AlertePolice(
+            officier_id=off.id,
+            type_alerte=type_alerte,
+            titre=titre,
+            message=message,
+            niveau=niveau,
+            donnees_liees=donnees_liees,
+            domaine_id=off.domaine_id,
+            departement_id=off.departement_id,
+        )
+        session.add(alerte)
+        nb_alertes += 1
     await session.commit()
-    await session.refresh(alerte)
-    return alerte
-
+    journal.info(f"Alertes créées pour {nb_alertes} officiers: {titre}")
+    return nb_alertes
 
 async def obtenir_alertes(
     session: AsyncSession,
