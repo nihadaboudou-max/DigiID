@@ -1036,7 +1036,7 @@ async def _enregistrer_recherche(
         officier_id=officier_id,
         type_recherche=type_recherche,
         terme_recherche=terme[:255],
-        resultats_trouves=resultats,
+        resultats_trouves=str(resultats),
     )
     
     # --- Cloisonnement automatique (NOUVEAU) ---
