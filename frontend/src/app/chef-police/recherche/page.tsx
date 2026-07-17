@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation"; // ✅ Importer useRouter
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Badge } from "@/composants/commun/Badge";
@@ -17,6 +18,7 @@ export default function ChefPoliceRecherchePage() {
 }
 
 function Contenu() {
+  const router = useRouter(); // ✅ Initialiser le router
   const [recherche, setRecherche] = useState("");
   const [filtreVille, setFiltreVille] = useState("");
   const [filtreStatut, setFiltreStatut] = useState<"tous" | "actif" | "inactif">("tous");
@@ -87,6 +89,11 @@ function Contenu() {
     setFiltreVille("");
     setFiltreStatut("tous");
     setResultats(tousLesAgents);
+  }
+
+  // ✅ Fonction pour voir le profil
+  function voirProfil(agentId: string) {
+    router.push(`/chefs/police/agents/${agentId}`);
   }
 
   const stats = {
@@ -161,7 +168,7 @@ function Contenu() {
           </div>
         ) : resultats.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-4xl mb-3"></p>
+            <p className="text-4xl mb-3">🔍</p>
             <p className="text-ardoise-clair italic">{recherche ? "Aucun résultat trouvé." : "Commencez une recherche."}</p>
           </div>
         ) : (
@@ -181,7 +188,10 @@ function Contenu() {
                   </div>
                 </div>
                 <div className="flex-shrink-0">
-                  <button className="px-3 py-1 text-xs bg-terre text-white rounded hover:bg-terre/90 transition-colors">
+                  <button 
+                    onClick={() => voirProfil(agent.id)} // ✅ Ajouter onClick
+                    className="px-3 py-1 text-xs bg-terre text-white rounded hover:bg-terre/90 transition-colors"
+                  >
                     Voir profil
                   </button>
                 </div>
