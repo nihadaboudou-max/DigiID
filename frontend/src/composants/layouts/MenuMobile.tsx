@@ -1,9 +1,9 @@
 "use client";
 /**
- * Menu mobile (hamburger) — version mobile de la BarreLaterale.
- * S'affiche sous la forme d'un drawer glissant depuis la gauche.
- * Palette : Lagune, Ocre, Sable, Ardoise.
- */
+Menu mobile (hamburger) — version mobile de la BarreLaterale.
+S'affiche sous la forme d'un drawer glissant depuis la gauche.
+Palette : Lagune, Ocre, Sable, Ardoise.
+*/
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -78,32 +78,35 @@ const LIENS_CHEF_ONG: Lien[] = [
 
 const LIENS_CHEF_POLICE: Lien[] = [
   { href: "/chef-police", libelle: "Tableau de bord", Icone: IconeAccueil },
-  { href: "/chef-police/agents", libelle: "Agents Police", Icone: IconeUtilisateur },
+  { href: "/chef-police/equipe", libelle: "Mon équipe", Icone: IconeUtilisateur },
+  { href: "/chef-police/audit", libelle: "Audit & Traçabilité", Icone: IconeJournal },
   { href: "/chef-police/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
   { href: "/chef-police/recherche", libelle: "Recherche", Icone: IconeScan },
-  { href: "/chef-police/missions", libelle: "Missions", Icone: IconePartage },
   { href: "/chef-police/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
-  { href: "/chef-police/rapports", libelle: "Rapports", Icone: IconeJournal },
+  { href: "/chef-police/activites", libelle: "Activités", Icone: IconeJournal },
+  { href: "/chef-police/rapports", libelle: "Rapports", Icone: IconePartage },
 ];
 
 const LIENS_CHEF_MEDICAL: Lien[] = [
   { href: "/chef-medical", libelle: "Tableau de bord", Icone: IconeAccueil },
-  { href: "/chef-medical/agents", libelle: "Médecins", Icone: IconeUtilisateur },
+  { href: "/chef-medical/equipe", libelle: "Médecins", Icone: IconeUtilisateur },
+  { href: "/chef-medical/audit", libelle: "Audit & Traçabilité", Icone: IconeJournal },
   { href: "/chef-medical/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
   { href: "/chef-medical/recherche", libelle: "Recherche", Icone: IconeScan },
-  { href: "/chef-medical/missions", libelle: "Missions", Icone: IconePartage },
   { href: "/chef-medical/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
-  { href: "/chef-medical/rapports", libelle: "Rapports", Icone: IconeJournal },
+  { href: "/chef-medical/activites", libelle: "Activités", Icone: IconeJournal },
+  { href: "/chef-medical/rapports", libelle: "Rapports", Icone: IconePartage },
 ];
 
 const LIENS_CHEF_ENROLEMENT: Lien[] = [
   { href: "/chef-enrolement", libelle: "Tableau de bord", Icone: IconeAccueil },
-  { href: "/chef-enrolement/agents", libelle: "Agents terrain", Icone: IconeUtilisateur },
+  { href: "/chef-enrolement/equipe", libelle: "Agents terrain", Icone: IconeUtilisateur },
+  { href: "/chef-enrolement/audit", libelle: "Audit & Traçabilité", Icone: IconeJournal },
   { href: "/chef-enrolement/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
   { href: "/chef-enrolement/recherche", libelle: "Recherche", Icone: IconeScan },
-  { href: "/chef-enrolement/missions", libelle: "Missions", Icone: IconePartage },
   { href: "/chef-enrolement/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
-  { href: "/chef-enrolement/rapports", libelle: "Rapports", Icone: IconeJournal },
+  { href: "/chef-enrolement/activites", libelle: "Activités", Icone: IconeJournal },
+  { href: "/chef-enrolement/rapports", libelle: "Rapports", Icone: IconePartage },
 ];
 
 // ---- Composant section pliable mobile ----
@@ -151,14 +154,18 @@ export function BoutonMenuMobile() {
   const [ouvert, setOuvert] = useState(false);
   const pathname = usePathname();
   const { utilisateur } = useAuthentification();
+
   if (!utilisateur) return null;
 
   const estSuperAdminRole = utilisateur.role === "super_administrateur";
   const estAdminRole = utilisateur.role === "administrateur";
-  const estMedecin = utilisateur.role === "medecin";
-  const estAgent = utilisateur.role === "agent";
-  const estPolice = utilisateur.role === "police";
-  const estOng = utilisateur.role === "ong";
+  
+  // ✅ CORRECTION : Utiliser les bons noms de rôles
+  const estMedecin = utilisateur.role === "agent_medical";
+  const estAgent = utilisateur.role === "agent_terrain";
+  const estPolice = utilisateur.role === "agent_police";
+  const estOng = utilisateur.role === "agent_ong";
+
   // ✅ NOUVEAU : Détection des rôles chefs
   const estChefOng = utilisateur.role === "chef_ong";
   const estChefPolice = utilisateur.role === "chef_police";
@@ -276,7 +283,6 @@ export function BoutonMenuMobile() {
 
             {/* Navigation */}
             <nav className="p-3">
-
               {/* ============================================================ */}
               {/* SUPER ADMIN — Menu épuré (PAS de sections citoyen) */}
               {/* ============================================================ */}
@@ -344,8 +350,6 @@ export function BoutonMenuMobile() {
                       })}
                     </div>
                   </SectionPlieMobile>
-
-                  {/* ✅ FIN DU MENU SUPER ADMIN — PAS de Score/Attestations/Identité/Mon espace */}
                 </>
               )}
 
@@ -421,7 +425,6 @@ export function BoutonMenuMobile() {
               {/* ============================================================ */}
               {/* ✅ NOUVEAU : CHEFS DE DÉPARTEMENT */}
               {/* ============================================================ */}
-
               {/* Chef ONG */}
               {estChefOng && (
                 <>
@@ -526,7 +529,6 @@ export function BoutonMenuMobile() {
               {/* RÔLES PROFESSIONNELS (Médecin, Agent, Police, ONG) */}
               {/* Chaque rôle a son menu pro + le menu citoyen complet */}
               {/* ============================================================ */}
-
               {/* Médecin */}
               {estMedecin && (
                 <>
@@ -600,11 +602,9 @@ export function BoutonMenuMobile() {
                         { href: "/police/verification", libelle: "Vérification", Icone: IconeBouclier },
                         { href: "/police/recherche", libelle: "Recherche", Icone: IconeScan },
                         { href: "/police/scan-qr", libelle: "Scan QR Code", Icone: IconeScan },
-                        // --- Outils avancés ---
                         { href: "/police/comparaison-photos", libelle: "Comparaison photos", Icone: IconeVisage },
                         { href: "/police/carte", libelle: "Carte géographique", Icone: IconeStatistique },
                         { href: "/police/alertes", libelle: "Alertes temps réel", Icone: IconeAlerte },
-                        // --- Gestion ---
                         { href: "/police/notes", libelle: "Notes internes", Icone: IconeJournal },
                         { href: "/police/historique", libelle: "Historique", Icone: IconeJournal },
                         { href: "/police/audit", libelle: "Journal d'audit", Icone: IconeBouclier },
@@ -765,8 +765,8 @@ export function BoutonMenuMobile() {
 }
 
 /**
- * Sous-composant : menu citoyen complet (réutilisé par les rôles professionnels et les chefs)
- */
+Sous-composant : menu citoyen complet (réutilisé par les rôles professionnels et les chefs)
+*/
 function MenuCitoyenComplet({
   pathname,
   setOuvert,
