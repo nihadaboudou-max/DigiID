@@ -23,9 +23,9 @@ export default function PageTableauDeBord() {
   return (
     // ✅ CORRECTION : Ajout des rôles de chefs
     <EnvelopperEspaceProtege rolesAutorises={[
-      "citoyen", "agent", "medecin", "police", "ong",
-      "chef_police", "chef_medical", "chef_ong", "chef_agent",
-      "administrateur", "super_administrateur"
+      "citoyen", "agent_police", "chef_police", "agent_medical", "chef_medical", 
+      "agent_ong", "chef_ong", "agent_terrain", "chef_agent", "admin_domaine", 
+      "administrateur", "super_administrateur",
     ]}>
       <Contenu />
     </EnvelopperEspaceProtege>

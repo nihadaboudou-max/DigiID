@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link"; // ✅ Import ajouté pour la navigation
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
@@ -81,6 +82,17 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
     }
   }
 
+  // ✅ Fonction pour déterminer la bonne route selon le type d'agent
+  function getRouteEquipe(): string {
+    switch (typeAgent) {
+      case "police": return "/chef-police/equipe";
+      case "medical": return "/chef-medical/equipe";
+      case "ong": return "/chef-ong/equipe";
+      case "enrolement": return "/chef-enrolement/equipe";
+      default: return "/chef-police/equipe";
+    }
+  }
+
   function ouvrirFormulaire(mode: "direct" | "invitation") {
     setModeCreation(mode);
     setFormData({ 
@@ -121,7 +133,6 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
           pays: formData.pays || "Sénégal",
         };
         
-        // ✅ Champs spécifiques selon le type d'agent
         if (typeAgent === "ong") {
           payload.mission = formData.mission || undefined;
         }
@@ -282,9 +293,19 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
                     </div>
                   </div>
                 </div>
-                <div className="text-xs text-ardoise-clair flex-shrink-0 sm:text-right">
-                  <p>Créé le</p>
-                  <p className="font-medium">{new Date(agent.date_creation).toLocaleDateString("fr-FR")}</p>
+                
+                {/* ✅ AJOUT : Actions et bouton Voir profil avec la route dynamique */}
+                <div className="flex items-center gap-4 flex-shrink-0">
+                  <div className="text-xs text-ardoise-clair text-right hidden sm:block">
+                    <p>Créé le</p>
+                    <p className="font-medium">{new Date(agent.date_creation).toLocaleDateString("fr-FR")}</p>
+                  </div>
+                  
+                  <Link href={`${getRouteEquipe()}/${agent.id}`}>
+                    <button className="px-3 py-1.5 text-xs bg-lagune text-white rounded hover:bg-lagune/90 transition-colors whitespace-nowrap">
+                      Voir profil →
+                    </button>
+                  </Link>
                 </div>
               </div>
             ))}
@@ -319,12 +340,10 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
               <ChampSaisie libelle="Téléphone" value={formData.telephone} onChange={(e) => setFormData({ ...formData, telephone: e.target.value })} placeholder="+221 77 123 45 67" />
               <ChampSaisie libelle="Ville" value={formData.ville} onChange={(e) => setFormData({ ...formData, ville: e.target.value })} placeholder="Dakar" />
               
-              {/* ✅ Champ spécifique ONG */}
               {typeAgent === "ong" && modeCreation === "direct" && (
                 <ChampSaisie libelle="Mission (optionnel)" value={formData.mission} onChange={(e) => setFormData({ ...formData, mission: e.target.value })} placeholder="Ex: Distribution alimentaire" />
               )}
 
-              {/* ✅ Champ spécifique Médical */}
               {typeAgent === "medical" && modeCreation === "direct" && (
                 <ChampSaisie libelle="Spécialité (optionnel)" value={formData.specialite} onChange={(e) => setFormData({ ...formData, specialite: e.target.value })} placeholder="Ex: Médecine générale" />
               )}

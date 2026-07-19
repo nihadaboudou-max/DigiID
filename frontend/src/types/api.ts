@@ -6,10 +6,6 @@
 export type RoleUtilisateur =
   // ─── Rôles existants (rétrocompatibilité) ──────────────────────
   | "citoyen"
-  | "agent"
-  | "medecin"
-  | "police"
-  | "ong"
   | "administrateur"
   | "super_administrateur"
   // ─── NOUVEAUX RÔLES : Hiérarchie organisationnelle ─────────────
@@ -34,10 +30,7 @@ export const ROLES_ADMIN: RoleUtilisateur[] = [
 
 /** Rôles institutionnels vérifiés */
 export const ROLES_INSTITUTIONNELS: RoleUtilisateur[] = [
-  "agent",
-  "medecin",
-  "police",
-  "ong",
+  // Anciens rôles supprimés : "agent", "medecin", "police", "ong",
   // Nouveaux rôles
   "agent_police",
   "agent_medical",
@@ -79,10 +72,6 @@ export const ROLES_PROFESSIONNELS: RoleUtilisateur[] = [
   "chef_medical",
   "chef_ong",
   "chef_agent",
-  "agent",
-  "medecin",
-  "police",
-  "ong",
   "agent_police",
   "agent_medical",
   "agent_ong",
@@ -100,16 +89,12 @@ export function cheminTableauDeBord(role: RoleUtilisateur): string {
     case "administrateur":
     case "admin_domaine":
       return "/admin/tableau-de-bord";
-    case "medecin":
     case "agent_medical":
       return "/medecin/dashboard";
-    case "agent":
     case "agent_terrain":
       return "/agent/dashboard";
-    case "police":
     case "agent_police":
       return "/police/dashboard";
-    case "ong":
     case "agent_ong":
       return "/ong/dashboard";
     // Nouveaux rôles chefs
@@ -168,16 +153,12 @@ export function obtenirTypeDepartementDepuisRole(
   const mapping: Record<string, string> = {
     chef_police: "police",
     agent_police: "police",
-    police: "police",
     chef_medical: "medical",
     agent_medical: "medical",
-    medecin: "medical",
     chef_ong: "ong",
     agent_ong: "ong",
-    ong: "ong",
     chef_agent: "agent",
     agent_terrain: "agent",
-    agent: "agent",
   };
   return mapping[role] || null;
 }
@@ -195,6 +176,7 @@ export interface Utilisateur {
   est_email_verifie: boolean;
   score_actuel: number | null;
   date_creation?: string;
+  est_actif: boolean;
 
   // --- NOUVEAU : Cloisonnement multi-niveaux ---
   domaine_id?: string | null;
