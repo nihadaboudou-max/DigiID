@@ -542,6 +542,7 @@ export function BoutonMenuMobile() {
                         { href: "/medecin/attestations", libelle: "Attestations", Icone: IconeCheck },
                         { href: "/medecin/calendrier", libelle: "Calendrier", Icone: IconeParametres },
                         { href: "/medecin/historique", libelle: "Historique", Icone: IconeAlerte },
+                        { href: "/medecin/profil", libelle: "Mon profil", Icone: IconeParametres },
                       ].map(({ href, libelle, Icone }) => {
                         const actif = pathname === href || pathname.startsWith(href);
                         return (
@@ -572,6 +573,7 @@ export function BoutonMenuMobile() {
                         { href: "/agent/enrolement", libelle: "Enrôlement", Icone: IconeUtilisateur },
                         { href: "/agent/scan", libelle: "Scan CNI", Icone: IconeScan },
                         { href: "/agent/capture", libelle: "Capture biométrique", Icone: IconeIdentite },
+                        { href: "/agent/profil", libelle: "Mon profil", Icone: IconeParametres },
                       ].map(({ href, libelle, Icone }) => {
                         const actif = pathname === href || pathname.startsWith(href);
                         return (
@@ -610,6 +612,7 @@ export function BoutonMenuMobile() {
                         { href: "/police/audit", libelle: "Journal d'audit", Icone: IconeBouclier },
                         { href: "/police/export", libelle: "Export rapports", Icone: IconePartage },
                         { href: "/police/signalement", libelle: "Signalements", Icone: IconeAlerte },
+                        { href: "/police/profil_personnel", libelle: "Mon profil", Icone: IconeParametres },
                       ].map(({ href, libelle, Icone }) => {
                         const actif = pathname === href || pathname.startsWith(href);
                         return (
@@ -641,6 +644,7 @@ export function BoutonMenuMobile() {
                         { href: "/ong/programme", libelle: "Programmes", Icone: IconeStatistique },
                         { href: "/ong/missions", libelle: "Missions terrain", Icone: IconeEnvoyer },
                         { href: "/ong/attestations", libelle: "Attestations", Icone: IconeCheck },
+                        { href: "/ong/profil", libelle: "Mon profil", Icone: IconeParametres },
                       ].map(({ href, libelle, Icone }) => {
                         const actif = pathname === href || pathname.startsWith(href);
                         return (

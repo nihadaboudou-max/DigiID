@@ -499,6 +499,7 @@ export function BarreLaterale() {
       { href: "/chef-police/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
       { href: "/chef-police/activites", libelle: "Activités", Icone: IconeJournal },
       { href: "/chef-police/rapports", libelle: "Rapports", Icone: IconePartage },
+      { href: "/police/profil", libelle: "Mon profil", Icone: IconeParametres },
     ];
     titreSection = "Chef Police";
     couleurLabel = "text-terre";
@@ -513,6 +514,7 @@ export function BarreLaterale() {
       { href: "/chef-medical/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
       { href: "/chef-medical/activites", libelle: "Activités", Icone: IconeJournal },
       { href: "/chef-medical/rapports", libelle: "Rapports", Icone: IconePartage },
+      { href: "/medecin/profil", libelle: "Mon profil", Icone: IconeParametres },
     ];
     titreSection = "Chef Médical";
     couleurLabel = "text-lagune";
@@ -528,6 +530,7 @@ export function BarreLaterale() {
       { href: "/chef-ong/missions", libelle: "Missions", Icone: IconeEnvoyer },
       { href: "/chef-ong/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
       { href: "/chef-ong/rapports", libelle: "Rapports", Icone: IconePartage },
+      { href: "/chef-ong/profil", libelle: "Mon profil", Icone: IconeParametres },
     ];
     titreSection = "Chef ONG";
     couleurLabel = "text-ocre";
@@ -542,6 +545,7 @@ export function BarreLaterale() {
       { href: "/chef-enrolement/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
       { href: "/chef-enrolement/activites", libelle: "Activités", Icone: IconeJournal },
       { href: "/chef-enrolement/rapports", libelle: "Rapports", Icone: IconePartage },
+      { href: "/chef-enrolement/profil", libelle: "Mon profil", Icone: IconeParametres },
     ];
     titreSection = "Chef Enrôlement";
     couleurLabel = "text-lagune";
@@ -558,6 +562,7 @@ export function BarreLaterale() {
       { href: "/medecin/attestations", libelle: "Attestations", Icone: IconeCheck },
       { href: "/medecin/calendrier", libelle: "Calendrier", Icone: IconeParametres },
       { href: "/medecin/historique", libelle: "Historique", Icone: IconeAlerte },
+      { href: "/medecin/profil", libelle: "Mon profil", Icone: IconeParametres },
     ];
     titreSection = "agent_medical";
     couleurLabel = "text-lagune";
@@ -568,6 +573,7 @@ export function BarreLaterale() {
       { href: "/agent/enrolement", libelle: "Enrôlement", Icone: IconeUtilisateur },
       { href: "/agent/scan", libelle: "Scan CNI", Icone: IconeScan },
       { href: "/agent/capture", libelle: "Capture biométrique", Icone: IconeIdentite },
+      { href: "/agent/profil", libelle: "Mon profil", Icone: IconeParametres },
     ];
     titreSection = "Agent terrain";
     couleurLabel = "text-lagune";
@@ -586,6 +592,7 @@ export function BarreLaterale() {
       { href: "/police/audit", libelle: "Journal d'audit", Icone: IconeBouclier },
       { href: "/police/export", libelle: "Export rapports", Icone: IconePartage },
       { href: "/police/signalement", libelle: "Signalements", Icone: IconeAlerte },
+      { href: "/police/profil_personnel", libelle: "Mon profil", Icone: IconeParametres },
     ];
     titreSection = "Agent Police";
     couleurLabel = "text-terre";
@@ -597,6 +604,7 @@ export function BarreLaterale() {
       { href: "/ong/programme", libelle: "Liste des Programmes", Icone: IconeStatistique },
       { href: "/ong/missions", libelle: "Missions terrain", Icone: IconeEnvoyer },
       { href: "/ong/attestations", libelle: "Attestations", Icone: IconeCheck },
+      { href: "/ong/profil", libelle: "Mon profil", Icone: IconeParametres },
     ];
     titreSection = "Agent ONG";
     couleurLabel = "text-ocre";
