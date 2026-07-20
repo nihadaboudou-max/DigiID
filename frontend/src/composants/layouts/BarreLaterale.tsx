@@ -499,7 +499,7 @@ export function BarreLaterale() {
       { href: "/chef-police/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
       { href: "/chef-police/activites", libelle: "Activités", Icone: IconeJournal },
       { href: "/chef-police/rapports", libelle: "Rapports", Icone: IconePartage },
-      { href: "/police/profil", libelle: "Mon profil", Icone: IconeParametres },
+      { href: "/chef-police/profil", libelle: "Mon profil", Icone: IconeParametres },
     ];
     titreSection = "Chef Police";
     couleurLabel = "text-terre";
@@ -514,7 +514,7 @@ export function BarreLaterale() {
       { href: "/chef-medical/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
       { href: "/chef-medical/activites", libelle: "Activités", Icone: IconeJournal },
       { href: "/chef-medical/rapports", libelle: "Rapports", Icone: IconePartage },
-      { href: "/medecin/profil", libelle: "Mon profil", Icone: IconeParametres },
+      { href: "/chef-medical/profil", libelle: "Mon profil", Icone: IconeParametres },
     ];
     titreSection = "Chef Médical";
     couleurLabel = "text-lagune";
