@@ -70,6 +70,41 @@ export interface VerificationPatient {
   email: string | null;
 }
 
+// =============================================================================
+// TYPES POUR LA RECHERCHE FACIALE
+// =============================================================================
+
+export interface Personne {
+  id: string;
+  nom: string;
+  prenom: string;
+  date_naissance: string;
+  groupe_sanguin: string;
+  telephone: string;
+  contact_urgence: string;
+  photo?: string;
+  antecedents?: string[];
+  allergies?: string[];
+}
+
+export interface RecherchePersonne {
+  trouve: boolean;
+  personne: Personne | null;
+  score_confiance: number;
+  temps_analyse_ms: number;
+}
+
+export interface HistoriqueRecherche {
+  id: string;
+  date_recherche: string;
+  score_confiance: number;
+  personne_trouvee_id: string | null;
+}
+
+// =============================================================================
+// FONCTIONS EXISTANTES
+// =============================================================================
+
 /**
  * Vérifie qu'un DigiID correspond à un citoyen existant dans le système.
  */
@@ -88,7 +123,6 @@ export async function listerDossiers(
   if (statut) params.set("statut", statut);
   if (recherche) params.set("recherche", recherche);
   const query = params.toString() ? `?${params.toString()}` : "";
-  
   return clientAPI.get<DossierMedical[]>(`/api/v1/medical/dossiers${query}`, {
     authentifie: true,
   });
@@ -227,40 +261,47 @@ export async function signalerOrdonnance(
 }
 
 // =============================================================================
-// RECONNAISSANCE FACIALE - RECHERCHE PAR PHOTO
+// NOUVELLES FONCTIONS POUR LA RECHERCHE FACIALE
 // =============================================================================
 
-export interface Personne {
-  id: string;
-  nom: string;
-  prenom: string | null;
-  date_naissance: string | null;
-  groupe_sanguin: string | null;
-  telephone: string | null;
-  contact_urgence: string | null;
-  photo: string | null;
-  antecedents: string[];
-  allergies: string[];
-  digiid?: string;
-}
-
-export interface RecherchePersonne {
-  trouve: boolean;
-  personne: Personne | null;
-  score_confiance: number;
-  temps_analyse_ms: number;
-  candidats_possibles?: Personne[];
-}
-
 /**
- * Recherche une personne dans la base de données par reconnaissance faciale.
+ * Recherche une personne par reconnaissance faciale.
+ * @param photo - La photo en base64 ou File
  */
 export async function rechercherPersonneParPhoto(data: {
   photo: string; // base64 ou URL
 }): Promise<RecherchePersonne> {
+  // Créer un FormData pour envoyer le fichier
+  const formData = new FormData();
+  
+  // Si la photo est en base64, la convertir en Blob
+  if (data.photo.startsWith('data:image')) {
+    const response = await fetch(data.photo);
+    const blob = await response.blob();
+    formData.append('photo', blob, 'recherche.jpg');
+  } else {
+    // Sinon, supposer que c'est déjà un fichier ou une référence
+    formData.append('photo', data.photo);
+  }
+
   return clientAPI.post<RecherchePersonne>(
-    "/api/v1/medical/recherche-par-photo",
-    data,
+    '/api/v1/medical/recherche-faciale/',
+    formData,
+    { 
+      authentifie: true,
+      headers: {} // Laisser clientAPI gérer les headers
+    }
+  );
+}
+
+/**
+ * Obtient l'historique des recherches faciales.
+ */
+export async function obtenirHistoriqueRecherches(
+  limite: number = 10
+): Promise<{ historique: HistoriqueRecherche[]; total: number }> {
+  return clientAPI.get<{ historique: HistoriqueRecherche[]; total: number }>(
+    `/api/v1/medical/recherche-faciale/historique?limite=${limite}`,
     { authentifie: true }
   );
 }

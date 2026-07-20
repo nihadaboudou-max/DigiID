@@ -85,6 +85,9 @@ from src.modules.qr_dynamique import routeur_qr_dynamique
 # --- Module Chefs ---
 from src.modules.chefs import routeur_chefs
 
+# Module Recherche Faciale Médicale
+from src.modules.recherche_faciale import routeur_recherche_faciale
+
 # Routeur racine — préfixe et tag globaux gérés au montage
 routeur_v1 = APIRouter()
 
@@ -163,3 +166,6 @@ routeur_v1.include_router(routeur_qr_dynamique)
 
 # ... (dans la section d'include_router, ajoute cette ligne)
 routeur_v1.include_router(routeur_chefs)
+
+## Module Recherche Faciale Médicale — routeur pour la recherche faciale par les agents médicaux
+routeur_v1.include_router(routeur_recherche_faciale)
