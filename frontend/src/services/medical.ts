@@ -1,5 +1,6 @@
 /**
  * Service API pour le module médical (dossiers, consultations, ordonnances).
+ * Aligné avec les routes backend /api/v1/medical et /api/v1/utilisateur
  */
 import { clientAPI } from "./client_api";
 
@@ -18,6 +19,9 @@ export interface DossierMedical {
   ordonnances_count: number;
   date_creation: string;
   date_modification: string;
+  // --- Cloisonnement ---
+  domaine_id: string | null;
+  departement_id: string | null;
 }
 
 export interface Consultation {
@@ -36,6 +40,9 @@ export interface Consultation {
   conclusion: string | null;
   date_controle: string | null;
   date_consultation: string;
+  // --- Cloisonnement ---
+  domaine_id: string | null;
+  departement_id: string | null;
 }
 
 export interface Ordonnance {
@@ -50,6 +57,9 @@ export interface Ordonnance {
   statut: string;
   date_prescription: string;
   date_expiration: string | null;
+  // --- Cloisonnement ---
+  domaine_id: string | null;
+  departement_id: string | null;
 }
 
 export interface VerificationPatient {
@@ -63,59 +73,60 @@ export interface VerificationPatient {
 /**
  * Vérifie qu'un DigiID correspond à un citoyen existant dans le système.
  */
-export async function verifierPatient(
-  digiid: string,
-): Promise<VerificationPatient> {
+export async function verifierPatient(digiid: string): Promise<VerificationPatient> {
   return clientAPI.get<VerificationPatient>(
-    `/api/v1/utilisateur/medical/verifier-patient/${encodeURIComponent(digiid)}`,
-    { authentifie: true },
+    `/api/v1/medical/verifier-patient/${encodeURIComponent(digiid)}`,
+    { authentifie: true }
   );
 }
 
-
 export async function listerDossiers(
   statut?: string,
-  recherche?: string,
+  recherche?: string
 ): Promise<DossierMedical[]> {
   const params = new URLSearchParams();
   if (statut) params.set("statut", statut);
   if (recherche) params.set("recherche", recherche);
   const query = params.toString() ? `?${params.toString()}` : "";
-  return clientAPI.get<DossierMedical[]>(`/api/v1/utilisateur/medical/dossiers${query}`, {
+  
+  return clientAPI.get<DossierMedical[]>(`/api/v1/medical/dossiers${query}`, {
     authentifie: true,
   });
 }
 
 export async function creerDossier(data: {
   patient_nom: string;
+  patient_prenom?: string;
   patient_digiid: string;
+  patient_date_naissance?: string;
+  hopital?: string;
   motif: string;
   diagnostic?: string;
 }): Promise<DossierMedical> {
-  return clientAPI.post<DossierMedical>("/api/v1/utilisateur/medical/dossiers", data, {
+  return clientAPI.post<DossierMedical>("/api/v1/medical/dossiers", data, {
     authentifie: true,
   });
 }
 
 export async function obtenirDossier(id: string): Promise<DossierMedical> {
-  return clientAPI.get<DossierMedical>(`/api/v1/utilisateur/medical/dossiers/${id}`, {
+  return clientAPI.get<DossierMedical>(`/api/v1/medical/dossiers/${id}`, {
     authentifie: true,
   });
 }
 
 export async function modifierDossier(
   id: string,
-  data: { motif?: string; diagnostic?: string; statut?: string },
+  data: { motif?: string; diagnostic?: string; statut?: string; hopital?: string }
 ): Promise<DossierMedical> {
-  return clientAPI.patch<DossierMedical>(`/api/v1/utilisateur/medical/dossiers/${id}`, data, {
+  return clientAPI.patch<DossierMedical>(`/api/v1/medical/dossiers/${id}`, data, {
     authentifie: true,
   });
 }
 
 export async function listerConsultations(dossierId: string): Promise<Consultation[]> {
   return clientAPI.get<Consultation[]>(
-    `/api/v1/utilisateur/medical/dossiers/${dossierId}/consultations`,
-    { authentifie: true },
+    `/api/v1/medical/dossiers/${dossierId}/consultations`,
+    { authentifie: true }
   );
 }
 
@@ -131,22 +142,23 @@ export async function ajouterConsultation(data: {
   temperature?: number;
   pression_arterielle?: string;
   date_controle?: string;
+  hopital?: string;
 }): Promise<Consultation> {
-  return clientAPI.post<Consultation>("/api/v1/utilisateur/medical/consultations", data, {
+  return clientAPI.post<Consultation>("/api/v1/medical/consultations", data, {
     authentifie: true,
   });
 }
 
 export async function listerOrdonnances(dossierId: string): Promise<Ordonnance[]> {
   return clientAPI.get<Ordonnance[]>(
-    `/api/v1/utilisateur/medical/dossiers/${dossierId}/ordonnances`,
-    { authentifie: true },
+    `/api/v1/medical/dossiers/${dossierId}/ordonnances`,
+    { authentifie: true }
   );
 }
 
 /** Liste toutes les ordonnances du médecin connecté. */
 export async function listerToutesOrdonnances(): Promise<Ordonnance[]> {
-  return clientAPI.get<Ordonnance[]>("/api/v1/utilisateur/medical/ordonnances", {
+  return clientAPI.get<Ordonnance[]>("/api/v1/medical/ordonnances", {
     authentifie: true,
   });
 }
@@ -158,28 +170,31 @@ export async function creerOrdonnance(data: {
   instructions?: string;
   date_expiration?: string;
 }): Promise<Ordonnance> {
-  return clientAPI.post<Ordonnance>("/api/v1/utilisateur/medical/ordonnances", data, {
+  return clientAPI.post<Ordonnance>("/api/v1/medical/ordonnances", data, {
     authentifie: true,
   });
 }
 
 export async function modifierOrdonnance(
   id: string,
-  data: { medicaments?: string; instructions?: string; date_expiration?: string },
+  data: { medicaments?: string; instructions?: string; date_expiration?: string }
 ): Promise<Ordonnance> {
   return clientAPI.patch<Ordonnance>(
-    `/api/v1/utilisateur/medical/ordonnances/${id}`,
+    `/api/v1/medical/ordonnances/${id}`,
     data,
-    { authentifie: true },
+    { authentifie: true }
   );
 }
 
 export async function supprimerOrdonnance(id: string): Promise<void> {
-  return clientAPI.delete(
-    `/api/v1/utilisateur/medical/ordonnances/${id}`,
-    { authentifie: true },
-  );
+  return clientAPI.delete(`/api/v1/medical/ordonnances/${id}`, {
+    authentifie: true,
+  });
 }
+
+// =============================================================================
+// ROUTES PATIENT (Citoyen)
+// =============================================================================
 
 /** Récupère le dossier médical complet du citoyen connecté. */
 export async function monDossierMedical(): Promise<{
@@ -202,11 +217,11 @@ export async function mesOrdonnances(): Promise<Ordonnance[]> {
 /** Signale un problème sur une ordonnance (patient). */
 export async function signalerOrdonnance(
   id: string,
-  motif: string,
+  motif: string
 ): Promise<{ succes: boolean; message: string }> {
   return clientAPI.post<{ succes: boolean; message: string }>(
     `/api/v1/utilisateur/mes-ordonnances/${id}/signaler`,
     { motif },
-    { authentifie: true },
+    { authentifie: true }
   );
 }
