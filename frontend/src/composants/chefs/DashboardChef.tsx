@@ -49,8 +49,13 @@ export default function DashboardChef({
     try {
       if (!agents.length) setChargement(true);
       
-      // ✅ CORRECTION 1 : Ajout du type 'any' pour éviter l'erreur 'unknown'
-      const data: any = await clientAPI.get(`/api/v1/chefs/${typeAgent}/agents?par_page=5`, {
+      // ✅ CORRECTION : Endpoint dynamique selon le type d'agent
+      let endpoint = `/api/v1/chefs/${typeAgent}/agents`;
+      if (typeAgent === "medical") {
+        endpoint = `/api/v1/chefs/medical/medecins`;
+      }
+      
+      const data: any = await clientAPI.get(`${endpoint}?par_page=5`, {
         authentifie: true,
       });
       
@@ -100,7 +105,6 @@ export default function DashboardChef({
     total: agents.length,
     actifs: agents.filter(a => a.est_actif).length,
     inactifs: agents.filter(a => !a.est_actif).length,
-    // ✅ CORRECTION 2 : 'aujourdhui' (tout en minuscules) pour correspondre à l'affichage JSX
     aujourdhui: agents.filter(a => {
       const dateCreation = new Date(a.date_creation);
       const aujourdhui = new Date();
@@ -295,7 +299,7 @@ export default function DashboardChef({
 
         <Link href={`/chef-${typeAgent}/missions`}>
           <Carte className="cursor-pointer hover:shadow-lg transition-all p-6 h-full">
-            <div className="text-3xl mb-3">📋</div> {/* ✅ CORRECTION 3 : Icône ajoutée */}
+            <div className="text-3xl mb-3">📋</div>
             <h3 className="font-bold text-ardoise mb-1">Missions</h3>
             <p className="text-sm text-ardoise-clair">
               Planifier et suivre les missions
@@ -305,7 +309,7 @@ export default function DashboardChef({
 
         <Link href={`/chef-${typeAgent}/rapports`}>
           <Carte className="cursor-pointer hover:shadow-lg transition-all p-6 h-full">
-            <div className="text-3xl mb-3">📊</div>
+            <div className="text-3xl mb-3"></div>
             <h3 className="font-bold text-ardoise mb-1">Rapports</h3>
             <p className="text-sm text-ardoise-clair">
               Consulter et générer les rapports
