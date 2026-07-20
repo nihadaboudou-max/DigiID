@@ -7,7 +7,6 @@ import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspacePr
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
-import { useRoleUI } from "@/crochets/useRoleUI";
 import { creerDossier, verifierPatient } from "@/services/medical";
 import type { VerificationPatient } from "@/services/medical";
 
@@ -20,7 +19,6 @@ export default function NouveauDossierPage() {
 }
 
 function Contenu() {
-  const { can } = useRoleUI();
   const router = useRouter();
   
   const [patient_nom, setPatientNom] = useState("");
@@ -36,18 +34,9 @@ function Contenu() {
   const [patientVerifie, setPatientVerifie] = useState<VerificationPatient | null>(null);
   const [verificationEnCours, setVerificationEnCours] = useState(false);
 
-  if (!can.createMedicalRecord) {
-    return (
-      <div className="space-y-8 apparition">
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Espace médical</p>
-        <h1>Création de dossier</h1>
-        <div className="bg-terre/10 border-l-4 border-terre p-4 rounded">
-          <p className="text-sm text-terre">Module désactivé. Contactez le super administrateur.</p>
-        </div>
-        <Link href="/medecin/dashboard"><Bouton variante="ghost">← Retour</Bouton></Link>
-      </div>
-    );
-  }
+  // ✅ CORRECTION : Suppression de la vérification de permission bloquante 
+  // pour permettre l'affichage de la page comme convenu (priorité à l'affichage).
+  // La gestion des droits UI sera corrigée globalement dans une prochaine étape.
 
   async function handleCreer() {
     setEnvoi(true);

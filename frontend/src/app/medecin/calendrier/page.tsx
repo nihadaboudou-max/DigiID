@@ -1,8 +1,5 @@
 "use client";
 
-/**
- * Calendrier — Planification des rendez-vous médicaux.
- */
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
@@ -30,7 +27,7 @@ interface RendezVous {
 
 export default function CalendrierMedecin() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["agent_medical"]}>
+    <EnvelopperEspaceProtege rolesAutorises={["agent_medical", "chef_medical"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
@@ -43,7 +40,7 @@ function Contenu() {
     listerDossiers().then((d) => setDossiersCount(d.length)).catch(() => {});
   }, []);
 
-  // RDV fictifs pour la semaine en cours
+  // RDV fictifs pour la semaine en cours (à remplacer par l'API plus tard)
   const rdvs: RendezVous[] = [];
 
   const debutSemaine = new Date();
@@ -64,12 +61,12 @@ function Contenu() {
       </nav>
 
       <div>
-        <p className="text-ocre text-sm uppercase font-semibold tracking-wider">Espace medical</p>
+        <p className="text-ocre text-sm uppercase font-semibold tracking-wider">Espace médical</p>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="mt-1">Calendrier</h1>
             <p className="text-ardoise-clair mt-2">
-              Planifiez et gerez vos rendez-vous medicaux.
+              Planifiez et gérez vos rendez-vous médicaux.
             </p>
           </div>
           <p className="text-xs text-ardoise-clair/60">{dossiersCount} patients actifs</p>
@@ -79,7 +76,7 @@ function Contenu() {
       {/* Navigation semaine */}
       <div className="flex items-center justify-between">
         <Bouton variante="ghost" onClick={() => {}}>
-          &larr; Semaine precedente
+          &larr; Semaine précédente
         </Bouton>
         <p className="text-sm font-semibold text-ardoise">
           {joursSemaine[0]?.date.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
@@ -92,7 +89,7 @@ function Contenu() {
       {/* Grille hebdomadaire */}
       <div className="overflow-x-auto">
         <div className="min-w-[768px]">
-          {/* En-tete des jours */}
+          {/* En-tête des jours */}
           <div className="flex border-b border-ardoise-clair/10 pb-2 mb-2">
             <div className="w-16 flex-shrink-0" />
             {joursSemaine.map((j) => (
@@ -111,7 +108,7 @@ function Contenu() {
             ))}
           </div>
 
-          {/* Creneaux */}
+          {/* Créneaux */}
           <div className="space-y-0.5">
             {CRENEAUX.map((heure) => (
               <div key={heure} className="flex items-stretch">
@@ -150,7 +147,7 @@ function Contenu() {
       <Carte titre="Ajouter un rendez-vous">
         <div className="max-w-md space-y-3">
           <p className="text-sm text-ardoise-clair">
-            La planification automatique des rendez-vous arrive bientot.
+            La planification automatique des rendez-vous arrive bientôt.
             Vous pouvez pour l&apos;instant utiliser vos dossiers patients
             pour organiser vos consultations.
           </p>
@@ -160,7 +157,9 @@ function Contenu() {
         </div>
       </Carte>
 
-      <Link href="/medecin/dashboard"><Bouton variante="ghost">Retour</Bouton></Link>
+      <Link href="/medecin/dashboard">
+        <Bouton variante="ghost">Retour</Bouton>
+      </Link>
     </div>
   );
 }

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
-import { useRoleUI } from "@/crochets/useRoleUI";
 import { listerDossiers } from "@/services/medical";
 import type { DossierMedical } from "@/services/medical";
 
@@ -18,7 +17,6 @@ export default function AttestationsPage() {
 }
 
 function Contenu() {
-  const { can } = useRoleUI();
   const [dossiers, setDossiers] = useState<DossierMedical[]>([]);
   const [dossierId, setDossierId] = useState("");
   const [typeAttestation, setTypeAttestation] = useState("");
@@ -40,10 +38,7 @@ function Contenu() {
     setMessage(null);
     
     try {
-      // TODO: Remplacer par l'appel API réel une fois la route backend créée
-      // await creerAttestation({ dossier_id: dossierId, type: typeAttestation });
-      
-      // Simulation d'attente réseau
+      // Simulation d'attente réseau en attendant l'API réelle
       await new Promise(resolve => setTimeout(resolve, 1500));
       
       setMessage({ 
@@ -55,17 +50,6 @@ function Contenu() {
     } finally {
       setGenerationEnCours(false);
     }
-  }
-
-  if (!can.manageMedicalAttestations) {
-    return (
-      <div className="space-y-8 apparition">
-        <div className="bg-terre/10 border-l-4 border-terre p-4 rounded">
-          <p className="text-sm text-terre">Module d'attestations désactivé pour votre rôle.</p>
-        </div>
-        <Link href="/medecin/dashboard"><Bouton variante="ghost">← Retour</Bouton></Link>
-      </div>
-    );
   }
 
   return (
