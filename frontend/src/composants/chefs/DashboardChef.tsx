@@ -284,39 +284,6 @@ export default function DashboardChef({
           </div>
         )}
       </Carte>
-
-      {/* Actions rapides */}
-      <div className="grid md:grid-cols-3 gap-4">
-        <Link href={`/chef-${typeAgent}/agents`}>
-          <Carte className="cursor-pointer hover:shadow-lg transition-all p-6 h-full">
-            <div className="text-3xl mb-3">👥</div>
-            <h3 className="font-bold text-ardoise mb-1">Gérer les agents</h3>
-            <p className="text-sm text-ardoise-clair">
-              Inviter, créer et gérer votre équipe
-            </p>
-          </Carte>
-        </Link>
-
-        <Link href={`/chef-${typeAgent}/missions`}>
-          <Carte className="cursor-pointer hover:shadow-lg transition-all p-6 h-full">
-            <div className="text-3xl mb-3">📋</div>
-            <h3 className="font-bold text-ardoise mb-1">Missions</h3>
-            <p className="text-sm text-ardoise-clair">
-              Planifier et suivre les missions
-            </p>
-          </Carte>
-        </Link>
-
-        <Link href={`/chef-${typeAgent}/rapports`}>
-          <Carte className="cursor-pointer hover:shadow-lg transition-all p-6 h-full">
-            <div className="text-3xl mb-3"></div>
-            <h3 className="font-bold text-ardoise mb-1">Rapports</h3>
-            <p className="text-sm text-ardoise-clair">
-              Consulter et générer les rapports
-            </p>
-          </Carte>
-        </Link>
-      </div>
     </div>
   );
 }
