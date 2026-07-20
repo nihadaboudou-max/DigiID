@@ -13,7 +13,10 @@ import { listerMesConsentements } from "@/services/consentements";
 import type { ConsentementDetail } from "@/services/consentements";
 
 export default function PageAutorisations() {
-  return <EnvelopperEspaceProtege rolesAutorises={["citoyen","agent","medecin","police","ong","administrateur","super_administrateur"]}><Contenu /></EnvelopperEspaceProtege>;
+  return <EnvelopperEspaceProtege rolesAutorises={[      
+    "citoyen", "agent_police", "chef_police", "agent_medical", "chef_medical", 
+    "agent_ong", "chef_ong", "agent_terrain", "chef_agent", "admin_domaine", 
+    "administrateur", "super_administrateur"]}><Contenu /></EnvelopperEspaceProtege>;
 }
 
 function Contenu() {

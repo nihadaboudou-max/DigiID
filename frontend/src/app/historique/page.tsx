@@ -60,7 +60,10 @@ function formaterDate(iso: string): string {
 
 export default function PageHistorique() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["citoyen", "agent", "medecin", "police", "ong", "administrateur", "super_administrateur"]}>
+    <EnvelopperEspaceProtege rolesAutorises={[      
+      "citoyen", "agent_police", "chef_police", "agent_medical", "chef_medical", 
+      "agent_ong", "chef_ong", "agent_terrain", "chef_agent", "admin_domaine", 
+      "administrateur", "super_administrateur"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
