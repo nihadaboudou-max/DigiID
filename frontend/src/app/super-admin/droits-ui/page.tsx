@@ -1,8 +1,8 @@
 "use client";
 /**
- * Page Super Admin — Matrice des droits UI (version finale).
- * Navigation par rôles : on clique sur un rôle pour voir ses droits.
- */
+Page Super Admin — Matrice des droits UI (version corrigée avec synchronisation).
+Navigation par rôles : on clique sur un rôle pour voir ses droits.
+*/
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
@@ -22,22 +22,22 @@ import type { ModulePermission } from "@/services/ui_permissions";
 // ---------- Constantes ----------
 const COULEURS_ROLES: Record<string, { bg: string; text: string; border: string; label: string; icone: string }> = {
   super_administrateur: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-300", label: "Super Admin", icone: "👑" },
-  super_admin: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-300", label: "Super Admin", icone: "👑" },
-  admin_domaine: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-300", label: "Admin Domaine", icone: "" },
+  super_admin: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-300", label: "Super Admin", icone: "" },
+  admin_domaine: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-300", label: "Admin Domaine", icone: "🌐" },
   administrateur: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-300", label: "Administrateur", icone: "⚙️" },
   chef_police: { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-300", label: "Chef Police", icone: "👮" },
   chef_medical: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-300", label: "Chef Médical", icone: "" },
   chef_ong: { bg: "bg-cyan-50", text: "text-cyan-700", border: "border-cyan-300", label: "Chef ONG", icone: "🤝" },
   chef_agent: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-300", label: "Chef Enrôlement", icone: "" },
   agent_police: { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-300", label: "Agent Police", icone: "👮" },
-  agent_medical: { bg: "bg-green-50", text: "text-green-700", border: "border-green-300", label: "Agent Médical", icone: "️" },
-  agent_ong: { bg: "bg-teal-50", text: "text-teal-700", border: "border-teal-300", label: "Agent ONG", icone: "🤝" },
-  agent_terrain: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-300", label: "Agent Terrain", icone: "" },
+  agent_medical: { bg: "bg-green-50", text: "text-green-700", border: "border-green-300", label: "Agent Médical", icone: "🩺" },
   medecin: { bg: "bg-green-50", text: "text-green-700", border: "border-green-300", label: "Médecin", icone: "🩺" },
-  police: { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-300", label: "Police", icone: "" },
+  agent_ong: { bg: "bg-teal-50", text: "text-teal-700", border: "border-teal-300", label: "Agent ONG", icone: "🤝" },
+  agent_terrain: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-300", label: "Agent Terrain", icone: "📋" },
+  police: { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-300", label: "Police", icone: "🚔" },
   ong: { bg: "bg-teal-50", text: "text-teal-700", border: "border-teal-300", label: "ONG", icone: "🌍" },
   agent: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-300", label: "Agent", icone: "👤" },
-  citoyen: { bg: "bg-gray-50", text: "text-gray-700", border: "border-gray-300", label: "Citoyen", icone: "🧑" },
+  citoyen: { bg: "bg-gray-50", text: "text-gray-700", border: "border-gray-300", label: "Citoyen", icone: "" },
 };
 
 const ORDRE_ROLES = [
@@ -50,9 +50,9 @@ const ORDRE_ROLES = [
   "chef_agent",
   "agent_police",
   "agent_medical",
+  "medecin",
   "agent_ong",
   "agent_terrain",
-  "medecin",
   "police",
   "ong",
   "agent",
@@ -76,6 +76,7 @@ function Contenu() {
   const [roleSelectionne, setRoleSelectionne] = useState<string | null>(null);
   const [sauvegardeEnCours, setSauvegardeEnCours] = useState<string | null>(null);
   const [succesMessage, setSuccesMessage] = useState<string | null>(null);
+  const [derniereSync, setDerniereSync] = useState<Date | null>(null);
 
   // Stats
   const stats = useMemo(() => {
@@ -99,9 +100,13 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
+      console.log("[Droits UI] Chargement de la matrice de permissions...");
       const data = await obtenirMatricePermissions();
+      console.log("[Droits UI] Matrice chargée avec succès:", data.modules.length, "modules");
       setModules(data.modules);
+      setDerniereSync(new Date());
     } catch (e) {
+      console.error("[Droits UI] Erreur lors du chargement:", e);
       const modulesFallback: ModulePermission[] = [];
       for (const role of ORDRE_ROLES) {
         const defauts = modulesParDefaut(role);
@@ -110,6 +115,7 @@ function Contenu() {
         }
       }
       setModules(modulesFallback);
+      setErreur("Utilisation des données de fallback. Vérifiez la connexion au backend.");
     } finally {
       setChargement(false);
     }
@@ -147,15 +153,19 @@ function Contenu() {
 
   // Basculer un module
   const basculerModule = useCallback(
-    async (module: ModulePermission, champ: "is_enabled" | "is_read_only") => {
+    async (module: ModulePermission, champ: "is_enabled" | "is_read_only" = "is_enabled") => {
       const cleSauvegarde = `${module.role_name}:${module.module_key}:${champ}`;
       setSauvegardeEnCours(cleSauvegarde);
       setErreur(null);
       setSuccesMessage(null);
+      
       try {
+        console.log(`[Droits UI] Mise à jour de ${module.module_label} pour ${module.role_name}`);
+        
         const payload: { module_key: string; is_enabled?: boolean; is_read_only?: boolean } = {
           module_key: module.module_key,
         };
+        
         if (champ === "is_enabled") {
           payload.is_enabled = !module.is_enabled;
           if (!payload.is_enabled) payload.is_read_only = false;
@@ -163,12 +173,24 @@ function Contenu() {
           payload.is_read_only = !module.is_read_only;
           if (payload.is_read_only) payload.is_enabled = true;
         }
+        
+        console.log("[Droits UI] Payload envoyé:", payload);
         await mettreAJourModuleRole(module.role_name, payload);
+        console.log("[Droits UI] Mise à jour réussie, rechargement de la matrice...");
+        
+        // ✅ CORRECTION MAJEURE : Rechargement systématique après sauvegarde
         await chargerMatrice();
-        setSuccesMessage(`${module.module_label} mis à jour pour ${COULEURS_ROLES[module.role_name]?.label || module.role_name}`);
-        setTimeout(() => setSuccesMessage(null), 3000);
+        
+        const actionText = champ === "is_enabled" 
+          ? (payload.is_enabled ? "activé" : "désactivé")
+          : (payload.is_read_only ? "passé en lecture seule" : "passé en écriture");
+        
+        setSuccesMessage(`${module.module_label} ${actionText} pour ${COULEURS_ROLES[module.role_name]?.label || module.role_name}`);
+        
+        setTimeout(() => setSuccesMessage(null), 4000);
       } catch (e) {
-        setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur");
+        console.error("[Droits UI] Erreur lors de la sauvegarde:", e);
+        setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de synchronisation avec le backend");
       } finally {
         setSauvegardeEnCours(null);
       }
@@ -181,7 +203,11 @@ function Contenu() {
     async (activer: boolean) => {
       if (!roleSelectionne) return;
       setSauvegardeEnCours("tous");
+      setErreur(null);
+      
       try {
+        console.log(`[Droits UI] ${activer ? "Activation" : "Désactivation"} de tous les modules pour ${roleSelectionne}`);
+        
         for (const perm of permissionsRole) {
           await mettreAJourModuleRole(roleSelectionne, {
             module_key: perm.module_key,
@@ -189,10 +215,14 @@ function Contenu() {
             is_read_only: false,
           });
         }
+        
+        console.log("[Droits UI] Tous les modules mis à jour, rechargement...");
         await chargerMatrice();
+        
         setSuccesMessage(`Tous les modules ${activer ? "activés" : "désactivés"} pour ${COULEURS_ROLES[roleSelectionne]?.label || roleSelectionne}`);
-        setTimeout(() => setSuccesMessage(null), 3000);
+        setTimeout(() => setSuccesMessage(null), 4000);
       } catch (e) {
+        console.error("[Droits UI] Erreur lors de la mise à jour massive:", e);
         setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur");
       } finally {
         setSauvegardeEnCours(null);
@@ -206,10 +236,15 @@ function Contenu() {
       {/* En-tête */}
       <div>
         <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Super administration</p>
-        <h1 className="mt-1 text-2xl"> Configuration des droits UI</h1>
+        <h1 className="mt-1 text-2xl">Configuration des droits UI</h1>
         <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
-          Cliquez sur un rôle pour configurer ses permissions par module.
+          Cliquez sur un rôle pour configurer ses permissions par module. Les modifications sont synchronisées avec le backend.
         </p>
+        {derniereSync && (
+          <p className="text-xs text-ardoise-clair mt-2">
+            Dernière synchronisation: {derniereSync.toLocaleTimeString("fr-FR")}
+          </p>
+        )}
       </div>
 
       {/* Statistiques globales */}
@@ -257,14 +292,12 @@ function Contenu() {
                 }}
               />
             </div>
-
             <div className="mt-4 space-y-1 max-h-[600px] overflow-y-auto">
               {rolesUniques.map((role) => {
                 const isSelected = roleSelectionne === role;
                 const couleur = COULEURS_ROLES[role];
                 const nbModules = modules.filter((m) => m.role_name === role).length;
                 const nbActives = modules.filter((m) => m.role_name === role && m.is_enabled).length;
-                
                 return (
                   <button
                     key={role}
@@ -369,7 +402,6 @@ function Contenu() {
                     permissionsRole.map((perm) => {
                       const cleSauvegarde = `${perm.role_name}:${perm.module_key}`;
                       const enSauvegarde = sauvegardeEnCours?.startsWith(cleSauvegarde);
-
                       return (
                         <div
                           key={perm.module_key}
@@ -385,7 +417,6 @@ function Contenu() {
                             </p>
                             <p className="text-xs text-ardoise-clair font-mono">{perm.module_key}</p>
                           </div>
-
                           <div className="flex items-center gap-4">
                             {/* Toggle Activé/Désactivé */}
                             <label className="flex items-center gap-2 cursor-pointer">
@@ -406,7 +437,6 @@ function Contenu() {
                                 />
                               </button>
                             </label>
-
                             {/* Toggle Lecture seule */}
                             {perm.is_enabled && (
                               <label className="flex items-center gap-2 cursor-pointer">
@@ -437,7 +467,7 @@ function Contenu() {
               </div>
             ) : (
               <div className="text-center py-12">
-                <p className="text-4xl mb-3">👤</p>
+                <p className="text-4xl mb-3"></p>
                 <p className="text-ardoise-clair italic">
                   {rolesUniques.length === 0
                     ? "Aucun rôle trouvé."
