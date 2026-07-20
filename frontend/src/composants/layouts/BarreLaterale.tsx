@@ -556,6 +556,7 @@ export function BarreLaterale() {
   else if (utilisateur.role === "agent_medical") {
     liens = [
       { href: "/medecin/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+      {href: "/medecin/recherche-photo", libelle: "Recherche par photo", Icone: IconeScan },
       { href: "/medecin/nouveau-dossier", libelle: "Nouveau dossier", Icone: IconeUtilisateur },
       { href: "/medecin/dossiers", libelle: "Dossiers patients", Icone: IconeStatistique },
       { href: "/medecin/ordonnances", libelle: "Ordonnances", Icone: IconeJournal },

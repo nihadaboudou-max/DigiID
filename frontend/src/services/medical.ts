@@ -225,3 +225,42 @@ export async function signalerOrdonnance(
     { authentifie: true }
   );
 }
+
+// =============================================================================
+// RECONNAISSANCE FACIALE - RECHERCHE PAR PHOTO
+// =============================================================================
+
+export interface Personne {
+  id: string;
+  nom: string;
+  prenom: string | null;
+  date_naissance: string | null;
+  groupe_sanguin: string | null;
+  telephone: string | null;
+  contact_urgence: string | null;
+  photo: string | null;
+  antecedents: string[];
+  allergies: string[];
+  digiid?: string;
+}
+
+export interface RecherchePersonne {
+  trouve: boolean;
+  personne: Personne | null;
+  score_confiance: number;
+  temps_analyse_ms: number;
+  candidats_possibles?: Personne[];
+}
+
+/**
+ * Recherche une personne dans la base de données par reconnaissance faciale.
+ */
+export async function rechercherPersonneParPhoto(data: {
+  photo: string; // base64 ou URL
+}): Promise<RecherchePersonne> {
+  return clientAPI.post<RecherchePersonne>(
+    "/api/v1/medical/recherche-par-photo",
+    data,
+    { authentifie: true }
+  );
+}
