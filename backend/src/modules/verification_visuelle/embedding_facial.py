@@ -27,7 +27,7 @@ _HANDLE_DEEPFACE = None       # lazy import cache
 
 
 def _obtenir_deepface():
-    """Importe et retourne la classe DeepFace (lazy, une seule fois)."""
+    """Importe et retourne le module DeepFace (lazy)."""
     global _HANDLE_DEEPFACE
     if _HANDLE_DEEPFACE is None:
         try:
@@ -81,7 +81,7 @@ def generer_embedding(
 
     # 2. DeepFace.Represent extrait l'embedding (Facenet512)
     try:
-        resultat = DeepFace.Represent(
+        resultat = DeepFace.represent(
             img_path=img_array,
             model_name=modele,
             detector_backend=_BACKEND,
