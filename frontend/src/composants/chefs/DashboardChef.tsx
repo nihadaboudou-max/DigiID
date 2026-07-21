@@ -128,8 +128,8 @@ export default function DashboardChef({
             Tableau de bord en temps réel
           </p>
         </div>
-        <div className="flex gap-2 mt-4 md:mt-0">
-          <Link href={`/chef-${typeAgent}/agents`}>
+                <div className="flex gap-2 mt-4 md:mt-0">
+          <Link href={`/chef-${typeAgent}/equipe`}>
             <button className="px-4 py-2 bg-lagune text-white rounded-lg hover:bg-lagune/90 transition-colors text-sm font-semibold">
               + Nouvel agent
             </button>
@@ -222,7 +222,7 @@ export default function DashboardChef({
             <p className="text-ardoise-clair italic mb-4">
               Aucun agent dans votre équipe.
             </p>
-            <Link href={`/chef-${typeAgent}/agents`}>
+                        <Link href={`/chef-${typeAgent}/equipe`}>
               <button className="px-4 py-2 bg-lagune text-white rounded-lg hover:bg-lagune/90 transition-colors text-sm font-semibold">
                 + Créer votre premier agent
               </button>
