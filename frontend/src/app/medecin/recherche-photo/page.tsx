@@ -72,14 +72,14 @@ function Contenu() {
     setErreur("");
   }
 
-  function handlePrendreEnCharge(personne: Personne) {
-    window.location.href = `/medical/prise-en-charge?personne_id=${personne.id}`;
+    function handlePrendreEnCharge(personne: Personne) {
+    window.location.href = `/medecin/nouveau-dossier?personne_id=${personne.id}`;
   }
 
   return (
     <div className="space-y-8 apparition">
-      <nav className="text-sm text-ardoise-clair flex gap-2 flex-wrap">
-        <Link href="/medical/dashboard" className="hover:text-ocre">Dashboard</Link>
+            <nav className="text-sm text-ardoise-clair flex gap-2 flex-wrap">
+        <Link href="/medecin/dashboard" className="hover:text-ocre">Dashboard</Link>
         <span>/</span>
         <span className="text-ardoise font-semibold">Recherche par photo</span>
       </nav>
@@ -87,27 +87,22 @@ function Contenu() {
       <p className="text-ocre text-sm font-semibold uppercase tracking-wider">Espace médical</p>
       <h1>Recherche d'une personne par photo</h1>
             <p className="text-ardoise-clair max-w-2xl">
-        Prends en photo une personne pour retrouver ses informations dans la base de données
-        et la prendre en charge rapidement.
-      </p>
+              Prends en photo une personne pour retrouver ses informations dans la base de données
+              et la prendre en charge rapidement. Les données sont protégées et tracées.
+            </p>
 
-            {/* Bandeau développement — visible uniquement en mode placeholder */}
-      {(!resultat || resultat.mode_developpement) && (
-        <div className="bg-ambre/10 border border-ambre/30 p-4 rounded-lg">
-          <p className="text-sm font-semibold text-ambre mb-1">
-            🔧 Fonctionnalité en développement
-          </p>
-          <p className="text-xs text-ardoise-clair">
-            La reconnaissance faciale (deepface) n'est pas encore branchée.
-            Les résultats sont des placeholders — aucune vraie correspondance n'est effectuée.
-            {resultat?.mode_developpement && (
-              <span className="block mt-1 text-ambre/70">
-                Dernière tentative : score {resultat.score_confiance}% — aucun matching réel.
-              </span>
+            {/* Bandeau info embeddings */}
+            {!resultat && (
+              <div className="bg-lagune/10 border border-lagune/30 p-4 rounded-lg">
+                <p className="text-sm font-semibold text-lagune mb-1">
+                  🤖 Reconnaissance faciale active
+                </p>
+                <p className="text-xs text-ardoise-clair">
+                  Deepface (Facenet512) est opérationnel. Les embeddings sont générés automatiquement
+                  lors de chaque vérification visuelle des citoyens.
+                </p>
+              </div>
             )}
-          </p>
-        </div>
-      )}
 
       {/* Erreur */}
       {erreur && (
@@ -168,128 +163,147 @@ function Contenu() {
             {/* Résultat */}
             {resultat && (
               <>
-                {resultat.trouve && (
-                  <Carte titre="Résultat de la recherche">
-                    <div className="space-y-4">
+                                {resultat.trouve && (
+                  <Carte titre="✅ Personne identifiée">
+                    <div className="space-y-6">
+                      {/* Score de confiance */}
                       <div className="text-center">
-                        <p className="text-6xl mb-2">✅</p>
-                        <p className="text-2xl font-bold text-succes mb-2">PERSONNE IDENTIFIÉE</p>
-                        <div className="max-w-xs mx-auto mb-4">
+                        <div className="max-w-xs mx-auto">
                           <div className="flex justify-between text-sm mb-1">
-                            <span className="text-ardoise-clair">Confiance</span>
-                            <span className="font-bold text-succes">{resultat.score_confiance}%</span>
+                            <span className="text-ardoise-clair font-medium">Confiance</span>
+                            <span className={`font-bold ${resultat.score_confiance >= 70 ? "text-succes" : resultat.score_confiance >= 45 ? "text-ambre" : "text-terre"}`}>
+                              {resultat.score_confiance}%
+                            </span>
                           </div>
                           <BarreProgression
                             valeur={Math.min(resultat.score_confiance, 100)}
-                            couleur="succes"
+                            couleur={resultat.score_confiance >= 70 ? "succes" : resultat.score_confiance >= 45 ? "ambre" : "terre"}
                           />
                         </div>
-                        <p className="text-xs text-ardoise-clair">
-                          Analyse effectuée en {resultat.temps_analyse_ms}ms
+                        <p className="text-xs text-ardoise-clair/60 mt-2">
+                          Analyse en {resultat.temps_analyse_ms}ms • Facenet512
                         </p>
                       </div>
 
-                      <div className="mt-6 pt-4 border-t border-ardoise-clair/10">
-                        <p className="text-sm font-semibold text-ardoise mb-3">Informations de la personne</p>
+                      {/* Identité */}
+                      <div className="bg-ardoise-clair/5 rounded-xl p-5">
+                        <p className="text-sm font-semibold text-ardoise mb-4 flex items-center gap-2">
+                          <span>👤</span> Identité
+                        </p>
                         <div className="grid md:grid-cols-2 gap-4">
-                          <div className="flex items-center gap-3">
-                            {resultat.personne?.photo && (
-                              <img
-                                src={resultat.personne.photo}
-                                alt={resultat.personne.nom}
-                                className="w-16 h-16 rounded-full object-cover border-2 border-lagune"
-                              />
-                            )}
-                            <div>
-                              <p className="font-bold text-ardoise">{resultat.personne?.nom} {resultat.personne?.prenom}</p>
-                              <p className="text-xs text-ardoise-clair">ID: {resultat.personne?.id}</p>
-                            </div>
+                          <div>
+                            <p className="text-xs text-ardoise-clair/60 uppercase tracking-wider">Nom complet</p>
+                            <p className="text-lg font-bold text-ardoise">{resultat.personne?.nom} {resultat.personne?.prenom}</p>
                           </div>
-
-                          <div className="space-y-1 text-sm">
-                            <p><span className="text-ardoise-clair">Date de naissance :</span> <span className="text-ardoise font-medium">{resultat.personne?.date_naissance}</span></p>
-                            <p><span className="text-ardoise-clair">Groupe sanguin :</span> <span className="text-ardoise font-medium">{resultat.personne?.groupe_sanguin}</span></p>
-                            <p><span className="text-ardoise-clair">Téléphone :</span> <span className="text-ardoise font-medium">{resultat.personne?.telephone}</span></p>
-                            <p><span className="text-ardoise-clair">Contact urgence :</span> <span className="text-ardoise font-medium">{resultat.personne?.contact_urgence}</span></p>
+                          <div>
+                            <p className="text-xs text-ardoise-clair/60 uppercase tracking-wider">ID DigiID</p>
+                            <p className="text-sm font-mono text-ardoise">{resultat.personne?.digiid || resultat.personne?.id}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-ardoise-clair/60 uppercase tracking-wider">Date de naissance</p>
+                            <p className="text-sm text-ardoise font-medium">{resultat.personne?.date_naissance || "Non renseignée"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-ardoise-clair/60 uppercase tracking-wider">Groupe sanguin</p>
+                            <p className="text-sm text-ardoise font-medium">{resultat.personne?.groupe_sanguin || "Non renseigné"}</p>
                           </div>
                         </div>
-
-                        {resultat.personne?.antecedents && resultat.personne.antecedents.length > 0 && (
-                          <div className="mt-4 p-3 bg-ocre/5 border border-ocre/20 rounded">
-                            <p className="text-xs font-semibold text-ocre mb-2">⚠️ Antécédents médicaux</p>
-                            <ul className="text-sm text-ardoise space-y-1">
-                              {resultat.personne.antecedents.map((a: string, i: number) => (
-                                <li key={i}>• {a}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {resultat.personne?.allergies && resultat.personne.allergies.length > 0 && (
-                          <div className="mt-3 p-3 bg-terre/5 border border-terre/20 rounded">
-                            <p className="text-xs font-semibold text-terre mb-2">🚫 Allergies connues</p>
-                            <ul className="text-sm text-ardoise space-y-1">
-                              {resultat.personne.allergies.map((a: string, i: number) => (
-                                <li key={i}>• {a}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
                       </div>
 
-                      <div className="mt-6 pt-4 border-t border-ardoise-clair/10 flex gap-3 justify-center">
+                      {/* Contact */}
+                      <div className="bg-ardoise-clair/5 rounded-xl p-5">
+                        <p className="text-sm font-semibold text-ardoise mb-4 flex items-center gap-2">
+                          <span>📞</span> Contact
+                        </p>
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs text-ardoise-clair/60 uppercase tracking-wider">Téléphone</p>
+                            <p className="text-sm text-ardoise font-medium">{resultat.personne?.telephone || "Non renseigné"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-ardoise-clair/60 uppercase tracking-wider">Contact urgence</p>
+                            <p className="text-sm text-ardoise font-medium">{resultat.personne?.contact_urgence || "Non renseigné"}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Antécédents médicaux */}
+                      {resultat.personne?.antecedents && resultat.personne.antecedents.length > 0 && (
+                        <div className="bg-ocre/5 border border-ocre/20 rounded-xl p-5">
+                          <p className="text-xs font-semibold text-ocre mb-3 flex items-center gap-2">
+                            <span>⚠️</span> Antécédents médicaux
+                          </p>
+                          <ul className="text-sm text-ardoise space-y-1.5">
+                            {resultat.personne.antecedents.map((a: string, i: number) => (
+                              <li key={i} className="flex items-start gap-2">
+                                <span className="text-ocre mt-0.5">•</span>
+                                <span>{a}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Allergies */}
+                      {resultat.personne?.allergies && resultat.personne.allergies.length > 0 && (
+                        <div className="bg-terre/5 border border-terre/20 rounded-xl p-5">
+                          <p className="text-xs font-semibold text-terre mb-3 flex items-center gap-2">
+                            <span>🚫</span> Allergies connues
+                          </p>
+                          <ul className="text-sm text-ardoise space-y-1.5">
+                            {resultat.personne.allergies.map((a: string, i: number) => (
+                              <li key={i} className="flex items-start gap-2">
+                                <span className="text-terre mt-0.5">•</span>
+                                <span>{a}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Actions */}
+                      <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
                         <Bouton
                           variante="primaire"
                           onClick={() => handlePrendreEnCharge(resultat.personne!)}
                         >
-                          🏥 Prendre en charge cette personne
+                          🏥 Créer un dossier de prise en charge
                         </Bouton>
-                        <Link href={`/medical/dossier/${resultat.personne?.id}`}>
-                          <Bouton variante="secondaire">📋 Voir le dossier complet</Bouton>
+                        <Link href={`/medecin/dossiers/${resultat.personne?.id}`}>
+                          <Bouton variante="secondaire">📋 Voir le dossier médical</Bouton>
                         </Link>
                       </div>
                     </div>
                   </Carte>
                 )}
 
-                {!resultat.trouve && resultat.mode_developpement && (
-                  <Carte titre="Résultat de la recherche">
-                    <div className="text-center py-4">
-                      <p className="text-6xl mb-4">🔧</p>
-                      <p className="text-xl font-bold text-ambre mb-2">RECHERCHE NON DISPONIBLE</p>
-                      <p className="text-sm text-ardoise-clair mb-4">
-                        La reconnaissance faciale n&apos;est pas encore implémentée.
-                        Reviens après l&apos;activation du module deepface.
-                      </p>
-                      <p className="text-xs text-ardoise-clair/60 mb-4">
-                        Temps d&apos;analyse : {resultat.temps_analyse_ms}ms | Score : {resultat.score_confiance}%
-                      </p>
-                      <div className="flex gap-3 justify-center">
-                        <Link href="/medical/nouveau-dossier">
-                          <Bouton variante="primaire">➕ Créer un nouveau dossier</Bouton>
-                        </Link>
-                        <Bouton variante="ghost" onClick={handleReset}>
-                          Réessayer
-                        </Bouton>
-                      </div>
-                    </div>
-                  </Carte>
-                )}
-
-                {!resultat.trouve && !resultat.mode_developpement && (
-                  <Carte titre="Résultat de la recherche">
+                                {!resultat.trouve && (
+                  <Carte titre="❓ Personne non trouvée">
                     <div className="text-center py-4">
                       <p className="text-6xl mb-4">❓</p>
-                      <p className="text-2xl font-bold text-terre mb-2">PERSONNE NON TROUVÉE</p>
-                      <p className="text-sm text-ardoise-clair mb-4">
+                      <p className="text-xl font-bold text-terre mb-2">PERSONNE NON TROUVÉE</p>
+                      <p className="text-sm text-ardoise-clair mb-4 max-w-md mx-auto">
                         Aucune correspondance trouvée dans la base de données.
+                        {resultat.score_confiance > 0 && (
+                          <span> Score maximum : {resultat.score_confiance}% (en dessous du seuil de 45%).</span>
+                        )}
                       </p>
-                      <p className="text-xs text-ardoise-clair/60 mb-4">
-                        Temps d&apos;analyse : {resultat.temps_analyse_ms}ms |
-                        Score max : {resultat.score_confiance}%
-                      </p>
-                      <div className="flex gap-3 justify-center">
-                        <Link href="/medical/nouveau-dossier">
+                      <div className="bg-ardoise-clair/5 rounded-lg p-3 mb-4 max-w-xs mx-auto">
+                        <div className="flex justify-between text-xs text-ardoise-clair">
+                          <span>Temps d'analyse</span>
+                          <span className="font-medium text-ardoise">{resultat.temps_analyse_ms}ms</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-ardoise-clair mt-1">
+                          <span>Score max</span>
+                          <span className="font-medium text-ardoise">{resultat.score_confiance}%</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-ardoise-clair mt-1">
+                          <span>Seuil requis</span>
+                          <span className="font-medium text-ardoise">45%</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-3 justify-center flex-wrap">
+                        <Link href="/medecin/nouveau-dossier">
                           <Bouton variante="primaire">➕ Créer un nouveau dossier</Bouton>
                         </Link>
                         <Bouton variante="ghost" onClick={handleReset}>
@@ -303,7 +317,7 @@ function Contenu() {
             )}
 
       <div className="flex gap-3 flex-wrap">
-        <Link href="/medical/dashboard">
+                <Link href="/medecin/dashboard">
           <Bouton variante="ghost">← Retour au dashboard</Bouton>
         </Link>
       </div>
