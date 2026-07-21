@@ -314,7 +314,7 @@ export async function rechercherPersonneParPhoto(
       reject(new Error("Erreur réseau lors de la recherche"));
     });
 
-    xhr.open("POST", `/api/backend${PREFIXE_RECHERCHE_FACIALE}`);
+    xhr.open("POST", `${PREFIXE_RECHERCHE_FACIALE}`);
     // Ne pas set Content-Type — le navigateur le fait automatiquement avec FormData
     Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
     xhr.send(formData);

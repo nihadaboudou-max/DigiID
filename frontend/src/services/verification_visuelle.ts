@@ -73,7 +73,7 @@ export async function uploaderPhoto(
       reject(new Error("Erreur réseau lors de l'upload"));
     });
 
-    xhr.open("POST", `/api/backend${PREFIXE}`);
+    xhr.open("POST", `${PREFIXE}`);
     // Ne pas set Content-Type — le navigateur le fait automatiquement avec FormData
     Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
     xhr.send(formData);
