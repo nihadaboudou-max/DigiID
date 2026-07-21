@@ -39,15 +39,18 @@ export default function DashboardChef({
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
 
-  useEffect(() => {
+    useEffect(() => {
     chargerAgents();
-    const interval = setInterval(chargerAgents, 30000);
+    const interval = setInterval(() => {
+      chargerAgents();
+    }, 30000);
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [typeAgent]);
 
   async function chargerAgents() {
     try {
-      if (!agents.length) setChargement(true);
+      setChargement(true);
       
       // ✅ CORRECTION : Endpoint dynamique selon le type d'agent
       let endpoint = `/api/v1/chefs/${typeAgent}/agents`;
