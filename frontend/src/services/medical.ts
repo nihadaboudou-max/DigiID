@@ -82,6 +82,7 @@ export interface Personne {
   groupe_sanguin: string | null;
   telephone: string | null;
   contact_urgence: string | null;
+  digiid: string | null;
   photo?: string | null;
   antecedents?: string[];
   allergies?: string[];
