@@ -799,7 +799,14 @@ async def creer_invitation_chef(
     """
     chef = await verifier_est_chef(chef)
     
-    # Mapping des types de chefs vers les rôles
+        # Mapping des types de chefs vers les rôles
+    mapping_types = {
+        "ong": "chef_ong",
+        "police": "chef_police",
+        "medical": "chef_medical",
+        "enrolement": "chef_agent",
+    }
+    
     mapping_roles = {
         "ong": "agent_ong",
         "police": "agent_police",
@@ -807,12 +814,16 @@ async def creer_invitation_chef(
         "enrolement": "agent_terrain",
     }
     
+    role_attendu = mapping_types.get(type_chef)
+    if not role_attendu:
+        raise HTTPException(status_code=400, detail=f"Type de chef invalide: {type_chef}")
+    
     role = mapping_roles.get(type_chef)
     if not role:
         raise HTTPException(status_code=400, detail=f"Type de chef invalide: {type_chef}")
     
     # Vérifier que le chef a le bon rôle
-    if chef.role != f"chef_{type_chef}":
+    if chef.role != role_attendu:
         raise HTTPException(
             status_code=403,
             detail=f"Seuls les chefs {type_chef} peuvent créer des invitations pour ce type."
@@ -994,12 +1005,12 @@ async def lister_rapports_chef(
     """Liste les rapports du chef."""
     chef = await verifier_est_chef(chef)
     
-    # Mapping des types
+        # Mapping des types
     mapping_roles = {
         "ong": "chef_ong",
         "police": "chef_police",
         "medical": "chef_medical",
-        "enrolement": "chef_enrolement",
+        "enrolement": "chef_agent",
     }
     
     role_attendu = mapping_roles.get(type_chef)
