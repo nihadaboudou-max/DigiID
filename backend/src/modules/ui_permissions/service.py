@@ -64,7 +64,7 @@ MODULES_PAR_DEFAUT: dict[str, list[dict]] = {
         {"module_key": "badges", "module_label": "Mes badges", "is_enabled": True, "is_read_only": True},
         {"module_key": "parrainage", "module_label": "Mon parrainage", "is_enabled": True, "is_read_only": False},
     ],
-    "agent": [
+    "agent_terrain": [
         {"module_key": "enrolement_citoyen", "module_label": "Enrôlement citoyen", "is_enabled": True, "is_read_only": False},
         {"module_key": "scan_ocr_cni", "module_label": "Scan OCR CNI", "is_enabled": True, "is_read_only": False},
         {"module_key": "capture_biometrique", "module_label": "Capture biométrique", "is_enabled": True, "is_read_only": False},
@@ -73,7 +73,7 @@ MODULES_PAR_DEFAUT: dict[str, list[dict]] = {
         {"module_key": "stats_enrolement", "module_label": "Statistiques enrôlement", "is_enabled": True, "is_read_only": True},
         {"module_key": "mon_profil_agent", "module_label": "Mon profil agent", "is_enabled": True, "is_read_only": True},
     ],
-    "medecin": [
+    "agent_medical": [
         {"module_key": "creation_dossier", "module_label": "Création dossier médical", "is_enabled": True, "is_read_only": False},
         {"module_key": "suivi_dossier", "module_label": "Suivi des dossiers", "is_enabled": True, "is_read_only": False},
         {"module_key": "recherche_patient", "module_label": "Recherche patient", "is_enabled": True, "is_read_only": False},
@@ -81,24 +81,65 @@ MODULES_PAR_DEFAUT: dict[str, list[dict]] = {
         {"module_key": "historique_consultations", "module_label": "Historique consultations", "is_enabled": True, "is_read_only": True},
         {"module_key": "ordonnances", "module_label": "Ordonnances", "is_enabled": True, "is_read_only": False},
         {"module_key": "calendrier_rendezvous", "module_label": "Calendrier rendez-vous", "is_enabled": True, "is_read_only": False},
-        {"module_key": "mon_profil_medecin", "module_label": "Mon profil médecin", "is_enabled": True, "is_read_only": True},
+        {"module_key": "mon_profil_agent", "module_label": "Mon profil agent", "is_enabled": True, "is_read_only": True},
     ],
-    "police": [
+    "agent_police": [
         {"module_key": "verification_identite", "module_label": "Vérification d'identité", "is_enabled": True, "is_read_only": False},
         {"module_key": "consultation_score", "module_label": "Consultation score", "is_enabled": True, "is_read_only": True},
         {"module_key": "recherche_personne", "module_label": "Recherche personne", "is_enabled": True, "is_read_only": False},
         {"module_key": "audit_acces_police", "module_label": "Audit accès police", "is_enabled": True, "is_read_only": True},
         {"module_key": "signalement_fraude", "module_label": "Signalement fraude", "is_enabled": True, "is_read_only": False},
-        {"module_key": "mon_profil_police", "module_label": "Mon profil police", "is_enabled": True, "is_read_only": True},
+        {"module_key": "mon_profil_agent", "module_label": "Mon profil agent", "is_enabled": True, "is_read_only": True},
     ],
-    "ong": [
+    "agent_ong": [
         {"module_key": "consultation_beneficiaires", "module_label": "Bénéficiaires", "is_enabled": True, "is_read_only": False},
         {"module_key": "attestations_communautaires", "module_label": "Attestations communautaires", "is_enabled": True, "is_read_only": False},
         {"module_key": "rapports_terrain", "module_label": "Rapports terrain", "is_enabled": True, "is_read_only": False},
         {"module_key": "gestion_programme", "module_label": "Gestion programme", "is_enabled": True, "is_read_only": False},
-        {"module_key": "mon_profil_ong", "module_label": "Mon profil ONG", "is_enabled": True, "is_read_only": True},
+        {"module_key": "mon_profil_agent", "module_label": "Mon profil agent", "is_enabled": True, "is_read_only": True},
         {"module_key": "statistiques_ong", "module_label": "Statistiques ONG", "is_enabled": True, "is_read_only": True},
         {"module_key": "calendrier_missions", "module_label": "Calendrier missions", "is_enabled": True, "is_read_only": False},
+    ],
+    "chef_police": [
+        {"module_key": "gestion_equipe", "module_label": "Gestion équipe", "is_enabled": True, "is_read_only": False},
+        {"module_key": "statistiques_chef", "module_label": "Statistiques", "is_enabled": True, "is_read_only": True},
+        {"module_key": "audit_equipe", "module_label": "Audit équipe", "is_enabled": True, "is_read_only": True},
+        {"module_key": "gestion_missions", "module_label": "Missions", "is_enabled": True, "is_read_only": False},
+        {"module_key": "invitations", "module_label": "Invitations", "is_enabled": True, "is_read_only": False},
+        {"module_key": "rapports_chef", "module_label": "Rapports", "is_enabled": True, "is_read_only": False},
+        {"module_key": "recherche_chef", "module_label": "Recherche", "is_enabled": True, "is_read_only": True},
+        {"module_key": "mon_profil_chef", "module_label": "Mon profil", "is_enabled": True, "is_read_only": True},
+        {"module_key": "programmes", "module_label": "Programmes", "is_enabled": True, "is_read_only": False},
+    ],
+    "chef_medical": [
+        {"module_key": "gestion_equipe", "module_label": "Gestion équipe", "is_enabled": True, "is_read_only": False},
+        {"module_key": "statistiques_chef", "module_label": "Statistiques", "is_enabled": True, "is_read_only": True},
+        {"module_key": "audit_equipe", "module_label": "Audit équipe", "is_enabled": True, "is_read_only": True},
+        {"module_key": "gestion_missions", "module_label": "Missions", "is_enabled": True, "is_read_only": False},
+        {"module_key": "invitations", "module_label": "Invitations", "is_enabled": True, "is_read_only": False},
+        {"module_key": "rapports_chef", "module_label": "Rapports", "is_enabled": True, "is_read_only": False},
+        {"module_key": "recherche_chef", "module_label": "Recherche", "is_enabled": True, "is_read_only": True},
+        {"module_key": "mon_profil_chef", "module_label": "Mon profil", "is_enabled": True, "is_read_only": True},
+    ],
+    "chef_ong": [
+        {"module_key": "gestion_equipe", "module_label": "Gestion équipe", "is_enabled": True, "is_read_only": False},
+        {"module_key": "statistiques_chef", "module_label": "Statistiques", "is_enabled": True, "is_read_only": True},
+        {"module_key": "audit_equipe", "module_label": "Audit équipe", "is_enabled": True, "is_read_only": True},
+        {"module_key": "gestion_missions", "module_label": "Missions", "is_enabled": True, "is_read_only": False},
+        {"module_key": "invitations", "module_label": "Invitations", "is_enabled": True, "is_read_only": False},
+        {"module_key": "rapports_chef", "module_label": "Rapports", "is_enabled": True, "is_read_only": False},
+        {"module_key": "recherche_chef", "module_label": "Recherche", "is_enabled": True, "is_read_only": True},
+        {"module_key": "mon_profil_chef", "module_label": "Mon profil", "is_enabled": True, "is_read_only": True},
+        {"module_key": "programmes", "module_label": "Programmes", "is_enabled": True, "is_read_only": False},
+    ],
+    "chef_agent": [
+        {"module_key": "gestion_equipe", "module_label": "Gestion équipe", "is_enabled": True, "is_read_only": False},
+        {"module_key": "statistiques_chef", "module_label": "Statistiques", "is_enabled": True, "is_read_only": True},
+        {"module_key": "audit_equipe", "module_label": "Audit équipe", "is_enabled": True, "is_read_only": True},
+        {"module_key": "invitations", "module_label": "Invitations", "is_enabled": True, "is_read_only": False},
+        {"module_key": "rapports_chef", "module_label": "Rapports", "is_enabled": True, "is_read_only": False},
+        {"module_key": "recherche_chef", "module_label": "Recherche", "is_enabled": True, "is_read_only": True},
+        {"module_key": "mon_profil_chef", "module_label": "Mon profil", "is_enabled": True, "is_read_only": True},
     ],
 }
 
