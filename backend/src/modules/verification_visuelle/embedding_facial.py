@@ -15,7 +15,9 @@ Usage :
 """
 from io import BytesIO
 from typing import Iterable, Optional
+
 import numpy as np
+from PIL import Image
 
 # ── deepface : chargement paresseux (lazy) pour éviter le gel au démarrage ──
 _BACKEND: str = "opencv"      # detection
@@ -25,12 +27,12 @@ _HANDLE_DEEPFACE = None       # lazy import cache
 
 
 def _obtenir_deepface():
-    """Importe et retourne le module deepface (lazy)."""
+    """Importe et retourne la classe DeepFace (lazy, une seule fois)."""
     global _HANDLE_DEEPFACE
     if _HANDLE_DEEPFACE is None:
         try:
-            import deepface
-            _HANDLE_DEEPFACE = deepface
+            from deepface import DeepFace
+            _HANDLE_DEEPFACE = DeepFace
         except ImportError:
             raise RuntimeError(
                 "deepface n'est pas installé. "
@@ -71,21 +73,22 @@ def generer_embedding(
     ValueError
         Si aucun visage n'est détecté dans l'image
     """
-    df = _obtenir_deepface()
+    DeepFace = _obtenir_deepface()
 
-    # deepface.Represent accepte un chemin ou un np.array
-    img = np.array(bytearray(image_bytes), dtype=np.uint8)
+    # 1. Décoder l'image en RGB via PIL → numpy array (H, W, 3)
+    pil_image = Image.open(BytesIO(image_bytes)).convert("RGB")
+    img_array = np.array(pil_image)
 
+    # 2. DeepFace.Represent extrait l'embedding (Facenet512)
     try:
-        resultat = df.Represent(
-            img_path=img,
+        resultat = DeepFace.Represent(
+            img_path=img_array,
             model_name=modele,
             detector_backend=_BACKEND,
             enforce_detection=detecter_visage,
             align=True,
         )
     except ValueError as exc:
-        # deepface lève ValueError si aucun visage détecté
         raise ValueError(f"Aucun visage détecté dans l'image : {exc}") from exc
 
     if not resultat or "embedding" not in resultat[0]:
