@@ -38,24 +38,44 @@ FALLBACK_MODULES: dict[str, set[str]] = {
         "historique_acces", "verification_cni", "verification_faciale",
         "consentements", "chatbot", "badges", "parrainage",
     },
-    "agent": {
+    "agent_terrain": {
         "enrolement_citoyen", "scan_ocr_cni", "capture_biometrique",
         "liste_enrollements", "recherche_citoyen", "stats_enrolement",
         "mon_profil_agent",
     },
-    "medecin": {
+    "agent_medical": {
         "creation_dossier", "suivi_dossier", "recherche_patient",
         "attestations_medicales", "historique_consultations",
-        "ordonnances", "calendrier_rendezvous", "mon_profil_medecin",
+        "ordonnances", "calendrier_rendezvous", "mon_profil_agent",
     },
-    "police": {
+    "agent_police": {
         "verification_identite", "consultation_score", "recherche_personne",
-        "audit_acces_police", "signalement_fraude", "mon_profil_police",
+        "audit_acces_police", "signalement_fraude", "mon_profil_agent",
     },
-    "ong": {
+    "agent_ong": {
         "consultation_beneficiaires", "attestations_communautaires",
-        "rapports_terrain", "gestion_programme", "mon_profil_ong",
+        "rapports_terrain", "gestion_programme", "mon_profil_agent",
         "statistiques_ong", "calendrier_missions",
+    },
+    "chef_police": {
+        "gestion_equipe", "statistiques_chef", "audit_equipe",
+        "gestion_missions", "invitations", "rapports_chef",
+        "recherche_chef", "mon_profil_chef", "programmes",
+    },
+    "chef_medical": {
+        "gestion_equipe", "statistiques_chef", "audit_equipe",
+        "gestion_missions", "invitations", "rapports_chef",
+        "recherche_chef", "mon_profil_chef",
+    },
+    "chef_ong": {
+        "gestion_equipe", "statistiques_chef", "audit_equipe",
+        "gestion_missions", "invitations", "rapports_chef",
+        "recherche_chef", "mon_profil_chef", "programmes",
+    },
+    "chef_agent": {
+        "gestion_equipe", "statistiques_chef", "audit_equipe",
+        "invitations", "rapports_chef",
+        "recherche_chef", "mon_profil_chef",
     },
 }
 
