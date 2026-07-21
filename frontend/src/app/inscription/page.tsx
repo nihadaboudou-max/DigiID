@@ -15,11 +15,12 @@ import { Logo } from "@/composants/commun/Logo";
 import { inscrire } from "@/services/authentification";
 import { ErreurAPI } from "@/services/client_api";
 import { useAuthentification } from "@/contextes/authentification";
+import { cheminTableauDeBord } from "@/types/api";
 
 export default function PageInscription() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { rafraichirProfil } = useAuthentification();
+  const { rafraichirProfil, utilisateur } = useAuthentification();
   const [donnees, setDonnees] = useState({
     email: "",
     mot_de_passe: "",
@@ -135,7 +136,7 @@ export default function PageInscription() {
               <Bouton
                 variante="ghost"
                 className="w-full"
-                onClick={() => router.push("/tableau-de-bord")}
+                onClick={() => router.push(utilisateur ? cheminTableauDeBord(utilisateur.role) : "/tableau-de-bord")}
               >
                 Passer pour l'instant
               </Bouton>
