@@ -40,7 +40,7 @@ function Contenu() {
     setChargement(true);
     setErreur("");
     try {
-      return clientAPI.get<Enrolement>(`/api/v1/enrolement/${id}`, { authentifie: true });
+      const e = await clientAPI.get<Enrolement>(`/api/v1/enrolement/${id}`, { authentifie: true });
       setEnrolement(e);
       setNotes(e.notes || "");
     } catch (e: any) {
