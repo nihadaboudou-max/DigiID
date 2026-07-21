@@ -150,6 +150,17 @@ export async function obtenirDossier(id: string): Promise<DossierMedical> {
   });
 }
 
+/**
+ * Cherche les dossiers médicaux d'un patient par son DigiID.
+ * Retourne le premier dossier trouvé ou null.
+ */
+export async function trouverDossierParDigiID(
+  digiid: string,
+): Promise<DossierMedical | null> {
+  const dossiers = await listerDossiers("tous", digiid);
+  return dossiers.length > 0 ? dossiers[0] : null;
+}
+
 export async function modifierDossier(
   id: string,
   data: { motif?: string; diagnostic?: string; statut?: string; hopital?: string }
