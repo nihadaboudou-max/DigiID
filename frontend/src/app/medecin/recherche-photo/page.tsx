@@ -12,7 +12,7 @@ import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspacePr
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { BarreProgression } from "@/composants/commun/BarreProgression";
-import { rechercherPersonneParPhoto } from "@/services/medical";
+import { rechercherPersonneParPhoto, trouverDossierParDigiID } from "@/services/medical";
 import type { RecherchePersonne, Personne } from "@/services/medical";
 
 export default function PageRecherchePersonne() {
@@ -25,11 +25,12 @@ export default function PageRecherchePersonne() {
 
 function Contenu() {
   const [apercu, setApercu] = useState<string | null>(null);
-  const [fichier, setFichier] = useState<File | null>(null);
-  const [resultat, setResultat] = useState<RecherchePersonne | null>(null);
-  const [chargement, setChargement] = useState(false);
-  const [erreur, setErreur] = useState("");
-  const refPhoto = useRef<HTMLInputElement>(null);
+    const [fichier, setFichier] = useState<File | null>(null);
+    const [resultat, setResultat] = useState<RecherchePersonne | null>(null);
+    const [chargement, setChargement] = useState(false);
+    const [erreur, setErreur] = useState("");
+    const refPhoto = useRef<HTMLInputElement>(null);
+    const refCamera = useRef<HTMLInputElement>(null);
 
   async function handleSelectionFichier(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -60,6 +61,30 @@ function Contenu() {
       setResultat(data);
     } catch {
       setErreur("Erreur lors de la recherche. Vérifie que la photo est valide.");
+    } finally {
+      setChargement(false);
+    }
+  }
+
+  async function handleVoirDossier(personne: Personne) {
+    if (!personne.digiid) {
+      // Pas de DigiID, on va directement à la création
+      window.location.href = `/medecin/nouveau-dossier?personne_id=${personne.id}&nom=${encodeURIComponent(personne.nom)}&prenom=${encodeURIComponent(personne.prenom || "")}`;
+      return;
+    }
+
+    setChargement(true);
+    try {
+      const dossier = await trouverDossierParDigiID(personne.digiid);
+      if (dossier) {
+        window.location.href = `/medecin/dossiers/${dossier.id}`;
+      } else {
+        // Aucun dossier existant → rediriger vers création
+        window.location.href = `/medecin/nouveau-dossier?personne_id=${personne.id}&digiid=${personne.digiid}&nom=${encodeURIComponent(personne.nom)}&prenom=${encodeURIComponent(personne.prenom || "")}`;
+      }
+    } catch {
+      // En cas d'erreur, on propose de créer un dossier
+      window.location.href = `/medecin/nouveau-dossier?personne_id=${personne.id}&digiid=${personne.digiid}&nom=${encodeURIComponent(personne.nom)}&prenom=${encodeURIComponent(personne.prenom || "")}`;
     } finally {
       setChargement(false);
     }
@@ -111,37 +136,70 @@ function Contenu() {
         </div>
       )}
 
-      {/* Sélection de la photo */}
+            {/* Sélection de la photo */}
       <Carte titre="Photo de la personne à identifier">
-        <div
-          className="border-2 border-dashed border-ardoise-clair/30 rounded-xl p-8 text-center cursor-pointer hover:border-lagune transition-colors"
-          onClick={() => refPhoto.current?.click()}
-        >
-                    {apercu ? (
-            <img src={apercu} alt="Photo de la personne" className="max-h-80 mx-auto rounded-lg" />
-          ) : (
-            <div>
-              <p className="text-5xl mb-2">📷</p>
-              <p className="text-sm text-ardoise-clair">Clique pour sélectionner ou prendre une photo</p>
-              <p className="text-xs text-ardoise-clair/60 mt-1">Photo du visage de la personne</p>
-            </div>
-          )}
-          <input
-            ref={refPhoto}
-            type="file"
-            accept="image/*"
-            capture="user"
-                        className="hidden"
-            onChange={handleSelectionFichier}
-          />
-        </div>
-                {apercu && (
-          <button
-            onClick={() => { refPhoto.current?.click(); }}
-            className="text-xs text-lagune hover:underline mt-2"
+        <div className="grid md:grid-cols-2 gap-4">
+          {/* Zone 1 : Galerie */}
+          <div
+            className="border-2 border-dashed border-ardoise-clair/30 rounded-xl p-8 text-center cursor-pointer hover:border-lagune transition-colors"
+            onClick={() => refPhoto.current?.click()}
           >
-            Changer la photo
-          </button>
+            {apercu ? (
+              <img src={apercu} alt="Photo de la personne" className="max-h-60 mx-auto rounded-lg" />
+            ) : (
+              <div>
+                <p className="text-5xl mb-2">📁</p>
+                <p className="text-sm text-ardoise-clair font-medium">Choisir une photo</p>
+                <p className="text-xs text-ardoise-clair/60 mt-1">Depuis la galerie ou les fichiers</p>
+              </div>
+            )}
+            <input
+              ref={refPhoto}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleSelectionFichier}
+            />
+          </div>
+
+          {/* Zone 2 : Appareil photo (mode urgence) */}
+          <div
+            className="border-2 border-dashed border-ocre/40 rounded-xl p-8 text-center cursor-pointer hover:border-ocre transition-colors bg-ocre/5"
+            onClick={() => refCamera.current?.click()}
+          >
+            <div>
+              <p className="text-5xl mb-2">🚑</p>
+              <p className="text-sm text-ocre font-bold">📸 Urgence — Prendre une photo</p>
+              <p className="text-xs text-ardoise-clair/60 mt-1">Ouvre l&apos;appareil photo (caméra arrière)</p>
+              <p className="text-xs text-ocre/70 mt-2 font-semibold">Mode urgence • Photo du patient</p>
+            </div>
+            <input
+              ref={refCamera}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleSelectionFichier}
+            />
+          </div>
+        </div>
+
+        {apercu && (
+          <div className="flex gap-3 mt-4 justify-center">
+            <button
+              onClick={() => { refPhoto.current?.click(); }}
+              className="text-xs text-lagune hover:underline"
+            >
+              Changer depuis la galerie
+            </button>
+            <span className="text-xs text-ardoise-clair/30">|</span>
+            <button
+              onClick={() => { refCamera.current?.click(); }}
+              className="text-xs text-ocre hover:underline font-semibold"
+            >
+              📸 Reprendre en photo (urgence)
+            </button>
+          </div>
         )}
       </Carte>
 
@@ -263,15 +321,20 @@ function Contenu() {
 
                       {/* Actions */}
                       <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-                        <Bouton
+                                                <Bouton
                           variante="primaire"
+                          chargement={chargement}
                           onClick={() => handlePrendreEnCharge(resultat.personne!)}
                         >
                           🏥 Créer un dossier de prise en charge
                         </Bouton>
-                        <Link href={`/medecin/dossiers/${resultat.personne?.id}`}>
-                          <Bouton variante="secondaire">📋 Voir le dossier médical</Bouton>
-                        </Link>
+                        <Bouton
+                          variante="secondaire"
+                          chargement={chargement}
+                          onClick={() => handleVoirDossier(resultat.personne!)}
+                        >
+                          📋 Voir le dossier médical
+                        </Bouton>
                       </div>
                     </div>
                   </Carte>
