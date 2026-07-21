@@ -60,7 +60,7 @@ faker==23.2.1
 # --- Deep Learning (vérification visuelle + recherche faciale) ---
 opencv-python-headless==4.9.0.80
 deepface==0.0.79
-tensorflow==2.13.0
+tensorflow==2.15.0
 # insightface==0.7.3           # Alternative plus légère (optionnel)
 # onnxruntime==1.17.1          # Nécessaire pour insightface
 pillow==10.2.0
