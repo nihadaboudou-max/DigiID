@@ -92,6 +92,7 @@ export interface RecherchePersonne {
   personne: Personne | null;
   score_confiance: number;
   temps_analyse_ms: number;
+  mode_developpement: boolean;
 }
 
 export interface HistoriqueRecherche {

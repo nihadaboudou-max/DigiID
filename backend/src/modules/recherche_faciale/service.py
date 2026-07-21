@@ -67,8 +67,40 @@ async def effectuer_recherche_faciale(
     """
     Traite une photo, effectue une recherche faciale et enregistre l'historique.
 
-    TODO: Implémenter la vraie reconnaissance faciale (embedding + matching).
-          Pour l'instant, le matching est mocké.
+    ⚠️ MODE DÉVELOPPEMENT — FONCTIONNALITÉ NON IMPLÉMENTÉE
+    ======================================================
+    Le vrai matching facial n'est pas encore branché.
+    Le résultat renvoie toujours "non trouvé" avec score = 0.
+
+    ------------------------------------------------------
+    Implémentation réelle à prévoir (stack technique) :
+    ------------------------------------------------------
+    1. Détection de visage
+       - Librairie : deepface (recommended) ou face_recognition (dlib)
+       - Vérifier que la photo contient bien un visage (sinon → ErreurValidation)
+       - Extraire le bounding box + landmarks
+
+    2. Extraction d'embedding facial
+       - Modèle : Facenet512 (128D), ArcFace (512D) ou VGG-Face
+       - Normaliser le vecteur (L2 norm)
+       - Stocker dans utilisateur.empreinte_faciale (déjà présent dans le modèle)
+
+    3. Recherche par similarité cosinus
+       - SELECT id, empreinte_faciale FROM utilisateur WHERE est_supprime = False
+       - Calculer la distance cosinus entre l'embedding de la photo et chaque stored
+       - Seuils : > 0.7 = forte confiance, 0.4-0.7 = faible, < 0.4 = rejet
+       - Prendre le meilleur score (max)
+
+    4. Journalisation
+       - Enregistrer le score réel, le temps d'analyse, le modèle utilisé
+       - Détecter les tentatives avec des photos sans visage (fraude potentielle)
+
+    5. Anti-spoofing (liveness) — optionnel mais recommandé
+       - Vérifier que la photo n'est pas une capture d'écran / un masque
+       - deepface propose une détection de liveness basique
+
+    Référence : backend/src/modules/verification_visuelle/service.py
+    (ce module fait déjà l'extraction d'embedding et la détection anti-doublon)
     """
     start_time = time.time()
 
@@ -76,22 +108,19 @@ async def effectuer_recherche_faciale(
     contenu_photo = await _lire_photo(photo)
     nom_fichier = f"recherche_{uuid.uuid4()}.jpg"
 
-    # 2. Recherche dans la base (MOCK — à remplacer par vrai matching facial)
-    # Logique réelle à implémenter :
-    #   - Extraire l'embedding facial de la photo
-    #   - Comparer avec les embeddings stockés dans utilisateur.empreinte_faciale
-    #   - Trouver la meilleure correspondance avec un score de similarité
+    # 2. Recherche dans la base — PAS ENCORE IMPLÉMENTÉE
+    # Le code ci-dessous est un placeholder qui sera remplacé par :
+    #   a) deepface.extract_embedding(photo_bytes) → vecteur 128D/512D
+    #   b) SELECT id, empreinte_faciale FROM utilisateur WHERE est_supprime = False
+    #   c) cosine_similarity(embedding_photo, embedding_stocke) pour chaque ligne
+    #   d) Meilleur score + seuil de confiance
+    #
+    # Résultat : on retourne "non trouvé" quel que soit le contenu de la photo.
+    # Cela évite les résultats fictifs trompeurs pendant le développement.
 
-    requete = await session.execute(
-        select(Utilisateur)
-        .where(Utilisateur.est_supprime == False)
-        .limit(1)
-    )
-    utilisateur_trouve = requete.scalar_one_or_none()
-
-    trouve = utilisateur_trouve is not None
-    score_confiance = 85.5 if trouve else 0.0  # Score mocké
-    personne_trouvee_id = utilisateur_trouve.id if utilisateur_trouve else None
+    personne_trouvee_id = None
+    trouve = False
+    score_confiance = 0.0
 
     temps_ecoule = int((time.time() - start_time) * 1000)
 
@@ -112,15 +141,15 @@ async def effectuer_recherche_faciale(
     await session.refresh(recherche)
 
     # 4. Construire la réponse
+    # Pas de personne trouvée — le matching facial n'est pas implémenté
     personne_data = None
-    if utilisateur_trouve:
-        personne_data = await _construire_profil_personne(utilisateur_trouve)
 
     return ResultatRechercheFaciale(
         trouve=trouve,
         personne=personne_data,
         score_confiance=score_confiance,
         temps_analyse_ms=temps_ecoule,
+        mode_developpement=True,
     )
 
 
