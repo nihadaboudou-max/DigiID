@@ -26,6 +26,7 @@ from src.modules.verification_visuelle.schemas import (
 )
 from src.noyau import journal
 from src.noyau.exceptions import ErreurValidation
+import numpy as np
 
 
 async def _lire_image(fichier: UploadFile) -> bytes:
@@ -141,22 +142,7 @@ async def traiter_upload_photo(
         utilisateur.est_visage_verifie = True
         utilisateur.date_verification_visage = datetime.now(timezone.utc)
         utilisateur.date_derniere_mise_a_jour_verifications = datetime.now(timezone.utc)
-        await session.commit()
-
-    journal.info(
-        f"Vérification visuelle enregistrée : utilisateur={utilisateur.id} statut={statut}"
-    )
-    return verification
-
-    session.add(verification)
-    await session.commit()
-    await session.refresh(verification)
-
-    # --- Mettre à jour le statut de l'utilisateur si approuvé ---
-    if statut == "approuve":
-        utilisateur.est_visage_verifie = True
-        utilisateur.date_verification_visage = datetime.now(timezone.utc)
-        utilisateur.date_derniere_mise_a_jour_verifications = datetime.now(timezone.utc)
+        utilisateur.empreinte_faciale = np.array(embedding, dtype=np.float32).tobytes()
         await session.commit()
 
     journal.info(

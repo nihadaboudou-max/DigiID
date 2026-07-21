@@ -29,7 +29,7 @@ class ResultatRechercheFaciale(BaseModel):
     score_confiance: float = Field(..., ge=0.0, le=100.0)
     temps_analyse_ms: int = Field(..., ge=0)
     mode_developpement: bool = Field(
-        default=True,
+        default=False,
         description="⚠️ True = la reconnaissance faciale n'est pas encore implémentée. "
                     "Le résultat est un placeholder de développement.",
     )

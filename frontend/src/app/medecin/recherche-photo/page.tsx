@@ -91,21 +91,23 @@ function Contenu() {
         et la prendre en charge rapidement.
       </p>
 
-      {/* Bandeau développement */}
-      <div className="bg-ambre/10 border border-ambre/30 p-4 rounded-lg">
-        <p className="text-sm font-semibold text-ambre mb-1">
-          🔧 Fonctionnalité en développement
-        </p>
-        <p className="text-xs text-ardoise-clair">
-          La reconnaissance faciale (deepface) n'est pas encore branchée.
-          Les résultats sont des placeholders — aucune vraie correspondance n'est effectuée.
-          {resultat?.mode_developpement && (
-            <span className="block mt-1 text-ambre/70">
-              Dernière tentative : score {resultat.score_confiance}% — aucun matching réel.
-            </span>
-          )}
-        </p>
-      </div>
+            {/* Bandeau développement — visible uniquement en mode placeholder */}
+      {(!resultat || resultat.mode_developpement) && (
+        <div className="bg-ambre/10 border border-ambre/30 p-4 rounded-lg">
+          <p className="text-sm font-semibold text-ambre mb-1">
+            🔧 Fonctionnalité en développement
+          </p>
+          <p className="text-xs text-ardoise-clair">
+            La reconnaissance faciale (deepface) n'est pas encore branchée.
+            Les résultats sont des placeholders — aucune vraie correspondance n'est effectuée.
+            {resultat?.mode_developpement && (
+              <span className="block mt-1 text-ambre/70">
+                Dernière tentative : score {resultat.score_confiance}% — aucun matching réel.
+              </span>
+            )}
+          </p>
+        </div>
+      )}
 
       {/* Erreur */}
       {erreur && (
@@ -166,30 +168,6 @@ function Contenu() {
             {/* Résultat */}
             {resultat && (
               <>
-                {resultat.mode_developpement && !resultat.trouve && (
-                  <Carte titre="Résultat de la recherche">
-                    <div className="text-center py-4">
-                      <p className="text-6xl mb-4">🔧</p>
-                      <p className="text-xl font-bold text-ambre mb-2">RECHERCHE NON DISPONIBLE</p>
-                      <p className="text-sm text-ardoise-clair mb-4">
-                        La reconnaissance faciale n&apos;est pas encore implémentée.
-                        Reviens après l&apos;activation du module deepface.
-                      </p>
-                      <p className="text-xs text-ardoise-clair/60 mb-4">
-                        Temps d&apos;analyse : {resultat.temps_analyse_ms}ms | Score : {resultat.score_confiance}%
-                      </p>
-                      <div className="flex gap-3 justify-center">
-                        <Link href="/medical/nouveau-dossier">
-                          <Bouton variante="primaire">➕ Créer un nouveau dossier</Bouton>
-                        </Link>
-                        <Bouton variante="ghost" onClick={handleReset}>
-                          Réessayer
-                        </Bouton>
-                      </div>
-                    </div>
-                  </Carte>
-                )}
-
                 {resultat.trouve && (
                   <Carte titre="Résultat de la recherche">
                     <div className="space-y-4">
@@ -269,6 +247,54 @@ function Contenu() {
                         <Link href={`/medical/dossier/${resultat.personne?.id}`}>
                           <Bouton variante="secondaire">📋 Voir le dossier complet</Bouton>
                         </Link>
+                      </div>
+                    </div>
+                  </Carte>
+                )}
+
+                {!resultat.trouve && resultat.mode_developpement && (
+                  <Carte titre="Résultat de la recherche">
+                    <div className="text-center py-4">
+                      <p className="text-6xl mb-4">🔧</p>
+                      <p className="text-xl font-bold text-ambre mb-2">RECHERCHE NON DISPONIBLE</p>
+                      <p className="text-sm text-ardoise-clair mb-4">
+                        La reconnaissance faciale n&apos;est pas encore implémentée.
+                        Reviens après l&apos;activation du module deepface.
+                      </p>
+                      <p className="text-xs text-ardoise-clair/60 mb-4">
+                        Temps d&apos;analyse : {resultat.temps_analyse_ms}ms | Score : {resultat.score_confiance}%
+                      </p>
+                      <div className="flex gap-3 justify-center">
+                        <Link href="/medical/nouveau-dossier">
+                          <Bouton variante="primaire">➕ Créer un nouveau dossier</Bouton>
+                        </Link>
+                        <Bouton variante="ghost" onClick={handleReset}>
+                          Réessayer
+                        </Bouton>
+                      </div>
+                    </div>
+                  </Carte>
+                )}
+
+                {!resultat.trouve && !resultat.mode_developpement && (
+                  <Carte titre="Résultat de la recherche">
+                    <div className="text-center py-4">
+                      <p className="text-6xl mb-4">❓</p>
+                      <p className="text-2xl font-bold text-terre mb-2">PERSONNE NON TROUVÉE</p>
+                      <p className="text-sm text-ardoise-clair mb-4">
+                        Aucune correspondance trouvée dans la base de données.
+                      </p>
+                      <p className="text-xs text-ardoise-clair/60 mb-4">
+                        Temps d&apos;analyse : {resultat.temps_analyse_ms}ms |
+                        Score max : {resultat.score_confiance}%
+                      </p>
+                      <div className="flex gap-3 justify-center">
+                        <Link href="/medical/nouveau-dossier">
+                          <Bouton variante="primaire">➕ Créer un nouveau dossier</Bouton>
+                        </Link>
+                        <Bouton variante="ghost" onClick={handleReset}>
+                          Réessayer
+                        </Bouton>
                       </div>
                     </div>
                   </Carte>
