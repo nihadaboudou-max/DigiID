@@ -18,6 +18,7 @@ import { Alerte } from "@/composants/commun/Alerte";
 import { Logo } from "@/composants/commun/Logo";
 import { EnTete } from "@/composants/layouts/EnTete";
 import { clientAPI, ErreurAPI } from "@/services/client_api";
+import { cheminTableauDeBord } from "@/types/api";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ const OPTIONS_CANAUX: OptionCanal[] = [
 
 export default function PageVerification() {
   const router = useRouter();
+  const [utilisateur, setUtilisateur] = useState<{ role: string } | null>(null);
   const [etape, setEtape] = useState<Etape>("choix");
   const [canal, setCanal] = useState<Canal>("email");
   const [code, setCode] = useState("");
@@ -82,8 +84,11 @@ export default function PageVerification() {
   // Au montage, récupérer le profil pour adapter les options
   useEffect(() => {
     clientAPI
-      .get<ProfilUtilisateur>("/api/v1/auth/moi", { authentifie: true })
-      .then((profil) => setATelephone(!!profil.telephone))
+      .get<ProfilUtilisateur & { role: string }>("/api/v1/auth/moi", { authentifie: true })
+      .then((profil) => {
+        setATelephone(!!profil.telephone);
+        setUtilisateur({ role: profil.role });
+      })
       .catch(() => setATelephone(false));
   }, []);
 
@@ -189,7 +194,7 @@ export default function PageVerification() {
             <p className="text-ardoise-clair mb-6">
               Ton identité est confirmée. Tu peux maintenant utiliser pleinement DigiID.
             </p>
-            <Bouton variante="primaire" onClick={() => router.push("/tableau-de-bord")}>
+            <Bouton variante="primaire" onClick={() => router.push(utilisateur ? cheminTableauDeBord(utilisateur.role as any) : "/tableau-de-bord")}>
               Accéder à mon espace
             </Bouton>
           </div>
@@ -285,7 +290,7 @@ export default function PageVerification() {
               <div className="text-center pt-4">
                 <button
                   type="button"
-                  onClick={() => router.push("/tableau-de-bord")}
+                  onClick={() => router.push(utilisateur ? cheminTableauDeBord(utilisateur.role as any) : "/tableau-de-bord")}
                   className="text-sm text-ardoise-clair hover:text-ardoise underline"
                 >
                   Passer pour l&apos;instant

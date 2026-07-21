@@ -24,11 +24,17 @@ const REDIRECTIONS_PAR_ROLE: Record<string, string> = {
   "chef_police": "/chef-police",
   "chef_medical": "/chef-medical",
   "chef_agent": "/chef-enrolement",
-  "citoyen": "/tableau-de-bord",
+  // Anciens noms (rétrocompatibilité)
   "agent": "/tableau-de-bord",
-  "medecin": "/tableau-de-bord",
-  "police": "/tableau-de-bord",
-  "ong": "/tableau-de-bord",
+  "medecin": "/medecin/dashboard",
+  "police": "/police/dashboard",
+  "ong": "/ong/dashboard",
+  "citoyen": "/tableau-de-bord",
+  // Nouveaux noms
+  "agent_medical": "/medecin/dashboard",
+  "agent_police": "/police/dashboard",
+  "agent_ong": "/ong/dashboard",
+  "agent_terrain": "/agent/dashboard",
 };
 
 export default function PageConnexion() {

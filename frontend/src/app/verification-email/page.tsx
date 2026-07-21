@@ -20,6 +20,7 @@ import {
 } from "@/services/authentification";
 import { ErreurAPI } from "@/services/client_api";
 import { useAuthentification } from "@/contextes/authentification";
+import { cheminTableauDeBord } from "@/types/api";
 
 export default function PageVerificationEmail() {
   const router = useRouter();
@@ -105,9 +106,13 @@ export default function PageVerificationEmail() {
         // dans le contexte d'authentification AVANT de rediriger
         await rafraichirProfil();
 
-        // Rediriger vers le tableau de bord après 1,5 seconde
+        // Rediriger vers le bon tableau de bord selon le rôle
         setTimeout(() => {
-          router.push("/tableau-de-bord");
+          if (utilisateur) {
+            router.push(cheminTableauDeBord(utilisateur.role));
+          } else {
+            router.push("/tableau-de-bord");
+          }
         }, 1500);
       }
     } catch (e) {
