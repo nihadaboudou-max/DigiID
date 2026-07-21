@@ -40,7 +40,7 @@ function Contenu() {
     setChargement(true);
     setErreur("");
     try {
-      const e = await clientAPI.get<Enrolement>(`/api/v1/utilisateur/enrolement/${id}`, { authentifie: true });
+      return clientAPI.get<Enrolement>(`/api/v1/enrolement/${id}`, { authentifie: true });
       setEnrolement(e);
       setNotes(e.notes || "");
     } catch (e: any) {
@@ -55,7 +55,7 @@ function Contenu() {
     setMessage("");
     setErreur("");
     try {
-      const e = await clientAPI.patch<Enrolement>(`/api/v1/utilisateur/enrolement/${id}`, donnees, { authentifie: true });
+      const e = await clientAPI.patch<Enrolement>(`/api/v1/enrolement/${id}`, donnees, { authentifie: true });
       setEnrolement(e);
       setMessage("Enrolement mis a jour !");
     } catch (e: any) {
@@ -67,9 +67,9 @@ function Contenu() {
 
   if (chargement) {
     return (
-      <EnvelopperEspaceProtege rolesAutorises={["agent"]}>
-        <p className="text-ardoise-clair italic text-center py-12">Chargement...</p>
-      </EnvelopperEspaceProtege>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin w-8 h-8 border-4 border-ocre border-t-transparent rounded-full"></div>
+      </div>
     );
   }
 

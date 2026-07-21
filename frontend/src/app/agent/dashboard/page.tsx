@@ -22,15 +22,21 @@ export default function AgentDashboard() {
 function Contenu() {
   const { can, chargement: chargementPerms, erreur: erreurPerms } = useRoleUI();
   const [enrolements, setEnrolements] = useState<Enrolement[]>([]);
+  const [enrolementsOriginaux, setEnrolementsOriginaux] = useState<Enrolement[]>([]);
   const [chargementListe, setChargementListe] = useState(true);
   const [erreurListe, setErreurListe] = useState("");
+  const [filtreStatut, setFiltreStatut] = useState("tous");
 
-  useEffect(() => { charger(); }, []);
+  useEffect(() => { charger(); }, [filtreStatut]);
 
   async function charger() {
     setChargementListe(true);
     setErreurListe("");
-    try { setEnrolements(await listerEnrolements()); }
+    try { 
+      const data = await listerEnrolements(filtreStatut === "tous" ? undefined : filtreStatut);
+      setEnrolements(data); 
+      setEnrolementsOriginaux(data);
+    }
     catch { setErreurListe("Impossible de charger la liste des enrolements."); }
     finally { setChargementListe(false); }
   }
@@ -107,6 +113,34 @@ function Contenu() {
       {/* Enrolements recents */}
       {can.viewEnrollments && (
         <Carte titre="Enrolements recents">
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div className="flex items-center gap-2 flex-1">
+              <input
+                type="text"
+                placeholder="Rechercher par nom..."
+                className="flex-1 px-3 py-1.5 border border-ardoise-clair/20 rounded-lg text-sm"
+                onChange={(e) => {
+                  const terme = e.target.value.toLowerCase();
+                  if (!terme) { setEnrolements(enrolementsOriginaux); return; }
+                  setEnrolements(enrolementsOriginaux.filter(e => 
+                    e.citoyen_prenom.toLowerCase().includes(terme) ||
+                    e.citoyen_nom.toLowerCase().includes(terme) ||
+                    (e.citoyen_digiid || "").toLowerCase().includes(terme)
+                  ));
+                }}
+              />
+            </div>
+            <select
+              value={filtreStatut}
+              onChange={(e) => setFiltreStatut(e.target.value)}
+              className="px-3 py-1.5 border border-ardoise-clair/20 rounded-lg text-sm"
+            >
+              <option value="tous">Tous</option>
+              <option value="en_attente">En attente</option>
+              <option value="valide">Valides</option>
+              <option value="rejete">Rejetes</option>
+            </select>
+          </div>
           {erreurListe ? (
             <div className="text-center py-6">
               <p className="text-terre text-sm mb-3">{erreurListe}</p>
