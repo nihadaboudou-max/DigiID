@@ -425,15 +425,17 @@ async def obtenir_audit_chef(
 ) -> tuple[list[dict], int]:
     """Obtient le journal d'audit de tous les agents sous la supervision du chef."""
     
-    # 1. Identifier tous les agents du domaine/département du chef
-    # On inclut les rôles d'agents génériques et spécifiques
-    roles_agents = ["agent_police", "agent_ong", "agent_medical", "agent_terrain", "police", "ong", "medecin", "agent"]
+        # 1. Identifier tous les agents du domaine du chef (pas seulement son département)
+    roles_agents = [
+        "agent_police", "agent_medical", "agent_ong", "agent_terrain",
+        "police", "medecin", "ong", "agent",
+        "agent_medical", "agent_enrolement",
+    ]
     
     agent_query = select(Utilisateur.id).where(
         Utilisateur.domaine_id == chef.domaine_id,
-        Utilisateur.departement_id == chef.departement_id,
         Utilisateur.role.in_(roles_agents),
-        Utilisateur.est_actif == True
+        Utilisateur.est_supprime == False,
     )
     
     if agent_id:
