@@ -72,17 +72,29 @@ async def _recuperer_tous_embeddings(
 
     Retourne une liste de (utilisateur_id, vecteur_embedding).
     """
-    requete = await session.execute(
-        select(VerificationVisuelle.utilisateur_id, VerificationVisuelle.embedding)
+    # Sous-requête : pour chaque utilisateur, prendre l'ID de sa dernière vérification approuvée
+    sous_requete = (
+        select(
+            VerificationVisuelle.utilisateur_id,
+            func.max(VerificationVisuelle.cree_le).label("derniere_date"),
+        )
         .where(
             VerificationVisuelle.embedding.isnot(None),
             VerificationVisuelle.statut == "approuve",
             VerificationVisuelle.est_supprime == False,
         )
-        .distinct(VerificationVisuelle.utilisateur_id)
-        .order_by(
+        .group_by(VerificationVisuelle.utilisateur_id)
+    ).subquery()
+
+    requete = await session.execute(
+        select(
             VerificationVisuelle.utilisateur_id,
-            desc(VerificationVisuelle.cree_le),
+            VerificationVisuelle.embedding,
+        )
+        .join(
+            sous_requete,
+            (VerificationVisuelle.utilisateur_id == sous_requete.c.utilisateur_id)
+            & (VerificationVisuelle.cree_le == sous_requete.c.derniere_date),
         )
     )
     resultats = requete.all()
