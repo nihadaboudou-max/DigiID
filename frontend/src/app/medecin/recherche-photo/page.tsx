@@ -177,7 +177,7 @@ function Contenu() {
                           </div>
                           <BarreProgression
                             valeur={Math.min(resultat.score_confiance, 100)}
-                            couleur={resultat.score_confiance >= 70 ? "succes" : resultat.score_confiance >= 45 ? "ambre" : "terre"}
+                            couleur={resultat.score_confiance >= 70 ? "succes" : resultat.score_confiance >= 45 ? "ocre" : "terre"}
                           />
                         </div>
                         <p className="text-xs text-ardoise-clair/60 mt-2">
