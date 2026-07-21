@@ -18,7 +18,10 @@ Sécurité :
 """
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.modeles.recherche_faciale import RechercheFaciale
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Index
 from sqlalchemy.dialects.postgresql import UUID
@@ -207,6 +210,20 @@ class Utilisateur(Base, MelangeTracabilite):
     consentements: Mapped[list["Consentement"]] = relationship(
         back_populates="utilisateur",
         cascade="all, delete-orphan",
+    )
+    
+    # --- Relations Recherche Faciale ---
+    recherches_faciales_agent: Mapped[list["RechercheFaciale"]] = relationship(
+        "RechercheFaciale",
+        foreign_keys="RechercheFaciale.agent_medical_id",
+        back_populates="agent_medical",
+        lazy="selectin",
+    )
+    recherches_faciales_trouve: Mapped[list["RechercheFaciale"]] = relationship(
+        "RechercheFaciale",
+        foreign_keys="RechercheFaciale.personne_trouvee_id",
+        back_populates="personne_trouvee",
+        lazy="selectin",
     )
 
     # --- Relations multi-niveaux ---

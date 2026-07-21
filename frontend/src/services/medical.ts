@@ -77,12 +77,12 @@ export interface VerificationPatient {
 export interface Personne {
   id: string;
   nom: string;
-  prenom: string;
-  date_naissance: string;
-  groupe_sanguin: string;
-  telephone: string;
-  contact_urgence: string;
-  photo?: string;
+  prenom: string | null;
+  date_naissance: string | null;
+  groupe_sanguin: string | null;
+  telephone: string | null;
+  contact_urgence: string | null;
+  photo?: string | null;
   antecedents?: string[];
   allergies?: string[];
 }
@@ -261,47 +261,74 @@ export async function signalerOrdonnance(
 }
 
 // =============================================================================
-// NOUVELLES FONCTIONS POUR LA RECHERCHE FACIALE
+// RECHERCHE FACIALE — upload multipart direct (XHR, pas clientAPI)
 // =============================================================================
 
+const PREFIXE_RECHERCHE_FACIALE = "/api/v1/medical/recherche-faciale";
+
 /**
- * Recherche une personne par reconnaissance faciale.
- * @param photo - La photo en base64 ou File
+ * Recherche une personne par reconnaissance faciale (upload de fichier).
+ * Utilise XMLHttpRequest (comme verification_visuelle.ts) car
+ * clientAPI.post stringifie le body en JSON, ce qui casse le FormData.
  */
-export async function rechercherPersonneParPhoto(data: {
-  photo: string; // base64 ou URL
-}): Promise<RecherchePersonne> {
-  // Créer un FormData pour envoyer le fichier
+export async function rechercherPersonneParPhoto(
+  fichier: File,
+  onProgress?: (pct: number) => void,
+): Promise<RecherchePersonne> {
   const formData = new FormData();
-  
-  // Si la photo est en base64, la convertir en Blob
-  if (data.photo.startsWith('data:image')) {
-    const response = await fetch(data.photo);
-    const blob = await response.blob();
-    formData.append('photo', blob, 'recherche.jpg');
-  } else {
-    // Sinon, supposer que c'est déjà un fichier ou une référence
-    formData.append('photo', data.photo);
+  formData.append("photo", fichier);
+
+  const token = (await import("@/services/client_api")).obtenirTokenAcces();
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
   }
 
-  return clientAPI.post<RecherchePersonne>(
-    '/api/v1/medical/recherche-faciale/',
-    formData,
-    { 
-      authentifie: true,
-      headers: {} // Laisser clientAPI gérer les headers
-    }
-  );
+  const xhr = new XMLHttpRequest();
+
+  return new Promise((resolve, reject) => {
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as RecherchePersonne);
+        } catch {
+          reject(new Error("Réponse invalide du serveur"));
+        }
+      } else {
+        try {
+          const err = JSON.parse(xhr.responseText);
+          reject(new Error(err.detail || err.message || "Erreur lors de la recherche"));
+        } catch {
+          reject(new Error("Erreur lors de la recherche faciale"));
+        }
+      }
+    });
+
+    xhr.addEventListener("error", () => {
+      reject(new Error("Erreur réseau lors de la recherche"));
+    });
+
+    xhr.open("POST", `/api/backend${PREFIXE_RECHERCHE_FACIALE}`);
+    // Ne pas set Content-Type — le navigateur le fait automatiquement avec FormData
+    Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+    xhr.send(formData);
+  });
 }
 
 /**
- * Obtient l'historique des recherches faciales.
+ * Obtient l'historique des recherches faciales de l'agent connecté.
  */
 export async function obtenirHistoriqueRecherches(
-  limite: number = 10
+  limite: number = 10,
 ): Promise<{ historique: HistoriqueRecherche[]; total: number }> {
   return clientAPI.get<{ historique: HistoriqueRecherche[]; total: number }>(
-    `/api/v1/medical/recherche-faciale/historique?limite=${limite}`,
-    { authentifie: true }
+    `${PREFIXE_RECHERCHE_FACIALE}/historique?limite=${limite}`,
+    { authentifie: true },
   );
 }

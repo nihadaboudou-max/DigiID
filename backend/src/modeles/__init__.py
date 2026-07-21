@@ -14,6 +14,7 @@ from src.modeles.notification import Notification
 from src.modeles.parrainage import Parrainage
 from src.modeles.fraude_incident import FraudeIncident
 from src.modeles.verification_visuelle import VerificationVisuelle
+from src.modeles.recherche_faciale import RechercheFaciale
 from src.modeles.configuration_systeme import ConfigurationSysteme
 from src.modeles.code_verification import CodeVerification
 from src.modeles.verification_cni import VerificationCNI
@@ -46,6 +47,7 @@ __all__ = [
     "Notification",
     "Parrainage",
     "FraudeIncident",
+    "RechercheFaciale",
     "VerificationVisuelle",
     "ConfigurationSysteme",
     "CodeVerification",

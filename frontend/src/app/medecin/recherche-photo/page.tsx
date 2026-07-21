@@ -24,23 +24,29 @@ export default function PageRecherchePersonne() {
 }
 
 function Contenu() {
-  const [photo, setPhoto] = useState<string | null>(null);
+  const [apercu, setApercu] = useState<string | null>(null);
+  const [fichier, setFichier] = useState<File | null>(null);
   const [resultat, setResultat] = useState<RecherchePersonne | null>(null);
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState("");
   const refPhoto = useRef<HTMLInputElement>(null);
 
-  function lireFichier(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
+  async function handleSelectionFichier(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Garder le fichier pour l'upload
+    setFichier(file);
+
+    // Générer un aperçu base64 pour l'affichage uniquement
+    const reader = new FileReader();
+    reader.onload = () => setApercu(reader.result as string);
+    reader.onerror = () => setErreur("Impossible de lire le fichier.");
+    reader.readAsDataURL(file);
   }
 
   async function handleRechercher() {
-    if (!photo) {
+    if (!fichier) {
       setErreur("Veuillez sélectionner une photo.");
       return;
     }
@@ -50,7 +56,7 @@ function Contenu() {
     setResultat(null);
 
     try {
-      const data = await rechercherPersonneParPhoto({ photo });
+      const data = await rechercherPersonneParPhoto(fichier);
       setResultat(data);
     } catch {
       setErreur("Erreur lors de la recherche. Vérifie que la photo est valide.");
@@ -60,13 +66,13 @@ function Contenu() {
   }
 
   function handleReset() {
-    setPhoto(null);
+    setApercu(null);
+    setFichier(null);
     setResultat(null);
     setErreur("");
   }
 
   function handlePrendreEnCharge(personne: Personne) {
-    // Redirige vers la page de prise en charge avec les infos de la personne
     window.location.href = `/medical/prise-en-charge?personne_id=${personne.id}`;
   }
 
@@ -98,8 +104,8 @@ function Contenu() {
           className="border-2 border-dashed border-ardoise-clair/30 rounded-xl p-8 text-center cursor-pointer hover:border-lagune transition-colors"
           onClick={() => refPhoto.current?.click()}
         >
-          {photo ? (
-            <img src={photo} alt="Photo de la personne" className="max-h-80 mx-auto rounded-lg" />
+                    {apercu ? (
+            <img src={apercu} alt="Photo de la personne" className="max-h-80 mx-auto rounded-lg" />
           ) : (
             <div>
               <p className="text-5xl mb-2">📷</p>
@@ -112,16 +118,13 @@ function Contenu() {
             type="file"
             accept="image/*"
             capture="user"
-            className="hidden"
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (file) setPhoto(await lireFichier(file));
-            }}
+                        className="hidden"
+            onChange={handleSelectionFichier}
           />
         </div>
-        {photo && (
+                {apercu && (
           <button
-            onClick={() => { setPhoto(null); refPhoto.current?.click(); }}
+            onClick={() => { refPhoto.current?.click(); }}
             className="text-xs text-lagune hover:underline mt-2"
           >
             Changer la photo
@@ -134,7 +137,7 @@ function Contenu() {
         <Bouton
           variante="primaire"
           chargement={chargement}
-          disabled={!photo || chargement}
+          disabled={!fichier || chargement}
           onClick={handleRechercher}
         >
           🔍 Rechercher dans la base de données
