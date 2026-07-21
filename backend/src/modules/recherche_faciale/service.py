@@ -8,6 +8,8 @@ from fastapi import UploadFile
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.noyau import dechiffrer_donnee
+from src.noyau.exceptions import ErreurValidation
 from src.modeles import Utilisateur
 from src.modeles.recherche_faciale import RechercheFaciale
 from src.modules.recherche_faciale.schemas import (
@@ -16,7 +18,6 @@ from src.modules.recherche_faciale.schemas import (
     PersonneRecherchee,
     ResultatRechercheFaciale,
 )
-from src.noyau.exceptions import ErreurValidation
 
 
 async def _lire_photo(fichier: UploadFile) -> bytes:
@@ -31,18 +32,21 @@ async def _lire_photo(fichier: UploadFile) -> bytes:
 
 
 async def _construire_profil_personne(utilisateur: Utilisateur) -> PersonneRecherchee:
-    """Construit le profil d'une personne trouvée à partir du modèle Utilisateur."""
+    """
+    Construit le profil d'une personne trouvée à partir du modèle Utilisateur.
+    Les champs chiffrés sont déchiffrés avant d'être renvoyés.
+    """
     return PersonneRecherchee(
         id=str(utilisateur.id),
-        nom=utilisateur.nom_chiffre or "",
-        prenom=utilisateur.prenom_chiffre or "",
+        nom=dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else "",
+        prenom=dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else "",
         date_naissance=(
             utilisateur.date_naissance.isoformat()
             if hasattr(utilisateur, "date_naissance") and utilisateur.date_naissance
             else None
         ),
         groupe_sanguin=getattr(utilisateur, "groupe_sanguin", "O+"),
-        telephone=utilisateur.telephone_chiffre or "",
+        telephone=dechiffrer_donnee(utilisateur.telephone_chiffre) if utilisateur.telephone_chiffre else "",
         contact_urgence=getattr(utilisateur, "contact_urgence", ""),
         photo=None,
         antecedents=[],
