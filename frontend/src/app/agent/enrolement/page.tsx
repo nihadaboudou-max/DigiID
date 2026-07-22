@@ -18,7 +18,7 @@ export default function EnrolementPage() {
 }
 
 function Contenu() {
-  const { can, chargement, erreur } = useRoleUI(); // <-- Ajout de chargement et erreur
+  const { can, chargement, erreur, avertissement } = useRoleUI();
   const [nom, setNom] = useState("");
   const [prenom, setPrenom] = useState("");
   const [telephone, setTelephone] = useState("");
@@ -29,7 +29,6 @@ function Contenu() {
   const [erreurEnvoi, setErreurEnvoi] = useState("");
   const [etape, setEtape] = useState(1);
 
-  // 1. Afficher un état de chargement pendant la récupération des permissions
   if (chargement) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -38,19 +37,18 @@ function Contenu() {
     );
   }
 
-  // 2. Afficher une erreur si le chargement a échoué
-  if (erreur) {
+  // Erreur bloquante uniquement (pas de modules disponibles)
+  if (erreur && !can.enroll) {
     return (
       <div className="space-y-8 apparition">
-        <div className="bg-ocre/10 border-l-4 border-ocre p-4 rounded">
-          <p className="text-sm text-ocre">{erreur}</p>
+        <div className="bg-terre/10 border-l-4 border-terre p-4 rounded">
+          <p className="text-sm text-terre">{erreur}</p>
         </div>
         <Link href="/agent/dashboard"><Bouton variante="ghost">Retour</Bouton></Link>
       </div>
     );
   }
 
-  // 3. Maintenant seulement, on vérifie la permission en toute sécurité
   if (!can.enroll) {
     return (
       <div className="space-y-8 apparition">
@@ -116,6 +114,11 @@ function Contenu() {
 
   return (
     <div className="space-y-8 apparition">
+      {avertissement && (
+        <div className="bg-ocre/10 border-l-4 border-ocre p-4 rounded">
+          <p className="text-sm text-ocre">{avertissement}</p>
+        </div>
+      )}
       <nav className="flex items-center gap-2 text-sm text-ardoise-clair">
         <Link href="/agent/dashboard" className="hover:text-ocre">Tableau de bord</Link>
         <span>/</span>

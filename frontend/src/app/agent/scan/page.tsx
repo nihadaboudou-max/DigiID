@@ -20,7 +20,7 @@ export default function ScanPage() {
 }
 
 function Contenu() {
-  const { can } = useRoleUI();
+  const { can, chargement: chargementPerms, avertissement } = useRoleUI();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -219,13 +219,21 @@ function Contenu() {
     arreterCamera();
   }, [arreterCamera]);
 
+  if (chargementPerms) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-ardoise-clair animate-pulse">Chargement des permissions...</p>
+      </div>
+    );
+  }
+
   if (!can.scanCNI) {
     return (
       <div className="space-y-8 apparition">
         <p className="text-ocre text-sm uppercase font-semibold tracking-wider">Agent terrain</p>
         <h1>Scan CNI</h1>
         <div className="bg-terre/10 border-l-4 border-terre p-4 rounded">
-          <p className="text-sm text-terre">Module scan desactive.</p>
+          <p className="text-sm text-terre">Module scan désactivé.</p>
         </div>
         <Link href="/agent/dashboard"><Bouton variante="ghost">Retour</Bouton></Link>
       </div>
@@ -236,8 +244,13 @@ function Contenu() {
 
   return (
     <div className="space-y-8 apparition">
+      {avertissement && (
+        <div className="bg-ocre/10 border-l-4 border-ocre p-4 rounded">
+          <p className="text-sm text-ocre">{avertissement}</p>
+        </div>
+      )}
       <nav className="text-sm text-ardoise-clair flex gap-2">
-        <Link href="/agent/dashboard" className="hover:text-ocre">Dashboard</Link>
+        <Link href="/agent/dashboard" className="hover:text-ocre">Tableau de bord</Link>
         <span>/</span>
         <span className="text-ardoise font-semibold">Scan CNI</span>
       </nav>

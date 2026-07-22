@@ -43,10 +43,8 @@ def upgrade() -> None:
     op.create_index(op.f('ix_recherches_faciales_cree_le'), 'recherches_faciales', ['cree_le'], unique=False)
     op.create_index('ix_recherches_faciales_non_supprime', 'recherches_faciales', ['agent_medical_id', 'est_supprime'], unique=False)
     op.create_index(op.f('ix_recherches_faciales_personne_trouvee_id'), 'recherches_faciales', ['personne_trouvee_id'], unique=False)
-    op.drop_index('ix_ui_module_enabled', table_name='ui_module_permissions')
-    op.drop_index('ix_ui_module_module', table_name='ui_module_permissions')
-    op.drop_index('ix_ui_module_role', table_name='ui_module_permissions')
-    op.drop_table('ui_module_permissions')
+    # NOTE: ne plus dropper ui_module_permissions / ui_layout / modules_overrides
+    # (régression corrigée par la migration c7a8b9d0e1f2)
     op.alter_column('alertes_police', 'domaine_id',
                existing_type=sa.UUID(),
                comment='Domaine de rattachement',
@@ -92,8 +90,7 @@ def upgrade() -> None:
     op.drop_column('signalements_fraude', 'traite_par_id')
     op.drop_column('signalements_fraude', 'priorite')
     op.drop_column('signalements_fraude', 'notes_traitement')
-    op.drop_column('utilisateur', 'ui_layout')
-    op.drop_column('utilisateur', 'modules_overrides')
+    # Colonnes UI conservées (restaurées par c7a8b9d0e1f2 si absentes)
     op.alter_column('verification_cni', 'mrz_ligne_1',
                existing_type=sa.VARCHAR(length=100),
                type_=sa.String(length=50),

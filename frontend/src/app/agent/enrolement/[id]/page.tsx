@@ -44,7 +44,7 @@ function Contenu() {
       setEnrolement(e);
       setNotes(e.notes || "");
     } catch (e: any) {
-      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Impossible de charger l'enrolement");
+      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Impossible de charger l'enrôlement");
     } finally {
       setChargement(false);
     }
@@ -57,7 +57,7 @@ function Contenu() {
     try {
       const e = await clientAPI.patch<Enrolement>(`/api/v1/enrolement/${id}`, donnees, { authentifie: true });
       setEnrolement(e);
-      setMessage("Enrolement mis a jour !");
+      setMessage("Enrôlement mis à jour !");
     } catch (e: any) {
       setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur");
     } finally {
@@ -85,8 +85,8 @@ function Contenu() {
   if (!enrolement) return null;
 
   const statutBadge = (s: string) => {
-    if (s === "valide") return <Badge variante="succes">Valide</Badge>;
-    if (s === "rejete") return <Badge variante="terre">Rejete</Badge>;
+    if (s === "valide") return <Badge variante="succes">Validé</Badge>;
+    if (s === "rejete") return <Badge variante="terre">Rejeté</Badge>;
     return <Badge variante="ocre">En attente</Badge>;
   };
 
@@ -95,9 +95,9 @@ function Contenu() {
       <nav className="flex items-center gap-2 text-sm text-ardoise-clair">
         <Link href="/agent/dashboard" className="hover:text-ocre">Tableau de bord</Link>
         <span>/</span>
-        <Link href="/agent/enrolement" className="hover:text-ocre">Enrolement</Link>
+        <Link href="/agent/enrolement" className="hover:text-ocre">Enrôlement</Link>
         <span>/</span>
-        <span className="text-ardoise font-semibold">Detail</span>
+        <span className="text-ardoise font-semibold">Détail</span>
       </nav>
 
       <div className="flex items-start justify-between gap-4">
@@ -116,37 +116,37 @@ function Contenu() {
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
 
       <div className="grid md:grid-cols-2 gap-6">
-        <Carte titre="Identite du citoyen">
+        <Carte titre="Identité du citoyen">
           <div className="space-y-3">
             <ChampDetail libelle="Nom complet" valeur={`${enrolement.citoyen_prenom} ${enrolement.citoyen_nom}`} />
-            <ChampDetail libelle="Telephone" valeur={enrolement.citoyen_telephone || "—"} />
+            <ChampDetail libelle="Téléphone" valeur={enrolement.citoyen_telephone || "—"} />
             <ChampDetail libelle="Email" valeur={enrolement.citoyen_email || "—"} />
             {enrolement.citoyen_digiid && (
               <ChampDetail libelle="DigiID" valeur={enrolement.citoyen_digiid} mono />
             )}
-            <ChampDetail libelle="Date enrolement" valeur={new Date(enrolement.date_enrolement).toLocaleDateString("fr-FR", {
+            <ChampDetail libelle="Date d'enrôlement" valeur={new Date(enrolement.date_enrolement).toLocaleDateString("fr-FR", {
               day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit"
             })} />
             {enrolement.date_validation && (
-              <ChampDetail libelle="Date validation" valeur={new Date(enrolement.date_validation).toLocaleDateString("fr-FR", {
+              <ChampDetail libelle="Date de validation" valeur={new Date(enrolement.date_validation).toLocaleDateString("fr-FR", {
                 day: "numeric", month: "long", year: "numeric"
               })} />
             )}
           </div>
         </Carte>
 
-        <Carte titre="Verifications">
+        <Carte titre="Vérifications">
           <div className="space-y-4">
             <div className="flex items-center justify-between p-3 bg-sable rounded-lg">
               <span className="text-sm text-ardoise">Scan CNI</span>
               <Badge variante={enrolement.scan_cni ? "succes" : "neutre"}>
-                {enrolement.scan_cni ? "Effectue" : "Non effectue"}
+                {enrolement.scan_cni ? "Effectué" : "Non effectué"}
               </Badge>
             </div>
             <div className="flex items-center justify-between p-3 bg-sable rounded-lg">
-              <span className="text-sm text-ardoise">Capture biometrique</span>
+              <span className="text-sm text-ardoise">Capture biométrique</span>
               <Badge variante={enrolement.capture_biometrique ? "succes" : "neutre"}>
-                {enrolement.capture_biometrique ? "Effectuee" : "Non effectuee"}
+                {enrolement.capture_biometrique ? "Effectuée" : "Non effectuée"}
               </Badge>
             </div>
             <div className="flex items-center justify-between p-3 bg-sable rounded-lg">
@@ -186,7 +186,7 @@ function Contenu() {
               disabled={envoi}
               onClick={() => mettreAJour({ statut: "valide" })}
             >
-              Valider l'enrolement
+              Valider l&apos;enrôlement
             </Bouton>
             <Bouton
               variante="ghost"

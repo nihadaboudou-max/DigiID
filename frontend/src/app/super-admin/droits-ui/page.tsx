@@ -50,12 +50,8 @@ const ORDRE_ROLES = [
   "chef_agent",
   "agent_police",
   "agent_medical",
-  "medecin",
   "agent_ong",
   "agent_terrain",
-  "police",
-  "ong",
-  "agent",
   "citoyen",
 ];
 

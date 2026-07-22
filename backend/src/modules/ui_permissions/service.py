@@ -146,6 +146,19 @@ MODULES_PAR_DEFAUT: dict[str, list[dict]] = {
 # Liste de tous les rôles valides
 ROLES_VALIDES = list(MODULES_PAR_DEFAUT.keys())
 
+# Anciens noms de rôles (seeds / migrations legacy) → nom canonique
+ALIAS_ROLES: dict[str, str] = {
+    "agent": "agent_terrain",
+    "medecin": "agent_medical",
+    "police": "agent_police",
+    "ong": "agent_ong",
+}
+
+
+def normaliser_role(role: str) -> str:
+    """Normalise un rôle legacy vers le nom canonique utilisé par MODULES_PAR_DEFAUT."""
+    return ALIAS_ROLES.get(role, role)
+
 
 async def _creer_table_si_necessaire(session: AsyncSession) -> None:
     """Crée la table ui_module_permissions si elle n'existe pas encore."""
@@ -214,6 +227,8 @@ async def obtenir_modules_role(
     """
     from sqlalchemy import text
 
+    role = normaliser_role(role)
+
     # S'assurer que la table existe (peut ne pas être le cas en prod)
     await _creer_table_si_necessaire(session)
 
@@ -228,6 +243,43 @@ async def obtenir_modules_role(
         {"role": role},
     )
     lignes = resultat.mappings().all()
+
+    # Compatibilité : anciennes lignes seedées sous le nom legacy (ex: 'agent')
+    if not lignes:
+        legacy = next((ancien for ancien, canon in ALIAS_ROLES.items() if canon == role), None)
+        if legacy:
+            resultat_legacy = await session.execute(
+                text("""
+                    SELECT role_name, module_key, module_label, module_description,
+                           module_icon, is_enabled, is_read_only, updated_at
+                    FROM ui_module_permissions
+                    WHERE role_name = :role
+                    ORDER BY module_key
+                """),
+                {"role": legacy},
+            )
+            lignes_legacy = resultat_legacy.mappings().all()
+            if lignes_legacy:
+                # Migrer vers le nom canonique
+                await session.execute(
+                    text("""
+                        UPDATE ui_module_permissions
+                        SET role_name = :canon
+                        WHERE role_name = :legacy
+                        AND NOT EXISTS (
+                            SELECT 1 FROM ui_module_permissions u2
+                            WHERE u2.role_name = :canon
+                              AND u2.module_key = ui_module_permissions.module_key
+                        )
+                    """),
+                    {"canon": role, "legacy": legacy},
+                )
+                await session.execute(
+                    text("DELETE FROM ui_module_permissions WHERE role_name = :legacy"),
+                    {"legacy": legacy},
+                )
+                await session.commit()
+                return await obtenir_modules_role(session, role)
 
     if not lignes:
         # Fallback sur les données par défaut
@@ -257,6 +309,8 @@ async def mettre_a_jour_module_role(
     Met à jour un module spécifique pour un rôle donné.
     """
     from sqlalchemy import text
+
+    role = normaliser_role(role)
 
     # Vérifier que le rôle existe
     if role not in ROLES_VALIDES:
@@ -345,7 +399,7 @@ async def obtenir_config_ui_utilisateur(
       2. Les overrides individuels (modules_overrides)
       3. Le layout préféré (ui_layout)
     """
-    role = utilisateur.role
+    role = normaliser_role(utilisateur.role)
 
     # 1. Modules de base pour le rôle
     modules_role = await obtenir_modules_role(session, role)

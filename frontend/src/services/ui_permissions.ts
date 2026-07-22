@@ -74,6 +74,14 @@ export async function obtenirConfigUI(): Promise<ConfigUI> {
 // ---------- Utilitaires ----------
 
 export function modulesParDefaut(role: string): ModulePermission[] {
+  const aliases: Record<string, string> = {
+    agent: "agent_terrain",
+    medecin: "agent_medical",
+    police: "agent_police",
+    ong: "agent_ong",
+  };
+  const roleCanonique = aliases[role] || role;
+
   const modulesParRole: Record<string, ModulePermission[]> = {
     super_administrateur: [
       { role_name: "super_administrateur", module_key: "gestion_roles", module_label: "Gestion des rôles", module_description: null, module_icon: "shield", is_enabled: true, is_read_only: false, updated_at: null },
@@ -185,5 +193,5 @@ export function modulesParDefaut(role: string): ModulePermission[] {
     ],
   };
 
-  return modulesParRole[role] || [];
+  return modulesParRole[roleCanonique] || [];
 }

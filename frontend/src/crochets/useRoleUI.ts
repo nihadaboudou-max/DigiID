@@ -88,8 +88,23 @@ export interface UseRoleUIReturn {
   can: CanActions;
   layout: string;
   chargement: boolean;
+  /** Erreur bloquante (aucun module disponible). */
   erreur: string | null;
+  /** Avertissement soft (fallback local appliqué, pages utilisables). */
+  avertissement: string | null;
   role: string;
+}
+
+/** Anciens noms de rôles encore présents en base / seeds. */
+const ALIAS_ROLES: Record<string, string> = {
+  agent: "agent_terrain",
+  medecin: "agent_medical",
+  police: "agent_police",
+  ong: "agent_ong",
+};
+
+function normaliserRole(role: string): string {
+  return ALIAS_ROLES[role] || role;
 }
 
 // ---------- Mapping module_key → clé can ----------
@@ -181,6 +196,7 @@ export function useRoleUI(): UseRoleUIReturn {
   const [layout, setLayout] = useState<string>("default");
   const [chargement, setChargement] = useState<boolean>(true);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [avertissement, setAvertissement] = useState<string | null>(null);
   
   // Indique si un chargement a déjà été tenté (évite les boucles infinies)
   const chargementEffectueRef = useRef(false);
@@ -189,20 +205,37 @@ export function useRoleUI(): UseRoleUIReturn {
   const chargerConfig = useCallback(async () => {
     if (!estConnecte || !utilisateur) return;
 
+    const roleCanonique = normaliserRole(utilisateur.role);
     setChargement(true);
     setErreur(null);
+    setAvertissement(null);
 
     try {
       const config = await obtenirConfigUI();
-      setModules(config.modules || []);
+      let mods = config.modules || [];
+
+      // Réponse vide (table absente / rôle mal seedé) → fallback local
+      if (mods.length === 0) {
+        const fallback = modulesParDefaut(roleCanonique);
+        if (fallback.length > 0) {
+          mods = fallback;
+          setAvertissement("Configuration UI vide : modules par défaut appliqués");
+        }
+      }
+
+      setModules(mods);
       setLayout(config.layout || "default");
     } catch (err) {
       console.warn("⚠️ Erreur de chargement UI, utilisation du fallback:", err);
-      // Fallback : utiliser les modules par défaut du rôle définis dans ui_permissions.ts
-      const fallback = modulesParDefaut(utilisateur.role);
+      const fallback = modulesParDefaut(roleCanonique);
       setModules(fallback);
       setLayout("default");
-      setErreur("Mode hors-ligne : configuration UI par défaut appliquée");
+      if (fallback.length === 0) {
+        setErreur("Impossible de charger la configuration UI pour ce rôle.");
+      } else {
+        // Soft : les pages restent utilisables avec le fallback
+        setAvertissement("Mode hors-ligne : configuration UI par défaut appliquée");
+      }
     } finally {
       setChargement(false);
       chargementEffectueRef.current = true;
@@ -222,6 +255,7 @@ export function useRoleUI(): UseRoleUIReturn {
       setLayout("default");
       setChargement(false);
       setErreur(null);
+      setAvertissement(null);
     }
   }, [estConnecte, utilisateur, chargerConfig]);
 
@@ -297,6 +331,7 @@ export function useRoleUI(): UseRoleUIReturn {
     layout,
     chargement,
     erreur,
+    avertissement,
     role: utilisateur?.role || "",
   };
 }

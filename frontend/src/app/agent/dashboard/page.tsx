@@ -20,7 +20,7 @@ export default function AgentDashboard() {
 }
 
 function Contenu() {
-  const { can, chargement: chargementPerms, erreur: erreurPerms } = useRoleUI();
+  const { can, chargement: chargementPerms, erreur: erreurPerms, avertissement } = useRoleUI();
   const [enrolements, setEnrolements] = useState<Enrolement[]>([]);
   const [enrolementsOriginaux, setEnrolementsOriginaux] = useState<Enrolement[]>([]);
   const [chargementListe, setChargementListe] = useState(true);
@@ -37,7 +37,7 @@ function Contenu() {
       setEnrolements(data); 
       setEnrolementsOriginaux(data);
     }
-    catch { setErreurListe("Impossible de charger la liste des enrolements."); }
+    catch { setErreurListe("Impossible de charger la liste des enrôlements."); }
     finally { setChargementListe(false); }
   }
 
@@ -50,21 +50,26 @@ function Contenu() {
   if (chargementPerms) {
     return <div className="space-y-8 apparition"><p className="text-ardoise-clair italic text-center py-12">Chargement...</p></div>;
   }
-  if (erreurPerms) {
+  if (erreurPerms && !can.viewEnrollments && !can.enroll) {
     return <div className="space-y-8 apparition"><div className="bg-terre/10 border-l-4 border-terre p-4 rounded"><p className="text-sm text-terre">{erreurPerms}</p></div></div>;
   }
 
   return (
     <div className="space-y-8 apparition">
+      {avertissement && (
+        <div className="bg-ocre/10 border-l-4 border-ocre p-4 rounded">
+          <p className="text-sm text-ocre">{avertissement}</p>
+        </div>
+      )}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Agent terrain</p>
-          <h1 className="mt-1">Enrolement des citoyens</h1>
-          <p className="text-ardoise-clair mt-2">Inscris les nouveaux citoyens au systeme DigiID.</p>
+          <h1 className="mt-1">Enrôlement des citoyens</h1>
+          <p className="text-ardoise-clair mt-2">Inscris les nouveaux citoyens au système DigiID.</p>
         </div>
         <div className="flex gap-3 flex-wrap">
           {can.enroll && (
-            <Link href="/agent/enrolement"><Bouton variante="primaire">+ Nouvel enrolement</Bouton></Link>
+            <Link href="/agent/enrolement"><Bouton variante="primaire">+ Nouvel enrôlement</Bouton></Link>
           )}
           {can.scanCNI && (
             <Link href="/agent/scan"><Bouton variante="secondaire">Scanner une CNI</Bouton></Link>
@@ -72,15 +77,15 @@ function Contenu() {
         </div>
       </div>
 
-            {/* Stats */}
+      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="carte text-center">
           <p className="text-3xl font-bold text-lagune">{chargementListe ? "..." : aujourdhui}</p>
-          <p className="text-xs uppercase text-ardoise-clair font-semibold">Enroles aujourd'hui</p>
+          <p className="text-xs uppercase text-ardoise-clair font-semibold">Enrôlés aujourd&apos;hui</p>
         </div>
         <div className="carte text-center">
           <p className="text-3xl font-bold text-ocre">{chargementListe ? "..." : enrolements.length}</p>
-          <p className="text-xs uppercase text-ardoise-clair font-semibold">Total enrolements</p>
+          <p className="text-xs uppercase text-ardoise-clair font-semibold">Total enrôlements</p>
         </div>
         <div className="carte text-center">
           <p className="text-3xl font-bold text-succes">{chargementListe ? "..." : `${taux}%`}</p>
@@ -99,20 +104,20 @@ function Contenu() {
             {chargementListe ? "..." : `${aujourdhui} aujourd'hui`}
           </span>
           <span className="text-sm text-ardoise-clair">
-            {chargementListe ? "..." : `${valides} valides / ${enrolements.length} total`}
+            {chargementListe ? "..." : `${valides} validés / ${enrolements.length} total`}
           </span>
         </div>
         <BarreProgression valeur={Math.min(taux, 100)} couleur="ocre" />
         <div className="mt-3 flex gap-4 text-xs text-ardoise-clair">
-          <span>✅ {valides} valides</span>
+          <span>✅ {valides} validés</span>
           <span>⏳ {enAttente} en attente</span>
-          <span>❌ {rejetes} rejetes</span>
+          <span>❌ {rejetes} rejetés</span>
         </div>
       </Carte>
 
-      {/* Enrolements recents */}
+      {/* Enrôlements récents */}
       {can.viewEnrollments && (
-        <Carte titre="Enrolements recents">
+        <Carte titre="Enrôlements récents">
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <div className="flex items-center gap-2 flex-1">
               <input
@@ -137,29 +142,29 @@ function Contenu() {
             >
               <option value="tous">Tous</option>
               <option value="en_attente">En attente</option>
-              <option value="valide">Valides</option>
-              <option value="rejete">Rejetes</option>
+              <option value="valide">Validés</option>
+              <option value="rejete">Rejetés</option>
             </select>
           </div>
           {erreurListe ? (
             <div className="text-center py-6">
               <p className="text-terre text-sm mb-3">{erreurListe}</p>
-              <Bouton variante="ghost" taille="petit" onClick={charger}>Reessayer</Bouton>
+              <Bouton variante="ghost" taille="petit" onClick={charger}>Réessayer</Bouton>
             </div>
           ) : chargementListe ? (
             <p className="text-ardoise-clair italic text-center py-8">Chargement...</p>
           ) : enrolements.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-4xl mb-3">📋</p>
-              <p className="text-ardoise-clair italic">Aucun enrolement pour le moment.</p>
+              <p className="text-ardoise-clair italic">Aucun enrôlement pour le moment.</p>
               <Link href="/agent/enrolement" className="mt-4 inline-block">
-                <Bouton variante="primaire" taille="petit">+ Premier enrolement</Bouton>
+                <Bouton variante="primaire" taille="petit">+ Premier enrôlement</Bouton>
               </Link>
             </div>
           ) : (
             <>
               <div className="space-y-2">
-                                {enrolements.slice(0, 5).map((enr) => (
+                {enrolements.slice(0, 5).map((enr) => (
                   <Link
                     key={enr.id}
                     href={`/agent/enrolement/${enr.id}`}
@@ -183,10 +188,10 @@ function Contenu() {
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <Badge variante={enr.statut === "valide" ? "succes" : enr.statut === "rejete" ? "terre" : "ocre"}>
-                        {enr.statut === "valide" ? "Valide" : enr.statut === "rejete" ? "Rejete" : "En attente"}
+                        {enr.statut === "valide" ? "Validé" : enr.statut === "rejete" ? "Rejeté" : "En attente"}
                       </Badge>
                       {enr.scan_cni && <span className="text-xs" title="CNI scannée">🪪</span>}
-                      {enr.capture_biometrique && <span className="text-xs" title="Biometrie capturee">🔐</span>}
+                      {enr.capture_biometrique && <span className="text-xs" title="Biométrie capturée">🔐</span>}
                       <span className="text-xs text-ardoise-clair/40 group-hover:text-lagune group-hover:translate-x-0.5 transition-all">→</span>
                     </div>
                   </Link>
@@ -194,7 +199,7 @@ function Contenu() {
               </div>
               {enrolements.length > 5 && (
                 <p className="text-center text-xs text-ardoise-clair mt-3">
-                  +{enrolements.length - 5} autres enrolements
+                  +{enrolements.length - 5} autres enrôlements
                 </p>
               )}
             </>
@@ -204,9 +209,9 @@ function Contenu() {
 
       {/* Actions rapides */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {can.enroll && <CarteAction titre="Nouvel enrolement" description="Inscrire un nouveau citoyen" href="/agent/enrolement" icone="👤" />}
-        {can.scanCNI && <CarteAction titre="Scanner CNI" description="OCR de la carte d'identite" href="/agent/scan" icone="🪪" />}
-        {can.captureBiometrics && <CarteAction titre="Capture biometrique" description="Photo et empreinte" href="/agent/capture" icone="🔐" />}
+        {can.enroll && <CarteAction titre="Nouvel enrôlement" description="Inscrire un nouveau citoyen" href="/agent/enrolement" icone="👤" />}
+        {can.scanCNI && <CarteAction titre="Scanner CNI" description="OCR de la carte d'identité" href="/agent/scan" icone="🪪" />}
+        {can.captureBiometrics && <CarteAction titre="Capture biométrique" description="Photo et empreinte" href="/agent/capture" icone="🔐" />}
       </div>
     </div>
   );
@@ -223,7 +228,7 @@ function CarteAction({ titre, description, href, icone }: { titre: string; descr
             <p className="text-sm text-ardoise-clair mt-1">{description}</p>
           </div>
         </div>
-        <p className="text-xs text-ocre font-semibold mt-3 group-hover:translate-x-1 transition-transform">Acceder →</p>
+        <p className="text-xs text-ocre font-semibold mt-3 group-hover:translate-x-1 transition-transform">Accéder →</p>
       </div>
     </Link>
   );

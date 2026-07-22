@@ -18,14 +18,10 @@ Sécurité :
 """
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from src.modeles.recherche_faciale import RechercheFaciale
-
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Index
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from typing import Any, Optional
 
 from src.modeles.consentement import Consentement
 from src.modeles.session_authentification import SessionAuthentification
@@ -83,6 +79,20 @@ class Utilisateur(Base, MelangeTracabilite):
         default=RolesUtilisateur.CITOYEN.value,
         nullable=False,
         index=True,
+    )
+
+    # --- Configuration UI (matrice des droits) ---
+    ui_layout: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        nullable=True,
+        default="default",
+        doc="Layout UI préféré (default, compact, etc.)",
+    )
+    modules_overrides: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSONB,
+        nullable=True,
+        server_default="{}",
+        doc="Overrides individuels des modules UI : { module_key: { is_enabled, is_read_only } }",
     )
 
     # --- 2FA ---

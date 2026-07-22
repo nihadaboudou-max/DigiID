@@ -43,7 +43,18 @@ FALLBACK_MODULES: dict[str, set[str]] = {
         "liste_enrollements", "recherche_citoyen", "stats_enrolement",
         "mon_profil_agent",
     },
+    # Alias legacy
+    "agent": {
+        "enrolement_citoyen", "scan_ocr_cni", "capture_biometrique",
+        "liste_enrollements", "recherche_citoyen", "stats_enrolement",
+        "mon_profil_agent",
+    },
     "agent_medical": {
+        "creation_dossier", "suivi_dossier", "recherche_patient",
+        "attestations_medicales", "historique_consultations",
+        "ordonnances", "calendrier_rendezvous", "mon_profil_agent",
+    },
+    "medecin": {
         "creation_dossier", "suivi_dossier", "recherche_patient",
         "attestations_medicales", "historique_consultations",
         "ordonnances", "calendrier_rendezvous", "mon_profil_agent",
@@ -52,7 +63,16 @@ FALLBACK_MODULES: dict[str, set[str]] = {
         "verification_identite", "consultation_score", "recherche_personne",
         "audit_acces_police", "signalement_fraude", "mon_profil_agent",
     },
+    "police": {
+        "verification_identite", "consultation_score", "recherche_personne",
+        "audit_acces_police", "signalement_fraude", "mon_profil_agent",
+    },
     "agent_ong": {
+        "consultation_beneficiaires", "attestations_communautaires",
+        "rapports_terrain", "gestion_programme", "mon_profil_agent",
+        "statistiques_ong", "calendrier_missions",
+    },
+    "ong": {
         "consultation_beneficiaires", "attestations_communautaires",
         "rapports_terrain", "gestion_programme", "mon_profil_agent",
         "statistiques_ong", "calendrier_missions",
