@@ -137,17 +137,51 @@ function Contenu() {
 
         <Carte titre="Vérifications">
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 bg-sable rounded-lg">
+            <div className="flex items-center justify-between gap-3 p-3 bg-sable rounded-lg">
               <span className="text-sm text-ardoise">Scan CNI</span>
-              <Badge variante={enrolement.scan_cni ? "succes" : "neutre"}>
-                {enrolement.scan_cni ? "Effectué" : "Non effectué"}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variante={enrolement.scan_cni ? "succes" : "neutre"}>
+                  {enrolement.scan_cni ? "Effectué" : "Non effectué"}
+                </Badge>
+                {!enrolement.scan_cni && enrolement.statut === "en_attente" && (
+                  <Link href={`/agent/scan?enrolement_id=${enrolement.id}`}>
+                    <Bouton variante="secondaire" taille="petit">Scanner</Bouton>
+                  </Link>
+                )}
+                {!enrolement.scan_cni && enrolement.statut === "en_attente" && (
+                  <Bouton
+                    variante="ghost"
+                    taille="petit"
+                    disabled={envoi}
+                    onClick={() => mettreAJour({ scan_cni: true })}
+                  >
+                    Marquer fait
+                  </Bouton>
+                )}
+              </div>
             </div>
-            <div className="flex items-center justify-between p-3 bg-sable rounded-lg">
+            <div className="flex items-center justify-between gap-3 p-3 bg-sable rounded-lg">
               <span className="text-sm text-ardoise">Capture biométrique</span>
-              <Badge variante={enrolement.capture_biometrique ? "succes" : "neutre"}>
-                {enrolement.capture_biometrique ? "Effectuée" : "Non effectuée"}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variante={enrolement.capture_biometrique ? "succes" : "neutre"}>
+                  {enrolement.capture_biometrique ? "Effectuée" : "Non effectuée"}
+                </Badge>
+                {!enrolement.capture_biometrique && enrolement.statut === "en_attente" && (
+                  <Link href={`/agent/capture?enrolement_id=${enrolement.id}`}>
+                    <Bouton variante="secondaire" taille="petit">Capturer</Bouton>
+                  </Link>
+                )}
+                {!enrolement.capture_biometrique && enrolement.statut === "en_attente" && (
+                  <Bouton
+                    variante="ghost"
+                    taille="petit"
+                    disabled={envoi}
+                    onClick={() => mettreAJour({ capture_biometrique: true })}
+                  >
+                    Marquer fait
+                  </Bouton>
+                )}
+              </div>
             </div>
             <div className="flex items-center justify-between p-3 bg-sable rounded-lg">
               <span className="text-sm text-ardoise">Statut</span>
