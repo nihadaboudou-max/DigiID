@@ -96,6 +96,23 @@ function Contenu() {
   async function demarrerCamera() {
     setErreur("");
     setSucces("");
+
+    // getUserMedia exige un contexte sécurisé (HTTPS ou localhost)
+    const estSecure =
+      typeof window !== "undefined" &&
+      (window.isSecureContext ||
+        location.hostname === "localhost" ||
+        location.hostname === "127.0.0.1");
+
+    if (!estSecure || !navigator.mediaDevices?.getUserMedia) {
+      // Repli : input fichier avec capture (ouvre l'appareil photo sur mobile)
+      setErreur(
+        "La caméra live nécessite HTTPS. Ouverture du sélecteur photo à la place.",
+      );
+      inputRef.current?.click();
+      return;
+    }
+
     try {
       const flux = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -104,8 +121,17 @@ function Contenu() {
       setModeCamera(true);
       setPreview(null);
       setFichier(null);
-    } catch {
-      setErreur("Impossible d'accéder à la caméra. Vérifie les permissions du navigateur.");
+    } catch (err: unknown) {
+      const name = err instanceof DOMException ? err.name : "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setErreur("Permission caméra refusée. Autorise l'accès dans le navigateur, ou importe une photo.");
+      } else if (name === "NotFoundError") {
+        setErreur("Aucune caméra détectée. Importe une photo à la place.");
+      } else {
+        setErreur("Impossible d'accéder à la caméra. Importe une photo à la place.");
+      }
+      // Repli automatique vers l'import
+      inputRef.current?.click();
     }
   }
 
@@ -279,6 +305,7 @@ function Contenu() {
             ref={inputRef}
             type="file"
             accept="image/jpeg,image/png,image/webp"
+            capture="user"
             className="hidden"
             onChange={handleFichier}
           />
@@ -323,10 +350,15 @@ function Contenu() {
           )}
 
           {!modeCamera && !preview && (
-            <div className="border-2 border-dashed border-ardoise-clair/30 rounded-xl p-10 text-center bg-sable/50 mb-4">
-              <p className="text-4xl mb-2">📷</p>
-              <p className="text-sm text-ardoise-clair">Caméra ou import de fichier</p>
-            </div>
+            <button
+              type="button"
+              onClick={demarrerCamera}
+              className="w-full border-2 border-dashed border-ardoise-clair/30 rounded-xl p-10 text-center bg-sable/50 mb-4 hover:border-ocre/50 hover:bg-ocre/5 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-ocre/40"
+            >
+              <p className="text-4xl mb-2" aria-hidden>📷</p>
+              <p className="text-sm font-semibold text-ardoise">Clique pour ouvrir la caméra</p>
+              <p className="text-xs text-ardoise-clair mt-1">Ou utilise le bouton Importer ci-dessous</p>
+            </button>
           )}
 
           <div className="flex flex-wrap gap-2">
