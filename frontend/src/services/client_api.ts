@@ -241,10 +241,12 @@ async function appel_api<T>(
 
   // Réponse d'erreur ?
   if (!reponse.ok) {
-    const erreurApi = donnees as ReponseErreurAPI;
+    const erreurApi = donnees as any;
+    // FastAPI renvoie 'detail', notre API custom renvoie 'message'
+    const message = erreurApi.message || erreurApi.detail || "Erreur inconnue";
     throw new ErreurAPI(
       erreurApi.code_erreur || "INCONNU",
-      erreurApi.message || "Erreur inconnue",
+      message,
       reponse.status,
       erreurApi.request_id || undefined,
     );
