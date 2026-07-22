@@ -24,6 +24,18 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
     # Super Admin — accès total
     RoleUtilisateur.SUPER_ADMIN: frozenset({"*"}),
     
+        # Administrateur (legacy) — mêmes permissions que Admin Domaine pour rétrocompatibilité
+    # Note: Rôle distinct de 'admin_domaine', défini dans config/constantes.py
+    "administrateur": frozenset({
+        "domaine.lire", "domaine.ecrire", "domaine.supprimer",
+        "departement.lire", "departement.ecrire", "departement.supprimer",
+        "utilisateur.lire", "utilisateur.ecrire",
+        "invitation.envoyer", "invitation.lire",
+        "audit.lire", "statistiques.lire",
+        "equipe.lire", "equipe.ecrire", "equipe.supprimer",
+        "chef.creer", "chef.lire", "chef.modifier",
+    }),
+    
     # Admin Domaine — accès total dans son domaine
     RoleUtilisateur.ADMIN_DOMAINE: frozenset({
         "domaine.lire", "domaine.ecrire", "domaine.supprimer",

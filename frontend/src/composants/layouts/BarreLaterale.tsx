@@ -466,26 +466,29 @@ export function BarreLaterale() {
     titreSection = "Super administration";
     couleurLabel = "text-ocre";
     accentColor = "bg-ocre";
-  } else if (estAdmin) {
-    liens = LIENS_ADMIN;
-    titreSection = "Administration";
-    couleurLabel = "text-terre";
-    accentColor = "bg-terre";
   }
-
-  // ─── NOUVEAUX RÔLES : Admin Domaine ──────────────────────────────
+  
+  // ─── Admin Domaine (liens spécifiques) ───────────────────────────
   else if (utilisateur.role === "admin_domaine") {
     liens = [
-      { href: "/admin-domaine", libelle: "Tableau de bord", Icone: IconeAccueil },
-      { href: "/admin-domaine/departements", libelle: "Départements", Icone: IconeIdentite },
-      { href: "/admin-domaine/chefs", libelle: "Chefs de département", Icone: IconeBouclier },
-      { href: "/admin-domaine/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
-      { href: "/admin-domaine/activites", libelle: "Activités", Icone: IconeJournal },
-      { href: "/admin-domaine/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
+      { href: "/admin/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/admin/chefs", libelle: "Chefs de département", Icone: IconeBouclier },
+      { href: "/admin/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
+      { href: "/admin/departements", libelle: "Départements", Icone: IconeIdentite },
+      { href: "/admin/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
+      { href: "/admin/audit", libelle: "Journal d'audit", Icone: IconeJournal },
     ];
     titreSection = "Admin de Domaine";
     couleurLabel = "text-ocre";
     accentColor = "bg-ocre";
+  }
+  
+  // ─── Administrateur (legacy) ─────────────────────────────────────
+  else if (estAdmin) {
+    liens = LIENS_ADMIN;
+    titreSection = "Administration";
+    couleurLabel = "text-terre";
+    accentColor = "bg-terre";
   }
 
   // ─── NOUVEAUX RÔLES : Chefs de Département ───────────────────────

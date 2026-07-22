@@ -184,9 +184,10 @@ async def lister(
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Liste les invitations avec filtres."""
-    # Super admin voit tout, admin_domaine voit seulement son domaine
+        # Super admin et administrateur (legacy) voient tout,
+    # admin_domaine et autres voient seulement leurs propres invitations
     cree_par = None
-    if utilisateur_courant.role != "super_administrateur":
+    if utilisateur_courant.role not in ("super_administrateur", "administrateur", "super_admin"):
         cree_par = utilisateur_courant.id
 
     invitations, total = await lister_invitations(

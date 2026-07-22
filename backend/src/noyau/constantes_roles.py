@@ -46,6 +46,8 @@ ROLES_SUPER_ADMIN: Final[frozenset] = frozenset({
 
 ROLES_ADMIN_DOMAINE: Final[frozenset] = frozenset({
     RoleUtilisateur.ADMIN_DOMAINE,
+    # Rétrocompatibilité : 'administrateur' legacy a les mêmes droits
+    "administrateur",
 })
 
 ROLES_CHEF: Final[frozenset] = frozenset({

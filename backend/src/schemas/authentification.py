@@ -125,6 +125,11 @@ class UtilisateurReponse(BaseModel):
     est_email_verifie: bool
     score_actuel: Optional[int]
     date_creation: Optional[datetime] = None
+    # ✅ CORRECTION : Ajout des champs de cloisonnement pour permettre
+    # au frontend de filtrer les données par domaine/département
+    domaine_id: Optional[UUID] = None
+    departement_id: Optional[UUID] = None
+    equipe_id: Optional[UUID] = None
 
 
 class ConnexionReponse(BaseModel):

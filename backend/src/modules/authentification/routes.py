@@ -58,6 +58,10 @@ def _construire_utilisateur_reponse(utilisateur: Utilisateur) -> UtilisateurRepo
         est_email_verifie=utilisateur.est_email_verifie,
         score_actuel=utilisateur.score_actuel,
         date_creation=utilisateur.cree_le,
+        # ✅ CORRECTION : Transmettre les IDs de cloisonnement
+        domaine_id=utilisateur.domaine_id,
+        departement_id=utilisateur.departement_id,
+        equipe_id=utilisateur.equipe_id,
     )
 
 
