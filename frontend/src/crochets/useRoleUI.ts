@@ -10,7 +10,7 @@
  *   - erreur : erreur éventuelle
  *
  * Utilisation :
- *   const { can, modules, layout } = useRoleUI();
+ *   const { can, modules, layout, chargement } = useRoleUI();
  *   if (can.createMedicalRecord) { ... }
  *   if (can.enroll) { ... }
  */
@@ -24,7 +24,7 @@ import type { ModulePermission } from "@/services/ui_permissions";
 // ---------- Types ----------
 
 export interface CanActions {
-  /** Modules Super Admin */
+  /** Modules Super Admin / Admin */
   manageRoles: boolean;
   manageUIMatrix: boolean;
   viewAuditLogs: boolean;
@@ -47,7 +47,7 @@ export interface CanActions {
   viewBadges: boolean;
   manageReferral: boolean;
 
-  /** Modules Agent */
+  /** Modules Agent Terrain */
   enroll: boolean;
   scanCNI: boolean;
   captureBiometrics: boolean;
@@ -93,6 +93,7 @@ export interface UseRoleUIReturn {
 }
 
 // ---------- Mapping module_key → clé can ----------
+// Ce mapping correspond EXACTEMENT aux clés définies dans service.py (MODULES_PAR_DEFAUT)
 
 const MODULE_TO_CAN_KEY: Record<string, keyof CanActions> = {
   // Super Admin
@@ -104,6 +105,14 @@ const MODULE_TO_CAN_KEY: Record<string, keyof CanActions> = {
   statistiques_globales: "viewGlobalStats",
   monitoring_temps_reel: "monitorRealtime",
   gestion_admins: "manageAdmins",
+
+  // Administrateur
+  gestion_utilisateurs_admin: "manageUsers",
+  matrice_droits: "manageUIMatrix",
+  audit_logs_admin: "viewAuditLogs",
+  statistiques_admin: "viewGlobalStats",
+  alertes_securite: "viewAuditLogs",
+  mon_profil_admin: "viewProfile",
 
   // Citoyen
   mon_profil: "viewProfile",
@@ -118,13 +127,15 @@ const MODULE_TO_CAN_KEY: Record<string, keyof CanActions> = {
   badges: "viewBadges",
   parrainage: "manageReferral",
 
-  // Agent
-  enrolement_citoyen: "enroll",
+  // Agent Terrain (Correspondance exacte + tolérance orthographique pour la BDD)
+  enrolement_citoyen: "enroll",       // Orthographe correcte (1 'l') - Backend
+  enrollement_citoyen: "enroll",      // Tolérance en cas de faute de frappe en BDD (2 'l')
   scan_ocr_cni: "scanCNI",
   capture_biometrique: "captureBiometrics",
   liste_enrollements: "viewEnrollments",
   recherche_citoyen: "searchCitizen",
   stats_enrolement: "viewEnrollmentStats",
+  mon_profil_agent: "viewProfile",
 
   // Médecin
   creation_dossier: "createMedicalRecord",
@@ -149,6 +160,17 @@ const MODULE_TO_CAN_KEY: Record<string, keyof CanActions> = {
   gestion_programme: "manageProgram",
   statistiques_ong: "viewONGStats",
   calendrier_missions: "manageMissions",
+
+  // Rôles Chef (mappés sur les actions génériques correspondantes)
+  gestion_equipe: "manageUsers",
+  statistiques_chef: "viewGlobalStats",
+  audit_equipe: "viewAuditLogs",
+  gestion_missions: "manageMissions",
+  invitations: "manageUsers",
+  rapports_chef: "viewFieldReports",
+  recherche_chef: "searchPerson",
+  mon_profil_chef: "viewProfile",
+  programmes: "manageProgram",
 };
 
 // ---------- Hook ----------
@@ -159,7 +181,8 @@ export function useRoleUI(): UseRoleUIReturn {
   const [layout, setLayout] = useState<string>("default");
   const [chargement, setChargement] = useState<boolean>(true);
   const [erreur, setErreur] = useState<string | null>(null);
-  // Indique si un chargement a déjà été tenté (évite les boucles)
+  
+  // Indique si un chargement a déjà été tenté (évite les boucles infinies)
   const chargementEffectueRef = useRef(false);
 
   // Récupère la config UI de l'utilisateur
@@ -173,12 +196,13 @@ export function useRoleUI(): UseRoleUIReturn {
       const config = await obtenirConfigUI();
       setModules(config.modules || []);
       setLayout(config.layout || "default");
-    } catch {
-      // Fallback : utiliser les modules par défaut du rôle
+    } catch (err) {
+      console.warn("⚠️ Erreur de chargement UI, utilisation du fallback:", err);
+      // Fallback : utiliser les modules par défaut du rôle définis dans ui_permissions.ts
       const fallback = modulesParDefaut(utilisateur.role);
       setModules(fallback);
       setLayout("default");
-      setErreur("Mode hors-ligne : configuration UI non disponible");
+      setErreur("Mode hors-ligne : configuration UI par défaut appliquée");
     } finally {
       setChargement(false);
       chargementEffectueRef.current = true;
@@ -190,18 +214,20 @@ export function useRoleUI(): UseRoleUIReturn {
     if (estConnecte && utilisateur && !chargementEffectueRef.current) {
       chargerConfig();
     }
+    
     // Réinitialiser quand l'utilisateur change (déconnexion/reconnexion)
     if (!estConnecte || !utilisateur) {
       chargementEffectueRef.current = false;
       setModules([]);
       setLayout("default");
       setChargement(false);
+      setErreur(null);
     }
   }, [estConnecte, utilisateur, chargerConfig]);
 
-  // Construire l'objet can
+  // Construire l'objet can de manière optimisée
   const can = useMemo<CanActions>(() => {
-    // Initialiser toutes les actions à false
+    // 1. Initialiser toutes les actions à false
     const actions: CanActions = {
       manageRoles: false,
       manageUIMatrix: false,
@@ -247,18 +273,18 @@ export function useRoleUI(): UseRoleUIReturn {
       viewONGStats: false,
       manageMissions: false,
       hasModule: (moduleKey: string) => {
-        return modules.some(
-          (m) => m.module_key === moduleKey && m.is_enabled
-        );
+        return modules.some((m) => m.module_key === moduleKey && m.is_enabled);
       },
     };
 
-    // Activer chaque module trouvé
+    // 2. Activer chaque module trouvé dans la réponse API (ou le fallback)
     for (const mod of modules) {
       if (!mod.is_enabled) continue;
+      
       const canKey = MODULE_TO_CAN_KEY[mod.module_key];
       if (canKey) {
-        (actions as unknown as Record<string, unknown>)[canKey] = true;
+        // CORRECTION TS : Conversion via 'unknown' pour satisfaire le compilateur strict
+        (actions as unknown as Record<string, boolean>)[canKey] = true;
       }
     }
 

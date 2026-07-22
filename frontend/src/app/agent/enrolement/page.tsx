@@ -18,7 +18,7 @@ export default function EnrolementPage() {
 }
 
 function Contenu() {
-  const { can } = useRoleUI();
+  const { can, chargement, erreur } = useRoleUI(); // <-- Ajout de chargement et erreur
   const [nom, setNom] = useState("");
   const [prenom, setPrenom] = useState("");
   const [telephone, setTelephone] = useState("");
@@ -26,13 +26,48 @@ function Contenu() {
   const [notes, setNotes] = useState("");
   const [envoi, setEnvoi] = useState(false);
   const [succes, setSucces] = useState(false);
-  const [erreur, setErreur] = useState("");
+  const [erreurEnvoi, setErreurEnvoi] = useState("");
   const [etape, setEtape] = useState(1);
+
+  // 1. Afficher un état de chargement pendant la récupération des permissions
+  if (chargement) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-ardoise-clair animate-pulse">Chargement des permissions...</p>
+      </div>
+    );
+  }
+
+  // 2. Afficher une erreur si le chargement a échoué
+  if (erreur) {
+    return (
+      <div className="space-y-8 apparition">
+        <div className="bg-ocre/10 border-l-4 border-ocre p-4 rounded">
+          <p className="text-sm text-ocre">{erreur}</p>
+        </div>
+        <Link href="/agent/dashboard"><Bouton variante="ghost">Retour</Bouton></Link>
+      </div>
+    );
+  }
+
+  // 3. Maintenant seulement, on vérifie la permission en toute sécurité
+  if (!can.enroll) {
+    return (
+      <div className="space-y-8 apparition">
+        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Agent terrain</p>
+        <h1>Enrôlement</h1>
+        <div className="bg-terre/10 border-l-4 border-terre p-4 rounded">
+          <p className="text-sm text-terre">Module désactivé pour votre rôle.</p>
+        </div>
+        <Link href="/agent/dashboard"><Bouton variante="ghost">Retour</Bouton></Link>
+      </div>
+    );
+  }
 
   async function handleSubmit() {
     if (!nom || !prenom || !telephone) return;
     setEnvoi(true);
-    setErreur("");
+    setErreurEnvoi("");
     try {
       await creerEnrolement({ 
         citoyen_nom: nom, 
@@ -43,23 +78,10 @@ function Contenu() {
       });
       setSucces(true);
     } catch (e: any) {
-      setErreur(e?.message_utilisateur || e.message || "Erreur lors de l'enrôlement");
+      setErreurEnvoi(e?.message_utilisateur || e.message || "Erreur lors de l'enrôlement");
     } finally {
       setEnvoi(false);
     }
-  }
-
-  if (!can.enroll) {
-    return (
-      <div className="space-y-8 apparition">
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Agent terrain</p>
-        <h1>Enrolement</h1>
-        <div className="bg-terre/10 border-l-4 border-terre p-4 rounded">
-          <p className="text-sm text-terre">Module desactive.</p>
-        </div>
-        <Link href="/agent/dashboard"><Bouton variante="ghost">Retour</Bouton></Link>
-      </div>
-    );
   }
 
   if (succes) {
@@ -97,17 +119,16 @@ function Contenu() {
       <nav className="flex items-center gap-2 text-sm text-ardoise-clair">
         <Link href="/agent/dashboard" className="hover:text-ocre">Tableau de bord</Link>
         <span>/</span>
-        <span className="text-ardoise font-semibold">Nouvel enrolement</span>
+        <span className="text-ardoise font-semibold">Nouvel enrôlement</span>
       </nav>
 
       <div>
         <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Agent terrain</p>
-        <h1 className="mt-1">Enrolement citoyen</h1>
-        <p className="text-ardoise-clair mt-2">Inscris un nouveau citoyen dans le systeme DigiID.</p>
+        <h1 className="mt-1">Enrôlement citoyen</h1>
+        <p className="text-ardoise-clair mt-2">Inscris un nouveau citoyen dans le système DigiID.</p>
       </div>
 
       <Carte titre="Identité du citoyen">
-        {/* Barre d'étapes */}
         <div className="flex items-center gap-2 mb-6">
           <div className={`flex items-center gap-2 ${etape >= 1 ? "text-ocre" : "text-ardoise-clair/40"}`}>
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${etape >= 1 ? "bg-ocre text-white" : "bg-ardoise-clair/10"}`}>1</div>
@@ -173,7 +194,7 @@ function Contenu() {
                   <p className="text-xs text-ardoise-clair mt-1">Tu peux scanner la carte d'identité après l'enrôlement pour extraire automatiquement les données.</p>
                 </div>
               )}
-              {erreur && <p className="text-terre text-sm">{erreur}</p>}
+              {erreurEnvoi && <p className="text-terre text-sm">{erreurEnvoi}</p>}
               <div className="flex justify-between pt-2">
                 <Bouton variante="ghost" onClick={() => setEtape(2)}>← Retour</Bouton>
                 <Bouton variante="primaire" disabled={!nom || !prenom || !telephone || envoi} onClick={handleSubmit} chargement={envoi}>
