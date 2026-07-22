@@ -129,7 +129,6 @@ class UtilisateurReponse(BaseModel):
     # au frontend de filtrer les données par domaine/département
     domaine_id: Optional[UUID] = None
     departement_id: Optional[UUID] = None
-    equipe_id: Optional[UUID] = None
 
 
 class ConnexionReponse(BaseModel):

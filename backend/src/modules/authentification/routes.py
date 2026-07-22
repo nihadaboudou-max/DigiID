@@ -61,7 +61,6 @@ def _construire_utilisateur_reponse(utilisateur: Utilisateur) -> UtilisateurRepo
         # ✅ CORRECTION : Transmettre les IDs de cloisonnement
         domaine_id=utilisateur.domaine_id,
         departement_id=utilisateur.departement_id,
-        equipe_id=utilisateur.equipe_id,
     )
 
 
