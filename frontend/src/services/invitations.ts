@@ -3,7 +3,7 @@ Service API pour la gestion des invitations (Admin & Super Admin).
 */
 import { clientAPI } from "./client_api";
 
-// ✅ CORRECTION : Pas de /api au début, clientAPI ajoute /api/backend
+// Chemins au format /api/v1/... (rewrites next.config.js)
 const PREFIXE = "/v1/invitations";
 
 export interface Invitation {

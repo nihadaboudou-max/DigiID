@@ -106,7 +106,7 @@ function Contenu() {
     setExportEnCours(true);
     try {
       const token = obtenirTokenAcces();
-      const reponse = await fetch("/api/backend/api/v1/utilisateurs/moi/exporter", {
+      const reponse = await fetch("/api/v1/utilisateurs/moi/exporter", {
         headers: {
           Authorization: `Bearer ${token || ""}`,
         },

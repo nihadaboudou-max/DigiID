@@ -30,9 +30,9 @@ export async function uploaderDocument(fichier: File): Promise<DocumentDetail> {
   formData.append("fichier", fichier);
 
   const token = obtenirTokenAcces();
-  
-  // ✅ Utiliser /api/backend pour passer par le proxy Next.js
-  const reponse = await fetch(`/api/backend${PREFIXE}`, {
+
+  // Même préfixe que client_api (/api/v1/...) — rewrites next.config.js
+  const reponse = await fetch(PREFIXE, {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     body: formData,

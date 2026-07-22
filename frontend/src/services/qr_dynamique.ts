@@ -29,8 +29,6 @@ export interface QRCodeVerification {
   message: string;
 }
 
-const URL_BASE = "/api/backend";
-
 /**
  * Génère un nouveau QR Code temporaire pour le citoyen connecté.
  * L'ancien QR est automatiquement invalidé.
@@ -39,7 +37,7 @@ export async function genererQRCode(): Promise<QRCodeGenere> {
   const token = obtenirTokenAcces();
 
   try {
-    const reponse = await fetch(`${URL_BASE}/api/v1/utilisateur/qr/generer`, {
+    const reponse = await fetch(`/api/v1/utilisateur/qr/generer`, {
       method: "POST",
       headers: token ? { Authorization: `Bearer ${token}` } : { "Content-Type": "application/json" },
     });
@@ -68,7 +66,7 @@ export async function verifierQRCode(token: string): Promise<QRCodeVerification>
   const tokenAuth = obtenirTokenAcces();
 
   try {
-    const reponse = await fetch(`${URL_BASE}/api/v1/police/qr/verifier/${token}`, {
+    const reponse = await fetch(`/api/v1/police/qr/verifier/${token}`, {
       method: "POST",
       headers: tokenAuth ? { Authorization: `Bearer ${tokenAuth}` } : { "Content-Type": "application/json" },
     });

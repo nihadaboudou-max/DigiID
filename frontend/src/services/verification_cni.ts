@@ -98,13 +98,14 @@ export interface ListeVerificationsCNI {
   total: number;
 }
 
-// ✅ FIX : Toujours utiliser le proxy Next.js pour éviter les erreurs CORS
-// Le proxy redirige /api/backend/* vers le backend réel via next.config.js
-const URL_BASE = "/api/backend";
-
 /**
  * Upload une photo de CNI (recto ou verso) pour analyse OCR.
  * Utilise fetch directement car le clientAPI ne gère pas le multipart/form-data.
+ *
+ * IMPORTANT : même préfixe que client_api → `/api/v1/...`
+ * (rewrites next.config.js : /api/* → backend:8000/api/*).
+ * Ne pas utiliser `/api/backend/...` sinon destination cassée :
+ * backend:8000/api/backend/api/v1/...
  */
 export async function uploaderCNI(
   fichier: File,
@@ -115,10 +116,7 @@ export async function uploaderCNI(
   formData.append("face", face);
 
   const token = obtenirTokenAcces();
-
-  // ✅ FIX : Toujours passer par le proxy Next.js (dev ET production)
-  // Cela évite les erreurs CORS et les problèmes ECONNRESET entre services Render
-  const urlUpload = `${URL_BASE}/api/v1/utilisateur/verification-cni/upload`;
+  const urlUpload = "/api/v1/utilisateur/verification-cni/upload";
 
   let reponse: Response;
   try {
@@ -130,7 +128,7 @@ export async function uploaderCNI(
   } catch (erreur: unknown) {
     // Erreur réseau : backend injoignable (crash, timeout, DNS...)
     const message = erreur instanceof TypeError
-      ? "Le serveur backend est inaccessible. Vérifie qu'il est bien lancé sur Render."
+      ? "Le serveur backend est inaccessible. Vérifie qu'il est bien lancé et que le proxy /api fonctionne."
       : (erreur as Error)?.message || "Erreur réseau lors de l'upload";
     throw new ErreurAPI("RESEAU", message, 0);
   }
