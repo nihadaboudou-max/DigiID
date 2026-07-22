@@ -1,10 +1,11 @@
 /**
-Service API pour la gestion des invitations (Admin & Super Admin).
-*/
+ * Service API pour la gestion des invitations (Admin & Super Admin).
+ */
 import { clientAPI } from "./client_api";
 
-// Chemins au format /api/v1/... (rewrites next.config.js)
-const PREFIXE = "/v1/invitations";
+// ✅ CORRECTION 1 : Utiliser le chemin complet /api/v1/invitations 
+// pour correspondre exactement au prefix du routeur FastAPI.
+const PREFIXE = "/api/v1/invitations";
 
 export interface Invitation {
   id: string;
@@ -65,5 +66,7 @@ export const annulerInvitation = (id: string) =>
   clientAPI.delete<void>(`${PREFIXE}/${id}`, { authentifie: true });
 
 /** Renvoie une invitation */
+// ✅ CORRECTION 2 : Remplacer 'undefined' par '{}' pour éviter les erreurs 
+// de parsing JSON (422 Unprocessable Entity) côté backend FastAPI.
 export const renvoyerInvitation = (id: string) =>
-  clientAPI.post<Invitation>(`${PREFIXE}/${id}/renvoyer`, undefined, { authentifie: true });
+  clientAPI.post<Invitation>(`${PREFIXE}/${id}/renvoyer`, {}, { authentifie: true });
