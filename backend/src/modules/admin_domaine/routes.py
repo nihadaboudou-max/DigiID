@@ -255,7 +255,7 @@ async def statistiques_admin_domaine(
 @require_permission("audit.lire")
 async def audit_admin_domaine(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
-    utilisateur: Annotated[Utilisateur, Depends(admin_courant)],
+    utilisateur_courant: Annotated[Utilisateur, Depends(admin_courant)],
     limite: int = Query(default=100, ge=1, le=500, description="Nombre max d'événements"),
     domaine_id: UUID | None = Query(
         default=None,
@@ -267,7 +267,7 @@ async def audit_admin_domaine(
 
     Filtre automatiquement par le domaine_id de l'admin connecté.
     """
-    domaine_filtre = domaine_id or _obtenir_domaine_id(utilisateur)
+    domaine_filtre = domaine_id or _obtenir_domaine_id(utilisateur_courant)
 
     # Récupérer les IDs des utilisateurs du domaine
     utilisateurs_domaine = (await session.execute(

@@ -42,7 +42,7 @@ function Contenu() {
     const charger = async () => {
       try {
         const data = await clientAPI.get<StatsDomaine>(
-          `/api/v1/admin-domaine/statistiques?domaine_id=${utilisateur?.domaine_id || ""}`,
+          `/api/v1/admin-domaine/statistiques`,
           { authentifie: true }
         );
         if (actif) setStats(data);

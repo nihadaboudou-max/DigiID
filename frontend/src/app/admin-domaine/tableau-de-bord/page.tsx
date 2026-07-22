@@ -72,7 +72,7 @@ function Contenu() {
     const charger = async () => {
       try {
         const data = await clientAPI.get<StatsDomaine>(
-          `/api/v1/admin-domaine/tableau-de-bord?domaine_id=${utilisateur?.domaine_id || ""}`,
+          `/api/v1/admin-domaine/tableau-de-bord`,
           { authentifie: true }
         );
         if (actif) setStats(data);
