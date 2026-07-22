@@ -471,12 +471,12 @@ export function BarreLaterale() {
   // ─── Admin Domaine (liens spécifiques) ───────────────────────────
   else if (utilisateur.role === "admin_domaine") {
     liens = [
-      { href: "/admin/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
-      { href: "/admin/chefs", libelle: "Chefs de département", Icone: IconeBouclier },
-      { href: "/admin/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
-      { href: "/admin/departements", libelle: "Départements", Icone: IconeIdentite },
-      { href: "/admin/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
-      { href: "/admin/audit", libelle: "Journal d'audit", Icone: IconeJournal },
+      { href: "/admin-domaine/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/admin-domaine/chefs", libelle: "Chefs de département", Icone: IconeBouclier },
+      { href: "/admin-domaine/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
+      { href: "/admin-domaine/departements", libelle: "Départements", Icone: IconeIdentite },
+      { href: "/admin-domaine/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
+      { href: "/admin-domaine/audit", libelle: "Journal d'audit", Icone: IconeJournal },
     ];
     titreSection = "Admin de Domaine";
     couleurLabel = "text-ocre";
@@ -676,8 +676,8 @@ export function BarreLaterale() {
           </div>
         )}
 
-        {/* Sous-menu Activités pour Admin */}
-        {estAdmin && (
+        {/* Sous-menu Activités pour Admin (uniquement administrateur, pas admin_domaine) */}
+        {utilisateur.role === "administrateur" && (
           <div className="pt-0.5">
             <GroupePlie
               estActif={estDansActivitesAdmin}

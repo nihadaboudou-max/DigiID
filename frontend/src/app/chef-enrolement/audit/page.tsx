@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
-import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
-import { Badge } from "@/composants/commun/Badge";
-import { listerAuditChef, type AuditLog } from "@/services/chefs";
-import { Alerte } from "@/composants/commun/Alerte";
+import { listerAuditChef } from "@/services/chefs";
+import {
+  AuditTableEnrichi,
+  useAuditEnrichi,
+} from "@/composants/audit/AuditTableEnrichi";
 
 export default function ChefAgentAuditPage() {
   return (
@@ -18,184 +19,121 @@ export default function ChefAgentAuditPage() {
 }
 
 function Contenu() {
-  const [logs, setLogs] = useState<AuditLog[]>([]);
-  const [chargement, setChargement] = useState(true);
-  const [erreur, setErreur] = useState<string | null>(null);
-  
   const [typeAction, setTypeAction] = useState("");
   const [dateDebut, setDateDebut] = useState("");
   const [dateFin, setDateFin] = useState("");
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [recherche, setRecherche] = useState("");
+  const [agentFilter, setAgentFilter] = useState("");
+
+  const {
+    logs, total, chargement, erreur, page, totalPages, setPage, chargerAudit,
+  } = useAuditEnrichi();
+
+  const fetchAudit = useCallback(() => {
+    chargerAudit(listerAuditChef, {
+      type_action: typeAction || undefined,
+      date_debut: dateDebut || undefined,
+      date_fin: dateFin || undefined,
+      agent_id: agentFilter || undefined,
+      recherche: recherche || undefined,
+    });
+  }, [typeAction, dateDebut, dateFin, agentFilter, recherche]);
 
   useEffect(() => {
-    chargerAudit();
-  }, [page, typeAction, dateDebut, dateFin]);
+    fetchAudit();
+  }, [page, typeAction, dateDebut, dateFin, agentFilter, recherche]);
 
-  async function chargerAudit() {
-    setChargement(true);
-    setErreur(null);
-    try {
-      const data = await listerAuditChef({
-        type_action: typeAction || undefined,
-        date_debut: dateDebut || undefined,
-        date_fin: dateFin || undefined,
-        page,
-        par_page: 50,
-      });
-      setLogs(data.logs);
-      setTotal(data.total);
-    } catch (error: any) {
-      setErreur(error?.message || "Erreur de chargement de l'audit");
-    } finally {
-      setChargement(false);
-    }
-  }
-
-  function resetFiltres() {
+  const resetFiltres = () => {
     setTypeAction("");
     setDateDebut("");
     setDateFin("");
+    setRecherche("");
+    setAgentFilter("");
     setPage(1);
-  }
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString("fr-FR", {
-      day: "2-digit", month: "2-digit", year: "numeric",
-      hour: "2-digit", minute: "2-digit"
-    });
   };
 
-  const getBadgeVariante = (type: string) => {
-    if (type.includes("verification") || type.includes("recherche")) return "lagune";
-    if (type.includes("signalement") || type.includes("alerte")) return "terre";
-    if (type.includes("connexion")) return "succes";
-    return "ocre";
-  };
+  const filtres = (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div>
+          <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Action</label>
+          <select
+            value={typeAction}
+            onChange={(e) => { setTypeAction(e.target.value); setPage(1); }}
+            className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-terre/30"
+          >
+            <option value="">Toutes</option>
+            <option value="enrolement_creation">Création enrôlement</option>
+            <option value="enrolement_scan_cni">Scan CNI</option>
+            <option value="enrolement_capture_biometrique">Capture biométrique</option>
+            <option value="connexion_reussie">Connexion réussie</option>
+            <option value="connexion_echouee">Échec connexion</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Agent</label>
+          <input
+            type="text"
+            placeholder="Nom de l'agent..."
+            value={agentFilter}
+            onChange={(e) => { setAgentFilter(e.target.value); setPage(1); }}
+            className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-terre/30"
+          />
+        </div>
+        <div>
+          <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Du</label>
+          <input
+            type="date"
+            value={dateDebut}
+            onChange={(e) => { setDateDebut(e.target.value); setPage(1); }}
+            className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-terre/30"
+          />
+        </div>
+        <div>
+          <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Au</label>
+          <input
+            type="date"
+            value={dateFin}
+            onChange={(e) => { setDateFin(e.target.value); setPage(1); }}
+            className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-terre/30"
+          />
+        </div>
+        <div>
+          <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Recherche</label>
+          <input
+            type="text"
+            placeholder="Texte dans la description..."
+            value={recherche}
+            onChange={(e) => { setRecherche(e.target.value); setPage(1); }}
+            className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-terre/30"
+          />
+        </div>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="space-y-6 apparition pb-20">
-      <div>
-        <p className="text-terre font-semibold text-sm uppercase tracking-wider">🛡️ Supervision</p>
-        <h1>Journal d'Audit de l'Équipe</h1>
-        <p className="text-ardoise-clair mt-2">
-          Historique complet de toutes les actions effectuées par vos agents terrain.
-        </p>
+    <div>
+      <AuditTableEnrichi
+        logs={logs}
+        total={total}
+        chargement={chargement}
+        erreur={erreur}
+        accentCouleur="text-terre"
+        titre="Journal d'Audit — Enrôlement"
+        sousTitre="Qui a enrôlé qui, à quelle heure, depuis quel appareil — traçabilité complète des enrôlements."
+        filtres={filtres}
+        onResetFiltres={resetFiltres}
+        page={page}
+        totalPages={totalPages}
+        surPageSuivante={() => setPage(p => p + 1)}
+        surPagePrecedente={() => setPage(p => p - 1)}
+      />
+      <div className="mt-4">
+        <Link href="/chef-enrolement">
+          <Bouton variante="ghost" taille="petit">← Retour au tableau de bord</Bouton>
+        </Link>
       </div>
-
-      {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
-
-      <Carte titre="Filtrer les activités">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Type d'action</label>
-            <select 
-              value={typeAction} 
-              onChange={(e) => { setTypeAction(e.target.value); setPage(1); }}
-              className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-terre/30"
-            >
-              <option value="">Toutes les actions</option>
-              <option value="connexion_reussie">Connexion réussie</option>
-              <option value="modification_profil">Modification de profil</option>
-              <option value="enrolement_creation">Création enrôlement</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Date début</label>
-            <input 
-              type="date" 
-              value={dateDebut} 
-              onChange={(e) => { setDateDebut(e.target.value); setPage(1); }}
-              className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-terre/30"
-            />
-          </div>
-          <div>
-            <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Date fin</label>
-            <input 
-              type="date" 
-              value={dateFin} 
-              onChange={(e) => { setDateFin(e.target.value); setPage(1); }}
-              className="w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-terre/30"
-            />
-          </div>
-          <div className="flex items-end">
-            <Bouton variante="ghost" onClick={resetFiltres} className="w-full">🔄 Réinitialiser</Bouton>
-          </div>
-        </div>
-      </Carte>
-
-      <Carte titre={`Activités récentes (${total} au total)`}>
-        {chargement ? (
-          <div className="text-center py-8">
-            <div className="animate-spin w-8 h-8 border-4 border-terre border-t-transparent rounded-full mx-auto mb-3"></div>
-            <p className="text-ardoise-clair">Chargement des journaux...</p>
-          </div>
-        ) : logs.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-4xl mb-3">📭</p>
-            <p className="text-ardoise-clair italic">Aucune activité trouvée pour ces critères.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs uppercase bg-sable text-ardoise-clair">
-                <tr>
-                  <th className="px-4 py-3 rounded-tl-lg">Date & Heure</th>
-                  <th className="px-4 py-3">Agent</th>
-                  <th className="px-4 py-3">Action</th>
-                  <th className="px-4 py-3">Détails</th>
-                  <th className="px-4 py-3 rounded-tr-lg">IP</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logs.map((log) => (
-                  <tr key={log.id} className="border-b border-ardoise-clair/10 hover:bg-sable/50 transition-colors">
-                    <td className="px-4 py-3 whitespace-nowrap text-ardoise-clair">
-                      {formatDate(log.date_evenement)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-semibold text-ardoise">{log.agent_nom}</div>
-                      <div className="text-xs text-ardoise-clair capitalize">{log.agent_role.replace('_', ' ')}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variante={getBadgeVariante(log.type_evenement)} taille="petit">
-                        {log.type_evenement.replace(/_/g, ' ')}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 max-w-xs truncate text-ardoise-clair" title={log.description}>
-                      {log.description}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-ardoise-clair">
-                      {log.adresse_ip || "-"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {!chargement && logs.length > 0 && (
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-ardoise-clair/10">
-            <p className="text-xs text-ardoise-clair">
-              Page {page} sur {Math.ceil(total / 50) || 1}
-            </p>
-            <div className="flex gap-2">
-              <Bouton variante="ghost" taille="petit" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
-                ← Précédent
-              </Bouton>
-              <Bouton variante="ghost" taille="petit" disabled={page * 50 >= total} onClick={() => setPage(p => p + 1)}>
-                Suivant →
-              </Bouton>
-            </div>
-          </div>
-        )}
-      </Carte>
-
-      {/* ✅ CORRECTION : Lien de retour vers le bon tableau de bord */}
-      <Link href="/chef-enrolement">
-        <Bouton variante="ghost">← Retour au tableau de bord</Bouton>
-      </Link>
     </div>
   );
 }

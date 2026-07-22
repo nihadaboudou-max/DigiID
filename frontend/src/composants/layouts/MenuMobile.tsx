@@ -159,6 +159,7 @@ export function BoutonMenuMobile() {
 
   const estSuperAdminRole = utilisateur.role === "super_administrateur";
   const estAdminRole = utilisateur.role === "administrateur";
+  const estAdminDomaine = utilisateur.role === "admin_domaine";
   
   // ✅ CORRECTION : Utiliser les bons noms de rôles
   const estMedecin = utilisateur.role === "agent_medical";
@@ -186,6 +187,10 @@ export function BoutonMenuMobile() {
     couleurSection = "text-ocre";
     bgCercle = "bg-ocre";
     titreSection = "Super admin";
+  } else if (estAdminDomaine) {
+    couleurSection = "text-ocre";
+    bgCercle = "bg-ocre";
+    titreSection = "Admin Domaine";
   } else if (estAdminRole) {
     couleurSection = "text-terre";
     bgCercle = "bg-terre";
@@ -351,6 +356,53 @@ export function BoutonMenuMobile() {
                     </div>
                   </SectionPlieMobile>
                 </>
+              )}
+
+              {/* ============================================================ */}
+              {/* ADMIN DOMAINE */}
+              {/* ============================================================ */}
+              {estAdminDomaine && (
+                <div>
+                  <SectionPlieMobile
+                    titre="Admin de Domaine"
+                    couleur="text-ocre"
+                    initialOuvert={true}
+                  >
+                    <div className="pl-2">
+                      {[
+                        { href: "/admin-domaine/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
+                        { href: "/admin-domaine/chefs", libelle: "Chefs de département", Icone: IconeBouclier },
+                        { href: "/admin-domaine/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
+                        { href: "/admin-domaine/departements", libelle: "Départements", Icone: IconeIdentite },
+                        { href: "/admin-domaine/statistiques", libelle: "Statistiques", Icone: IconeStatistique },
+                        { href: "/admin-domaine/audit", libelle: "Journal d'audit", Icone: IconeJournal },
+                      ].map(({ href, libelle, Icone }) => {
+                        const actif = pathname.startsWith(href);
+                        return (
+                          <Link
+                            key={href}
+                            href={href}
+                            onClick={() => setOuvert(false)}
+                            className={clsx(
+                              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                              actif
+                                ? "bg-sable text-lagune font-semibold"
+                                : "text-ardoise hover:bg-sable/60",
+                            )}
+                          >
+                            <div className={clsx(
+                              "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                              actif ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                            )}>
+                              <Icone className="w-3.5 h-3.5" />
+                            </div>
+                            <span>{libelle}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </SectionPlieMobile>
+                </div>
               )}
 
               {/* ============================================================ */}
@@ -669,7 +721,7 @@ export function BoutonMenuMobile() {
               {/* ============================================================ */}
               {/* CITOYEN — utilisateur normal */}
               {/* ============================================================ */}
-              {!estSuperAdminRole && !estAdminRole && !estProfessionnel && !estChef && (
+              {!estSuperAdminRole && !estAdminDomaine && !estAdminRole && !estProfessionnel && !estChef && (
                 <div>
                   <SectionPlieMobile titre="Navigation" couleur="text-lagune" initialOuvert={true}>
                     <div className="pl-2">

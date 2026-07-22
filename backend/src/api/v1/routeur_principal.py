@@ -76,6 +76,9 @@ from src.modules.departements import routeur_departements
 # --- Modules invitations ---
 from src.modules.invitations import routeur_invitations
 
+# --- Module Admin Domaine (espace dédié) ---
+from src.modules.admin_domaine import routeur_admin_domaine
+
 # --- Modules équipes ---
 from src.modules.equipes import routeur_equipes
 
@@ -166,6 +169,9 @@ routeur_v1.include_router(routeur_qr_dynamique)
 
 # ... (dans la section d'include_router, ajoute cette ligne)
 routeur_v1.include_router(routeur_chefs)
+
+# Admin Domaine — espace dédié aux administrateurs de domaine
+routeur_v1.include_router(routeur_admin_domaine)
 
 ## Module Recherche Faciale Médicale — routeur pour la recherche faciale par les agents médicaux
 routeur_v1.include_router(routeur_recherche_faciale)

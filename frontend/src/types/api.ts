@@ -87,8 +87,9 @@ export function cheminTableauDeBord(role: RoleUtilisateur): string {
     case "super_admin":
       return "/super-admin/tableau-de-bord";
     case "administrateur":
-    case "admin_domaine":
       return "/admin/tableau-de-bord";
+    case "admin_domaine":
+      return "/admin-domaine/tableau-de-bord";
     case "agent_medical":
       return "/medecin/dashboard";
     case "agent_terrain":

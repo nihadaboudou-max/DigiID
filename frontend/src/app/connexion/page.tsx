@@ -19,7 +19,7 @@ import { ErreurAPI } from "@/services/client_api";
 const REDIRECTIONS_PAR_ROLE: Record<string, string> = {
   "super_administrateur": "/super-admin/tableau-de-bord",
   "administrateur": "/admin/tableau-de-bord",
-  "admin_domaine": "/admin/tableau-de-bord",
+  "admin_domaine": "/admin-domaine/tableau-de-bord",
   "chef_ong": "/chef-ong",
   "chef_police": "/chef-police",
   "chef_medical": "/chef-medical",
