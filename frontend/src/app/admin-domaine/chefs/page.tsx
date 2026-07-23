@@ -2,8 +2,6 @@
 
 /**
  * Page Admin Domaine — Gestion des chefs de département.
- * Version simplifiée : l'admin de domaine consulte uniquement
- * les chefs de son propre domaine.
  */
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
@@ -264,7 +262,6 @@ function Contenu() {
         </Carte>
       )}
 
-      {/* Modale de détail */}
       {modalDetail && (
         <Modal
           ouvert={true}

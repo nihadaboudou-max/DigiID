@@ -1,17 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Routes API dédiées à l'espace Admin Domaine.
-
 Préfixe : /api/v1/admin-domaine
-
-Contrairement aux routes /api/v1/admin qui servent les admins système
-(administrateur, super_administrateur), ici les endpoints sont adaptés
-spécifiquement aux besoins des admins de domaine (admin_domaine).
-
-Fonctionnalités :
-  - Tableau de bord : KPIs du domaine (chefs, agents, départements)
-  - Statistiques : métriques détaillées du domaine
-  - Audit : journal filtré par domaine
 """
 from datetime import datetime, timezone, timedelta
 from typing import Annotated, Optional
@@ -36,17 +26,11 @@ from src.noyau.permissions import require_permission
 routeur_admin_domaine = APIRouter(
     prefix="/api/v1/admin-domaine",
     tags=["Admin Domaine"],
-    # admin_courant accepte déjà les rôles admin_domaine, administrateur, super_administrateur
     dependencies=[Depends(admin_courant)],
 )
 
 
-# =============================================================================
-# Schémas
-# =============================================================================
-
 class StatsTableauDeBord(BaseModel):
-    """KPIs du tableau de bord pour l'admin de domaine."""
     chefs_actifs: int = 0
     agents_total: int = 0
     departements_actifs: int = 0
@@ -54,7 +38,6 @@ class StatsTableauDeBord(BaseModel):
 
 
 class StatsDomaine(BaseModel):
-    """Statistiques détaillées du domaine."""
     total_chefs: int = 0
     chefs_par_type: dict[str, int] = {}
     total_departements: int = 0
@@ -66,7 +49,6 @@ class StatsDomaine(BaseModel):
 
 
 class EvenementAuditItem(BaseModel):
-    """Événement d'audit pour l'admin de domaine."""
     id: str
     date_evenement: str
     type_evenement: str
@@ -77,18 +59,12 @@ class EvenementAuditItem(BaseModel):
 
 
 class ListeAuditReponse(BaseModel):
-    """Liste paginée des événements d'audit."""
     donnees: list[EvenementAuditItem]
     total: int
     page: int
 
 
-# =============================================================================
-# Utilitaires
-# =============================================================================
-
 def _obtenir_domaine_id(utilisateur: Utilisateur) -> UUID:
-    """Retourne le domaine_id de l'utilisateur connecté, ou lève une erreur."""
     if not utilisateur.domaine_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -96,10 +72,6 @@ def _obtenir_domaine_id(utilisateur: Utilisateur) -> UUID:
         )
     return utilisateur.domaine_id
 
-
-# =============================================================================
-# ENDPOINTS
-# =============================================================================
 
 @routeur_admin_domaine.get(
     "/tableau-de-bord",
@@ -110,40 +82,16 @@ async def tableau_de_bord_admin_domaine(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(admin_courant)],
 ):
-    """
-    Retourne les KPIs du domaine de l'admin connecté :
-      - chefs_actifs : nombre de chefs actifs dans le domaine
-      - agents_total : nombre total d'agents dans le domaine
-      - departements_actifs : nombre de départements actifs
-      - invitations_en_attente : invitations en attente pour ce domaine
-    """
     domaine_id = _obtenir_domaine_id(utilisateur)
 
-    # CORRECTION : Les chefs sont liés via Departement.chef_id, pas Utilisateur.domaine_id
-    # Sous-requête pour obtenir les IDs des départements du domaine
-    dept_ids_subquery = select(Departement.id).where(
-        Departement.domaine_id == domaine_id,
-        Departement.est_actif == True,
-    )
-    
-    # Sous-requête pour obtenir les IDs des chefs via Departement.chef_id
-    chef_ids_subquery = select(Departement.chef_id).where(
-        Departement.domaine_id == domaine_id,
-        Departement.chef_id.isnot(None),
-        Departement.est_actif == True,
-    )
-
-    # Chefs actifs (via jointure avec département)
     chefs_actifs = await session.scalar(
-        select(func.count(Utilisateur.id)).where(
-            Utilisateur.id.in_(chef_ids_subquery),
-            Utilisateur.role.in_(RolesUtilisateur.roles_chefs()),
-            Utilisateur.est_actif == True,
-            Utilisateur.est_supprime == False,
+        select(func.count(Departement.id)).where(
+            Departement.domaine_id == domaine_id,
+            Departement.chef_id.isnot(None),
+            Departement.est_actif == True,
         )
     )
 
-    # Agents (non-chefs) du domaine
     roles_chefs = RolesUtilisateur.roles_chefs()
     agents_total = await session.scalar(
         select(func.count(Utilisateur.id)).where(
@@ -157,7 +105,6 @@ async def tableau_de_bord_admin_domaine(
         )
     )
 
-    # Départements actifs
     departements_actifs = await session.scalar(
         select(func.count(Departement.id)).where(
             Departement.domaine_id == domaine_id,
@@ -165,7 +112,6 @@ async def tableau_de_bord_admin_domaine(
         )
     )
 
-    # Invitations en attente
     invitations_en_attente = await session.scalar(
         select(func.count(Invitation.id)).where(
             Invitation.domaine_id == domaine_id,
@@ -190,18 +136,9 @@ async def statistiques_admin_domaine(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(admin_courant)],
 ):
-    """
-    Retourne les statistiques détaillées du domaine :
-      - total_chefs + répartition par type
-      - total_départements + répartition par type
-      - total_agents
-      - invitations (envoyées, acceptées, taux)
-    """
     domaine_id = _obtenir_domaine_id(utilisateur)
     roles_chefs = RolesUtilisateur.roles_chefs()
 
-    # CORRECTION : Utiliser une jointure avec Departement pour trouver les chefs
-    # Total chefs par type
     resultat_chefs = await session.execute(
         select(Utilisateur.role, func.count(Utilisateur.id)).where(
             Utilisateur.id.in_(
@@ -217,7 +154,6 @@ async def statistiques_admin_domaine(
     chefs_par_type = {role: count for role, count in resultat_chefs.all()}
     total_chefs = sum(chefs_par_type.values())
 
-    # Total agents (non-chefs)
     total_agents = await session.scalar(
         select(func.count(Utilisateur.id)).where(
             Utilisateur.domaine_id == domaine_id,
@@ -230,7 +166,6 @@ async def statistiques_admin_domaine(
         )
     )
 
-    # Départements par type
     resultat_depts = await session.execute(
         select(Departement.type_departement, func.count(Departement.id)).where(
             Departement.domaine_id == domaine_id,
@@ -239,7 +174,6 @@ async def statistiques_admin_domaine(
     departements_par_type = {type_: count for type_, count in resultat_depts.all()}
     total_departements = sum(departements_par_type.values())
 
-    # Invitations
     invitations_envoyees = await session.scalar(
         select(func.count(Invitation.id)).where(
             Invitation.domaine_id == domaine_id,
@@ -282,15 +216,8 @@ async def audit_admin_domaine(
         description="Filtrer par domaine (utilise celui de l'admin par défaut)",
     ),
 ):
-    """
-    Retourne les événements d'audit liés au domaine de l'admin.
-
-    Filtre automatiquement par le domaine_id de l'admin connecté.
-    """
     domaine_filtre = domaine_id or _obtenir_domaine_id(utilisateur_courant)
 
-    # CORRECTION : Inclure les utilisateurs qui ont domaine_id OU qui sont chefs d'un département du domaine
-    # Récupérer les IDs des utilisateurs du domaine
     utilisateurs_domaine = (await session.execute(
         select(Utilisateur.id).where(
             (
@@ -353,14 +280,8 @@ async def lister_chefs_domaine(
     role: str | None = Query(None, description="Filtrer par rôle spécifique"),
     domaine_id: UUID | None = Query(None, description="ID du domaine (optionnel)"),
 ):
-    """
-    Liste les chefs de département du domaine.
-    Compatible avec le format attendu par le frontend admin-domaine/chefs.
-    """
     domaine_filtre = domaine_id or _obtenir_domaine_id(utilisateur)
 
-    # CORRECTION : Utiliser une jointure avec Departement pour trouver les chefs
-    # Un chef est lié à un département via Departement.chef_id
     conditions = [
         Departement.domaine_id == domaine_filtre,
         Departement.chef_id.isnot(None),
@@ -378,17 +299,6 @@ async def lister_chefs_domaine(
     )
     chefs = result.scalars().all()
 
-    # Charger les départements
-    dept_ids = [c.departement_id for c in chefs if c.departement_id]
-    departements = {}
-    if dept_ids:
-        dept_result = await session.execute(
-            select(Departement).where(Departement.id.in_(dept_ids))
-        )
-        for d in dept_result.scalars().all():
-            departements[str(d.id)] = d.nom
-
-    # CORRECTION : Récupérer le département via Departement.chef_id
     departements_par_chef = {}
     for chef in chefs:
         dept = await session.execute(
@@ -431,10 +341,8 @@ async def detail_chef_domaine(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(admin_courant)],
 ):
-    """Retourne le détail complet d'un chef du même domaine."""
     domaine_id = _obtenir_domaine_id(utilisateur)
 
-    # CORRECTION : Utiliser une jointure avec Departement pour vérifier que le chef est dans le domaine
     chef = (await session.scalars(
         select(Utilisateur)
         .join(Departement, Utilisateur.id == Departement.chef_id)
@@ -457,7 +365,6 @@ async def detail_chef_domaine(
     nom = dechiffrer_donnee(chef.nom_chiffre) if chef.nom_chiffre else ""
     telephone = dechiffrer_donnee(chef.telephone_chiffre) if chef.telephone_chiffre else ""
 
-    # Département
     departement_nom = None
     dept = await session.execute(
         select(Departement).where(Departement.chef_id == chef.id)
