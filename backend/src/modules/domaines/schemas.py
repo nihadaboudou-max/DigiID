@@ -39,6 +39,7 @@ class DomaineResponse(DomaineBase):
     """Schéma de réponse pour un domaine."""
     id: UUID
     admin_id: Optional[UUID] = None
+    admin_nom: Optional[str] = Field(None, description="Nom de l'admin assigné")
     est_actif: bool
     date_creation: datetime
     date_modification: Optional[datetime] = None

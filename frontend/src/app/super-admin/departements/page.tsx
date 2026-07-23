@@ -59,8 +59,15 @@ function Contenu() {
   const [creationEnCours, setCreationEnCours] = useState(false);
   const [editionEnCours, setEditionEnCours] = useState(false);
   const [departementSelectionne, setDepartementSelectionne] = useState<Departement | null>(null);
-  const [formCreation, setFormCreation] = useState({ nom: "", type_departement: "police", domaine_id: "", description: "", capacite_max: 50, chef_id: "" });
+    const [formCreation, setFormCreation] = useState({ nom: "", type_departement: "police", domaine_id: "", description: "", capacite_max: 50, chef_id: "" });
   const [formEdition, setFormEdition] = useState({ nom: "", type_departement: "police", domaine_id: "", description: "", capacite_max: 50, chef_id: "" });
+
+  /** Convertit les chaînes vides en null pour les IDs */
+  const nettoyerFormulaire = (form: typeof formCreation) => ({
+    ...form,
+    chef_id: form.chef_id || null,
+    domaine_id: form.domaine_id || null,
+  });
   const [erreurCreation, setErreurCreation] = useState<string | null>(null);
   const [erreurEdition, setErreurEdition] = useState<string | null>(null);
 
@@ -111,7 +118,7 @@ function Contenu() {
     setErreurCreation(null);
     setCreationEnCours(true);
     try {
-      await clientAPI.post("/api/v1/departements", formCreation, { authentifie: true });
+      await clientAPI.post("/api/v1/departements", nettoyerFormulaire(formCreation), { authentifie: true });
       notifier("Département créé avec succès !", "succes");
       setModaleOuverte(false);
       setFormCreation({ nom: "", type_departement: "police", domaine_id: "", description: "", capacite_max: 50, chef_id: "" });
@@ -129,7 +136,7 @@ function Contenu() {
     setErreurEdition(null);
     setEditionEnCours(true);
     try {
-      await clientAPI.patch(`/api/v1/departements/${departementSelectionne.id}`, formEdition, { authentifie: true });
+      await clientAPI.patch(`/api/v1/departements/${departementSelectionne.id}`, nettoyerFormulaire(formEdition), { authentifie: true });
       notifier("Département modifié avec succès !", "succes");
       setModaleEdition(false);
       charger();

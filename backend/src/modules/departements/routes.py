@@ -43,8 +43,8 @@ async def _enrichir_departement(dept: Departement, session: AsyncSession) -> dic
         "chef_id": dept.chef_id,
         "chef_nom": None,
         "est_actif": dept.est_actif,
-        "date_creation": dept.cree_le,
-        "date_modification": dept.modifie_le,
+                "date_creation": dept.date_creation,
+        "date_modification": dept.date_modification,
     }
     
     # Domaine

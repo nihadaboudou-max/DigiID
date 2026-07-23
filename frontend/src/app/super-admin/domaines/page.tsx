@@ -112,16 +112,13 @@ function Contenu() {
     setErreurCreation(null);
     setCreationEnCours(true);
     try {
-      // ✅ CORRECTION : Envoyer admin_id seulement si renseigné
-      const payload: any = {
+            const payload: any = {
         nom: formCreation.nom,
         code: formCreation.code,
         region: formCreation.region || null,
         description: formCreation.description || null,
+        admin_id: formCreation.admin_id || null,
       };
-      if (formCreation.admin_id) {
-        payload.admin_id = formCreation.admin_id;
-      }
       await clientAPI.post("/api/v1/domaines", payload, { authentifie: true });
       notifier("Domaine créé avec succès !", "succes");
       setModaleOuverte(false);
@@ -140,16 +137,12 @@ function Contenu() {
     setErreurEdition(null);
     setEditionEnCours(true);
     try {
-      const payload: any = {
+            const payload: any = {
         nom: formEdition.nom,
         description: formEdition.description || null,
         region: formEdition.region || null,
+        admin_id: formEdition.admin_id || null,
       };
-      if (formEdition.admin_id) {
-        payload.admin_id = formEdition.admin_id;
-      } else {
-        payload.admin_id = null; // Permet de désassigner
-      }
       await clientAPI.patch(`/api/v1/domaines/${domaineSelectionne.id}`, payload, {
         authentifie: true,
       });

@@ -18,7 +18,31 @@ from src.modules.domaines.service import (
     modifier_domaine, supprimer_domaine, suspendre_domaine, reactiver_domaine
 )
 from src.modules.domaines.dependances import obtenir_domaine_ou_404
+from src.noyau import dechiffrer_donnee
 from src.noyau.permissions import require_permission
+
+
+# =============================================================================
+# Fonctions utilitaires
+# =============================================================================
+
+async def _enrichir_domaine(domaine: Domaine, session: AsyncSession) -> Domaine:
+    """Ajoute admin_nom à un domaine."""
+    if domaine.admin_id:
+        utilisateur = await session.get(Utilisateur, domaine.admin_id)
+        if utilisateur:
+            prenom = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else ""
+            nom = dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else ""
+            domaine.admin_nom = f"{prenom} {nom}".strip() or "Admin"
+    return domaine
+
+
+async def _enrichir_domaines(domaines: list[Domaine], session: AsyncSession) -> list[Domaine]:
+    """Enrichit une liste de domaines avec admin_nom."""
+    for domaine in domaines:
+        await _enrichir_domaine(domaine, session)
+    return domaines
+
 
 routeur_domaines = APIRouter(prefix="/api/v1/domaines", tags=["Domaines"])
 
@@ -36,7 +60,8 @@ async def creer(
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Crée un nouveau domaine organisationnel."""
-    return await creer_domaine(session, donnees, admin_id=donnees.admin_id)
+    domaine = await creer_domaine(session, donnees, admin_id=donnees.admin_id)
+    return await _enrichir_domaine(domaine, session)
 
 
 @routeur_domaines.get(
@@ -54,6 +79,7 @@ async def lister(
 ):
     """Liste tous les domaines avec pagination."""
     domaines, total = await lister_domaines(session, page, par_page, est_actif)
+    domaines = await _enrichir_domaines(domaines, session)
     return DomaineListResponse(
         domaines=domaines,
         total=total,
@@ -71,9 +97,10 @@ async def lister(
 async def obtenir(
     domaine: Domaine = Depends(obtenir_domaine_ou_404),
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
 ):
     """Récupère les détails d'un domaine."""
-    return domaine
+    return await _enrichir_domaine(domaine, session)
 
 
 @routeur_domaines.patch(
@@ -89,7 +116,8 @@ async def modifier(
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Modifie un domaine existant."""
-    return await modifier_domaine(session, domaine.id, donnees)
+    domaine_modifie = await modifier_domaine(session, domaine.id, donnees)
+    return await _enrichir_domaine(domaine_modifie, session)
 
 
 @routeur_domaines.delete(
@@ -120,7 +148,8 @@ async def suspendre(
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Suspend un domaine avec un motif."""
-    return await suspendre_domaine(session, domaine.id, motif)
+    domaine_suspendu = await suspendre_domaine(session, domaine.id, motif)
+    return await _enrichir_domaine(domaine_suspendu, session)
 
 
 @routeur_domaines.post(
@@ -135,4 +164,5 @@ async def reactiver(
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Réactive un domaine suspendu."""
-    return await reactiver_domaine(session, domaine.id)
+    domaine_reactif = await reactiver_domaine(session, domaine.id)
+    return await _enrichir_domaine(domaine_reactif, session)
