@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
@@ -85,9 +85,17 @@ def _obtenir_ids_utilisateurs_domaine(session: AsyncSession, domaine_id: UUID):
     Récupère tous les IDs des utilisateurs d'un domaine via le champ domaine_id
     sur la table Utilisateur.
     """
+    # Double condition : domaine_id direct OU via département
+    sous_req = select(Departement.chef_id).where(
+        Departement.domaine_id == domaine_id,
+        Departement.chef_id.isnot(None),
+    )
     return select(Utilisateur.id).where(
-        Utilisateur.domaine_id == domaine_id,
         Utilisateur.est_supprime == False,
+        or_(
+            Utilisateur.domaine_id == domaine_id,
+            Utilisateur.id.in_(sous_req),
+        ),
     )
 
 
@@ -106,26 +114,40 @@ async def tableau_de_bord_admin_domaine(
 ):
     domaine_id = _obtenir_domaine_id(utilisateur)
 
-    # ✅ CORRECTION : Chefs via Utilisateur.domaine_id (direct)
+    # ✅ CORRECTION : Chefs via domaine_id OU via département du domaine
     roles_chefs = RolesUtilisateur.roles_chefs()
+    sous_req_chefs_dept = select(Departement.chef_id).where(
+        Departement.domaine_id == domaine_id,
+        Departement.chef_id.isnot(None),
+    )
     chefs_actifs = await session.scalar(
         select(func.count(Utilisateur.id)).where(
-            Utilisateur.domaine_id == domaine_id,
             Utilisateur.role.in_(roles_chefs),
             Utilisateur.est_supprime == False,
+            or_(
+                Utilisateur.domaine_id == domaine_id,
+                Utilisateur.id.in_(sous_req_chefs_dept),
+            ),
         )
     )
 
-    # ✅ CORRECTION : Agents via Utilisateur.domaine_id (direct)
+    # ✅ CORRECTION : Agents via domaine_id OU via département du domaine
+    sous_req_agents_dept = select(Departement.chef_id).where(
+        Departement.domaine_id == domaine_id,
+        Departement.chef_id.isnot(None),
+    )
     agents_total = await session.scalar(
         select(func.count(Utilisateur.id)).where(
-            Utilisateur.domaine_id == domaine_id,
             Utilisateur.role.notin_(roles_chefs),
             Utilisateur.role.notin_([
                 RolesUtilisateur.ADMINISTRATEUR.value,
                 RolesUtilisateur.SUPER_ADMINISTRATEUR.value,
             ]),
             Utilisateur.est_supprime == False,
+            or_(
+                Utilisateur.domaine_id == domaine_id,
+                Utilisateur.id.in_(sous_req_agents_dept),
+            ),
         )
     )
 
@@ -163,29 +185,43 @@ async def statistiques_admin_domaine(
     domaine_id = _obtenir_domaine_id(utilisateur)
     roles_chefs = RolesUtilisateur.roles_chefs()
 
-    # ✅ CORRECTION : Chefs via Utilisateur.domaine_id (direct)
+    # ✅ CORRECTION : Chefs via domaine_id OU via département du domaine
+    sous_req_chefs = select(Departement.chef_id).where(
+        Departement.domaine_id == domaine_id,
+        Departement.chef_id.isnot(None),
+    )
     resultat_chefs = await session.execute(
         select(Utilisateur.role, func.count(Utilisateur.id))
         .where(
-            Utilisateur.domaine_id == domaine_id,
             Utilisateur.role.in_(roles_chefs),
             Utilisateur.est_supprime == False,
+            or_(
+                Utilisateur.domaine_id == domaine_id,
+                Utilisateur.id.in_(sous_req_chefs),
+            ),
         )
         .group_by(Utilisateur.role)
     )
     chefs_par_type = {role: count for role, count in resultat_chefs.all()}
     total_chefs = sum(chefs_par_type.values())
 
-    # ✅ CORRECTION : Agents via Utilisateur.domaine_id (direct)
+    # ✅ CORRECTION : Agents via domaine_id OU via département du domaine
+    sous_req_agents = select(Departement.chef_id).where(
+        Departement.domaine_id == domaine_id,
+        Departement.chef_id.isnot(None),
+    )
     total_agents = await session.scalar(
         select(func.count(Utilisateur.id)).where(
-            Utilisateur.domaine_id == domaine_id,
             Utilisateur.role.notin_(roles_chefs),
             Utilisateur.role.notin_([
                 RolesUtilisateur.ADMINISTRATEUR.value,
                 RolesUtilisateur.SUPER_ADMINISTRATEUR.value,
             ]),
             Utilisateur.est_supprime == False,
+            or_(
+                Utilisateur.domaine_id == domaine_id,
+                Utilisateur.id.in_(sous_req_agents),
+            ),
         )
     )
 
@@ -238,11 +274,18 @@ async def audit_admin_domaine(
 ):
     domaine_filtre = domaine_id or _obtenir_domaine_id(utilisateur_courant)
 
-    # ✅ CORRECTION : Utilisateurs via domaine_id (direct)
+    # ✅ CORRECTION : Utilisateurs via domaine_id OU via département du domaine
+    sous_req_audit = select(Departement.chef_id).where(
+        Departement.domaine_id == domaine_filtre,
+        Departement.chef_id.isnot(None),
+    )
     utilisateurs_domaine = (await session.execute(
         select(Utilisateur.id).where(
-            Utilisateur.domaine_id == domaine_filtre,
             Utilisateur.est_supprime == False,
+            or_(
+                Utilisateur.domaine_id == domaine_filtre,
+                Utilisateur.id.in_(sous_req_audit),
+            ),
         )
     )).scalars().all()
 
@@ -294,18 +337,27 @@ async def lister_chefs_domaine(
     domaine_id: UUID | None = Query(None, description="ID du domaine (optionnel)"),
 ):
     """
-    ✅ CORRECTION : Utilise Utilisateur.domaine_id directement.
+    ✅ CORRECTION : Filtre via domaine_id OU via département du domaine.
     """
     domaine_filtre = domaine_id or _obtenir_domaine_id(utilisateur)
     roles_chefs = RolesUtilisateur.roles_chefs()
 
-    # ✅ CORRECTION : Filtre via domaine_id directement sur Utilisateur
+    # Sous-requête : chefs de département du domaine
+    sous_req_chefs_liste = select(Departement.chef_id).where(
+        Departement.domaine_id == domaine_filtre,
+        Departement.chef_id.isnot(None),
+    )
+
+    # ✅ CORRECTION : Double condition (domaine_id direct OU chef de département)
     query = (
         select(Utilisateur)
         .where(
-            Utilisateur.domaine_id == domaine_filtre,
             Utilisateur.role.in_(roles_chefs),
             Utilisateur.est_supprime == False,
+            or_(
+                Utilisateur.domaine_id == domaine_filtre,
+                Utilisateur.id.in_(sous_req_chefs_liste),
+            ),
         )
     )
 
@@ -362,14 +414,21 @@ async def detail_chef_domaine(
 ):
     domaine_id = _obtenir_domaine_id(utilisateur)
 
-    # ✅ CORRECTION : Vérifie via domaine_id directement sur Utilisateur
+    # ✅ CORRECTION : Vérifie via domaine_id OU via département du domaine
+    sous_req_detail = select(Departement.chef_id).where(
+        Departement.domaine_id == domaine_id,
+        Departement.chef_id.isnot(None),
+    )
     chef = (await session.scalars(
         select(Utilisateur)
         .where(
             Utilisateur.id == chef_id,
-            Utilisateur.domaine_id == domaine_id,
             Utilisateur.role.in_(RolesUtilisateur.roles_chefs()),
             Utilisateur.est_supprime == False,
+            or_(
+                Utilisateur.domaine_id == domaine_id,
+                Utilisateur.id.in_(sous_req_detail),
+            ),
         )
     )).first()
 
