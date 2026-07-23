@@ -96,7 +96,7 @@ async def modifier_departement(
     for champ, valeur in donnees.model_dump(exclude_unset=True).items():
         setattr(departement, champ, valeur)
     
-    # 3️⃣ SYNCHRONISATION BIDIRECTIONNELLE si le chef a changé
+    # 3️ SYNCHRONISATION BIDIRECTIONNELLE si le chef a changé
     nouveau_chef_id = getattr(donnees, 'chef_id', None)
     
     if ancien_chef_id != nouveau_chef_id:
