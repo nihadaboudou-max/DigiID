@@ -3,11 +3,11 @@
 Routes API dédiées à l'espace Admin Domaine.
 Préfixe : /api/v1/admin-domaine
 """
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Annotated, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,9 +17,7 @@ from src.config.constantes import RolesUtilisateur
 from src.modeles import Utilisateur, JournalAudit
 from src.modeles.departement import Departement
 from src.modeles.invitation import Invitation
-from src.modules.authentification.dependances import (
-    admin_courant, utilisateur_courant, obtenir_ip_client,
-)
+from src.modules.authentification.dependances import admin_courant
 from src.noyau import dechiffrer_donnee
 from src.noyau.permissions import require_permission
 
@@ -29,6 +27,10 @@ routeur_admin_domaine = APIRouter(
     dependencies=[Depends(admin_courant)],
 )
 
+
+# =============================================================================
+# Schémas
+# =============================================================================
 
 class StatsTableauDeBord(BaseModel):
     chefs_actifs: int = 0
@@ -64,7 +66,12 @@ class ListeAuditReponse(BaseModel):
     page: int
 
 
+# =============================================================================
+# Utilitaires
+# =============================================================================
+
 def _obtenir_domaine_id(utilisateur: Utilisateur) -> UUID:
+    """Retourne le domaine_id de l'utilisateur connecté."""
     if not utilisateur.domaine_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -72,6 +79,10 @@ def _obtenir_domaine_id(utilisateur: Utilisateur) -> UUID:
         )
     return utilisateur.domaine_id
 
+
+# =============================================================================
+# ENDPOINTS
+# =============================================================================
 
 @routeur_admin_domaine.get(
     "/tableau-de-bord",
@@ -84,6 +95,7 @@ async def tableau_de_bord_admin_domaine(
 ):
     domaine_id = _obtenir_domaine_id(utilisateur)
 
+    # CORRECTION : Chefs via Departement.chef_id (pas Utilisateur.domaine_id)
     chefs_actifs = await session.scalar(
         select(func.count(Departement.id)).where(
             Departement.domaine_id == domaine_id,
@@ -139,6 +151,7 @@ async def statistiques_admin_domaine(
     domaine_id = _obtenir_domaine_id(utilisateur)
     roles_chefs = RolesUtilisateur.roles_chefs()
 
+    # CORRECTION : Jointure avec Departement pour les chefs
     resultat_chefs = await session.execute(
         select(Utilisateur.role, func.count(Utilisateur.id)).where(
             Utilisateur.id.in_(
@@ -210,11 +223,8 @@ async def statistiques_admin_domaine(
 async def audit_admin_domaine(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur_courant: Annotated[Utilisateur, Depends(admin_courant)],
-    limite: int = Query(default=100, ge=1, le=500, description="Nombre max d'événements"),
-    domaine_id: UUID | None = Query(
-        default=None,
-        description="Filtrer par domaine (utilise celui de l'admin par défaut)",
-    ),
+    limite: int = Query(default=100, ge=1, le=500),
+    domaine_id: UUID | None = Query(default=None),
 ):
     domaine_filtre = domaine_id or _obtenir_domaine_id(utilisateur_courant)
 
@@ -281,27 +291,26 @@ async def lister_chefs_domaine(
     domaine_id: UUID | None = Query(None, description="ID du domaine (optionnel)"),
 ):
     """
-    Liste les chefs de département du domaine.
-    CORRECTION : Utilise Departement.chef_id au lieu de Utilisateur.domaine_id
+    CORRECTION MAJEURE : Utilise une jointure avec Departement pour trouver les chefs.
+    Les chefs sont liés via Departement.chef_id, pas via Utilisateur.domaine_id.
     """
     domaine_filtre = domaine_id or _obtenir_domaine_id(utilisateur)
 
-    # CORRECTION : Jointure avec Departement pour trouver les chefs via chef_id
+    # CORRECTION : Jointure explicite Utilisateur.id == Departement.chef_id
     query = (
         select(Utilisateur)
         .join(Departement, Utilisateur.id == Departement.chef_id)
         .where(
             Departement.domaine_id == domaine_filtre,
-            Departement.chef_id.isnot(None),
             Utilisateur.est_supprime == False,
         )
     )
-    
+
     if role:
         query = query.where(Utilisateur.role == role)
-    
+
     query = query.order_by(Utilisateur.cree_le.desc())
-    
+
     result = await session.execute(query)
     chefs = result.scalars().all()
 
@@ -348,10 +357,9 @@ async def detail_chef_domaine(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(admin_courant)],
 ):
-    """Retourne le détail complet d'un chef du même domaine."""
     domaine_id = _obtenir_domaine_id(utilisateur)
 
-    # CORRECTION : Jointure avec Departement pour vérifier que le chef est dans le domaine
+    # CORRECTION : Jointure avec Departement
     chef = (await session.scalars(
         select(Utilisateur)
         .join(Departement, Utilisateur.id == Departement.chef_id)
@@ -374,7 +382,6 @@ async def detail_chef_domaine(
     nom = dechiffrer_donnee(chef.nom_chiffre) if chef.nom_chiffre else ""
     telephone = dechiffrer_donnee(chef.telephone_chiffre) if chef.telephone_chiffre else ""
 
-    # Département
     departement_nom = None
     dept = await session.execute(
         select(Departement).where(Departement.chef_id == chef.id)
