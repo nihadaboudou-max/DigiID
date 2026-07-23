@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
 """Service Domaines — Logique métier."""
 from uuid import UUID
-
 from fastapi import HTTPException, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.modeles import Domaine, Utilisateur
 from src.modules.domaines.schemas import DomaineCreate, DomaineUpdate
-
 
 async def creer_domaine(
     session: AsyncSession,
@@ -25,7 +22,7 @@ async def creer_domaine(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Le code '{donnees.code}' est déjà utilisé",
         )
-
+    
     domaine = Domaine(
         nom=donnees.nom,
         code=donnees.code,
@@ -37,7 +34,6 @@ async def creer_domaine(
     await session.commit()
     await session.refresh(domaine)
     return domaine
-
 
 async def obtenir_domaine(
     session: AsyncSession,
@@ -55,7 +51,6 @@ async def obtenir_domaine(
         )
     return domaine
 
-
 async def lister_domaines(
     session: AsyncSession,
     page: int = 1,
@@ -64,7 +59,6 @@ async def lister_domaines(
 ) -> tuple[list[Domaine], int]:
     """Liste les domaines avec pagination."""
     query = select(Domaine)
-    
     if est_actif is not None:
         query = query.where(Domaine.est_actif == est_actif)
     
@@ -79,22 +73,39 @@ async def lister_domaines(
     
     return domaines, total
 
-
 async def modifier_domaine(
     session: AsyncSession,
     domaine_id: UUID,
     donnees: DomaineUpdate,
 ) -> Domaine:
-    """Modifie un domaine."""
+    """Modifie un domaine ET synchronise l'utilisateur admin."""
     domaine = await obtenir_domaine(session, domaine_id)
     
+    # 🚨 CORRECTION CRITIQUE : Synchroniser utilisateur.domaine_id
+    ancien_admin_id = domaine.admin_id
+    nouvel_admin_id = donnees.admin_id if hasattr(donnees, 'admin_id') else None
+    
+    # Mettre à jour les champs du domaine
     for champ, valeur in donnees.model_dump(exclude_unset=True).items():
         setattr(domaine, champ, valeur)
+    
+    # 1️⃣ Si on change d'admin, mettre à jour les deux côtés de la relation
+    if ancien_admin_id != nouvel_admin_id:
+        # Retirer l'ancien admin de son domaine
+        if ancien_admin_id:
+            ancien_admin = await session.get(Utilisateur, ancien_admin_id)
+            if ancien_admin:
+                ancien_admin.domaine_id = None
+        
+        # Assigner le nouvel admin au domaine
+        if nouvel_admin_id:
+            nouvel_admin = await session.get(Utilisateur, nouvel_admin_id)
+            if nouvel_admin:
+                nouvel_admin.domaine_id = domaine_id
     
     await session.commit()
     await session.refresh(domaine)
     return domaine
-
 
 async def supprimer_domaine(
     session: AsyncSession,
@@ -104,7 +115,6 @@ async def supprimer_domaine(
     domaine = await obtenir_domaine(session, domaine_id)
     await session.delete(domaine)
     await session.commit()
-
 
 async def suspendre_domaine(
     session: AsyncSession,
@@ -117,7 +127,6 @@ async def suspendre_domaine(
     await session.commit()
     await session.refresh(domaine)
     return domaine
-
 
 async def reactiver_domaine(
     session: AsyncSession,
