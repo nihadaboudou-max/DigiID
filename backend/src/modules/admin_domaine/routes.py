@@ -87,11 +87,6 @@ class ListeAuditReponse(BaseModel):
 # Utilitaires
 # =============================================================================
 
-def _obtenir_domaine_id_ou_none(utilisateur: Utilisateur) -> UUID | None:
-    """Retourne le domaine_id de l'utilisateur connecté, ou None si non assigné."""
-    return utilisateur.domaine_id
-
-
 def _obtenir_domaine_id(utilisateur: Utilisateur) -> UUID:
     """Retourne le domaine_id de l'utilisateur connecté, ou lève une erreur."""
     if not utilisateur.domaine_id:
@@ -122,26 +117,29 @@ async def tableau_de_bord_admin_domaine(
       - departements_actifs : nombre de départements actifs
       - invitations_en_attente : invitations en attente pour ce domaine
     """
-    domaine_id = _obtenir_domaine_id_ou_none(utilisateur)
-    
-    # Si pas de domaine, retourner des stats vides
-    if not domaine_id:
-        return StatsTableauDeBord(
-            chefs_actifs=0,
-            agents_total=0,
-            departements_actifs=0,
-            invitations_en_attente=0,
-        )
+    domaine_id = _obtenir_domaine_id(utilisateur)
 
-    # CORRECTION : Utiliser Departement.chef_id au lieu de Utilisateur.departement_id
-    # Les chefs sont liés aux départements via Departement.chef_id
+    # CORRECTION : Les chefs sont liés via Departement.chef_id, pas Utilisateur.domaine_id
+    # Sous-requête pour obtenir les IDs des départements du domaine
+    dept_ids_subquery = select(Departement.id).where(
+        Departement.domaine_id == domaine_id,
+        Departement.est_actif == True,
+    )
     
+    # Sous-requête pour obtenir les IDs des chefs via Departement.chef_id
+    chef_ids_subquery = select(Departement.chef_id).where(
+        Departement.domaine_id == domaine_id,
+        Departement.chef_id.isnot(None),
+        Departement.est_actif == True,
+    )
+
     # Chefs actifs (via jointure avec département)
     chefs_actifs = await session.scalar(
-        select(func.count(Departement.id)).where(
-            Departement.domaine_id == domaine_id,
-            Departement.chef_id.isnot(None),
-            Departement.est_actif == True,
+        select(func.count(Utilisateur.id)).where(
+            Utilisateur.id.in_(chef_ids_subquery),
+            Utilisateur.role.in_(RolesUtilisateur.roles_chefs()),
+            Utilisateur.est_actif == True,
+            Utilisateur.est_supprime == False,
         )
     )
 
@@ -199,30 +197,19 @@ async def statistiques_admin_domaine(
       - total_agents
       - invitations (envoyées, acceptées, taux)
     """
-    domaine_id = _obtenir_domaine_id_ou_none(utilisateur)
-    
-    # Si pas de domaine, retourner des stats vides
-    if not domaine_id:
-        return StatsDomaine(
-            total_chefs=0,
-            chefs_par_type={},
-            total_departements=0,
-            departements_par_type={},
-            total_agents=0,
-            invitations_envoyees=0,
-            invitations_acceptees=0,
-            taux_acceptation=0,
-        )
-    
+    domaine_id = _obtenir_domaine_id(utilisateur)
     roles_chefs = RolesUtilisateur.roles_chefs()
 
-    # CORRECTION : Utiliser Departement.chef_id et le rôle du chef via jointure
+    # CORRECTION : Utiliser une jointure avec Departement pour trouver les chefs
     # Total chefs par type
     resultat_chefs = await session.execute(
-        select(Utilisateur.role, func.count(Departement.id)).where(
-            Departement.domaine_id == domaine_id,
-            Departement.chef_id.isnot(None),
-            Utilisateur.id == Departement.chef_id,
+        select(Utilisateur.role, func.count(Utilisateur.id)).where(
+            Utilisateur.id.in_(
+                select(Departement.chef_id).where(
+                    Departement.domaine_id == domaine_id,
+                    Departement.chef_id.isnot(None),
+                )
+            ),
             Utilisateur.role.in_(roles_chefs),
             Utilisateur.est_supprime == False,
         ).group_by(Utilisateur.role)
@@ -300,14 +287,10 @@ async def audit_admin_domaine(
 
     Filtre automatiquement par le domaine_id de l'admin connecté.
     """
-    domaine_filtre = domaine_id or _obtenir_domaine_id_ou_none(utilisateur_courant)
-    
-    # Si pas de domaine, retourner une liste vide
-    if not domaine_filtre:
-        return ListeAuditReponse(donnees=[], total=0, page=1)
+    domaine_filtre = domaine_id or _obtenir_domaine_id(utilisateur_courant)
 
-    # Récupérer les IDs des utilisateurs du domaine (via département)
-    # CORRECTION : Utiliser Departement.chef_id pour trouver les chefs
+    # CORRECTION : Inclure les utilisateurs qui ont domaine_id OU qui sont chefs d'un département du domaine
+    # Récupérer les IDs des utilisateurs du domaine
     utilisateurs_domaine = (await session.execute(
         select(Utilisateur.id).where(
             (
@@ -372,15 +355,12 @@ async def lister_chefs_domaine(
 ):
     """
     Liste les chefs de département du domaine.
-    CORRECTION : Utilise Departement.chef_id pour trouver les chefs.
+    Compatible avec le format attendu par le frontend admin-domaine/chefs.
     """
-    domaine_filtre = domaine_id or _obtenir_domaine_id_ou_none(utilisateur)
-    
-    # Si pas de domaine, retourner une liste vide
-    if not domaine_filtre:
-        return []
+    domaine_filtre = domaine_id or _obtenir_domaine_id(utilisateur)
 
-    # CORRECTION : Jointure via Departement.chef_id == Utilisateur.id
+    # CORRECTION : Utiliser une jointure avec Departement pour trouver les chefs
+    # Un chef est lié à un département via Departement.chef_id
     conditions = [
         Departement.domaine_id == domaine_filtre,
         Departement.chef_id.isnot(None),
@@ -452,16 +432,9 @@ async def detail_chef_domaine(
     utilisateur: Annotated[Utilisateur, Depends(admin_courant)],
 ):
     """Retourne le détail complet d'un chef du même domaine."""
-    domaine_id = _obtenir_domaine_id_ou_none(utilisateur)
-    
-    # Si pas de domaine, erreur 404
-    if not domaine_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Aucun domaine associé à ton profil.",
-        )
+    domaine_id = _obtenir_domaine_id(utilisateur)
 
-    # CORRECTION : Jointure via Departement.chef_id == Utilisateur.id
+    # CORRECTION : Utiliser une jointure avec Departement pour vérifier que le chef est dans le domaine
     chef = (await session.scalars(
         select(Utilisateur)
         .join(Departement, Utilisateur.id == Departement.chef_id)
