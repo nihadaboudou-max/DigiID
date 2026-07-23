@@ -635,6 +635,51 @@ export function BarreLaterale() {
     ? (utilisateur.prenom.charAt(0) + (utilisateur.nom?.charAt(0) || "")).toUpperCase()
     : utilisateur.email?.charAt(0).toUpperCase() || "?";
 
+  /** Carte des icônes par route pour les sous-menus citoyen */
+  const iconesRoutes: Record<string, typeof IconeAccueil> = {
+    "/profil": IconeUtilisateur,
+    "/documents-identite": IconeIdentite,
+    "/identite": IconeScan,
+    "/identite/email": IconeEmail,
+    "/identite/2fa": IconeCadenas,
+    "/identite/mot-de-passe": IconeCle,
+    "/historique": IconeJournal,
+    "/partage": IconePartage,
+    "/citoyen/mon-dossier-medical": IconeJournal,
+    "/citoyen/mes-ordonnances": IconeCheck,
+    "/attestations-communautaires/nouvelle": IconeEnvoyer,
+    "/attestations-communautaires": IconeCheck,
+    "/score": IconeScore,
+    "/badges": IconeCheck,
+    "/parrainage": IconePartage,
+    "/chatbot": IconeChat,
+    "/documents": IconeJournal,
+    "/parametres": IconeParametres,
+  };
+
+  /** Rendu d'un lien de sous-menu avec icône pour le citoyen */
+  const cbLienSousMenu = (href: string, libelle: string) => {
+    const Icone = iconesRoutes[href] || IconeAccueil;
+    const actif = pathname === href ||
+      (href === "/identite" && pathname.startsWith("/identite")) ||
+      (href === "/partage" && (pathname.startsWith("/autorisations") || pathname.startsWith("/consentements")));
+    return (
+      <Link
+        key={href}
+        href={href}
+        className={clsx(
+          "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
+          actif
+            ? "bg-sable/60 text-lagune font-medium"
+            : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
+        )}
+      >
+        <Icone className="w-3.5 h-3.5 flex-shrink-0" />
+        <span className="truncate">{libelle}</span>
+      </Link>
+    );
+  };
+
   return (
     <aside className="flex flex-col w-60 h-screen sticky top-0 bg-white border-r border-ardoise-clair/10 shadow-sm">
       {/* En-tête section — profil utilisateur */}
@@ -742,49 +787,174 @@ export function BarreLaterale() {
           </div>
         )}
 
-        {/* Menu citoyen — simplifié : un seul groupe compact */}
+        {/* ───── Menu citoyen hiérarchique avec groupes pliables ───── */}
         {utilisateur.role === "citoyen" && (
           <>
             <div className="border-t border-ardoise-clair/10 my-1.5" />
-            
-            {/* Groupe unique : Mon espace compact */}
-            <div className="space-y-0.5">
-              {/* En-tête du groupe */}
-              <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs uppercase tracking-wider font-bold text-ardoise-clair">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-sable-clair text-ardoise-clair flex-shrink-0">
-                  <IconeAccueil className="w-4 h-4" />
-                </div>
-                <span>Mon espace</span>
-              </div>
 
-              {/* Liens essentiels — plats, sans sous-groupes */}
-              {[
-                { href: "/tableau-de-bord",    libelle: "Tableau de bord",      Icone: IconeAccueil },
-                { href: "/profil",             libelle: "Mon profil",           Icone: IconeUtilisateur },
-                { href: "/documents-identite", libelle: "Identité numérique",    Icone: IconeIdentite },
-                { href: "/score",              libelle: "Score de confiance",    Icone: IconeScore },
-                { href: "/badges",             libelle: "Badges & Récompenses",  Icone: IconeCheck },
-                { href: "/citoyen/mes-ordonnances", libelle: "Mes ordonnances",   Icone: IconeJournal },
-                { href: "/parametres",         libelle: "Paramètres",            Icone: IconeParametres },
-              ].map((lien) => {
-                const actif = pathname === lien.href ||
-                  (lien.href === "/tableau-de-bord" && pathname === "/citoyen/dashboard");
-                return (
-                  <Link
-                    key={lien.href}
-                    href={lien.href}
-                    className={clsx(
-                      "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                      actif
-                        ? "bg-sable/60 text-lagune font-medium"
-                        : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                    )}
-                  >
-                    <lien.Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span className="truncate">{lien.libelle}</span>
-                  </Link>
-                );
-              })}
+            {/* Accueil — lien simple */}
+            <LienNav
+              href="/tableau-de-bord"
+              libelle="Accueil"
+              Icone={IconeAccueil}
+              actif={pathname === "/tableau-de-bord" || pathname === "/citoyen/dashboard"}
+            />
+
+            {/* Tableau de bord — lien simple */}
+            <LienNav
+              href="/citoyen/dashboard"
+              libelle="Tableau de bord"
+              Icone={IconeStatistique}
+              actif={pathname === "/citoyen/dashboard"}
+            />
+
+            {/* Mon DigiID — lien simple */}
+            <LienNav
+              href="/profil"
+              libelle="Mon DigiID"
+              Icone={IconeIdentite}
+              actif={pathname === "/profil"}
+            />
+
+            {/* Notifications — lien simple */}
+            <LienNav
+              href="/notifications"
+              libelle="Notifications"
+              Icone={IconeAlerte}
+              actif={pathname === "/notifications"}
+            />
+
+            <div className="border-t border-ardoise-clair/10 my-1.5" />
+
+            {/* Identité & Sécurité */}
+            <GroupePlie
+              estActif={
+                pathname.startsWith("/profil") ||
+                pathname.startsWith("/documents-identite") ||
+                pathname.startsWith("/identite") ||
+                pathname.startsWith("/historique") ||
+                pathname.startsWith("/partage") ||
+                pathname.startsWith("/autorisations") ||
+                pathname.startsWith("/consentements")
+              }
+              icone={IconeBouclier}
+              titre="Identité &amp; Sécurité"
+              initialOuvert={
+                pathname.startsWith("/profil") ||
+                pathname.startsWith("/documents-identite") ||
+                pathname.startsWith("/identite") ||
+                pathname.startsWith("/historique") ||
+                pathname.startsWith("/partage") ||
+                pathname.startsWith("/autorisations") ||
+                pathname.startsWith("/consentements")
+              }
+            >
+              <div className="space-y-0.5">
+                <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
+                  Mon Profil
+                </p>
+                {cbLienSousMenu("/profil", "Mon Profil")}
+                {cbLienSousMenu("/documents-identite", "Documents d'identité")}
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
+                  Vérifications
+                </p>
+                {cbLienSousMenu("/identite", "Vérifications")}
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
+                  Sécurité du compte
+                </p>
+                {cbLienSousMenu("/identite/email", "Vérification de l'email")}
+                {cbLienSousMenu("/identite/2fa", "Double authentification (2FA)")}
+                {cbLienSousMenu("/identite/mot-de-passe", "Changer le mot de passe")}
+                {cbLienSousMenu("/historique", "Historique des accès")}
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
+                  Partage &amp; Autorisations
+                </p>
+                {cbLienSousMenu("/partage", "Partage &amp; Autorisations")}
+              </div>
+            </GroupePlie>
+
+            {/* Santé */}
+            <GroupePlie
+              estActif={
+                pathname.startsWith("/citoyen/mon-dossier-medical") ||
+                pathname.startsWith("/citoyen/mes-ordonnances")
+              }
+              icone={IconeJournal}
+              titre="Santé"
+              initialOuvert={
+                pathname.startsWith("/citoyen/mon-dossier-medical") ||
+                pathname.startsWith("/citoyen/mes-ordonnances")
+              }
+            >
+              {cbLienSousMenu("/citoyen/mon-dossier-medical", "Mon dossier médical")}
+              {cbLienSousMenu("/citoyen/mes-ordonnances", "Mes ordonnances")}
+            </GroupePlie>
+
+            {/* Attestations & Communauté */}
+            <GroupePlie
+              estActif={pathname.startsWith("/attestations-communautaires")}
+              icone={IconeCheck}
+              titre="Attestations &amp; Communauté"
+              initialOuvert={pathname.startsWith("/attestations-communautaires")}
+            >
+              {cbLienSousMenu("/attestations-communautaires/nouvelle", "Nouvelle attestation")}
+              {cbLienSousMenu("/attestations-communautaires", "Mes attestations")}
+            </GroupePlie>
+
+            {/* Score & Récompenses */}
+            <GroupePlie
+              estActif={
+                pathname.startsWith("/score") ||
+                pathname === "/badges" ||
+                pathname === "/parrainage"
+              }
+              icone={IconeScore}
+              titre="Score &amp; Récompenses"
+              initialOuvert={
+                pathname.startsWith("/score") ||
+                pathname === "/badges" ||
+                pathname === "/parrainage"
+              }
+            >
+              {cbLienSousMenu("/score", "Mon Score")}
+              {cbLienSousMenu("/badges", "Mes Badges")}
+              {cbLienSousMenu("/parrainage", "Parrainage")}
+            </GroupePlie>
+
+            {/* Outils */}
+            <GroupePlie
+              estActif={
+                pathname === "/chatbot" ||
+                pathname.startsWith("/documents") ||
+                pathname.startsWith("/parametres")
+              }
+              icone={IconeParametres}
+              titre="Outils"
+              initialOuvert={
+                pathname === "/chatbot" ||
+                pathname.startsWith("/documents") ||
+                pathname.startsWith("/parametres")
+              }
+            >
+              {cbLienSousMenu("/chatbot", "Assistant DigiID (Chatbot RAG)")}
+              {cbLienSousMenu("/documents", "Mes Documents (IA)")}
+              {cbLienSousMenu("/parametres", "Paramètres (Préférences, Rôle &amp; permissions)")}
+            </GroupePlie>
+
+            {/* Aide & Support — lien simple */}
+            <div className="pt-1">
+              <LienNav
+                href="/aide"
+                libelle="Aide &amp; Support (FAQ, contact)"
+                Icone={IconeAlerte}
+                actif={pathname.startsWith("/aide")}
+              />
             </div>
           </>
         )}
