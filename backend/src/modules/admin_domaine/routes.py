@@ -280,25 +280,32 @@ async def lister_chefs_domaine(
     role: str | None = Query(None, description="Filtrer par rôle spécifique"),
     domaine_id: UUID | None = Query(None, description="ID du domaine (optionnel)"),
 ):
+    """
+    Liste les chefs de département du domaine.
+    CORRECTION : Utilise Departement.chef_id au lieu de Utilisateur.domaine_id
+    """
     domaine_filtre = domaine_id or _obtenir_domaine_id(utilisateur)
 
-    conditions = [
-        Departement.domaine_id == domaine_filtre,
-        Departement.chef_id.isnot(None),
-        Utilisateur.id == Departement.chef_id,
-        Utilisateur.est_supprime == False,
-    ]
-    if role:
-        conditions.append(Utilisateur.role == role)
-
-    result = await session.execute(
+    # CORRECTION : Jointure avec Departement pour trouver les chefs via chef_id
+    query = (
         select(Utilisateur)
         .join(Departement, Utilisateur.id == Departement.chef_id)
-        .where(and_(*conditions))
-        .order_by(Utilisateur.cree_le.desc())
+        .where(
+            Departement.domaine_id == domaine_filtre,
+            Departement.chef_id.isnot(None),
+            Utilisateur.est_supprime == False,
+        )
     )
+    
+    if role:
+        query = query.where(Utilisateur.role == role)
+    
+    query = query.order_by(Utilisateur.cree_le.desc())
+    
+    result = await session.execute(query)
     chefs = result.scalars().all()
 
+    # Charger les départements pour chaque chef
     departements_par_chef = {}
     for chef in chefs:
         dept = await session.execute(
@@ -341,8 +348,10 @@ async def detail_chef_domaine(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(admin_courant)],
 ):
+    """Retourne le détail complet d'un chef du même domaine."""
     domaine_id = _obtenir_domaine_id(utilisateur)
 
+    # CORRECTION : Jointure avec Departement pour vérifier que le chef est dans le domaine
     chef = (await session.scalars(
         select(Utilisateur)
         .join(Departement, Utilisateur.id == Departement.chef_id)
@@ -365,6 +374,7 @@ async def detail_chef_domaine(
     nom = dechiffrer_donnee(chef.nom_chiffre) if chef.nom_chiffre else ""
     telephone = dechiffrer_donnee(chef.telephone_chiffre) if chef.telephone_chiffre else ""
 
+    # Département
     departement_nom = None
     dept = await session.execute(
         select(Departement).where(Departement.chef_id == chef.id)
