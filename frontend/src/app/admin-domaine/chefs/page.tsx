@@ -76,10 +76,9 @@ function Contenu() {
       if (utilisateur?.domaine_id) {
         params.append("domaine_id", utilisateur.domaine_id);
       }
-      params.append("role", "chef");
 
       const data = await clientAPI.get<ChefApercu[]>(
-        `/api/v1/admin/chefs?${params.toString()}`,
+        `/api/v1/admin-domaine/chefs?${params.toString()}`,
         { authentifie: true }
       );
       setChefs(Array.isArray(data) ? data : []);
@@ -96,7 +95,7 @@ function Contenu() {
     setDetailChargement(true);
     try {
       const data = await clientAPI.get<ChefDetail>(
-        `/api/v1/admin/chefs/${id}/detail`,
+        `/api/v1/admin-domaine/chefs/${id}/detail`,
         { authentifie: true }
       );
       setModalDetail(data);

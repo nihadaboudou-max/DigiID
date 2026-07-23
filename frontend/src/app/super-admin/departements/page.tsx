@@ -68,14 +68,29 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      const [deps, doms, chefs] = await Promise.all([
+            const [deps, doms, utilisateurs] = await Promise.all([
         clientAPI.get<{ departements: Departement[] }>("/api/v1/departements", { authentifie: true }),
         clientAPI.get<{ domaines: DomaineSimple[] }>("/api/v1/domaines", { authentifie: true }),
-        clientAPI.get<{ chefs: ChefDisponible[] }>("/api/v1/utilisateurs?role=chef", { authentifie: true }).catch(() => ({ chefs: [] })),
+        // Chercher tous les chefs via l'endpoint super-admin
+        clientAPI
+          .get<{ utilisateurs: { id: string; prenom: string | null; nom: string | null; role: string }[] }>(
+            "/api/v1/super-admin/utilisateurs?limite=500",
+            { authentifie: true }
+          )
+          .catch(() => ({ utilisateurs: [] })),
       ]);
       setDepartements(deps.departements || []);
       setDomaines(doms.domaines || []);
-      setChefsDisponibles(chefs.chefs || []);
+      // Filtrer les rôles chefs et formater
+      const rolesChefs = ["chef_police", "chef_medical", "chef_ong", "chef_agent"];
+      const chefs = (utilisateurs.utilisateurs || [])
+        .filter((u) => rolesChefs.includes(u.role))
+        .map((u) => ({
+          id: u.id,
+          nom: [u.prenom, u.nom].filter(Boolean).join(" ") || "Sans nom",
+          role: u.role,
+        }));
+      setChefsDisponibles(chefs);
     } catch (e) {
       setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
     } finally {

@@ -36,7 +36,7 @@ async def creer(
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Crée un nouveau domaine organisationnel."""
-    return await creer_domaine(session, donnees)
+    return await creer_domaine(session, donnees, admin_id=donnees.admin_id)
 
 
 @routeur_domaines.get(

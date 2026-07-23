@@ -94,14 +94,26 @@ function Contenu() {
     setChargement(true);
     setErreur(null);
     try {
-      const [deps, doms, chefs] = await Promise.all([
+            const [deps, doms, chefs] = await Promise.all([
         clientAPI.get<{ departements: Departement[] }>("/api/v1/departements", { authentifie: true }),
         clientAPI.get<{ domaines: DomaineSimple[] }>("/api/v1/domaines", { authentifie: true }),
-        clientAPI.get<{ chefs: ChefDisponible[] }>("/api/v1/utilisateurs?role=chef", { authentifie: true }).catch(() => ({ chefs: [] })),
+        // Utiliser l'endpoint chefs-liste qui retourne les chefs formatés
+        clientAPI
+          .get<{ id: string; prenom_initiale: string | null; nom_initiale: string | null; email_masque: string; role: string }[]>(
+            "/api/v1/admin/chefs-liste",
+            { authentifie: true }
+          )
+          .catch(() => []),
       ]);
       setDepartements(deps.departements || []);
       setDomaines(doms.domaines || []);
-      setChefsDisponibles(chefs.chefs || []);
+            // Transformer en format ChefDisponible
+      const chefsFormates: ChefDisponible[] = (Array.isArray(chefs) ? chefs : []).map((c: any) => ({
+        id: c.id,
+        nom: [c.prenom_initiale || "", c.nom_initiale || ""].filter(Boolean).join(" ") || "Sans nom",
+        role: c.role,
+      }));
+      setChefsDisponibles(chefsFormates);
     } catch (e) {
       setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
     } finally {

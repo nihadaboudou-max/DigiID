@@ -23,7 +23,7 @@ class DomaineBase(BaseModel):
 
 class DomaineCreate(DomaineBase):
     """Schéma pour créer un domaine."""
-    pass
+    admin_id: Optional[UUID] = Field(None, description="ID de l'admin assigné")
 
 
 class DomaineUpdate(BaseModel):
@@ -31,6 +31,7 @@ class DomaineUpdate(BaseModel):
     nom: Optional[str] = Field(None, min_length=3, max_length=150)
     description: Optional[str] = Field(None, max_length=1000)
     region: Optional[str] = Field(None, max_length=100)
+    admin_id: Optional[UUID] = Field(None, description="ID de l'admin assigné")
     est_actif: Optional[bool] = None
 
 

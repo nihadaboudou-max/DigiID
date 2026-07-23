@@ -7,7 +7,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRoleUI } from "@/crochets/useRoleUI";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Badge } from "@/composants/commun/Badge";
@@ -25,7 +24,6 @@ export default function CitoyenDashboard() {
 
 function Contenu() {
   const { utilisateur, chargement: chargementAuth } = useAuthentification();
-  const { can, chargement: chargementUI } = useRoleUI();
   const [scoreData, setScoreData] = useState<ScoreDetail | null>(null);
   const [chargementScore, setChargementScore] = useState(true);
 
@@ -55,7 +53,7 @@ function Contenu() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [scoreData]);
 
-  if (chargementAuth || chargementUI) {
+  if (chargementAuth) {
     return (
       <div className="space-y-8 apparition">
         <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Mon espace</p>
@@ -66,6 +64,59 @@ function Contenu() {
   }
 
   if (!utilisateur) return null;
+
+  /* ─── Catégories organisées par priorité ─── */
+
+interface LienAction {
+  titre: string;
+  href: string;
+  icone: string;
+  description: string;
+}
+
+const CATEGORIES: { titre: string; icone: string; couleur: string; liens: LienAction[] }[] = [
+  {
+    titre: "Identité & Vérification",
+    icone: "🪪",
+    couleur: "border-l-lagune",
+    liens: [
+      { titre: "Documents d'identité", href: "/documents-identite", icone: "🆔", description: "CNI, permis, assurance" },
+      { titre: "Vérifier ma CNI", href: "/identite/verification-cni", icone: "📄", description: "Scanner ta carte d'identité" },
+      { titre: "Reconnaissance faciale", href: "/identite/verification-visuelle", icone: "📸", description: "Vérification biométrique" },
+    ],
+  },
+  {
+    titre: "Santé",
+    icone: "🏥",
+    couleur: "border-l-lagune",
+    liens: [
+      { titre: "Mon dossier médical", href: "/citoyen/mon-dossier-medical", icone: "📋", description: "Consultations, prescriptions" },
+      { titre: "Mes ordonnances", href: "/citoyen/mes-ordonnances", icone: "💊", description: "Consultez vos prescriptions" },
+    ],
+  },
+  {
+    titre: "Sécurité & Données",
+    icone: "🔒",
+    couleur: "border-l-ocre",
+    liens: [
+      { titre: "Mes consentements", href: "/consentements", icone: "✅", description: "Gérer les accès autorisés" },
+      { titre: "Mes autorisations", href: "/autorisations", icone: "🔐", description: "Qui a accès à mes données" },
+      { titre: "Partager mon DigiID", href: "/partage", icone: "📱", description: "QR code et lien de partage" },
+      { titre: "Mes documents", href: "/documents", icone: "📁", description: "Documents et justificatifs" },
+    ],
+  },
+  {
+    titre: "Engagement & Outils",
+    icone: "🌟",
+    couleur: "border-l-terre",
+    liens: [
+      { titre: "Mon score", href: "/score", icone: "📊", description: "Suis ton score de confiance" },
+      { titre: "Mes badges", href: "/badges", icone: "🏆", description: "Gamification et récompenses" },
+      { titre: "Parrainage", href: "/parrainage", icone: "📨", description: "Invite tes proches" },
+      { titre: "Assistant DigiID", href: "/chatbot", icone: "🤖", description: "Pose tes questions" },
+    ],
+  },
+];
 
   // Initiales pour l'avatar
   const initiales = ((utilisateur.prenom?.[0] || "") + (utilisateur.nom?.[0] || "")).toUpperCase() || "?";
@@ -84,151 +135,147 @@ function Contenu() {
     return { texte: "Non vérifié", variante: "neutre" as const };
   })();
 
-  // Score total
   const scoreTotal = scoreData?.score_total ?? 0;
   const niveauScore = scoreData?.niveau ?? "—";
 
   return (
-    <div className="space-y-8 apparition">
+    <div className="space-y-6 apparition pb-20">
+      {/* En-tête */}
       <div>
         <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Mon espace</p>
-        <h1 className="mt-1">Mon identité numérique</h1>
-        <p className="text-ardoise-clair mt-2">Bienvenue sur ton espace DigiID. Gère ton identité et suis ton score de confiance.</p>
+        <h1 className="mt-1">Tableau de bord</h1>
+        <p className="text-ardoise-clair mt-1 text-sm">
+          Bienvenue {nomComplet.split(" ")[0]} ✨ — Accède rapidement à tes données et services.
+        </p>
       </div>
 
-      {/* Résumé identité + Score */}
-      <div className="grid sm:grid-cols-2 gap-4">
-        {/* Carte identité */}
-        <Carte>
+      {/* Barre identité + Score + Progression */}
+      <div className="grid lg:grid-cols-3 gap-4">
+        {/* Carte Identité */}
+        <Carte className="lg:col-span-1">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-ocre/10 flex items-center justify-center text-ocre text-2xl font-bold flex-shrink-0">
+            <div className="w-14 h-14 rounded-full bg-ocre/10 flex items-center justify-center text-ocre text-xl font-bold flex-shrink-0">
               {initiales}
             </div>
             <div className="min-w-0">
-              <h2 className="font-bold text-ardoise text-lg truncate">{nomComplet}</h2>
-              <p className="text-sm text-ardoise-clair font-mono truncate">{utilisateur.digiid_public || "—"}</p>
-              <Badge variante={niveauIdentite.variante} className="mt-1">{niveauIdentite.texte}</Badge>
+              <h2 className="font-bold text-ardoise truncate">{nomComplet}</h2>
+              <p className="text-xs text-ardoise-clair font-mono truncate">{utilisateur.digiid_public || "—"}</p>
+              <Badge variante={niveauIdentite.variante} taille="petit" className="mt-1">{niveauIdentite.texte}</Badge>
             </div>
+          </div>
+          <div className="mt-4 flex gap-2 flex-wrap">
+            <Link href="/parametres">
+              <Badge variante="ocre" taille="petit" className="cursor-pointer hover:opacity-80">⚙️ Modifier</Badge>
+            </Link>
+            <Link href="/profil">
+              <Badge variante="lagune" taille="petit" className="cursor-pointer hover:opacity-80">👤 Profil complet</Badge>
+            </Link>
           </div>
         </Carte>
 
-        {/* Score de confiance */}
-        {can.viewScore && !chargementScore && scoreData && (
-          <Link href="/score" className="block group">
-            <Carte className="cursor-pointer hover:shadow-lg transition-all group">
-              <div className="flex items-center justify-between mb-1">
+        {/* Score */}
+        {scoreData && !chargementScore ? (
+          <Link href="/score" className="lg:col-span-1 block group">
+            <Carte className="cursor-pointer hover:shadow-lg transition-all h-full group">
+              <div className="flex items-center justify-between mb-2">
                 <p className="text-xs uppercase text-ardoise-clair font-semibold">Score de confiance</p>
-                <span className="flex items-center gap-1 text-xs text-green-700">
+                <span className="flex items-center gap-1 text-[10px] text-green-700">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
                   Live
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-4xl font-bold text-lagune transition-all duration-500">{scoreTotal}</span>
+                <span className="text-3xl font-bold text-lagune transition-all duration-500">{scoreTotal}</span>
                 <span className="text-sm text-ardoise-clair">/100</span>
-                <div className="flex-1">
-                  <BarreProgression valeur={scoreTotal} couleur="lagune" />
-                </div>
               </div>
+              <BarreProgression valeur={scoreTotal} couleur="lagune" />
               <div className="flex items-center justify-between mt-2">
                 <span className="text-xs text-ardoise-clair">Niveau : {niveauScore}</span>
                 <span className="text-xs text-ocre font-semibold group-hover:translate-x-1 transition-transform">
-                  Voir les détails →
+                  Détails →
                 </span>
               </div>
             </Carte>
           </Link>
+        ) : (
+          <div className="lg:col-span-1">
+            <Carte>
+              <p className="text-xs text-ardoise-clair italic">Chargement du score...</p>
+            </Carte>
+          </div>
         )}
-        {can.viewScore && chargementScore && (
-          <Carte>
-            <p className="text-xs text-ardoise-clair italic">Chargement du score...</p>
+
+        {/* Mini progression des vérifications */}
+        <Carte className="lg:col-span-1">
+          <p className="text-xs uppercase text-ardoise-clair font-semibold mb-3">Vérifications</p>
+          <div className="space-y-2">
+            <MiniVerif icone="📧" label="Email" fait={!!utilisateur.est_email_verifie} />
+            <MiniVerif icone="📸" label="Visage" fait={!!utilisateur.est_visage_verifie} />
+            <MiniVerif icone="🆔" label="CNI" fait={!!utilisateur.est_cni_verifiee} />
+            <MiniVerif icone="🔐" label="2FA" fait={!!utilisateur.deux_fa_active} />
+          </div>
+          <Link href="/parametres" className="block text-center mt-3 text-xs text-ocre hover:underline font-semibold">
+            Compléter mes vérifications →
+          </Link>
+        </Carte>
+      </div>
+
+      {/* Catégories organisées */}
+      <div className="grid md:grid-cols-2 gap-4">
+        {CATEGORIES.map((categorie) => (
+          <Carte key={categorie.titre} className={`border-l-4 ${categorie.couleur}`}>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xl">{categorie.icone}</span>
+              <h2 className="font-bold text-ardoise">{categorie.titre}</h2>
+            </div>
+            <div className="divide-y divide-ardoise-clair/5">
+              {categorie.liens.map((lien) => (
+                <Link
+                  key={lien.href}
+                  href={lien.href}
+                  className="flex items-center gap-3 py-2.5 group hover:bg-sable/50 -mx-4 px-4 rounded transition-colors"
+                >
+                  <span className="text-base w-6 text-center flex-shrink-0">{lien.icone}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-ardoise group-hover:text-ocre transition-colors truncate">
+                      {lien.titre}
+                    </p>
+                    <p className="text-xs text-ardoise-clair truncate">{lien.description}</p>
+                  </div>
+                  <span className="text-ocre text-xs opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                </Link>
+              ))}
+            </div>
           </Carte>
-        )}
+        ))}
       </div>
 
-      {/* Grille d'accès rapide — liens vers les pages réelles */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <CarteAction titre="Documents d'identité" description="CNI, Permis, Assurance" href="/documents-identite" icone="🆔" />
-        <CarteAction titre="Vérifier ma CNI" description="Scanner ta carte d'identité" href="/identite/verification-cni" icone="🪪" />
-        <CarteAction titre="Vérification faciale" description="Reconnaissance biométrique" href="/identite/verification-visuelle" icone="📸" />
-        <CarteAction titre="Mes consentements" description="Gérer les accès autorisés" href="/consentements" icone="✅" />
-        <CarteAction titre="Mes autorisations" description="Qui a accès à mes données" href="/autorisations" icone="🔒" />
-        <CarteAction titre="Partager mon DigiID" description="QR code et lien de partage" href="/partage" icone="📱" />
-        <CarteAction titre="Mes documents" description="Documents et justificatifs" href="/documents" icone="📄" />
-        <CarteAction titre="Parrainage" description="Invite tes proches" href="/parrainage" icone="📨" />
-        <CarteAction titre="Mes badges" description="Gamification et récompenses" href="/badges" icone="🏆" />
-        <CarteAction titre="Mes ordonnances" description="Consultez et signalez vos prescriptions" href="/citoyen/mes-ordonnances" icone="💊" />
-        <CarteAction titre="Mon dossier médical" description="Historique complet : consultations, prescriptions, contrôles" href="/citoyen/mon-dossier-medical" icone="🏥" />
-        <CarteAction titre="Mon score" description="Suis ton score de confiance" href="/score" icone="📊" />
-        <CarteAction titre="Mon profil" description="Gère ton profil et télécharge-le" href="/profil" icone="👤" />
-        <CarteAction titre="Assistant DigiID" description="Pose tes questions" href="/chatbot" icone="🤖" />
+      {/* Lien vers paramètres */}
+      <div className="text-center pt-4">
+        <Link
+          href="/parametres"
+          className="inline-flex items-center gap-2 text-sm text-ardoise-clair hover:text-ocre transition-colors"
+        >
+          ⚙️ Paramètres du compte et préférences →
+        </Link>
       </div>
-
-      {/* Statut des vérifications */}
-      <Carte titre="📋 Progression des vérifications">
-        <div className="space-y-3">
-          <LigneVerification
-            icone="📧"
-            label="Email vérifié"
-            fait={!!utilisateur.est_email_verifie}
-            lien={utilisateur.est_email_verifie ? undefined : "/identite/email"}
-          />
-          <LigneVerification
-            icone="👤"
-            label="Reconnaissance faciale"
-            fait={!!utilisateur.est_visage_verifie}
-            lien={utilisateur.est_visage_verifie ? undefined : "/identite/verification-visuelle"}
-          />
-          <LigneVerification
-            icone="🆔"
-            label="CNI vérifiée"
-            fait={!!utilisateur.est_cni_verifiee}
-            lien={utilisateur.est_cni_verifiee ? undefined : "/identite/verification-cni"}
-          />
-          <LigneVerification
-            icone="🔐"
-            label="2FA activée"
-            fait={!!utilisateur.deux_fa_active}
-            lien={utilisateur.deux_fa_active ? undefined : "/identite/2fa"}
-          />
-        </div>
-      </Carte>
     </div>
   );
 }
 
-function CarteAction({ titre, description, href, icone }: { titre: string; description: string; href: string; icone: string }) {
-  return (
-    <Link href={href} className="block group">
-      <div className="carte cursor-pointer hover:shadow-lg transition-all h-full">
-        <div className="flex items-start gap-3">
-          <span className="text-3xl">{icone}</span>
-          <div>
-            <h3 className="font-bold text-ardoise group-hover:text-ocre transition-colors">{titre}</h3>
-            <p className="text-sm text-ardoise-clair mt-1">{description}</p>
-          </div>
-        </div>
-        <p className="text-xs text-ocre font-semibold mt-3 group-hover:translate-x-1 transition-transform">Accéder →</p>
-      </div>
-    </Link>
-  );
-}
+/* ─── Sous-composants ─── */
 
-function LigneVerification({ icone, label, fait, lien }: { icone: string; label: string; fait: boolean; lien?: string }) {
+function MiniVerif({ icone, label, fait }: { icone: string; label: string; fait: boolean }) {
   return (
-    <div className="flex items-center justify-between p-3 bg-sable rounded-lg">
-      <div className="flex items-center gap-3">
-        <span className="text-lg">{icone}</span>
-        <span className="text-sm font-medium text-ardoise">{label}</span>
+    <div className="flex items-center justify-between py-1">
+      <div className="flex items-center gap-2">
+        <span className="text-xs">{icone}</span>
+        <span className="text-xs text-ardoise">{label}</span>
       </div>
       {fait ? (
-        <Badge variante="succes">✓ Fait</Badge>
-      ) : lien ? (
-        <Link href={lien} className="text-xs text-ocre hover:underline font-semibold">
-          À faire →
-        </Link>
+        <span className="text-xs text-green-600 font-semibold">✓</span>
       ) : (
-        <Badge variante="neutre">—</Badge>
+        <span className="text-xs text-ardoise-clair">—</span>
       )}
     </div>
   );
