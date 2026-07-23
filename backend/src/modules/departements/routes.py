@@ -5,6 +5,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from typing import Annotated
+from sqlalchemy import select
+from src.modeles.domaine import Domaine
+from src.noyau import dechiffrer_donnee
+
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modeles.utilisateur import Utilisateur
 
@@ -19,6 +24,44 @@ from src.modules.departements.service import (
 )
 from src.modules.departements.dependances import obtenir_departement_ou_404
 from src.noyau.permissions import require_permission
+
+
+# =============================================================================
+# Fonctions utilitaires
+# =============================================================================
+
+async def _enrichir_departement(dept: Departement, session: AsyncSession) -> dict:
+    """Ajoute chef_nom et domaine_nom à un département."""
+    data = {
+        "id": dept.id,
+        "nom": dept.nom,
+        "type_departement": dept.type_departement,
+        "description": dept.description,
+        "capacite_max": dept.capacite_max,
+        "domaine_id": dept.domaine_id,
+        "domaine_nom": None,
+        "chef_id": dept.chef_id,
+        "chef_nom": None,
+        "est_actif": dept.est_actif,
+        "date_creation": dept.cree_le,
+        "date_modification": dept.modifie_le,
+    }
+    
+    # Domaine
+    if dept.domaine_id:
+        domaine = await session.get(Domaine, dept.domaine_id)
+        if domaine:
+            data["domaine_nom"] = domaine.nom
+    
+    # Chef
+    if dept.chef_id:
+        chef = await session.get(Utilisateur, dept.chef_id)
+        if chef and chef.prenom_chiffre:
+            prenom = dechiffrer_donnee(chef.prenom_chiffre) or ""
+            nom = dechiffrer_donnee(chef.nom_chiffre) or ""
+            data["chef_nom"] = f"{prenom} {nom}".strip() or "Chef"
+    
+    return data
 
 routeur_departements = APIRouter(prefix="/api/v1/departements", tags=["Départements"])
 
@@ -36,7 +79,8 @@ async def creer(
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Crée un nouveau département dans un domaine."""
-    return await creer_departement(session, donnees)
+    dept = await creer_departement(session, donnees)
+    return await _enrichir_departement(dept, session)
 
 
 @routeur_departements.get(
@@ -57,8 +101,10 @@ async def lister(
     departements, total = await lister_departements(
         session, domaine_id, type_departement, page, par_page
     )
+    # Enrichir chaque département avec chef_nom et domaine_nom
+    enrichis = [await _enrichir_departement(d, session) for d in departements]
     return DepartementListResponse(
-        departements=departements,
+        departements=enrichis,
         total=total,
         page=page,
         par_page=par_page,
@@ -73,10 +119,11 @@ async def lister(
 @require_permission("departement.lire")
 async def obtenir(
     departement: Departement = Depends(obtenir_departement_ou_404),
+    session: AsyncSession = Depends(obtenir_session),
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
 ):
     """Récupère les détails d'un département."""
-    return departement
+    return await _enrichir_departement(departement, session)
 
 
 @routeur_departements.patch(
@@ -92,7 +139,8 @@ async def modifier(
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Modifie un département existant."""
-    return await modifier_departement(session, departement.id, donnees)
+    dept_modifie = await modifier_departement(session, departement.id, donnees)
+    return await _enrichir_departement(dept_modifie, session)
 
 
 @routeur_departements.delete(

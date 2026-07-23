@@ -73,8 +73,8 @@ function Contenu() {
         clientAPI.get<{ domaines: DomaineSimple[] }>("/api/v1/domaines", { authentifie: true }),
         // Chercher tous les chefs via l'endpoint super-admin
         clientAPI
-          .get<{ utilisateurs: { id: string; prenom: string | null; nom: string | null; role: string }[] }>(
-            "/api/v1/super-admin/utilisateurs?limite=500",
+                    .get<{ utilisateurs: { id: string; prenom: string | null; nom: string | null; role: string }[] }>(
+            "/api/v1/super-admin/utilisateurs?limite=100",
             { authentifie: true }
           )
           .catch(() => ({ utilisateurs: [] })),

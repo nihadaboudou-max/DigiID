@@ -742,120 +742,50 @@ export function BarreLaterale() {
           </div>
         )}
 
-        {/* Menu citoyen — visible uniquement pour les citoyens */}
+        {/* Menu citoyen — simplifié : un seul groupe compact */}
         {utilisateur.role === "citoyen" && (
           <>
             <div className="border-t border-ardoise-clair/10 my-1.5" />
-            {/* Mon espace personnel */}
-            <GroupePlie
-              estActif={pathname === "/tableau-de-bord" || pathname === "/profil" || pathname === "/documents" || pathname === "/historique" || pathname === "/notifications" || pathname.startsWith("/citoyen")}
-              icone={IconeAccueil}
-              titre="Mon espace"
-              initialOuvert={true}
-            >
-              <div className="space-y-0.5">
-                {[
-                  { href: "/tableau-de-bord",       libelle: "Tableau de bord",      Icone: IconeAccueil },
-                  { href: "/profil",                libelle: "Mon profil",           Icone: IconeUtilisateur },
-                  { href: "/documents-identite",    libelle: "Documents d'identité", Icone: IconeIdentite },
-                  { href: "/documents",             libelle: "Mes documents",         Icone: IconeJournal },
-                  { href: "/historique",            libelle: "Historique d'accès",    Icone: IconeAlerte },
-                  { href: "/notifications",         libelle: "Notifications",          Icone: IconeAlerte },
-                ].map((lien) => {
-                  const actif = pathname === lien.href;
-                  return (
-                    <Link
-                      key={lien.href}
-                      href={lien.href}
-                      className={clsx(
-                        "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                        actif
-                          ? "bg-sable/60 text-lagune font-medium"
-                          : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                      )}
-                    >
-                      <lien.Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                      <span className="truncate">{lien.libelle}</span>
-                    </Link>
-                  );
-                })}
+            
+            {/* Groupe unique : Mon espace compact */}
+            <div className="space-y-0.5">
+              {/* En-tête du groupe */}
+              <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs uppercase tracking-wider font-bold text-ardoise-clair">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-sable-clair text-ardoise-clair flex-shrink-0">
+                  <IconeAccueil className="w-4 h-4" />
+                </div>
+                <span>Mon espace</span>
               </div>
 
-              {/* Santé — Mes ordonnances */}
-              <div className="space-y-0.5 mt-2">
-                <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
-                  Santé
-                </p>
-                {[
-                  { href: "/citoyen/mes-ordonnances", libelle: "Mes ordonnances", Icone: IconeJournal },
-                  { href: "/citoyen/mon-dossier-medical", libelle: "Mon dossier médical", Icone: IconeStatistique },
-                ].map((lien) => {
-                  const actif = pathname === lien.href;
-                  return (
-                    <Link
-                      key={lien.href}
-                      href={lien.href}
-                      className={clsx(
-                        "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                        actif
-                          ? "bg-sable/60 text-lagune font-medium"
-                          : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                      )}
-                    >
-                      <lien.Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                      <span className="truncate">{lien.libelle}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            </GroupePlie>
-
-            <div className="border-t border-ardoise-clair/10 my-1" />
-
-            {/* Outils */}
-            <GroupePlie
-              estActif={pathname === "/chatbot" || pathname === "/parametres"}
-              icone={IconeParametres}
-              titre="Outils"
-              initialOuvert={pathname === "/chatbot" || pathname === "/parametres"}
-            >
-              <div className="space-y-0.5">
-                {[
-                  { href: "/chatbot",    libelle: "Assistant",  Icone: IconeChat },
-                  { href: "/parametres", libelle: "Paramètres", Icone: IconeParametres },
-                  { href: "/aide",       libelle: "Aide",       Icone: IconeChat },
-                ].map((lien) => {
-                  const actif = pathname === lien.href;
-                  return (
-                    <Link
-                      key={lien.href}
-                      href={lien.href}
-                      className={clsx(
-                        "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
-                        actif
-                          ? "bg-sable/60 text-lagune font-medium"
-                          : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
-                      )}
-                    >
-                      <lien.Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                      <span className="truncate">{lien.libelle}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            </GroupePlie>
-
-            <div className="border-t border-ardoise-clair/10 my-1" />
-
-            <GroupeScore pathname={pathname} />
-
-            <div className="border-t border-ardoise-clair/10 my-1" />
-
-            <GroupeAttestations pathname={pathname} />
-
-            <div className="border-t border-ardoise-clair/10 my-1" />
-
-            <GroupeIdentite pathname={pathname} />
+              {/* Liens essentiels — plats, sans sous-groupes */}
+              {[
+                { href: "/tableau-de-bord",    libelle: "Tableau de bord",      Icone: IconeAccueil },
+                { href: "/profil",             libelle: "Mon profil",           Icone: IconeUtilisateur },
+                { href: "/documents-identite", libelle: "Identité numérique",    Icone: IconeIdentite },
+                { href: "/score",              libelle: "Score de confiance",    Icone: IconeScore },
+                { href: "/badges",             libelle: "Badges & Récompenses",  Icone: IconeCheck },
+                { href: "/citoyen/mes-ordonnances", libelle: "Mes ordonnances",   Icone: IconeJournal },
+                { href: "/parametres",         libelle: "Paramètres",            Icone: IconeParametres },
+              ].map((lien) => {
+                const actif = pathname === lien.href ||
+                  (lien.href === "/tableau-de-bord" && pathname === "/citoyen/dashboard");
+                return (
+                  <Link
+                    key={lien.href}
+                    href={lien.href}
+                    className={clsx(
+                      "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
+                      actif
+                        ? "bg-sable/60 text-lagune font-medium"
+                        : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
+                    )}
+                  >
+                    <lien.Icone className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="truncate">{lien.libelle}</span>
+                  </Link>
+                );
+              })}
+            </div>
           </>
         )}
       </nav>
