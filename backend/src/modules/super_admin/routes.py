@@ -949,6 +949,7 @@ async def modifier_utilisateur(
         prenom=donnees.prenom,
         nom=donnees.nom,
         ville=donnees.ville,
+        domaine_id=donnees.domaine_id,
         adresse_ip=obtenir_ip_client(requete),
     )
 

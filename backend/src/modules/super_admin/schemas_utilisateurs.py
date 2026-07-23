@@ -83,6 +83,7 @@ class UtilisateurApercu(BaseModel):
     deux_fa_active: bool
     est_email_verifie: bool
     ville: Optional[str] = None
+    domaine_id: Optional[UUID] = Field(None, description="ID du domaine assigné")
     score_actuel: Optional[int] = None
     date_creation: datetime
     date_derniere_connexion: Optional[datetime] = None
@@ -117,3 +118,4 @@ class ModifierUtilisateurRequete(BaseModel):
     prenom: Optional[str] = None
     nom: Optional[str] = None
     ville: Optional[str] = None
+    domaine_id: Optional[UUID] = Field(None, description="ID du domaine assigné")

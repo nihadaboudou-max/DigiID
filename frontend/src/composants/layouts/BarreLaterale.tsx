@@ -374,7 +374,7 @@ export function BarreLaterale() {
     "/identite/2fa": IconeCadenas,
     "/identite/mot-de-passe": IconeCle,
     "/historique": IconeJournal,
-    "/partage": IconePartage,
+    "/autorisations": IconeBouclier,
     "/citoyen/mon-dossier-medical": IconeJournal,
     "/citoyen/mes-ordonnances": IconeCheck,
     "/attestations-communautaires/nouvelle": IconeEnvoyer,
@@ -522,28 +522,20 @@ export function BarreLaterale() {
           <>
             <div className="border-t border-ardoise-clair/10 my-1.5" />
 
-            {/* Accueil — lien simple */}
-            <LienNav
-              href="/tableau-de-bord"
-              libelle="Accueil"
-              Icone={IconeAccueil}
-              actif={pathname === "/tableau-de-bord" || pathname === "/citoyen/dashboard"}
-            />
-
-            {/* Tableau de bord — lien simple */}
+            {/* Accueil / Tableau de bord — lien unique */}
             <LienNav
               href="/citoyen/dashboard"
               libelle="Tableau de bord"
-              Icone={IconeStatistique}
+              Icone={IconeAccueil}
               actif={pathname === "/citoyen/dashboard"}
             />
 
-            {/* Mon DigiID — lien simple */}
+            {/* Mon DigiID — QR Code dynamique (carte d'identité numérique) */}
             <LienNav
-              href="/profil"
+              href="/citoyen/qr-code"
               libelle="Mon DigiID"
               Icone={IconeIdentite}
-              actif={pathname === "/profil"}
+              actif={pathname === "/citoyen/qr-code"}
             />
 
             {/* Notifications — lien simple */}
@@ -563,7 +555,6 @@ export function BarreLaterale() {
                 pathname.startsWith("/documents-identite") ||
                 pathname.startsWith("/identite") ||
                 pathname.startsWith("/historique") ||
-                pathname.startsWith("/partage") ||
                 pathname.startsWith("/autorisations") ||
                 pathname.startsWith("/consentements")
               }
@@ -574,7 +565,6 @@ export function BarreLaterale() {
                 pathname.startsWith("/documents-identite") ||
                 pathname.startsWith("/identite") ||
                 pathname.startsWith("/historique") ||
-                pathname.startsWith("/partage") ||
                 pathname.startsWith("/autorisations") ||
                 pathname.startsWith("/consentements")
               }
@@ -603,9 +593,9 @@ export function BarreLaterale() {
               </div>
               <div className="space-y-0.5">
                 <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
-                  Partage &amp; Autorisations
+                  Autorisations
                 </p>
-                {cbLienSousMenu("/partage", "Partage &amp; Autorisations")}
+                {cbLienSousMenu("/autorisations", "Autorisations")}
               </div>
             </GroupePlie>
 

@@ -82,6 +82,7 @@ def _utilisateur_vers_apercu(u: Utilisateur) -> UtilisateurApercu:
         deux_fa_active=u.deux_fa_active,
         est_email_verifie=u.est_email_verifie,
         ville=u.ville,
+        domaine_id=u.domaine_id,
         score_actuel=u.score_actuel,
         date_creation=u.cree_le,
         date_derniere_connexion=u.date_derniere_connexion,
@@ -278,6 +279,7 @@ async def modifier_utilisateur(
     prenom: Optional[str] = None,
     nom: Optional[str] = None,
     ville: Optional[str] = None,
+    domaine_id: Optional[UUID] = None,
     adresse_ip: Optional[str] = None,
 ) -> UtilisateurApercu:
     """Modifie les informations personnelles d'un utilisateur."""
@@ -301,6 +303,9 @@ async def modifier_utilisateur(
     if ville is not None:
         utilisateur.ville = ville
         modifications.append("ville")
+    if domaine_id is not None:
+        utilisateur.domaine_id = domaine_id
+        modifications.append("domaine")
 
     if not modifications:
         raise ErreurValidation(

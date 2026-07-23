@@ -34,7 +34,7 @@ import {
   type ModifierUtilisateurRequete,
   type ChangerRoleRequete,
 } from "@/services/super_admin_utilisateurs";
-import { ErreurAPI } from "@/services/client_api";
+import { clientAPI, ErreurAPI } from "@/services/client_api";
 
 // ---- Types des onglets de filtre ----
 type FiltreStatut = "tous" | "actifs" | "verrouilles" | "supprimes";
@@ -79,6 +79,9 @@ function Contenu() {
   const [modalSuppression, setModalSuppression] = useState<UtilisateurComplet | null>(null);
   const [modalRole, setModalRole] = useState<UtilisateurComplet | null>(null);
 
+  // Domaines disponibles pour assignation
+  const [domaines, setDomaines] = useState<{ id: string; nom: string }[]>([]);
+
   // États chargement actions
   const [actionChargement, setActionChargement] = useState(false);
 
@@ -109,6 +112,13 @@ function Contenu() {
       setChargement(false);
     }
   }, [recherche, filtreStatut, filtreRole, page]);
+
+  // Charger les domaines disponibles
+  useEffect(() => {
+    clientAPI.get<{ domaines: { id: string; nom: string }[] }>("/api/v1/domaines", { authentifie: true })
+      .then((data) => setDomaines(data.domaines || []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => { charger(1); }, []);
 
@@ -475,6 +485,7 @@ function Contenu() {
       {modalEdition && (
         <EditionModal
           utilisateur={modalEdition}
+          domaines={domaines}
           chargement={actionChargement}
           onSauvegarder={(d) => gererModification(modalEdition, d)}
           onFermer={() => setModalEdition(null)}
@@ -572,6 +583,10 @@ function DetailModal({ utilisateur, onFermer }: { utilisateur: UtilisateurComple
             <p className="text-xs uppercase text-ardoise-clair font-semibold">Sessions actives</p>
             <p className="text-sm mt-1">{utilisateur.sessions_actives}</p>
           </div>
+          <div>
+            <p className="text-xs uppercase text-ardoise-clair font-semibold">Domaine</p>
+            <p className="text-sm mt-1">{utilisateur.domaine_id || "—"}</p>
+          </div>
         </div>
 
         <div className="border-t border-ardoise-clair/10 pt-4">
@@ -621,9 +636,10 @@ function StatutItem({ label, value }: { label: string; value: boolean }) {
 
 // ---- ÉDITION ----
 function EditionModal({
-  utilisateur, chargement, onSauvegarder, onFermer,
+  utilisateur, domaines, chargement, onSauvegarder, onFermer,
 }: {
   utilisateur: UtilisateurComplet;
+  domaines: { id: string; nom: string }[];
   chargement: boolean;
   onSauvegarder: (d: ModifierUtilisateurRequete) => void;
   onFermer: () => void;
@@ -631,6 +647,7 @@ function EditionModal({
   const [prenom, setPrenom] = useState(utilisateur.prenom || "");
   const [nom, setNom] = useState(utilisateur.nom || "");
   const [ville, setVille] = useState(utilisateur.ville || "");
+  const [domaineId, setDomaineId] = useState(utilisateur.domaine_id || "");
 
   return (
     <Modal ouvert={true} surFermeture={onFermer} titre={`Modifier — ${utilisateur.email}`}>
@@ -663,9 +680,33 @@ function EditionModal({
           />
         </div>
 
+        {/* Assignation du domaine */}
+        <div>
+          <label className="text-xs uppercase text-ardoise-clair font-semibold">Domaine assigné</label>
+          <select
+            value={domaineId}
+            onChange={(e) => setDomaineId(e.target.value)}
+            className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm bg-white"
+          >
+            <option value="">Aucun domaine</option>
+            {domaines.map((d) => (
+              <option key={d.id} value={d.id}>{d.nom}</option>
+            ))}
+          </select>
+          <p className="text-xs text-ardoise-clair mt-1">
+            Assigner l&apos;utilisateur à un domaine. Les administrateurs de domaine
+            pourront gérer les utilisateurs de ce domaine.
+          </p>
+        </div>
+
         <div className="flex justify-end gap-3 pt-4 border-t border-ardoise-clair/10">
           <Bouton variante="ghost" onClick={onFermer}>Annuler</Bouton>
-          <Bouton variante="primaire" taille="petit" chargement={chargement} onClick={() => onSauvegarder({ prenom, nom, ville })}>
+          <Bouton variante="primaire" taille="petit" chargement={chargement} onClick={() => onSauvegarder({
+            prenom,
+            nom,
+            ville,
+            domaine_id: domaineId || null,
+          })}>
             Enregistrer
           </Bouton>
         </div>

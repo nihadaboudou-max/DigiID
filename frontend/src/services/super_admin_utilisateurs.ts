@@ -24,6 +24,7 @@ export interface UtilisateurComplet {
   deux_fa_active: boolean;
   est_email_verifie: boolean;
   ville: string | null;
+  domaine_id: string | null;
   score_actuel: number | null;
   date_creation: string;
   date_derniere_connexion: string | null;
@@ -62,6 +63,7 @@ export interface ModifierUtilisateurRequete {
   prenom?: string;
   nom?: string;
   ville?: string;
+  domaine_id?: string | null;
 }
 
 export interface CreerProfilRequete {

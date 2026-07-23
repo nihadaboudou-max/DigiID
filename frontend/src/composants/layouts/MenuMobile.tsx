@@ -23,7 +23,7 @@ interface Lien {
 }
 
 const LIENS_UTILISATEUR: Lien[] = [
-  { href: "/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
+  { href: "/citoyen/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
   { href: "/profil", libelle: "Mon profil", Icone: IconeUtilisateur },
   { href: "/score", libelle: "Mon score", Icone: IconeScore },
   { href: "/chatbot", libelle: "Assistant", Icone: IconeChat },
@@ -447,22 +447,22 @@ export function BoutonMenuMobile() {
                     <SectionPlieMobile
                       titre="Mon espace"
                       couleur="text-ardoise-clair/50"
-                      initialOuvert={pathname === "/tableau-de-bord" || pathname === "/profil"}
+                      initialOuvert={pathname === "/citoyen/dashboard" || pathname === "/profil"}
                     >
                       <div className="pl-2">
                         <Link
-                          href="/tableau-de-bord"
+                          href="/citoyen/dashboard"
                           onClick={() => setOuvert(false)}
                           className={clsx(
                             "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200",
-                            pathname === "/tableau-de-bord"
+                            pathname === "/citoyen/dashboard"
                               ? "bg-sable text-lagune font-semibold"
                               : "text-ardoise-clair hover:text-ardoise hover:bg-sable/60",
                           )}
                         >
                           <div className={clsx(
                             "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
-                            pathname === "/tableau-de-bord" ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
+                            pathname === "/citoyen/dashboard" ? "bg-lagune text-white" : "bg-sable-clair text-ardoise-clair"
                           )}>
                             <IconeAccueil className="w-3.5 h-3.5" />
                           </div>
@@ -838,8 +838,9 @@ function MenuCitoyenComplet({
           Mon espace personnel
         </p>
         {[
-          { href: "/tableau-de-bord", libelle: "Tableau de bord", Icone: IconeAccueil },
+          { href: "/citoyen/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
           { href: "/profil", libelle: "Mon profil", Icone: IconeUtilisateur },
+          { href: "/citoyen/qr-code", libelle: "Mon DigiID", Icone: IconeIdentite },
           { href: "/chatbot", libelle: "Assistant", Icone: IconeChat },
           { href: "/parametres", libelle: "Paramètres", Icone: IconeParametres },
         ].map(({ href, libelle, Icone }) => {
