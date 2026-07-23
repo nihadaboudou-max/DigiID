@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modeles import Domaine, Utilisateur
 from src.modules.domaines.schemas import DomaineCreate, DomaineUpdate
 
+
 async def creer_domaine(
     session: AsyncSession,
     donnees: DomaineCreate,
@@ -35,6 +36,7 @@ async def creer_domaine(
     await session.refresh(domaine)
     return domaine
 
+
 async def obtenir_domaine(
     session: AsyncSession,
     domaine_id: UUID,
@@ -50,6 +52,7 @@ async def obtenir_domaine(
             detail="Domaine introuvable",
         )
     return domaine
+
 
 async def lister_domaines(
     session: AsyncSession,
@@ -73,39 +76,53 @@ async def lister_domaines(
     
     return domaines, total
 
+
 async def modifier_domaine(
     session: AsyncSession,
     domaine_id: UUID,
     donnees: DomaineUpdate,
 ) -> Domaine:
-    """Modifie un domaine ET synchronise l'utilisateur admin."""
+    """
+    Modifie un domaine ET synchronise l'utilisateur admin.
+    
+    CORRECTION CRITIQUE : Quand on change l'admin_id d'un domaine,
+    il faut aussi mettre à jour le domaine_id de l'utilisateur concerné.
+    Sinon, l'admin de domaine ne voit jamais son domaine dans son dashboard.
+    """
     domaine = await obtenir_domaine(session, domaine_id)
     
-    # 🚨 CORRECTION CRITIQUE : Synchroniser utilisateur.domaine_id
+    # 1️⃣ Sauvegarder l'ancien admin_id AVANT modification
     ancien_admin_id = domaine.admin_id
-    nouvel_admin_id = donnees.admin_id if hasattr(donnees, 'admin_id') else None
     
-    # Mettre à jour les champs du domaine
+    # Récupérer le nouvel admin_id (peut être None si non fourni)
+    nouvel_admin_id = getattr(donnees, 'admin_id', None)
+    
+    # 2️ Mettre à jour les champs du domaine
     for champ, valeur in donnees.model_dump(exclude_unset=True).items():
         setattr(domaine, champ, valeur)
     
-    # 1️⃣ Si on change d'admin, mettre à jour les deux côtés de la relation
+    # 3️⃣ Synchroniser les deux côtés de la relation si l'admin a changé
     if ancien_admin_id != nouvel_admin_id:
+        
         # Retirer l'ancien admin de son domaine
         if ancien_admin_id:
             ancien_admin = await session.get(Utilisateur, ancien_admin_id)
             if ancien_admin:
                 ancien_admin.domaine_id = None
+                session.add(ancien_admin)  # Marquer comme modifié
         
         # Assigner le nouvel admin au domaine
         if nouvel_admin_id:
             nouvel_admin = await session.get(Utilisateur, nouvel_admin_id)
             if nouvel_admin:
                 nouvel_admin.domaine_id = domaine_id
+                session.add(nouvel_admin)  # Marquer comme modifié
     
+    # 4️⃣ Commit des DEUX tables (Domaine + Utilisateur)
     await session.commit()
     await session.refresh(domaine)
     return domaine
+
 
 async def supprimer_domaine(
     session: AsyncSession,
@@ -115,6 +132,7 @@ async def supprimer_domaine(
     domaine = await obtenir_domaine(session, domaine_id)
     await session.delete(domaine)
     await session.commit()
+
 
 async def suspendre_domaine(
     session: AsyncSession,
@@ -127,6 +145,7 @@ async def suspendre_domaine(
     await session.commit()
     await session.refresh(domaine)
     return domaine
+
 
 async def reactiver_domaine(
     session: AsyncSession,
