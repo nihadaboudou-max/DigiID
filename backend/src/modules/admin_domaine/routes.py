@@ -82,16 +82,13 @@ def _obtenir_domaine_id(utilisateur: Utilisateur) -> UUID:
 
 def _obtenir_ids_utilisateurs_domaine(session: AsyncSession, domaine_id: UUID):
     """
-    CORRECTION CRITIQUE : Récupère tous les IDs des utilisateurs d'un domaine
-    en passant par la table Departement (car les utilisateurs n'ont pas de domaine_id).
+    Récupère tous les IDs des utilisateurs d'un domaine via le champ domaine_id
+    sur la table Utilisateur.
     """
-    # Sous-requête : tous les chef_id des départements du domaine
-    chefs_subquery = select(Departement.chef_id).where(
-        Departement.domaine_id == domaine_id,
-        Departement.chef_id.isnot(None),
+    return select(Utilisateur.id).where(
+        Utilisateur.domaine_id == domaine_id,
+        Utilisateur.est_supprime == False,
     )
-    
-    return chefs_subquery
 
 
 # =============================================================================
@@ -109,22 +106,20 @@ async def tableau_de_bord_admin_domaine(
 ):
     domaine_id = _obtenir_domaine_id(utilisateur)
 
-    # ✅ CORRECT : Chefs via Departement.chef_id
+    # ✅ CORRECTION : Chefs via Utilisateur.domaine_id (direct)
+    roles_chefs = RolesUtilisateur.roles_chefs()
     chefs_actifs = await session.scalar(
-        select(func.count(Departement.id)).where(
-            Departement.domaine_id == domaine_id,
-            Departement.chef_id.isnot(None),
-            Departement.est_actif == True,
+        select(func.count(Utilisateur.id)).where(
+            Utilisateur.domaine_id == domaine_id,
+            Utilisateur.role.in_(roles_chefs),
+            Utilisateur.est_supprime == False,
         )
     )
 
-    # ✅ CORRECTION : Agents via jointure avec Departement
-    roles_chefs = RolesUtilisateur.roles_chefs()
-    agents_subquery = (
-        select(Utilisateur.id)
-        .join(Departement, Utilisateur.id == Departement.chef_id)
-        .where(
-            Departement.domaine_id == domaine_id,
+    # ✅ CORRECTION : Agents via Utilisateur.domaine_id (direct)
+    agents_total = await session.scalar(
+        select(func.count(Utilisateur.id)).where(
+            Utilisateur.domaine_id == domaine_id,
             Utilisateur.role.notin_(roles_chefs),
             Utilisateur.role.notin_([
                 RolesUtilisateur.ADMINISTRATEUR.value,
@@ -133,7 +128,6 @@ async def tableau_de_bord_admin_domaine(
             Utilisateur.est_supprime == False,
         )
     )
-    agents_total = await session.scalar(select(func.count()).select_from(agents_subquery.subquery()))
 
     departements_actifs = await session.scalar(
         select(func.count(Departement.id)).where(
@@ -169,12 +163,11 @@ async def statistiques_admin_domaine(
     domaine_id = _obtenir_domaine_id(utilisateur)
     roles_chefs = RolesUtilisateur.roles_chefs()
 
-    # ✅ CORRECTION : Chefs via jointure avec Departement
+    # ✅ CORRECTION : Chefs via Utilisateur.domaine_id (direct)
     resultat_chefs = await session.execute(
         select(Utilisateur.role, func.count(Utilisateur.id))
-        .join(Departement, Utilisateur.id == Departement.chef_id)
         .where(
-            Departement.domaine_id == domaine_id,
+            Utilisateur.domaine_id == domaine_id,
             Utilisateur.role.in_(roles_chefs),
             Utilisateur.est_supprime == False,
         )
@@ -183,12 +176,10 @@ async def statistiques_admin_domaine(
     chefs_par_type = {role: count for role, count in resultat_chefs.all()}
     total_chefs = sum(chefs_par_type.values())
 
-    # ✅ CORRECTION : Agents via jointure avec Departement
-    agents_subquery = (
-        select(Utilisateur.id)
-        .join(Departement, Utilisateur.id == Departement.chef_id)
-        .where(
-            Departement.domaine_id == domaine_id,
+    # ✅ CORRECTION : Agents via Utilisateur.domaine_id (direct)
+    total_agents = await session.scalar(
+        select(func.count(Utilisateur.id)).where(
+            Utilisateur.domaine_id == domaine_id,
             Utilisateur.role.notin_(roles_chefs),
             Utilisateur.role.notin_([
                 RolesUtilisateur.ADMINISTRATEUR.value,
@@ -197,7 +188,6 @@ async def statistiques_admin_domaine(
             Utilisateur.est_supprime == False,
         )
     )
-    total_agents = await session.scalar(select(func.count()).select_from(agents_subquery.subquery()))
 
     resultat_depts = await session.execute(
         select(Departement.type_departement, func.count(Departement.id)).where(
@@ -248,12 +238,10 @@ async def audit_admin_domaine(
 ):
     domaine_filtre = domaine_id or _obtenir_domaine_id(utilisateur_courant)
 
-    # ✅ CORRECTION : Utilisateurs via jointure avec Departement
+    # ✅ CORRECTION : Utilisateurs via domaine_id (direct)
     utilisateurs_domaine = (await session.execute(
-        select(Utilisateur.id)
-        .join(Departement, Utilisateur.id == Departement.chef_id)
-        .where(
-            Departement.domaine_id == domaine_filtre,
+        select(Utilisateur.id).where(
+            Utilisateur.domaine_id == domaine_filtre,
             Utilisateur.est_supprime == False,
         )
     )).scalars().all()
@@ -306,17 +294,16 @@ async def lister_chefs_domaine(
     domaine_id: UUID | None = Query(None, description="ID du domaine (optionnel)"),
 ):
     """
-    ✅ CORRECTION MAJEURE : Utilise une jointure avec Departement pour trouver les chefs.
+    ✅ CORRECTION : Utilise Utilisateur.domaine_id directement.
     """
     domaine_filtre = domaine_id or _obtenir_domaine_id(utilisateur)
     roles_chefs = RolesUtilisateur.roles_chefs()
 
-    # ✅ CORRECTION : Jointure explicite Utilisateur.id == Departement.chef_id
+    # ✅ CORRECTION : Filtre via domaine_id directement sur Utilisateur
     query = (
         select(Utilisateur)
-        .join(Departement, Utilisateur.id == Departement.chef_id)
         .where(
-            Departement.domaine_id == domaine_filtre,
+            Utilisateur.domaine_id == domaine_filtre,
             Utilisateur.role.in_(roles_chefs),
             Utilisateur.est_supprime == False,
         )
@@ -375,13 +362,12 @@ async def detail_chef_domaine(
 ):
     domaine_id = _obtenir_domaine_id(utilisateur)
 
-    # ✅ CORRECTION : Jointure avec Departement pour vérifier que le chef est dans le domaine
+    # ✅ CORRECTION : Vérifie via domaine_id directement sur Utilisateur
     chef = (await session.scalars(
         select(Utilisateur)
-        .join(Departement, Utilisateur.id == Departement.chef_id)
         .where(
             Utilisateur.id == chef_id,
-            Departement.domaine_id == domaine_id,
+            Utilisateur.domaine_id == domaine_id,
             Utilisateur.role.in_(RolesUtilisateur.roles_chefs()),
             Utilisateur.est_supprime == False,
         )
