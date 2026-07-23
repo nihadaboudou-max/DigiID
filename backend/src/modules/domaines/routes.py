@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modeles.utilisateur import Utilisateur
-
 from src.modeles.domaine import Domaine
 from src.base_donnees.session import obtenir_session
 from src.modules.domaines.schemas import (
@@ -115,7 +114,8 @@ async def modifier(
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
-    """Modifie un domaine existant."""
+    """Modifie un domaine existant et synchronise l'admin."""
+    # La synchronisation Utilisateur.domaine_id se fait DANS le service
     domaine_modifie = await modifier_domaine(session, domaine.id, donnees)
     return await _enrichir_domaine(domaine_modifie, session)
 

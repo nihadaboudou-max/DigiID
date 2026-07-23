@@ -14,7 +14,6 @@ async def creer_domaine(
     admin_id: UUID | None = None,
 ) -> Domaine:
     """Crée un nouveau domaine."""
-    # Vérifier unicité du code
     result = await session.execute(
         select(Domaine).where(Domaine.code == donnees.code)
     )
@@ -65,11 +64,9 @@ async def lister_domaines(
     if est_actif is not None:
         query = query.where(Domaine.est_actif == est_actif)
     
-    # Total
     count_query = select(func.count()).select_from(query.subquery())
     total = (await session.execute(count_query)).scalar() or 0
     
-    # Pagination
     query = query.offset((page - 1) * par_page).limit(par_page)
     result = await session.execute(query)
     domaines = list(result.scalars().all())
@@ -84,41 +81,38 @@ async def modifier_domaine(
 ) -> Domaine:
     """
     Modifie un domaine ET synchronise l'utilisateur admin.
-    
-    CORRECTION CRITIQUE : Quand on change l'admin_id d'un domaine,
-    il faut aussi mettre à jour le domaine_id de l'utilisateur concerné.
-    Sinon, l'admin de domaine ne voit jamais son domaine dans son dashboard.
+    C'est ici que se fait la magie de la liaison bidirectionnelle.
     """
     domaine = await obtenir_domaine(session, domaine_id)
     
-    # 1️⃣ Sauvegarder l'ancien admin_id AVANT modification
+    # 1. Sauvegarder l'ancien admin AVANT toute modification
     ancien_admin_id = domaine.admin_id
     
-    # Récupérer le nouvel admin_id (peut être None si non fourni)
+    # 2. Récupérer le nouvel admin_id (peut être None si non fourni dans le payload)
     nouvel_admin_id = getattr(donnees, 'admin_id', None)
     
-    # 2️ Mettre à jour les champs du domaine
+    # 3. Mettre à jour les champs du domaine (nom, description, region, admin_id, etc.)
     for champ, valeur in donnees.model_dump(exclude_unset=True).items():
         setattr(domaine, champ, valeur)
     
-    # 3️⃣ Synchroniser les deux côtés de la relation si l'admin a changé
+    # 4. SYNCHRONISATION BIDIRECTIONNELLE si l'admin a changé
     if ancien_admin_id != nouvel_admin_id:
         
-        # Retirer l'ancien admin de son domaine
+        # A. Retirer l'ancien admin de son domaine (libérer l'ancien)
         if ancien_admin_id:
             ancien_admin = await session.get(Utilisateur, ancien_admin_id)
             if ancien_admin:
                 ancien_admin.domaine_id = None
-                session.add(ancien_admin)  # Marquer comme modifié
+                session.add(ancien_admin)  # Marquer comme modifié dans la session
         
-        # Assigner le nouvel admin au domaine
+        # B. Assigner le nouvel admin à ce domaine
         if nouvel_admin_id:
             nouvel_admin = await session.get(Utilisateur, nouvel_admin_id)
             if nouvel_admin:
-                nouvel_admin.domaine_id = domaine_id
-                session.add(nouvel_admin)  # Marquer comme modifié
+                nouvel_admin.domaine_id = domaine.id
+                session.add(nouvel_admin)  # Marquer comme modifié dans la session
     
-    # 4️⃣ Commit des DEUX tables (Domaine + Utilisateur)
+    # 5. Valider les modifications des DEUX tables (Domaine ET Utilisateur)
     await session.commit()
     await session.refresh(domaine)
     return domaine
