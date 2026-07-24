@@ -1376,6 +1376,9 @@ async def lister_chefs_domaine(
     from src.noyau import dechiffrer_donnee
     
     # Construire la requête pour récupérer les chefs du domaine
+    # 🔴 CORRECTION : supprimé `est_actif == True` car les chefs créés
+    #    par le super admin ont `est_actif = False` tant qu'ils n'ont pas
+    #    vérifié leur email. On veut les voir dans la liste même inactifs.
     query = select(Utilisateur).where(
         Utilisateur.domaine_id == admin.domaine_id,
         Utilisateur.role.in_([
@@ -1384,7 +1387,6 @@ async def lister_chefs_domaine(
             RolesUtilisateur.CHEF_ONG.value,
             RolesUtilisateur.CHEF_AGENT.value,
         ]),
-        Utilisateur.est_actif == True,
         Utilisateur.est_supprime == False,
     )
     
