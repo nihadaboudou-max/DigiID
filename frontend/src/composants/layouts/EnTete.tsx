@@ -13,7 +13,7 @@ import { BoutonMenuMobile } from "@/composants/layouts/MenuMobile";
 import { useAuthentification } from "@/contextes/authentification";
 import { cheminTableauDeBord as cheminTDB } from "@/types/api";
 import { useNotifications } from "@/contextes/notifications";
-import { IconeDeconnexion, IconeAccueil } from "@/composants/commun/Icones";
+import { IconeDeconnexion } from "@/composants/commun/Icones";
 
 export function EnTete() {
   const { utilisateur, estConnecte, seDeconnecter } = useAuthentification();
@@ -47,14 +47,6 @@ export function EnTete() {
         <nav className="flex items-center gap-1 sm:gap-2">
           {estConnecte && utilisateur ? (
             <>
-              <Link
-                href={cheminTableauDeBord}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-ardoise-clair hover:text-lagune hover:bg-sable transition-all duration-200"
-              >
-                <IconeAccueil className="w-4 h-4" />
-                <span>Accueil</span>
-              </Link>
-
               <Link
                 href={cheminTableauDeBord}
                 className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-sable transition-all duration-200 group"

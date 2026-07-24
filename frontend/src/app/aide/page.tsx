@@ -6,8 +6,6 @@
 import { useState } from "react";
 import Link from "next/link";
 
-import { EnTete } from "@/composants/layouts/EnTete";
-import { PiedDePage } from "@/composants/layouts/PiedDePage";
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { ChampRecherche } from "@/composants/commun/ChampRecherche";
@@ -107,8 +105,6 @@ export default function PageAide() {
   }
 
   return (
-    <>
-      <EnTete />
       <main className="flex-grow">
         <section className="bg-gradient-to-b from-sable-clair to-white py-16">
           <div className="max-w-3xl mx-auto px-6 text-center apparition">
@@ -200,7 +196,5 @@ export default function PageAide() {
           </div>
         </section>
       </main>
-      <PiedDePage />
-    </>
   );
 }

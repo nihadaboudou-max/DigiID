@@ -387,7 +387,7 @@ export function BarreLaterale() {
     "/parametres": IconeParametres,
   };
 
-  /** Rendu d'un lien de sous-menu avec icône pour le citoyen */
+  /** Rendu d'un lien de sous-menu en rectangle cliquable */
   const cbLienSousMenu = (href: string, libelle: string) => {
     const Icone = iconesRoutes[href] || IconeAccueil;
     const actif = pathname === href ||
@@ -398,14 +398,24 @@ export function BarreLaterale() {
         key={href}
         href={href}
         className={clsx(
-          "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200 group",
+          "flex items-center gap-3 px-4 py-3 rounded-xl text-xs transition-all duration-200 group border",
           actif
-            ? "bg-sable/60 text-lagune font-medium"
-            : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise",
+            ? "bg-lagune/10 text-lagune font-semibold border-lagune/30 shadow-sm"
+            : "bg-white text-ardoise-clair border-ardoise-clair/15 hover:bg-sable/60 hover:text-ardoise hover:border-ardoise-clair/30 hover:shadow-sm",
         )}
       >
-        <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-        <span className="truncate">{libelle}</span>
+        <div className={clsx(
+          "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-all",
+          actif
+            ? "bg-lagune text-white"
+            : "bg-sable-clair text-ardoise-clair group-hover:bg-lagune/10 group-hover:text-lagune",
+        )}>
+          <Icone className="w-3.5 h-3.5" />
+        </div>
+        <span className="truncate font-medium">{libelle}</span>
+        {actif && (
+          <span className="ml-auto w-1 h-1 rounded-full bg-ocre" />
+        )}
       </Link>
     );
   };
@@ -578,18 +588,15 @@ export function BarreLaterale() {
               </div>
               <div className="space-y-0.5">
                 <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
-                  Vérifications
-                </p>
-                {cbLienSousMenu("/identite", "Vérifications")}
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
                   Sécurité du compte
                 </p>
-                {cbLienSousMenu("/identite/email", "Vérification de l'email")}
-                {cbLienSousMenu("/identite/2fa", "Double authentification (2FA)")}
-                {cbLienSousMenu("/identite/mot-de-passe", "Changer le mot de passe")}
-                {cbLienSousMenu("/historique", "Historique des accès")}
+                <div className="grid grid-cols-1 gap-1.5 px-1.5 py-1.5">
+                  {cbLienSousMenu("/identite", "Vérifications")}
+                  {cbLienSousMenu("/identite/email", "Vérification de l'email")}
+                  {cbLienSousMenu("/identite/2fa", "Double authentification (2FA)")}
+                  {cbLienSousMenu("/identite/mot-de-passe", "Changer le mot de passe")}
+                  {cbLienSousMenu("/historique", "Historique des accès")}
+                </div>
               </div>
               <div className="space-y-0.5">
                 <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
