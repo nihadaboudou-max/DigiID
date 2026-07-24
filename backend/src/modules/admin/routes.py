@@ -1107,7 +1107,7 @@ async def lister_signalements_police_admin(
     _: Annotated[Utilisateur, Depends(admin_courant)],
     limite: int = Query(50, ge=1, le=200),
 ):
-    from src.modeles.signalement_fraude import SignalementFraude
+    from src.modeles.verification_police import SignalementFraude
     query = select(SignalementFraude).order_by(SignalementFraude.date_signalement.desc()).limit(limite)
     signalements = (await session.scalars(query)).all()
 

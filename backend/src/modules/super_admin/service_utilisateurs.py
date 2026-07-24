@@ -283,6 +283,8 @@ async def modifier_utilisateur(
     adresse_ip: Optional[str] = None,
 ) -> UtilisateurApercu:
     """Modifie les informations personnelles d'un utilisateur."""
+    from src.modeles.departement import Departement
+
     resultat = await session.execute(
         select(Utilisateur).where(Utilisateur.id == utilisateur_id)
     )
@@ -303,9 +305,28 @@ async def modifier_utilisateur(
     if ville is not None:
         utilisateur.ville = ville
         modifications.append("ville")
+    
+    # 🔄 SYNCHRONISATION : quand on change domaine_id d'un chef
     if domaine_id is not None:
+        ancien_domaine_id = utilisateur.domaine_id
         utilisateur.domaine_id = domaine_id
         modifications.append("domaine")
+        
+        # Si l'utilisateur est un chef, chercher son département et synchroniser
+        if utilisateur.role in RolesUtilisateur.roles_chefs():
+            dept = (await session.scalars(
+                select(Departement).where(
+                    Departement.chef_id == utilisateur.id,
+                    Departement.domaine_id == domaine_id,
+                )
+            )).first()
+            if dept:
+                utilisateur.departement_id = dept.id
+                modifications.append("departement")
+            elif ancien_domaine_id != domaine_id:
+                # Changement de domaine : retirer l'ancien lien département
+                utilisateur.departement_id = None
+                modifications.append("departement (réinitialisé)")
 
     if not modifications:
         raise ErreurValidation(

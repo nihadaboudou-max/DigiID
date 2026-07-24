@@ -12,7 +12,7 @@ async def creer_departement(
     session: AsyncSession,
     donnees: DepartementCreate,
 ) -> Departement:
-    """Crée un nouveau département."""
+    """Crée un nouveau département ET synchronise le chef assigné."""
     # Vérifier unicité type+dans domaine
     result = await session.execute(
         select(Departement).where(
@@ -28,6 +28,17 @@ async def creer_departement(
     
     departement = Departement(**donnees.model_dump())
     session.add(departement)
+    await session.flush()  # Pour obtenir l'ID du département
+    
+    # 🔄 SYNCHRONISATION : si un chef est assigné à la création
+    chef_id = getattr(donnees, 'chef_id', None)
+    if chef_id:
+        chef = await session.get(Utilisateur, chef_id)
+        if chef:
+            chef.departement_id = departement.id
+            chef.domaine_id = departement.domaine_id
+            session.add(chef)
+    
     await session.commit()
     await session.refresh(departement)
     return departement
