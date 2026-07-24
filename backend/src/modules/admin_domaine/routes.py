@@ -348,6 +348,30 @@ async def lister_chefs_domaine(
         Departement.chef_id.isnot(None),
     )
 
+    # 🔄 SYNCHRONISATION : Mettre à jour les chefs liés à un département
+    #    mais dont Utilisateur.domaine_id/departement_id sont encore NULL
+    chefs_a_sync = (await session.scalars(
+        select(Utilisateur).where(
+            Utilisateur.role.in_(roles_chefs),
+            Utilisateur.est_supprime == False,
+            Utilisateur.id.in_(sous_req_chefs_liste),
+            or_(
+                Utilisateur.domaine_id.is_(None),
+                Utilisateur.departement_id.is_(None),
+            ),
+        )
+    )).all()
+    for chef in chefs_a_sync:
+        dept = await session.scalar(
+            select(Departement).where(Departement.chef_id == chef.id)
+        )
+        if dept:
+            chef.domaine_id = dept.domaine_id
+            chef.departement_id = dept.id
+            session.add(chef)
+    if chefs_a_sync:
+        await session.commit()
+
     # ✅ CORRECTION : Double condition (domaine_id direct OU chef de département)
     query = (
         select(Utilisateur)
