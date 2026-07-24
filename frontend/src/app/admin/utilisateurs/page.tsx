@@ -194,8 +194,13 @@ function Contenu() {
 
   // ---- Colonnes ----
   const MAP_ROLE: Record<string, string> = {
-    citoyen: "Citoyen", agent: "Agent", medecin: "Medecin",
-    police: "Police", ong: "ONG", administrateur: "Admin", super_administrateur: "Super admin",
+    citoyen: "Citoyen",
+    chef_police: "Chef Police", chef_medical: "Chef Medical",
+    chef_ong: "Chef ONG", chef_agent: "Chef Enrolement",
+    agent_police: "Agent Police", agent_medical: "Agent Medical",
+    agent_terrain: "Agent Terrain", agent_ong: "Agent ONG",
+    admin_domaine: "Admin Domaine",
+    administrateur: "Admin", super_administrateur: "Super admin",
   };
 
   const colonnes: Colonne<UtilisateurApercu>[] = [

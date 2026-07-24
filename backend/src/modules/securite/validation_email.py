@@ -21,7 +21,9 @@ from src.config.constantes import RolesUtilisateur
 # Les motifs sont testés en fin d'email (suffixe)
 
 DOMAINES_INSTITUTIONNELS: dict[str, list[str]] = {
-    RolesUtilisateur.MEDECIN.value: [
+    # Les clés utilisent les noms longs officiels (agent_*)
+    # car ce sont les valeurs stockées en base de données.
+    RolesUtilisateur.AGENT_MEDICAL.value: [  # "agent_medical"
         "sante.sn",
         "hopital.sn",
         "medecin.sn",
@@ -30,13 +32,13 @@ DOMAINES_INSTITUTIONNELS: dict[str, list[str]] = {
         "chu.sn",
         "centre-sante.sn",
     ],
-    RolesUtilisateur.POLICE.value: [
+    RolesUtilisateur.AGENT_POLICE.value: [  # "agent_police"
         "police.sn",
         "interieur.gouv.sn",
         "securite.gouv.sn",
         "gendarmerie.sn",
     ],
-    RolesUtilisateur.AGENT.value: [
+    RolesUtilisateur.AGENT_TERRAIN.value: [  # "agent_terrain"
         "administration.sn",
         "gouv.sn",
         "fonction-publique.sn",
@@ -44,7 +46,7 @@ DOMAINES_INSTITUTIONNELS: dict[str, list[str]] = {
         "impots.sn",
         "prestation.sn",
     ],
-    RolesUtilisateur.ONG.value: [
+    RolesUtilisateur.AGENT_ONG.value: [  # "agent_ong"
         "ong.sn",
         "asso.sn",
         "org.sn",

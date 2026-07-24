@@ -16,17 +16,32 @@ class RolesUtilisateur(str, Enum):
     L'enum est `str` pour faciliter la sérialisation JSON.
     """
     CITOYEN = "citoyen"
+    
+    # Agents (long form - used internally)
     AGENT_POLICE = "agent_police"
     AGENT_MEDICAL = "agent_medical"
     AGENT_TERRAIN = "agent_terrain"
     AGENT_ONG = "agent_ong"
+    
+    # Chefs
     CHEF_POLICE = "chef_police"
     CHEF_ONG = "chef_ong"
     CHEF_AGENT = "chef_agent"
     CHEF_MEDICAL = "chef_medical"
+    
+    # Administration
     ADMIN_DOMAINE = "admin_domaine"
     ADMINISTRATEUR = "administrateur"
     SUPER_ADMINISTRATEUR = "super_administrateur"
+    
+    # ─── ALIAS courts pour compatibilité Super Admin ───
+    # L'interface Super Admin envoie des noms courts (ong, medecin, agent, police)
+    # qui sont mappés vers les rôles longs dans service_utilisateurs.py.
+    # On définit les valeurs courtes ici pour la validation.
+    ONG = "ong"
+    MEDECIN = "medecin"
+    AGENT = "agent"
+    POLICE = "police"
 
     @classmethod
     def hierarchie(cls) -> dict:

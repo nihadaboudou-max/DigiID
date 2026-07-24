@@ -18,30 +18,56 @@ import { useNotifications } from "@/contextes/notifications";
 import { creerProfilUtilisateur, type CreerProfilRequete } from "@/services/super_admin_utilisateurs";
 import { ErreurAPI } from "@/services/client_api";
 
-type TypeRole = "agent" | "medecin" | "police" | "ong";
+type TypeRole = "chef_police" | "chef_medical" | "chef_ong" | "chef_agent" | "agent_police" | "agent_medical" | "agent_terrain" | "agent_ong";
 
 const ROLES_CREATION: { role: TypeRole; libelle: string; icone: string; description: string }[] = [
+  // ─── Chefs de département ───
   {
-    role: "agent",
-    libelle: "Agent administratif",
-    icone: "🏛️",
-    description: "Accès aux dossiers citoyens pour démarches administratives",
+    role: "chef_police",
+    libelle: "Chef Police",
+    icone: "👮‍♂️",
+    description: "Gère les agents de police et les missions de son département",
   },
   {
-    role: "medecin",
-    libelle: "Médecin",
+    role: "chef_medical",
+    libelle: "Chef Médical",
     icone: "🏥",
-    description: "Accès aux dossiers médicaux en contexte de soin",
+    description: "Gère les médecins et le personnel médical du département",
   },
   {
-    role: "police",
-    libelle: "Forces de l'ordre",
+    role: "chef_ong",
+    libelle: "Chef ONG",
+    icone: "🤝",
+    description: "Gère les agents ONG et les programmes d'aide",
+  },
+  {
+    role: "chef_agent",
+    libelle: "Chef Enrôlement",
+    icone: "📋",
+    description: "Gère les agents d'enrôlement et les inscriptions",
+  },
+  // ─── Agents ───
+  {
+    role: "agent_police",
+    libelle: "Agent Police",
     icone: "👮",
     description: "Vérification d'identité dans le cadre légal",
   },
   {
-    role: "ong",
-    libelle: "ONG / Association",
+    role: "agent_medical",
+    libelle: "Agent Médical",
+    icone: "🩺",
+    description: "Accès aux dossiers médicaux en contexte de soin",
+  },
+  {
+    role: "agent_terrain",
+    libelle: "Agent Terrain / Enrôlement",
+    icone: "📋",
+    description: "Enrôlement et inscription des citoyens",
+  },
+  {
+    role: "agent_ong",
+    libelle: "Agent ONG",
     icone: "🤝",
     description: "Consultation des profils pour programmes d'aide",
   },
@@ -55,7 +81,7 @@ export default function PageCreationProfil() {
   const [motDePasse, setMotDePasse] = useState("");
   const [prenom, setPrenom] = useState("");
   const [nom, setNom] = useState("");
-  const [role, setRole] = useState<TypeRole>("agent");
+  const [role, setRole] = useState<TypeRole>("agent_terrain");
   const [ville, setVille] = useState("Dakar");
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -113,7 +139,7 @@ export default function PageCreationProfil() {
               <Bouton variante="primaire" taille="petit" onClick={() => router.push("/super-admin/utilisateurs")}>
                 ← Retour à la liste
               </Bouton>
-              <Bouton variante="secondaire" taille="petit" onClick={() => { setSucces(null); setEmail(""); setMotDePasse(""); setPrenom(""); setNom(""); setRole("agent"); setVille("Dakar"); }}>
+              <Bouton variante="secondaire" taille="petit" onClick={() => { setSucces(null); setEmail(""); setMotDePasse(""); setPrenom(""); setNom(""); setRole("agent_terrain"); setVille("Dakar"); }}>
                 + Créer un autre
               </Bouton>
             </div>

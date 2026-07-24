@@ -40,10 +40,17 @@ class CreerProfilRequete(BaseModel):
     def valider_role_creation(cls, v: str) -> str:
         """Vérifie que le rôle est autorisé à la création (pas citoyen)."""
         roles_autorises = [
-            RolesUtilisateur.ONG.value,
-            RolesUtilisateur.MEDECIN.value,
-            RolesUtilisateur.AGENT.value,
-            RolesUtilisateur.POLICE.value,
+            # Chefs de département
+            RolesUtilisateur.CHEF_POLICE.value,
+            RolesUtilisateur.CHEF_MEDICAL.value,
+            RolesUtilisateur.CHEF_ONG.value,
+            RolesUtilisateur.CHEF_AGENT.value,
+            # Agents (noms longs officiels)
+            RolesUtilisateur.AGENT_POLICE.value,    # "agent_police"
+            RolesUtilisateur.AGENT_MEDICAL.value,   # "agent_medical"
+            RolesUtilisateur.AGENT_TERRAIN.value,   # "agent_terrain"
+            RolesUtilisateur.AGENT_ONG.value,       # "agent_ong"
+            # Administration
             RolesUtilisateur.ADMINISTRATEUR.value,
             RolesUtilisateur.SUPER_ADMINISTRATEUR.value,
         ]

@@ -41,10 +41,14 @@ type FiltreStatut = "tous" | "actifs" | "verrouilles" | "supprimes";
 
 const ROLES_DISPONIBLES = [
   { role: "citoyen", libelle: "Citoyen" },
-  { role: "agent", libelle: "Agent administratif" },
-  { role: "medecin", libelle: "Médecin" },
-  { role: "police", libelle: "Forces de l'ordre" },
-  { role: "ong", libelle: "ONG" },
+  { role: "chef_police", libelle: "Chef Police" },
+  { role: "chef_medical", libelle: "Chef Médical" },
+  { role: "chef_ong", libelle: "Chef ONG" },
+  { role: "chef_agent", libelle: "Chef Enrôlement" },
+  { role: "agent_police", libelle: "Agent Police" },
+  { role: "agent_medical", libelle: "Agent Médical" },
+  { role: "agent_terrain", libelle: "Agent Terrain" },
+  { role: "agent_ong", libelle: "Agent ONG" },
   { role: "administrateur", libelle: "Administrateur" },
   { role: "super_administrateur", libelle: "Super administrateur" },
 ];
@@ -221,13 +225,27 @@ function Contenu() {
       libelle: "Rôle",
       rendu: (u) => {
         const vars: Record<string, "lagune" | "succes" | "ocre" | "terre"> = {
-          citoyen: "lagune", agent: "lagune", medecin: "succes",
-          police: "succes", ong: "succes", administrateur: "ocre",
+          citoyen: "lagune",
+          // Chefs
+          chef_police: "succes", chef_medical: "succes",
+          chef_ong: "succes", chef_agent: "succes",
+          // Agents
+          agent_police: "lagune", agent_medical: "lagune",
+          agent_terrain: "lagune", agent_ong: "lagune",
+          admin_domaine: "ocre",
+          administrateur: "ocre",
           super_administrateur: "terre",
         };
         const roles: Record<string, string> = {
-          citoyen: "Citoyen", agent: "Agent", medecin: "Médecin",
-          police: "Police", ong: "ONG", administrateur: "Admin",
+          citoyen: "Citoyen",
+          // Chefs
+          chef_police: "Chef Police", chef_medical: "Chef Médical",
+          chef_ong: "Chef ONG", chef_agent: "Chef Enrôlement",
+          // Agents
+          agent_police: "Agent Police", agent_medical: "Agent Médical",
+          agent_terrain: "Agent Terrain", agent_ong: "Agent ONG",
+          admin_domaine: "Admin Domaine",
+          administrateur: "Admin",
           super_administrateur: "Super admin",
         };
         return <Badge variante={vars[u.role] || "lagune"}>{roles[u.role] || u.role}</Badge>;
@@ -841,13 +859,25 @@ function RoleModal({
             onChange={(e) => setRole(e.target.value)}
             className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm bg-white"
           >
-            <option value="citoyen">Citoyen</option>
-            <option value="agent">Agent administratif</option>
-            <option value="medecin">Médecin</option>
-            <option value="police">Forces de l'ordre</option>
-            <option value="ong">ONG</option>
-            <option value="administrateur">Administrateur</option>
-            <option value="super_administrateur">Super administrateur</option>
+            <optgroup label="🧑‍💼 Citoyen">
+              <option value="citoyen">Citoyen</option>
+            </optgroup>
+            <optgroup label="⭐ Chefs de département">
+              <option value="chef_police">Chef Police</option>
+              <option value="chef_medical">Chef Médical</option>
+              <option value="chef_ong">Chef ONG</option>
+              <option value="chef_agent">Chef Enrôlement</option>
+            </optgroup>
+            <optgroup label="👤 Agents">
+              <option value="agent_police">Agent Police</option>
+              <option value="agent_medical">Agent Médical</option>
+              <option value="agent_terrain">Agent Terrain</option>
+              <option value="agent_ong">Agent ONG</option>
+            </optgroup>
+            <optgroup label="🔧 Administration">
+              <option value="administrateur">Administrateur</option>
+              <option value="super_administrateur">Super administrateur</option>
+            </optgroup>
           </select>
         </div>
         <div>
