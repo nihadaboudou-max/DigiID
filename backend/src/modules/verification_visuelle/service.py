@@ -109,10 +109,48 @@ async def traiter_upload_photo(
             statut = "rejete"
             date_verification = None
 
+    # ✅ NOUVEAU : Comparaison avec la photo de la CNI si les vérifications précédentes sont OK
+    if statut == "approuve":
+        from src.modeles.verification_cni import VerificationCNI
+        resultat_cni = await session.execute(
+            select(VerificationCNI)
+            .where(
+                VerificationCNI.utilisateur_id == utilisateur.id,
+                VerificationCNI.face == "recto",
+                VerificationCNI.est_valide == True,
+                VerificationCNI.embedding_photo_cni.isnot(None),
+                VerificationCNI.est_supprime == False,
+            )
+            .order_by(desc(VerificationCNI.cree_le))
+            .limit(1)
+        )
+        cni_verification = resultat_cni.scalar_one_or_none()
+        
+        if cni_verification and cni_verification.embedding_photo_cni:
+            # Comparer les embeddings (seuil=0.0 pour obtenir le score brut)
+            doublons_cni = comparaison.comparer_embeddings(
+                embedding,
+                [("cni", cni_verification.embedding_photo_cni)],
+                seuil=0.0
+            )
+            score_similarite = doublons_cni[0]["similarite"] if doublons_cni else 0.0
+            
+            # Si score trop bas, rejeter la vérification
+            if score_similarite < 0.6:  # Seuil de similarité strict (60%)
+                statut = "rejete"
+                raison = f"La photo ne correspond pas à celle de votre CNI (similarité: {score_similarite:.1%}). Assurez-vous que c'est bien vous sur la photo."
+                date_verification = None
+                journal.warning(
+                    f"Rejet vérification visuelle - Pas de match CNI | "
+                    f"user={utilisateur.id} score={score_similarite:.2f}"
+                )
+            else:
+                journal.info(f"Match CNI réussi | user={utilisateur.id} score={score_similarite:.2f}")
+
     journal.info(
         f"Traitement vérification visuelle : verdict={verdict}, "
         f"score_liveness={score_liveness:.2f}, doublons={len(doublons)}, "
-        f"statut_final={statut}"
+        f"statut_final={statut}, similarite_cni={score_similarite}"
     )
 
     verification = VerificationVisuelle(
@@ -131,7 +169,7 @@ async def traiter_upload_photo(
             "adresse_ip": adresse_ip,
             "verdict_anti_spoofing": verdict,
         },
-        date_verification=date_verification,  # ✅ Définir la date de vérification
+        date_verification=date_verification,
     )
     session.add(verification)
     await session.commit()

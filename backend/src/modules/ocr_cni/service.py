@@ -357,6 +357,7 @@ async def traiter_upload_cni(
     Traite l'upload d'une image de CNI (recto ou verso).
     ⚠️ BLOQUE l'enregistrement si les données extraites ne correspondent 
     pas strictement au nom et au premier prénom du profil utilisateur.
+    ✅ Extrait et sauvegarde l'embedding facial de la photo CNI (recto).
     """
     contenu = await _lire_image(fichier)
     nom_fichier = fichier.filename or f"cni_{face}.jpg"
@@ -423,7 +424,7 @@ async def traiter_upload_cni(
                 message_utilisateur=message_erreur
             )
 
-    # 4. Enregistrement en base (seulement si la cohérence est validée)
+    # 4. Enregistrement en base
     verification = await _enregistrer_verification(
         session=session,
         utilisateur=utilisateur,
@@ -441,6 +442,27 @@ async def traiter_upload_cni(
             temps_analyse_ms=temps_ms,
         ),
     )
+
+    # 5. ✅ EXTRACTION EMBEDDING FACIAL (Uniquement pour le recto validé)
+    if face == "recto" and succes_ocr and verification.est_valide:
+        try:
+            from src.modules.verification_visuelle import embedding_facial
+            
+            # Générer l'embedding facial à partir de l'image CNI
+            embedding_cni = embedding_facial.generer_embedding(contenu)
+            
+            # Sauvegarder dans la base
+            verification.embedding_photo_cni = embedding_cni
+            await session.commit()
+            await session.refresh(verification)
+            
+            journal.info(
+                f"Embedding photo CNI extrait et sauvegardé | "
+                f"user={utilisateur.id} embedding_dim={len(embedding_cni)}"
+            )
+        except Exception as e:
+            journal.warning(f"Échec extraction embedding photo CNI : {e}")
+            # On ne bloque pas pour autant - l'embedding est optionnel
 
     return {
         "id": verification.id,
@@ -460,7 +482,6 @@ async def traiter_upload_cni(
             else "L'OCR n'a pas pu extraire les données. Vérifie la qualité de l'image."
         ),
     }
-    
 
 async def obtenir_synthese_verification(
     session: AsyncSession,

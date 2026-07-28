@@ -8,6 +8,7 @@ Stocke pour chaque scan :
   - Les résultats de validation (format, checksum MRZ, cohérence)
   - Les métadonnées du fichier uploadé
   - Le statut de la vérification
+  - ✅ L'embedding facial de la photo extraite (pour comparaison biométrique)
 
 Sécurité : seul l'utilisateur propriétaire peut accéder à ses données.
 Les données personnelles extraites (nom, prénom, date de naissance, etc.)
@@ -17,18 +18,15 @@ sont stockées en clair dans cette table car elles sont nécessaires
 import uuid
 from datetime import datetime
 from typing import Optional
-
 from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
-
 from src.base_donnees.base import Base, MelangeTracabilite
 
 
 class VerificationCNI(Base, MelangeTracabilite):
     """
     Résultat d'une analyse OCR de Carte Nationale d'Identité.
-
     Chaque enregistrement correspond à une face (recto ou verso)
     d'une CNI uploadée et analysée.
     """
@@ -159,6 +157,15 @@ class VerificationCNI(Base, MelangeTracabilite):
     date_traitement: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True,
         doc="Date à laquelle le traitement a été effectué",
+    )
+
+    # =========================================================================
+    # ✅ Biométrie (Embedding facial de la photo CNI)
+    # =========================================================================
+
+    embedding_photo_cni: Mapped[Optional[list[float]]] = mapped_column(
+        JSON, nullable=True, 
+        doc="Embedding facial (512D) extrait de la photo du recto de la CNI"
     )
 
     # =========================================================================
