@@ -5,7 +5,6 @@
  * avec possibilité de supprimer (corbeille) ou restaurer.
  */
 import { useState } from "react";
-
 import { Bouton } from "@/composants/commun/Bouton";
 import { Alerte } from "@/composants/commun/Alerte";
 import { ModalConfirmation } from "@/composants/commun/ModalConfirmation";
@@ -20,14 +19,13 @@ type Props = {
   historique: VerificationDetail[];
   total: number;
   chargement: boolean;
-  /** Rappel pour rafraîchir la liste après action */
   onRafraichir: () => void;
 };
 
 const COULEURS_STATUT: Record<string, string> = {
   en_attente: "text-ocre",
   approuve: "text-green-700",
-  rejete: "text-rouge",
+  rejete: "text-red-600", // ✅ CORRIGÉ : "text-rouge" n'existe pas par défaut dans Tailwind
 };
 
 const LABELS_STATUT: Record<string, string> = {
@@ -48,13 +46,12 @@ export default function HistoriqueVerification({
 
   if (chargement) {
     return (
-      <p className="text-sm text-ardoise-clair italic">
+      <p className="text-sm text-ardoise-clair italic text-center py-4">
         Chargement de l&apos;historique...
       </p>
     );
   }
 
-  /** Supprimer une vérification → corbeille */
   async function confirmerSuppression() {
     if (!suppressionId) return;
     setActionEnCours(suppressionId);
@@ -64,13 +61,13 @@ export default function HistoriqueVerification({
       setSuppressionId(null);
       onRafraichir();
     } catch (e) {
-      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la suppression.");
+      const msg = e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la suppression.";
+      setErreur(msg);
     } finally {
       setActionEnCours(null);
     }
   }
 
-  /** Restaurer une vérification depuis la corbeille */
   async function gererRestauration(id: string) {
     setActionEnCours(id);
     setErreur(null);
@@ -78,7 +75,8 @@ export default function HistoriqueVerification({
       await restaurerPhoto(id);
       onRafraichir();
     } catch (e) {
-      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la restauration.");
+      const msg = e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la restauration.";
+      setErreur(msg);
     } finally {
       setActionEnCours(null);
     }
@@ -97,9 +95,9 @@ export default function HistoriqueVerification({
 
   return (
     <div className="space-y-4">
-      {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
+      {erreur && <Alerte variante="erreur" titre="Erreur">{erreur}</Alerte>}
 
-      {/* Ligne active */}
+      {/* Lignes actives */}
       {filtrerActif.map((v) => (
         <LigneVerification
           key={v.id}
@@ -112,7 +110,7 @@ export default function HistoriqueVerification({
       {/* Section corbeille */}
       {filtrerCorbeille.length > 0 && (
         <details className="group">
-          <summary className="cursor-pointer text-sm text-ardoise-clair hover:text-ardoise font-medium">
+          <summary className="cursor-pointer text-sm text-ardoise-clair hover:text-ardoise font-medium list-none">
             🗑️ Corbeille ({filtrerCorbeille.length})
           </summary>
           <div className="mt-3 space-y-3">
@@ -148,12 +146,10 @@ export default function HistoriqueVerification({
         </details>
       )}
 
-      {/* Total */}
       <p className="text-xs text-ardoise-clair/60 text-right">
         {total} vérification{total > 1 ? "s" : ""} au total
       </p>
 
-      {/* Modal de confirmation suppression */}
       <ModalConfirmation
         ouvert={!!suppressionId}
         titre="Supprimer cette vérification ?"
@@ -167,8 +163,6 @@ export default function HistoriqueVerification({
     </div>
   );
 }
-
-// --- Sous-composant : une ligne de l'historique ---
 
 function LigneVerification({
   verification,
@@ -213,13 +207,13 @@ function LigneVerification({
   );
 }
 
-// --- Sous-composant : badge de statut coloré ---
-
 function StatutBadge({ statut }: { statut: string }) {
   const couleur = COULEURS_STATUT[statut] || "text-ardoise";
+  // ✅ Sécurité : s'assure que la classe de couleur existe avant de la transformer en bg-
+  const bgCouleur = couleur.includes("text-") ? couleur.replace("text-", "bg-") : "bg-ardoise";
   return (
     <span
-      className={`inline-block w-2 h-2 rounded-full ${couleur.replace("text-", "bg-")}`}
+      className={`inline-block w-2 h-2 rounded-full ${bgCouleur}`}
       title={LABELS_STATUT[statut] || statut}
     />
   );

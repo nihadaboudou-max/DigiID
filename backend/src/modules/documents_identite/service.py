@@ -446,3 +446,85 @@ async def synchroniser_profil_document(
         "est_visage_verifie": True,
         "date_verification": utilisateur.date_verification_identite.isoformat(),
     }
+    
+    
+async def comparer_photo_profil_document(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    document_id: str = "",
+) -> dict:
+    """
+    Compare l'empreinte faciale de l'utilisateur (photo de profil)
+    avec l'embedding de la dernière vérification visuelle approuvée.
+    
+    Seuil de validation : score >= 0.6
+    """
+    import numpy as np
+    from sqlalchemy import desc, select
+    from src.modeles import VerificationVisuelle
+    from src.modules.verification_visuelle import comparaison
+    from src.noyau import journal
+
+    # 1. Vérifier que l'utilisateur a une empreinte faciale enregistrée
+    if not utilisateur.empreinte_faciale:
+        return {
+            "correspond": False,
+            "score_confiance": 0.0,
+            "message": "Aucune photo de profil vérifiée enregistrée. Veuillez d'abord compléter une vérification visuelle réussie.",
+        }
+
+    # 2. Récupérer la dernière vérification visuelle approuvée de cet utilisateur
+    resultat = await session.execute(
+        select(VerificationVisuelle)
+        .where(
+            VerificationVisuelle.utilisateur_id == utilisateur.id,
+            VerificationVisuelle.statut == "approuve",
+            VerificationVisuelle.embedding.isnot(None),
+            VerificationVisuelle.est_supprime.is_(False),
+        )
+        .order_by(desc(VerificationVisuelle.cree_le))
+        .limit(1)
+    )
+    verification = resultat.scalar_one_or_none()
+
+    if not verification or not verification.embedding:
+        return {
+            "correspond": False,
+            "score_confiance": 0.0,
+            "message": "Aucune vérification visuelle approuvée avec embedding trouvée.",
+        }
+
+    try:
+        # 3. Convertir l'empreinte_faciale (bytes) en liste de floats
+        embedding_profil = np.frombuffer(utilisateur.empreinte_faciale, dtype=np.float32).tolist()
+        embedding_verification = verification.embedding
+
+        # 4. Calculer la similarité cosinus
+        # On passe seuil=0.0 pour obtenir le score brut sans filtrage
+        doublons = comparaison.comparer_embeddings(
+            embedding_verification,
+            [("profil", embedding_profil)],
+            seuil=0.0,
+        )
+
+        score_confiance = doublons[0]["similarite"] if doublons else 0.0
+        seuil_validation = 0.6
+        correspond = score_confiance >= seuil_validation
+
+        return {
+            "correspond": correspond,
+            "score_confiance": round(score_confiance, 4),
+            "seuil": seuil_validation,
+            "message": (
+                "✅ Le visage correspond à votre photo de profil." if correspond
+                else "❌ Le visage ne correspond pas suffisamment à votre photo de profil."
+            ),
+        }
+
+    except Exception as e:
+        journal.warning(f"Erreur lors de la comparaison faciale profil/document : {e}")
+        return {
+            "correspond": False,
+            "score_confiance": 0.0,
+            "message": f"Erreur technique lors de la comparaison : {str(e)}",
+        }

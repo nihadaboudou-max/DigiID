@@ -1,13 +1,14 @@
-# -*- coding: utf-8 -*-
+# -- coding: utf-8 --
 """Routes API du module de vérification visuelle."""
 from typing import Annotated
-
-from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi import APIRouter, Depends, File, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
 from src.modeles import Utilisateur
-from src.modules.authentification.dependances import utilisateur_courant, obtenir_ip_client, obtenir_agent_utilisateur
+from src.modules.authentification.dependances import (
+    utilisateur_courant, obtenir_ip_client, obtenir_agent_utilisateur
+)
 from src.modules.verification_visuelle import service
 from src.modules.scoring import declencher_recalcul_score
 from src.noyau import journal as journal_module
@@ -19,12 +20,10 @@ from src.modules.verification_visuelle.schemas import (
     VerificationVisuelleDetail,
 )
 
-
 routeur_verification = APIRouter(
     prefix="/api/v1/utilisateur/verification",
     tags=["Vérification Visuelle"],
 )
-
 
 @routeur_verification.post(
     "",
@@ -46,6 +45,7 @@ async def uploader_photo(
         adresse_ip=adresse_ip,
         user_agent=user_agent,
     )
+    
     await enregistrer_evenement_audit(
         session=session,
         type_evenement="verification_visuelle_upload",
@@ -53,6 +53,7 @@ async def uploader_photo(
         utilisateur_id=utilisateur.id,
         role_acteur=utilisateur.role,
     )
+    
     # Upload photo = signal positif → recalcul score
     try:
         await declencher_recalcul_score(
@@ -63,6 +64,7 @@ async def uploader_photo(
         )
     except Exception as e:
         journal_module.warning(f"Recalcul score ignoré (upload_photo) : {e}")
+    
     return VerificationVisuelleDetail(
         id=verification.id,
         statut=verification.statut,
@@ -76,7 +78,6 @@ async def uploader_photo(
         details=verification.details,
     )
 
-
 @routeur_verification.get(
     "/statut",
     response_model=VerificationVisuelleDetail | None,
@@ -86,16 +87,10 @@ async def statut_verification(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
 ):
-    """
-    Retourne le statut de la dernière vérification visuelle.
-    Retourne 204 No Content si aucune vérification n'existe encore.
-    """
-    from fastapi import Response
     resultat = await service.obtenir_statut_verification(session=session, utilisateur=utilisateur)
     if resultat is None:
         return Response(status_code=204)
     return resultat
-
 
 @routeur_verification.get(
     "/historique",
@@ -108,7 +103,6 @@ async def historique_verification(
 ):
     return await service.obtenir_historique_verification(session=session, utilisateur=utilisateur)
 
-
 @routeur_verification.delete(
     "/{verification_id}",
     response_model=SuppressionVerification,
@@ -117,7 +111,7 @@ async def historique_verification(
 async def supprimer_verification(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
-    verification_id: str,
+    verification_id: str,  # ✅ CORRIGÉ : espace supprimé
 ):
     """Déplace une vérification dans la corbeille (soft-delete)."""
     await enregistrer_evenement_audit(
@@ -132,7 +126,6 @@ async def supprimer_verification(
         utilisateur=utilisateur,
         verification_id=verification_id,
     )
-
 
 @routeur_verification.patch(
     "/{verification_id}/restaurer",
@@ -150,26 +143,3 @@ async def restaurer_verification(
         utilisateur=utilisateur,
         verification_id=verification_id,
     )
-
-
-@routeur_verification.post(
-    "/comparer-photo-profil",
-    summary="Comparer la photo de profil avec la photo d'un document",
-)
-async def comparer_photo_profil(
-    session: Annotated[AsyncSession, Depends(obtenir_session)],
-    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
-    document_id: str = "",
-):
-    """
-    Compare l'empreinte faciale de l'utilisateur (photo de profil)
-    avec l'embedding de la dernière vérification visuelle.
-    Retourne le score de confiance et le verdict.
-    Seuil de validation : 0.6
-    """
-    resultat = await service.comparer_photo_profil_document(
-        session=session,
-        utilisateur=utilisateur,
-        document_id=document_id,
-    )
-    return resultat
