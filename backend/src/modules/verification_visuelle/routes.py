@@ -1,14 +1,11 @@
-# -- coding: utf-8 --
+# -*- coding: utf-8 -*-
 """Routes API du module de vérification visuelle."""
 from typing import Annotated
-from fastapi import APIRouter, Depends, File, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.base_donnees.session import obtenir_session
 from src.modeles import Utilisateur
-from src.modules.authentification.dependances import (
-    utilisateur_courant, obtenir_ip_client, obtenir_agent_utilisateur
-)
+from src.modules.authentification.dependances import utilisateur_courant, obtenir_ip_client, obtenir_agent_utilisateur
 from src.modules.verification_visuelle import service
 from src.modules.scoring import declencher_recalcul_score
 from src.noyau import journal as journal_module
@@ -54,7 +51,6 @@ async def uploader_photo(
         role_acteur=utilisateur.role,
     )
     
-    # Upload photo = signal positif → recalcul score
     try:
         await declencher_recalcul_score(
             session=session,
@@ -87,6 +83,7 @@ async def statut_verification(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
 ):
+    from fastapi import Response
     resultat = await service.obtenir_statut_verification(session=session, utilisateur=utilisateur)
     if resultat is None:
         return Response(status_code=204)
@@ -111,7 +108,7 @@ async def historique_verification(
 async def supprimer_verification(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
-    verification_id: str,  # ✅ CORRIGÉ : espace supprimé
+    verification_id: str,
 ):
     """Déplace une vérification dans la corbeille (soft-delete)."""
     await enregistrer_evenement_audit(
@@ -143,3 +140,26 @@ async def restaurer_verification(
         utilisateur=utilisateur,
         verification_id=verification_id,
     )
+
+# ✅ NOUVEAU : Route pour comparer la photo de profil avec un document
+@routeur_verification.post(
+    "/comparer-photo-profil",
+    summary="Comparer la photo de profil avec la photo d'un document",
+)
+async def comparer_photo_profil(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    document_id: str = "",
+):
+    """
+    Compare l'empreinte faciale de l'utilisateur (photo de profil)
+    avec l'embedding de la dernière vérification visuelle.
+    Retourne le score de confiance et le verdict.
+    Seuil de validation : 0.6
+    """
+    resultat = await service.comparer_photo_profil_document(
+        session=session,
+        utilisateur=utilisateur,
+        document_id=document_id,
+    )
+    return resultat
