@@ -1,19 +1,20 @@
+"use client";
+
 /**
  * Page de vérification d'identité par scan de la Carte Nationale d'Identité.
  *
  * Permet à l'utilisateur de :
  * 1. Uploader le recto et le verso de sa CNI
  * 2. Lancer l'analyse OCR pour extraire les données
- * 3. Voir les résultats de la vérification
+ * 3. Voir les résultats de la vérification (avec rejet si incohérent)
  * 4. Consulter l'historique de ses vérifications
  *
  * @module verification-cni
  */
-"use client";
-
 import React, { useCallback, useEffect, useState } from "react";
 import UploadCNI from "@/composants/verification-cni/UploadCNI";
 import ResultatCNI from "@/composants/verification-cni/ResultatCNI";
+import { Alerte } from "@/composants/commun/Alerte";
 import {
   listerVerifications,
   obtenirSynthese,
@@ -40,6 +41,7 @@ export default function PageVerificationCNI() {
   const [historique, setHistorique] = useState<ListeVerificationsCNI | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   const [chargement, setChargement] = useState(false);
+  const [cniRejetee, setCniRejetee] = useState(false);
 
   // --- Chargement initial ---
   useEffect(() => {
@@ -47,7 +49,7 @@ export default function PageVerificationCNI() {
   }, []);
 
   const chargerDonnees = async () => {
-    setChargement(true); // ✅ CORRECTION : Activer le chargement
+    setChargement(true);
     try {
       const [syntheseData, historiqueData] = await Promise.all([
         obtenirSynthese().catch(() => null),
@@ -55,10 +57,15 @@ export default function PageVerificationCNI() {
       ]);
       setSynthese(syntheseData);
       setHistorique(historiqueData);
+      
+      // ✅ Vérifier si la CNI a été rejetée
+      if (syntheseData && syntheseData.statut === "rejete") {
+        setCniRejetee(true);
+      }
     } catch {
       // Erreur silencieuse si aucune donnée
     } finally {
-      setChargement(false); // ✅ CORRECTION : Désactiver le chargement
+      setChargement(false);
     }
   };
 
@@ -68,9 +75,21 @@ export default function PageVerificationCNI() {
       setDernierResultatRecto(resultat);
       setErreur(null);
       if (imageUrl) setImageRecto(imageUrl);
-      // ✅ CORRECTION : Recharger TOUTES les données (synthese + historique)
+      
+      // ✅ CORRECTION : Vérifier si la CNI est rejetée (incohérence)
+      if (resultat.resultat_ocr && !resultat.resultat_ocr.succes) {
+        setErreur("L'OCR n'a pas pu extraire les données. Vérifie la qualité de l'image.");
+      } else if (resultat.resultat_ocr?.erreurs && resultat.resultat_ocr.erreurs.length > 0) {
+        // Vérifier les erreurs d'incohérence
+        const erreursIncoherence = resultat.resultat_ocr.erreurs.filter(e => e.includes("⚠️") || e.includes("Incohérence"));
+        if (erreursIncoherence.length > 0) {
+          setCniRejetee(true);
+          setErreur(erreursIncoherence.join("\n"));
+        }
+      }
+      
       chargerDonnees();
-      setOngletActif("resultats"); // ✅ Aller automatiquement aux résultats
+      setOngletActif("resultats");
     },
     []
   );
@@ -80,22 +99,42 @@ export default function PageVerificationCNI() {
       setDernierResultatVerso(resultat);
       setErreur(null);
       if (imageUrl) setImageVerso(imageUrl);
-      // ✅ CORRECTION : Recharger TOUTES les données (synthese + historique)
+      
+      // ✅ CORRECTION : Vérifier si la CNI est rejetée
+      if (resultat.resultat_ocr && !resultat.resultat_ocr.succes) {
+        setErreur("L'OCR n'a pas pu extraire les données. Vérifie la qualité de l'image.");
+      } else if (resultat.resultat_ocr?.erreurs && resultat.resultat_ocr.erreurs.length > 0) {
+        const erreursIncoherence = resultat.resultat_ocr.erreurs.filter(e => e.includes("⚠️") || e.includes("Incohérence"));
+        if (erreursIncoherence.length > 0) {
+          setCniRejetee(true);
+          setErreur(erreursIncoherence.join("\n"));
+        }
+      }
+      
       chargerDonnees();
-      setOngletActif("resultats"); // ✅ Aller automatiquement aux résultats
+      setOngletActif("resultats");
     },
     []
   );
 
   const handleErreur = useCallback((msg: string) => {
     setErreur(msg);
+    setCniRejetee(true);
   }, []);
+
+  // --- Réinitialiser l'erreur quand on change d'onglet ---
+  useEffect(() => {
+    if (ongletActif === "scan") {
+      setErreur(null);
+      setCniRejetee(false);
+    }
+  }, [ongletActif]);
 
   // --- Gestion historique ---
   const handleSupprimer = async (id: string) => {
     try {
       await supprimerVerification(id);
-      chargerDonnees(); // ✅ Recharger après suppression
+      chargerDonnees();
     } catch {
       setErreur("Erreur lors de la suppression.");
     }
@@ -104,7 +143,7 @@ export default function PageVerificationCNI() {
   const handleRestaurer = async (id: string) => {
     try {
       await restaurerVerification(id);
-      chargerDonnees(); // ✅ Recharger après restauration
+      chargerDonnees();
     } catch {
       setErreur("Erreur lors de la restauration.");
     }
@@ -112,7 +151,7 @@ export default function PageVerificationCNI() {
 
   // --- Navigation ---
   const onglets: { id: OngletType; label: string; icone: string }[] = [
-    { id: "scan", label: "Scanner", icone: "📷" },
+    { id: "scan", label: "Scanner", icone: "" },
     { id: "resultats", label: "Résultats", icone: "📋" },
     { id: "historique", label: "Historique", icone: "📜" },
   ];
@@ -146,23 +185,28 @@ export default function PageVerificationCNI() {
         </div>
       </div>
 
-      {/* Message d'erreur */}
+      {/* ✅ CORRECTION : Message d'erreur principal */}
       {erreur && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-          <div className="flex items-center gap-2">
-            <span>⚠</span>
-            <span>{erreur}</span>
-            <button
-              onClick={() => setErreur(null)}
-              className="ml-auto text-red-500 hover:text-red-700"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
+        <Alerte 
+          variante={cniRejetee ? "erreur" : "avertissement"} 
+          titre={cniRejetee ? " CNI rejetée" : "️ Attention"}
+          className="mb-6"
+        >
+          <div className="whitespace-pre-line">{erreur}</div>
+          {cniRejetee && (
+            <div className="mt-3 text-sm">
+              <p className="font-semibold mb-2">Que faire ?</p>
+              <ul className="list-disc list-inside space-y-1 text-sm opacity-90">
+                <li>Vérifie que les informations sur ta CNI correspondent à ton profil DigiID</li>
+                <li>Si ton profil est incorrect, <a href="/parametres" className="underline font-semibold">modifie-le ici</a></li>
+                <li>Si la CNI est correcte mais rejetée, contacte le support</li>
+              </ul>
+            </div>
+          )}
+        </Alerte>
       )}
 
-      {/* Synthèse rapide si disponible */}
+      {/* ✅ CORRECTION : Synthèse rapide UNIQUEMENT si approuvée ou rejetée */}
       {synthese && synthese.statut !== "en_attente" && (
         <div
           className={`mb-6 p-4 rounded-lg border ${classeStatutCNI(
@@ -171,13 +215,18 @@ export default function PageVerificationCNI() {
         >
           <div className="flex items-center gap-3">
             <span className="text-2xl">{iconeStatutCNI(synthese.statut)}</span>
-            <div>
+            <div className="flex-1">
               <p className="font-semibold">
                 {synthese.statut === "approuve"
-                  ? "Identité vérifiée avec succès"
-                  : "Vérification d'identité échouée"}
+                  ? "✅ Identité vérifiée avec succès"
+                  : "❌ Vérification d'identité échouée"}
               </p>
               <p className="text-sm opacity-80">{synthese.message}</p>
+              {synthese.champs_verifies !== undefined && (
+                <p className="text-xs mt-1 opacity-70">
+                  {synthese.champs_verifies}/{synthese.champs_total} champs vérifiés
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -190,7 +239,7 @@ export default function PageVerificationCNI() {
             key={onglet.id}
             onClick={() => {
               setOngletActif(onglet.id);
-              if (onglet.id === "historique") chargerDonnees(); // ✅ Recharger si on va sur historique
+              if (onglet.id === "historique") chargerDonnees();
             }}
             className={`
               flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors
@@ -217,9 +266,7 @@ export default function PageVerificationCNI() {
             description="La face avant avec ta photo et ton identité"
             onSucces={handleSuccesRecto}
             onErreur={handleErreur}
-            desactive={
-              dernierResultatRecto?.statut === "approuve" && !synthese?.id_verso
-            }
+            desactive={cniRejetee || (dernierResultatRecto?.statut === "approuve" && !synthese?.id_verso)}
           />
 
           {/* Verso */}
@@ -229,17 +276,29 @@ export default function PageVerificationCNI() {
             description="La face arrière avec les informations complémentaires"
             onSucces={handleSuccesVerso}
             onErreur={handleErreur}
+            desactive={cniRejetee}
           />
+          
+          {cniRejetee && (
+            <div className="md:col-span-2">
+              <Alerte variante="info" titre="🔁 Nouvelle tentative">
+                <p className="text-sm">
+                  Tu peux scanner une nouvelle CNI ou corriger les informations. 
+                  Le système rejettera automatiquement les CNI incohérentes avec ton profil.
+                </p>
+              </Alerte>
+            </div>
+          )}
         </div>
       )}
 
       {ongletActif === "resultats" && (
         <div className="space-y-6">
-          {/* ✅ CORRECTION : Afficher la synthèse globale d'abord */}
-          {synthese && (
+          {/* ✅ CORRECTION : Afficher UNIQUEMENT la synthèse globale (pas de répétition) */}
+          {synthese ? (
             <div>
               <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
-                Synthèse globale
+                Résultat de la vérification
               </h3>
               <ResultatCNI
                 resultat={null}
@@ -247,34 +306,44 @@ export default function PageVerificationCNI() {
                 imageUrl={imageRecto}
                 face="recto"
               />
+              
+              {/* Afficher les détails recto/verso seulement si nécessaire */}
+              {synthese.donnees_recto && (
+                <div className="mt-6">
+                  <h4 className="text-xs font-semibold text-gray-600 uppercase mb-2">
+                    Détails Recto
+                  </h4>
+                  <div className="bg-gray-50 p-3 rounded-lg text-sm">
+                    {synthese.donnees_recto.nom_famille && (
+                      <p><strong>Nom:</strong> {synthese.donnees_recto.nom_famille}</p>
+                    )}
+                    {synthese.donnees_recto.prenoms && (
+                      <p><strong>Prénoms:</strong> {synthese.donnees_recto.prenoms}</p>
+                    )}
+                    {synthese.donnees_recto.numero_cni && (
+                      <p><strong>N° CNI:</strong> {synthese.donnees_recto.numero_cni}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-gray-400 text-5xl mb-2">📋</p>
+              <p className="text-gray-500 font-medium">
+                Aucune vérification disponible.
+              </p>
+              <p className="text-gray-400 text-sm mt-1">
+                Scanne ta CNI pour voir les résultats.
+              </p>
+              <button
+                onClick={() => setOngletActif("scan")}
+                className="mt-4 px-4 py-2 bg-lagune text-white rounded-lg hover:bg-lagune/90 transition-colors"
+              >
+                Scanner ma CNI
+              </button>
             </div>
           )}
-
-          {/* Résultats individuels */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
-                Résultat Recto
-              </h3>
-              <ResultatCNI
-                resultat={dernierResultatRecto}
-                synthese={null}
-                imageUrl={imageRecto}
-                face="recto"
-              />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
-                Résultat Verso
-              </h3>
-              <ResultatCNI
-                resultat={dernierResultatVerso}
-                synthese={null}
-                imageUrl={imageVerso}
-                face="verso"
-              />
-            </div>
-          </div>
         </div>
       )}
 
@@ -293,7 +362,7 @@ export default function PageVerificationCNI() {
 
           {!chargement && (!historique || historique.historique.length === 0) && (
             <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
-              <p className="text-gray-400 text-5xl mb-2">📄</p>
+              <p className="text-gray-400 text-5xl mb-2"></p>
               <p className="text-gray-500 font-medium">
                 Aucune vérification CNI pour le moment.
               </p>
@@ -330,6 +399,11 @@ export default function PageVerificationCNI() {
                           {verif.est_supprime && (
                             <span className="text-xs px-2 py-0.5 rounded-full bg-gray-300 text-gray-500">
                               Corbeille
+                            </span>
+                          )}
+                          {verif.est_valide === false && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-red-200 text-red-700">
+                              Rejetée
                             </span>
                           )}
                         </div>
