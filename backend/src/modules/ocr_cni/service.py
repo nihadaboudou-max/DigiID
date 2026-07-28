@@ -353,10 +353,15 @@ async def traiter_upload_cni(
     fichier: UploadFile,
     face: str = "recto",
 ) -> dict:
-    """Traite l'upload d'une image de CNI (recto ou verso)."""
+    """
+    Traite l'upload d'une image de CNI (recto ou verso).
+    ⚠️ BLOQUE l'enregistrement si les données extraites ne correspondent 
+    pas strictement au nom et au premier prénom du profil utilisateur.
+    """
     contenu = await _lire_image(fichier)
     nom_fichier = fichier.filename or f"cni_{face}.jpg"
 
+    # 1. Analyse OCR
     resultat_analyse = analyser_image_cni(contenu)
 
     succes_ocr = resultat_analyse["succes"]
@@ -366,32 +371,59 @@ async def traiter_upload_cni(
     temps_ms = resultat_analyse["temps_analyse_ms"]
     erreurs = resultat_analyse["erreurs"]
 
+    # 2. Extraction et fusion des données
     donnees_ocr = extraire_donnees_cni(
         texte_brut=texte_brut,
         confiance=confiance,
         mrz_lignes=mrz_lignes,
     )
-
     donnees = _fusionner_donnees_mrz(donnees_ocr, mrz_lignes)
     nb_champs = _compter_champs_extraits(donnees)
     validation = valider_donnees_cni(donnees) if succes_ocr else None
 
-    # ✅ NOUVEAU : Vérification de cohérence d'identité (seulement pour le recto)
-    message_coherence = ""
+    # 3. ✅ VÉRIFICATION STRICTE DE COHÉRENCE (Uniquement pour le recto)
     if succes_ocr and face == "recto" and donnees.nom_famille:
-        est_coherent, message_coherence = await verifier_coherence_identite(
-            session=session,
-            utilisateur=utilisateur,
-            nouvelles_donnees=donnees,
-        )
+        # Déchiffrement des données du profil
+        nom_profil = dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else ""
+        prenom_profil = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else ""
+
+        # Normalisation : majuscules, suppression des espaces, et extraction du PREMIER prénom
+        nom_cni_pur = donnees.nom_famille.strip().upper()
+        prenom_cni_pur = donnees.prenoms.strip().split()[0].upper() if donnees.prenoms else ""
         
-        if not est_coherent:
-            # On ne bloque pas l'upload, mais on ajoute un avertissement
-            erreurs.append(f"⚠️ {message_coherence}")
-            journal.warning(
-                f"Upload CNI avec incohérence | utilisateur={utilisateur.id} | {message_coherence}"
+        nom_profil_pur = nom_profil.strip().upper()
+        prenom_profil_pur = prenom_profil.strip().split()[0].upper() if prenom_profil else ""
+
+        incoherences = []
+
+        # Comparaison stricte du nom
+        if nom_profil_pur and nom_cni_pur and nom_profil_pur != nom_cni_pur:
+            incoherences.append(
+                f"Le nom sur la CNI ({nom_cni_pur}) ne correspond pas à votre profil ({nom_profil_pur})."
+            )
+        
+        # Comparaison stricte du premier prénom
+        if prenom_profil_pur and prenom_cni_pur and prenom_profil_pur != prenom_cni_pur:
+            incoherences.append(
+                f"Le prénom sur la CNI ({prenom_cni_pur}) ne correspond pas à votre profil ({prenom_profil_pur})."
             )
 
+        # 🚨 BLOCAGE : Si incohérence détectée, on rejette l'upload immédiatement
+        if incoherences:
+            message_erreur = "Incohérence d'identité détectée : " + " ".join(incoherences) + " Veuillez corriger votre nom/prénom dans vos paramètres avant de scanner votre CNI."
+            
+            journal.warning(
+                f"REJET CNI | Incohérence identité | utilisateur={utilisateur.id} | "
+                f"CNI(nom={nom_cni_pur}, prenom={prenom_cni_pur}) vs Profil(nom={nom_profil_pur}, prenom={prenom_profil_pur})"
+            )
+            
+            # Lève une erreur 400 qui sera affichée clairement au frontend
+            raise ErreurValidation(
+                message_erreur,
+                message_utilisateur=message_erreur
+            )
+
+    # 4. Enregistrement en base (seulement si la cohérence est validée)
     verification = await _enregistrer_verification(
         session=session,
         utilisateur=utilisateur,
@@ -422,13 +454,13 @@ async def traiter_upload_cni(
             "temps_analyse_ms": temps_ms,
         },
         "validation": validation,
-        "coherence_identite": message_coherence if message_coherence else "Non vérifiée",
+        "coherence_identite": "Vérifiée et cohérente",
         "message": (
-            "Carte scannée avec succès." if succes_ocr
+            "Carte scannée et identité validée avec succès." if succes_ocr
             else "L'OCR n'a pas pu extraire les données. Vérifie la qualité de l'image."
         ),
     }
-
+    
 
 async def obtenir_synthese_verification(
     session: AsyncSession,
