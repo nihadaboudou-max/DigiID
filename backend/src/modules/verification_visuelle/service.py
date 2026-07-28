@@ -1,10 +1,13 @@
-
 # -*- coding: utf-8 -*-
-"""Service de vérification visuelle — upload, comparaison, statut."""
+"""
+Service de vérification visuelle — upload, comparaison, statut.
+Gère la détection de visage, l'anti-spoofing, et la comparaison biométrique 
+avec l'empreinte faciale extraite de la CNI.
+"""
 from datetime import datetime, timezone
-from io import BytesIO
 from typing import Any
 
+import numpy as np
 from fastapi import UploadFile
 from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,10 +29,10 @@ from src.modules.verification_visuelle.schemas import (
 )
 from src.noyau import journal
 from src.noyau.exceptions import ErreurValidation
-import numpy as np
 
 
 async def _lire_image(fichier: UploadFile) -> bytes:
+    """Lit et valide le contenu du fichier uploadé."""
     contenu = await fichier.read()
     if not contenu:
         raise ErreurValidation(
@@ -44,18 +47,26 @@ async def _chercher_doublons(
     embedding: list[float],
     utilisateur_id: Any,
 ) -> list[dict]:
+    """Recherche des visages similaires dans la base de données (anti-doublon global)."""
     resultat = await session.execute(
         select(VerificationVisuelle)
         .where(VerificationVisuelle.utilisateur_id != utilisateur_id)
         .order_by(desc(VerificationVisuelle.cree_le))
     )
     enregistrements = resultat.scalars().all()
+    
     historique = [
         (str(record.utilisateur_id), record.embedding or [])
         for record in enregistrements
         if record.embedding is not None
     ]
-    return comparaison.comparer_embeddings(embedding, historique, seuil=parametres.seuil_similarite_visage)
+    
+    return comparaison.comparer_embeddings(
+        embedding, 
+        historique, 
+        seuil=parametres.seuil_similarite_visage
+    )
+
 
 async def traiter_upload_photo(
     session: AsyncSession,
@@ -64,33 +75,38 @@ async def traiter_upload_photo(
     adresse_ip: str | None = None,
     user_agent: str | None = None,
 ) -> VerificationVisuelle:
-    """Traite l'upload de photo et enregistre un résultat de vérification."""
+    """
+    Traite l'upload de photo et enregistre un résultat de vérification.
+    Compare automatiquement avec l'embedding de la CNI si disponible.
+    """
     contenu = await _lire_image(fichier)
 
+    # 1. Détection de visage
     visage_detecte, _ = detection_visage.detecter_visage(contenu)
     if not visage_detecte:
         raise ErreurValidation(
             "Aucun visage détecté dans la photo de vérification.",
             message_utilisateur=(
                 "Impossible de détecter un visage sur la photo. "
-                "Assure-toi de télécharger une photo nette de ton visage."
+                "Assure-toi de télécharger une photo nette de ton visage, bien éclairée."
             ),
         )
 
+    # 2. Analyse biométrique
     score_liveness, verdict = anti_spoofing.evaluer_anti_spoofing(contenu)
     embedding = embedding_facial.generer_embedding(contenu)
     doublons = await _chercher_doublons(session, embedding, utilisateur.id)
 
-    # ✅ CORRECTION : Déterminer le statut avec logique complète
-    statut = "approuve"  # Par défaut, on approuve
+    # 3. Détermination du statut initial
+    statut = "approuve"
     raison = "Vérification réussie. Identité confirmée."
-    score_similarite = None
+    score_similarite: float | None = None
     date_verification = datetime.now(timezone.utc)
 
-    # Vérifications de rejet
+    # 4. Vérifications de rejet (Anti-spoofing, Doublons, Listes)
     if verdict != "vivant":
         statut = "rejete"
-        raison = "Photo suspecte d'usurpation ou de faible qualité."
+        raison = "Photo suspecte d'usurpation (écran, masque) ou de faible qualité."
         date_verification = None
     elif doublons:
         statut = "rejete"
@@ -102,24 +118,25 @@ async def traiter_upload_photo(
         raison = "La qualité du visage est insuffisante pour vérifier l'identité."
         date_verification = None
     else:
-        # Vérifier les listes de personnes recherchées
         resultat_listes = listes_recherchees.verifier_listes_officielles(None, None)
         if resultat_listes:
             raison = "Correspondance détectée avec une liste de personnes recherchées."
             statut = "rejete"
             date_verification = None
 
-    # ✅ NOUVEAU : Comparaison avec la photo de la CNI si les vérifications précédentes sont OK
+    # 5. ✅ NOUVEAU : Comparaison avec la photo de la CNI (si les étapes précédentes sont OK)
     if statut == "approuve":
+        # Import local pour éviter les dépendances circulaires au démarrage
         from src.modeles.verification_cni import VerificationCNI
+        
         resultat_cni = await session.execute(
             select(VerificationCNI)
             .where(
                 VerificationCNI.utilisateur_id == utilisateur.id,
                 VerificationCNI.face == "recto",
-                VerificationCNI.est_valide == True,
+                VerificationCNI.est_valide.is_(True),
                 VerificationCNI.embedding_photo_cni.isnot(None),
-                VerificationCNI.est_supprime == False,
+                VerificationCNI.est_supprime.is_(False),
             )
             .order_by(desc(VerificationCNI.cree_le))
             .limit(1)
@@ -127,7 +144,7 @@ async def traiter_upload_photo(
         cni_verification = resultat_cni.scalar_one_or_none()
         
         if cni_verification and cni_verification.embedding_photo_cni:
-            # Comparer les embeddings (seuil=0.0 pour obtenir le score brut)
+            # Comparer les embeddings (seuil=0.0 pour obtenir le score brut sans filtrage)
             doublons_cni = comparaison.comparer_embeddings(
                 embedding,
                 [("cni", cni_verification.embedding_photo_cni)],
@@ -135,24 +152,31 @@ async def traiter_upload_photo(
             )
             score_similarite = doublons_cni[0]["similarite"] if doublons_cni else 0.0
             
-            # Si score trop bas, rejeter la vérification
+            # Si le score est trop bas, on rejete la vérification
             if score_similarite < 0.6:  # Seuil de similarité strict (60%)
                 statut = "rejete"
-                raison = f"La photo ne correspond pas à celle de votre CNI (similarité: {score_similarite:.1%}). Assurez-vous que c'est bien vous sur la photo."
+                raison = (
+                    f"La photo ne correspond pas à celle de votre CNI "
+                    f"(similarité: {score_similarite:.1%}). "
+                    f"Assurez-vous que c'est bien vous sur la photo."
+                )
                 date_verification = None
                 journal.warning(
-                    f"Rejet vérification visuelle - Pas de match CNI | "
+                    f"REJET VÉRIFICATION VISUELLE - Pas de match CNI | "
                     f"user={utilisateur.id} score={score_similarite:.2f}"
                 )
             else:
-                journal.info(f"Match CNI réussi | user={utilisateur.id} score={score_similarite:.2f}")
+                journal.info(
+                    f"MATCH CNI RÉUSSI | user={utilisateur.id} score={score_similarite:.2f}"
+                )
 
     journal.info(
-        f"Traitement vérification visuelle : verdict={verdict}, "
-        f"score_liveness={score_liveness:.2f}, doublons={len(doublons)}, "
-        f"statut_final={statut}, similarite_cni={score_similarite}"
+        f"Traitement vérification visuelle terminé : "
+        f"verdict={verdict}, liveness={score_liveness:.2f}, "
+        f"doublons={len(doublons)}, statut_final={statut}, similarite_cni={score_similarite}"
     )
 
+    # 6. Enregistrement en base de données
     verification = VerificationVisuelle(
         utilisateur_id=utilisateur.id,
         nom_fichier=fichier.filename or "photo_visage",
@@ -175,17 +199,15 @@ async def traiter_upload_photo(
     await session.commit()
     await session.refresh(verification)
 
-    # --- Mettre à jour le statut de l'utilisateur si approuvé ---
+    # 7. Mise à jour du profil utilisateur si la vérification est approuvée
     if statut == "approuve":
         utilisateur.est_visage_verifie = True
         utilisateur.date_verification_visage = datetime.now(timezone.utc)
         utilisateur.date_derniere_mise_a_jour_verifications = datetime.now(timezone.utc)
+        # Stockage de l'empreinte sous forme de bytes pour l'Utilisateur
         utilisateur.empreinte_faciale = np.array(embedding, dtype=np.float32).tobytes()
         await session.commit()
 
-    journal.info(
-        f"Vérification visuelle enregistrée : utilisateur={utilisateur.id} statut={statut}"
-    )
     return verification
 
 
@@ -193,6 +215,7 @@ async def obtenir_statut_verification(
     session: AsyncSession,
     utilisateur: Utilisateur,
 ) -> VerificationVisuelleDetail | None:
+    """Récupère la dernière vérification visuelle de l'utilisateur."""
     resultat = await session.execute(
         select(VerificationVisuelle)
         .where(VerificationVisuelle.utilisateur_id == utilisateur.id)
@@ -200,6 +223,7 @@ async def obtenir_statut_verification(
         .limit(1)
     )
     verification = resultat.scalar_one_or_none()
+    
     if verification is None:
         return None
 
@@ -222,6 +246,7 @@ async def obtenir_historique_verification(
     utilisateur: Utilisateur,
     limite: int = 10,
 ) -> ListeVerificationVisuelle:
+    """Récupère l'historique des vérifications visuelles."""
     resultat = await session.execute(
         select(VerificationVisuelle)
         .where(VerificationVisuelle.utilisateur_id == utilisateur.id)
@@ -265,7 +290,6 @@ async def supprimer_verification(
             message_utilisateur="L'identifiant de la vérification est invalide."
         )
 
-    # Vérifier que la vérification appartient à l'utilisateur
     resultat = await session.execute(
         select(VerificationVisuelle).where(
             VerificationVisuelle.id == uid,
@@ -286,7 +310,6 @@ async def supprimer_verification(
             message_utilisateur="Cette vérification est déjà dans la corbeille."
         )
 
-    # Soft-delete
     maintenant = datetime.now(timezone.utc)
     await session.execute(
         update(VerificationVisuelle)
@@ -295,9 +318,7 @@ async def supprimer_verification(
     )
     await session.commit()
 
-    journal.info(
-        f"Vérification supprimée : id={verification_id} utilisateur={utilisateur.id}"
-    )
+    journal.info(f"Vérification supprimée (corbeille) : id={verification_id} user={utilisateur.id}")
     return SuppressionVerification(id=uid)
 
 
@@ -343,7 +364,5 @@ async def restaurer_verification(
     )
     await session.commit()
 
-    journal.info(
-        f"Vérification restaurée : id={verification_id} utilisateur={utilisateur.id}"
-    )
+    journal.info(f"Vérification restaurée : id={verification_id} user={utilisateur.id}")
     return RestaurationVerification(id=uid)
