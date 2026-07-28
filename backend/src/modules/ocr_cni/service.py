@@ -46,6 +46,19 @@ TYPES_MIME_AUTORISES = {
     "image/tiff": "tiff",
 }
 
+# =============================================================================
+# Extraire premier prénom (utile pour la comparaison de cohérence)
+# =============================================================================
+def _extraire_premier_prenom(prenoms_complets: str) -> str:
+    """
+    Extrait le premier prénom d'une chaîne contenant potentiellement
+    plusieurs prénoms. Règle métier : on ne garde que le premier
+    pour éviter la saturation lors de la comparaison.
+    Exemple : "Jean Pierre Marie" → "Jean"
+    """
+    if not prenoms_complets:
+        return ""
+    return prenoms_complets.strip().split()[0]
 
 # =============================================================================
 # ✅ NOUVEAU : Vérification de cohérence d'identité
@@ -81,22 +94,22 @@ async def verifier_coherence_identite(
         nom_cni = nouvelles_donnees.nom_famille.upper().strip()
         nom_profil = nom_utilisateur.upper().strip()
         
-        if nom_profil not in nom_cni and nom_cni not in nom_profil:
+        if nom_profil != nom_cni:
             incoherences.append(
                 f"Nom CNI ({nom_cni}) ≠ Nom compte ({nom_profil})"
             )
     
-    # 2. Comparaison Prénom (SEUL champ fiable)
+    # 2. Comparaison Prénom (premier prénom uniquement — règle métier)
     prenom_utilisateur = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else ""
     if prenom_utilisateur and nouvelles_donnees.prenoms:
-        prenom_cni = nouvelles_donnees.prenoms.upper().strip()
-        prenom_profil = prenom_utilisateur.upper().strip()
-        
-        if prenom_profil not in prenom_cni and prenom_cni not in prenom_profil:
+        # Règle : on ne compare que le premier prénom (split()[0])
+        prenom_cni = _extraire_premier_prenom(nouvelles_donnees.prenoms).upper()
+        prenom_profil = _extraire_premier_prenom(prenom_utilisateur).upper()
+        if prenom_profil != prenom_cni:
             incoherences.append(
-                f"Prénom CNI ({prenom_cni}) ≠ Prénom compte ({prenom_utilisateur})"
+                f"Prénom CNI ({prenom_cni}) ≠ Prénom compte ({prenom_profil})"
             )
-    
+                
     # 3. Vérification biométrique (OPTIONNELLE — si photo de profil existe)
     # NOTE : Cette vérification nécessiterait un module de reconnaissance faciale
     # Pour l'instant, on ne l'implémente pas car il faudrait extraire la photo de la CNI

@@ -125,3 +125,30 @@ export async function restaurerPhoto(
     { authentifie: true },
   );
 }
+
+
+// =============================================================================
+// Comparaison photo profil ↔ document
+// =============================================================================
+
+export interface ResultatComparaisonFaciale {
+  correspond: boolean;
+  score_confiance: number;
+  seuil?: number;
+  message: string;
+}
+
+/**
+ * Compare la photo de profil de l'utilisateur avec la photo
+ * extraite d'un document d'identité.
+ * Seuil de validation : 0.6
+ */
+export async function comparerPhotoProfilAvecDocument(
+  documentId: string = ""
+): Promise<ResultatComparaisonFaciale> {
+  return clientAPI.post<ResultatComparaisonFaciale>(
+    `${PREFIXE}/comparer-photo-profil?document_id=${documentId}`,
+    undefined,
+    { authentifie: true }
+  );
+}

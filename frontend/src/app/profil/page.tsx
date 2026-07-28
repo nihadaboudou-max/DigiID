@@ -1,6 +1,5 @@
 "use client";
-
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
@@ -13,8 +12,8 @@ import { useAuthentification } from "@/contextes/authentification";
 export default function PageProfil() {
   return (
     <EnvelopperEspaceProtege rolesAutorises={[
-      "citoyen", "agent_police", "chef_police", "agent_medical", "chef_medical", 
-      "agent_ong", "chef_ong", "agent_terrain", "chef_agent", "admin_domaine", 
+      "citoyen", "agent_police", "chef_police", "agent_medical", "chef_medical",
+      "agent_ong", "chef_ong", "agent_terrain", "chef_agent", "admin_domaine",
       "administrateur", "super_administrateur"
     ]}>
       <Contenu />
@@ -37,8 +36,7 @@ function Contenu() {
   const initiales = ((utilisateur.prenom?.[0] || "") + (utilisateur.nom?.[0] || "")).toUpperCase() || "?";
   const nomComplet = [utilisateur.prenom, utilisateur.nom].filter(Boolean).join(" ") || utilisateur.email;
   const digiId = utilisateur.digiid_public || "DigiID non généré";
-
-  const urlProfil = typeof window !== "undefined" 
+  const urlProfil = typeof window !== "undefined"
     ? `${window.location.origin}/profil/${digiId}`
     : `https://digiid.africa/profil/${digiId}`;
 
@@ -86,9 +84,12 @@ function Contenu() {
     }
   }
 
+  // ✅ CORRECTION : Utiliser les champs existants (est_cni_verifiee + est_visage_verifie)
+  const identiteVerifiee = utilisateur.est_cni_verifiee && utilisateur.est_visage_verifie;
+  const aIncoherencePotentielle = !identiteVerifiee && (utilisateur.est_cni_verifiee || utilisateur.est_visage_verifie);
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 apparition pb-20">
-      
       {/* En-tête */}
       <div>
         <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Mon espace</p>
@@ -98,10 +99,22 @@ function Contenu() {
         </p>
       </div>
 
+      {/* Alerte d'incohérence (si CNI ou visage OK mais pas les deux) */}
+      {aIncoherencePotentielle && (
+        <Alerte variante="avertissement" titre="⚠️ Vérification d'identité incomplète">
+          <p className="text-sm">
+            Votre CNI ou votre visage a été vérifié, mais votre identité globale n'est pas encore validée. 
+            Assurez-vous que le <strong>nom et le premier prénom</strong> sur vos documents correspondent exactement à ceux de votre profil.
+            <Link href="/citoyen/documents-identite" className="underline font-semibold ml-1">Vérifier mes documents →</Link>
+          </p>
+        </Alerte>
+      )}
+
       {/* Carte principale d'identité */}
       <Carte>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
-          <div className="w-20 h-20 rounded-full bg-lagune/10 flex items-center justify-center text-lagune text-3xl font-bold flex-shrink-0">
+          {/* ✅ CORRECTION : Suppression de photo_profil_url - utilisation des initiales uniquement */}
+          <div className="w-20 h-20 rounded-full bg-lagune/10 flex items-center justify-center text-lagune text-3xl font-bold flex-shrink-0 border-2 border-lagune/20">
             {initiales}
           </div>
           <div className="flex-1 space-y-2">
@@ -114,6 +127,12 @@ function Contenu() {
               <Badge variante={utilisateur.est_actif ? "succes" : "terre"} taille="petit">
                 {utilisateur.est_actif ? "Compte actif" : "Compte inactif"}
               </Badge>
+              {/* ✅ CORRECTION : Utiliser identiteVerifiee (calculé localement) */}
+              {identiteVerifiee && (
+                <Badge variante="succes" taille="petit" className="border border-lagune/30">
+                  ️ Identité vérifiée
+                </Badge>
+              )}
             </div>
           </div>
         </div>
@@ -157,11 +176,18 @@ function Contenu() {
                 {utilisateur.est_cni_verifiee ? "Oui" : "Non"}
               </Badge>
             </div>
+            {/* ✅ CORRECTION : Badge calculé localement */}
+            <div className="flex items-center justify-between p-2 bg-lagune/10 rounded-lg border border-lagune/20">
+              <span className="text-sm text-ardoise font-medium">️ Identité globale vérifiée</span>
+              <Badge variante={identiteVerifiee ? "succes" : "terre"} taille="petit">
+                {identiteVerifiee ? "Oui" : "Non"}
+              </Badge>
+            </div>
           </div>
         </div>
       </Carte>
 
-      {/* Section identifiant DigiID (fusionnée depuis /partage, SANS QR code statique) */}
+      {/* Section identifiant DigiID */}
       <Carte>
         <p className="text-xs uppercase text-ocre font-bold mb-4 tracking-wider">
           Mon identifiant DigiID
@@ -187,10 +213,9 @@ function Contenu() {
             </Bouton>
           )}
           <Link href="/profil/telecharger">
-            <Bouton variante="ghost">📋 Télécharger mon profil numérique</Bouton>
+            <Bouton variante="ghost"> Télécharger mon profil numérique</Bouton>
           </Link>
         </div>
-
         <div className="mt-6 pt-4 border-t border-ardoise-clair/10">
           <p className="text-xs text-ardoise-clair font-semibold mb-2">Statut du profil</p>
           <div className="flex flex-wrap gap-2">
@@ -201,7 +226,11 @@ function Contenu() {
               👤 Visage {utilisateur.est_visage_verifie ? "✓" : "✗"}
             </Badge>
             <Badge variante={utilisateur.est_cni_verifiee ? "succes" : "terre"} taille="petit">
-              🆔 CNI {utilisateur.est_cni_verifiee ? "✓" : "✗"}
+               CNI {utilisateur.est_cni_verifiee ? "✓" : "✗"}
+            </Badge>
+            {/* ✅ CORRECTION : Utiliser identiteVerifiee */}
+            <Badge variante={identiteVerifiee ? "succes" : "terre"} taille="petit">
+              🛡️ Identité {identiteVerifiee ? "✓" : "✗"}
             </Badge>
           </div>
         </div>
@@ -233,7 +262,6 @@ function Contenu() {
           <Bouton variante="ghost">← Retour au tableau de bord</Bouton>
         </Link>
       </div>
-
     </div>
   );
 }

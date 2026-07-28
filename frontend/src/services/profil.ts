@@ -12,6 +12,12 @@ export interface ProfilDetail extends Utilisateur {
   pays: string | null;
   date_dernier_calcul_score: string | null;
   date_derniere_connexion: string | null;
+  // Vérification d'identité
+  est_verifie_identite?: boolean;
+  date_verification_identite?: string | null;
+  est_cni_verifiee?: boolean;
+  est_visage_verifie?: boolean;
+  photo_profil_url?: string | null;
 }
 
 export interface ProfilModification {

@@ -150,3 +150,26 @@ async def restaurer_verification(
         utilisateur=utilisateur,
         verification_id=verification_id,
     )
+
+
+@routeur_verification.post(
+    "/comparer-photo-profil",
+    summary="Comparer la photo de profil avec la photo d'un document",
+)
+async def comparer_photo_profil(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    document_id: str = "",
+):
+    """
+    Compare l'empreinte faciale de l'utilisateur (photo de profil)
+    avec l'embedding de la dernière vérification visuelle.
+    Retourne le score de confiance et le verdict.
+    Seuil de validation : 0.6
+    """
+    resultat = await service.comparer_photo_profil_document(
+        session=session,
+        utilisateur=utilisateur,
+        document_id=document_id,
+    )
+    return resultat

@@ -2,10 +2,9 @@
 /**
  * Page Documents d'Identité — CNI, Permis de Conduire, Assurance.
  * L'utilisateur :
- *   - Saisit/modifie ses informations d'identité
- *   - Peut corriger les champs mal extraits par l'OCR
- *   - Voit l'impact sur son score
- *   - Les modifications récentes réduisent temporairement le score (stabilité)
+ * - Saisit/modifie ses informations d'identité (champs non officiels uniquement)
+ * - Voit les données officielles extraites par l'OCR en lecture seule
+ * - Voit l'impact sur son score
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
@@ -20,6 +19,7 @@ import {
   modifierDocumentIdentite,
   supprimerDocumentIdentite,
   champsParType,
+  champsOfficielsDocument, // ✅ NOUVEAU : pour l'affichage en lecture seule
   LIBELLES_TYPE_DOCUMENT,
   ICONES_TYPE_DOCUMENT,
   COULEURS_TYPE_DOCUMENT,
@@ -34,18 +34,17 @@ import { ErreurAPI } from "@/services/client_api";
 type OngletType = "cni" | "permis" | "assurance";
 
 // =============================================================================
-// Champs obligatoires par type de document
+// Champs obligatoires par type de document (uniquement les modifiables)
 // =============================================================================
 const CHAMPS_OBLIGATOIRES: Record<OngletType, string[]> = {
-  cni: ["nom_complet", "date_naissance", "numero_document", "nationalite"],
-  permis: ["nom_complet", "date_naissance", "numero_permis", "categories_permis"],
+  cni: ["nom_complet", "numero_document", "nationalite"],
+  permis: ["nom_complet", "numero_permis", "categories_permis"],
   assurance: ["compagnie_assurance", "type_couverture", "numero_contrat", "date_expiration"],
 };
 
 // Libellés lisibles pour les messages d'erreur
 const LIBELLES_CHAMPS: Record<string, string> = {
   nom_complet: "Nom complet",
-  date_naissance: "Date de naissance",
   numero_document: "Numéro du document",
   nationalite: "Nationalité",
   numero_permis: "Numéro du permis",
@@ -58,10 +57,13 @@ const LIBELLES_CHAMPS: Record<string, string> = {
 
 export default function PageDocumentsIdentite() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={[      
-      "citoyen", "agent_police", "chef_police", "agent_medical", "chef_medical", 
-      "agent_ong", "chef_ong", "agent_terrain", "chef_agent", "admin_domaine", 
-      "administrateur", "super_administrateur"]}>
+    <EnvelopperEspaceProtege
+      rolesAutorises={[
+        "citoyen", "agent_police", "chef_police", "agent_medical", "chef_medical",
+        "agent_ong", "chef_ong", "agent_terrain", "chef_agent", "admin_domaine",
+        "administrateur", "super_administrateur"
+      ]}
+    >
       <Contenu />
     </EnvelopperEspaceProtege>
   );
@@ -103,9 +105,9 @@ function Contenu() {
         <h1 className="mt-1">Mes documents d'identité</h1>
         <p className="text-ardoise-clair mt-2 max-w-3xl">
           Ajoute tes documents d'identité (CNI, Permis de Conduire, Assurance)
-          pour renforcer ton profil. Tu peux corriger chaque champ à tout moment.
-          Plus tes documents sont stables (pas de modifications récentes),
-          plus ton score de confiance est élevé.
+          pour renforcer ton profil. Les données officielles (dates, lieu de naissance, etc.) 
+          sont extraites automatiquement par l'OCR et ne peuvent pas être modifiées manuellement 
+          pour garantir l'intégrité de ton identité.
         </p>
       </header>
 
@@ -213,7 +215,6 @@ function Contenu() {
               </ul>
               <p className="text-xs text-ardoise-clair italic mt-3">
                 Total possible pour les documents : <strong>11 pts</strong> sur 20 dédiés à l&apos;identité.
-                Les champs mal extraits par l&apos;OCR peuvent être corrigés ici.
               </p>
             </div>
           </Carte>
@@ -238,6 +239,7 @@ function VueDocument({
   notifier: (msg: string, type: "succes" | "erreur" | "info") => void;
 }) {
   const champs = champsParType(doc.type_document);
+  const champsOfficiels = champsOfficielsDocument(); // ✅ Récupération des champs en lecture seule
   const sourceLabel = doc.source === "ocr" ? "Extrait par OCR" : "Saisi manuellement";
   const modifDate = new Date(doc.modifie_le).toLocaleDateString("fr-FR", {
     day: "numeric", month: "long", year: "numeric",
@@ -277,7 +279,7 @@ function VueDocument({
         </div>
       </div>
 
-      {/* Grille des champs */}
+      {/* Grille des champs MODIFIABLES */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {champs.map((champ) => {
           const valeur = (doc as any)[champ.key];
@@ -293,6 +295,81 @@ function VueDocument({
             </div>
           );
         })}
+      </div>
+
+      {/* ✅ NOUVEAU : Champs officiels (lecture seule — extraits par OCR) */}
+      <div className="mt-6 pt-6 border-t border-ardoise-clair/10">
+        <p className="text-xs uppercase text-ardoise-clair font-semibold mb-3 flex items-center gap-2">
+          <span>🔒</span>
+          <span>Données officielles du document (non modifiables)</span>
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {champsOfficiels.map((champ) => {
+            const valeur = (doc as any)[champ.key];
+            if (!valeur) return null;
+            
+            let valeurAffichee = String(valeur);
+            
+            // Formater les dates
+            if (champ.key.startsWith("date_")) {
+              try {
+                const date = new Date(valeur);
+                valeurAffichee = date.toLocaleDateString("fr-FR", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                });
+              } catch {
+                valeurAffichee = String(valeur);
+              }
+            }
+            
+            // Sexe : libellé lisible
+            if (champ.key === "sexe") {
+              valeurAffichee = valeur === "M" ? "Masculin" : valeur === "F" ? "Féminin" : valeur;
+            }
+            
+            // Alerte si date d'expiration proche
+            let alerteExpiration = null;
+            if (champ.key === "date_expiration") {
+              try {
+                const dateExp = new Date(valeur);
+                const joursRestants = Math.ceil((dateExp.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                if (joursRestants < 0) {
+                  alerteExpiration = (
+                    <span className="text-xs text-red-600 font-semibold ml-2">
+                      ⚠️ Expiré depuis {Math.abs(joursRestants)} jours
+                    </span>
+                  );
+                } else if (joursRestants < 90) {
+                  alerteExpiration = (
+                    <span className="text-xs text-amber-600 font-semibold ml-2">
+                      ⚠️ Expire dans {joursRestants} jours
+                    </span>
+                  );
+                }
+              } catch {
+                // Ignore les erreurs de parsing
+              }
+            }
+            
+            return (
+              <div key={champ.key} className="bg-sable/50 rounded-lg p-3 border border-ardoise-clair/10">
+                <p className="text-xs text-ardoise-clair font-medium uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <span>🔒</span>
+                  {champ.libelle}
+                </p>
+                <p className="text-sm font-medium text-ardoise">
+                  {valeurAffichee}
+                  {alerteExpiration}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-xs text-ardoise-clair italic mt-3">
+          💡 Ces données sont extraites automatiquement de votre document et ne peuvent pas être modifiées manuellement pour garantir l'intégrité de votre identité.
+        </p>
       </div>
 
       {/* Métadonnées */}
@@ -329,11 +406,9 @@ function FormulaireDocument({
 }) {
   // ✅ FIX : mémoïser champs pour éviter une nouvelle référence à chaque render
   const champs = useMemo(() => champsParType(typeDocument), [typeDocument]);
-  
   const [valeurs, setValeurs] = useState<Record<string, any>>({});
   const [sauvegarde, setSauvegarde] = useState(false);
   const [erreurs, setErreurs] = useState<Record<string, string>>({});
-
   const obligatoires = CHAMPS_OBLIGATOIRES[typeDocument];
 
   // ✅ FIX : dépendances corrigées (document + typeDocument, pas champs)
@@ -348,7 +423,7 @@ function FormulaireDocument({
     });
     setValeurs(initiales);
     setErreurs({});
-  }, [document, typeDocument]);
+  }, [document, typeDocument, champs]);
 
   function setValeur(key: string, valeur: any) {
     setValeurs((v) => ({ ...v, [key]: valeur }));
@@ -364,7 +439,6 @@ function FormulaireDocument({
 
   function validerFormulaire(): boolean {
     const nouvellesErreurs: Record<string, string> = {};
-
     for (const champKey of obligatoires) {
       const valeur = valeurs[champKey];
       if (!valeur || (typeof valeur === "string" && valeur.trim() === "")) {
@@ -372,7 +446,6 @@ function FormulaireDocument({
         nouvellesErreurs[champKey] = `${libelle} est obligatoire`;
       }
     }
-
     setErreurs(nouvellesErreurs);
     return Object.keys(nouvellesErreurs).length === 0;
   }
@@ -381,7 +454,6 @@ function FormulaireDocument({
     if (!validerFormulaire()) {
       return;
     }
-
     setSauvegarde(true);
     try {
       const donnees: Record<string, any> = {};
@@ -404,8 +476,8 @@ function FormulaireDocument({
     <Carte titre={document ? `✏️ Corriger ${LIBELLES_TYPE_DOCUMENT[typeDocument].toLowerCase()}` : `➕ Ajouter ${LIBELLES_TYPE_DOCUMENT[typeDocument].toLowerCase()}`}>
       <p className="text-sm text-ardoise-clair mb-4">
         {document?.source === "ocr"
-          ? "Les données ont été extraites automatiquement. Corrige les champs mal lus."
-          : "Renseigne les informations de ton document."}
+          ? "Les données ont été extraites automatiquement. Corrige les champs modifiables mal lus."
+          : "Renseigne les informations de ton document. "}
       </p>
 
       {/* Indicateur de champs obligatoires */}
@@ -433,7 +505,7 @@ function FormulaireDocument({
           const valeur = valeurs[champ.key] ?? "";
           const estObligatoire = obligatoires.includes(champ.key);
           const aErreur = !!erreurs[champ.key];
-
+          
           if (champ.type_champ === "select") {
             const options = champ.key === "sexe" ? OPTIONS_SEXE
               : champ.key === "type_couverture" ? OPTIONS_COUVERTURE
@@ -469,7 +541,7 @@ function FormulaireDocument({
               </div>
             );
           }
-
+          
           return (
             <div key={champ.key}>
               <label className="block text-xs font-medium text-ardoise mb-1">

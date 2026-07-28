@@ -3,8 +3,12 @@
  *
  * L'utilisateur peut :
  *   - Ajouter ses documents (CNI, Permis, Assurance)
- *   - Corriger/modifier chaque champ si mal extrait
+ *   - Corriger/modifier les champs non officiels si mal extraits
  *   - Supprimer un document
+ *
+ * ⚠️ RÈGLE MÉTIER CRITIQUE :
+ * Les données officielles (dates, lieu de naissance, sexe, nationalité)
+ * sont extraites UNIQUEMENT par l'OCR et sont VERROUILLÉS en modification.
  *
  * Chaque modification déclenche un recalcul du score.
  */
@@ -140,7 +144,8 @@ export async function obtenirDocumentIdentite(
 
 /**
  * Modifie un document existant (correction des champs).
- * Seuls les champs fournis sont mis à jour.
+ * ⚠️ Le backend bloque automatiquement toute tentative de modification
+ * des champs officiels (dates, lieu naissance, sexe, nationalité).
  */
 export async function modifierDocumentIdentite(
   id: string,
@@ -161,7 +166,7 @@ export async function supprimerDocumentIdentite(
 }
 
 // =============================================================================
-// Utilitaires
+// Utilitaires d'affichage
 // =============================================================================
 
 export const LIBELLES_TYPE_DOCUMENT: Record<string, string> = {
@@ -188,20 +193,28 @@ export const COULEURS_BORDURE: Record<string, string> = {
   assurance: "border-l-green-500",
 };
 
+export const OPTIONS_COUVERTURE = [
+  { value: "responsabilite_civile", label: "Responsabilité Civile" },
+  { value: "tiers", label: "Tiers" },
+  { value: "tous_risques", label: "Tous Risques" },
+  { value: "vol_incendie", label: "Vol et Incendie" },
+];
+
+export const OPTIONS_SEXE = [
+  { value: "M", label: "Masculin" },
+  { value: "F", label: "Féminin" },
+];
+
 /**
- * Retourne les champs pertinents pour un type de document donné.
+ * Retourne les champs MODIFIABLES pour un type de document donné.
+ * ⚠️ Les dates officielles et données d'état civil en sont EXCLUES
+ * car elles doivent provenir uniquement de l'OCR et rester en lecture seule.
  */
 export function champsParType(type: string): { key: string; libelle: string; type_champ: string }[] {
   const communs = [
     { key: "numero_document", libelle: "Numéro du document", type_champ: "text" },
     { key: "nom_complet", libelle: "Nom complet", type_champ: "text" },
-    { key: "date_naissance", libelle: "Date de naissance", type_champ: "date" },
-    { key: "lieu_naissance", libelle: "Lieu de naissance", type_champ: "text" },
-    { key: "nationalite", libelle: "Nationalité", type_champ: "text" },
-    { key: "sexe", libelle: "Sexe", type_champ: "select" },
     { key: "adresse", libelle: "Adresse", type_champ: "text" },
-    { key: "date_delivrance", libelle: "Date de délivrance", type_champ: "date" },
-    { key: "date_expiration", libelle: "Date d'expiration", type_champ: "date" },
     { key: "pays_emetteur", libelle: "Pays émetteur", type_champ: "text" },
   ];
 
@@ -230,14 +243,67 @@ export function champsParType(type: string): { key: string; libelle: string; typ
   return [...communs, ...(specifiques[type] || [])];
 }
 
-export const OPTIONS_COUVERTURE = [
-  { value: "responsabilite_civile", label: "Responsabilité Civile" },
-  { value: "tiers", label: "Tiers" },
-  { value: "tous_risques", label: "Tous Risques" },
-  { value: "vol_incendie", label: "Vol et Incendie" },
-];
+/**
+ * Retourne les champs OFFICIELS du document (LECTURE SEULE).
+ * Ces champs sont extraits par l'OCR et ne peuvent pas être modifiés manuellement
+ * pour garantir l'intégrité et la traçabilité des données d'identité.
+ */
+export function champsOfficielsDocument(): { key: string; libelle: string }[] {
+  return [
+    { key: "date_naissance", libelle: "Date de naissance" },
+    { key: "lieu_naissance", libelle: "Lieu de naissance" },
+    { key: "sexe", libelle: "Sexe" },
+    { key: "nationalite", libelle: "Nationalité" },
+    { key: "date_delivrance", libelle: "Date de délivrance" },
+    { key: "date_expiration", libelle: "Date d'expiration" },
+  ];
+}
 
-export const OPTIONS_SEXE = [
-  { value: "M", label: "Masculin" },
-  { value: "F", label: "Féminin" },
-];
+// =============================================================================
+// Vérification de cohérence Profil ↔ Document
+// =============================================================================
+
+export interface ResultatCoherence {
+  est_coherent: boolean;
+  nom_correspond: boolean;
+  prenom_correspond: boolean;
+  nom_profil?: string;
+  nom_document?: string;
+  prenom_profil?: string;
+  prenom_document?: string;
+  incoherences: string[];
+  message: string;
+}
+
+export interface ResultatSynchronisation {
+  est_verifie_identite: boolean;
+  raison: string;
+  est_cni_verifiee: boolean;
+  est_visage_verifie: boolean;
+  date_verification?: string;
+}
+
+/**
+ * Vérifie la cohérence entre le profil utilisateur et un document.
+ */
+export async function verifierCohérenceProfil(
+  documentId: string
+): Promise<ResultatCoherence> {
+  return clientAPI.post<ResultatCoherence>(
+    `${PREFIXE}/${documentId}/verifier-coherence`,
+    undefined,
+    { authentifie: true }
+  );
+}
+
+/**
+ * Synchronise le statut de vérification d'identité global.
+ * Met à jour est_verifie_identite si CNI + Visage + Document cohérent.
+ */
+export async function synchroniserAvecProfil(): Promise<ResultatSynchronisation> {
+  return clientAPI.post<ResultatSynchronisation>(
+    `${PREFIXE}/synchroniser-profil`,
+    undefined,
+    { authentifie: true }
+  );
+}

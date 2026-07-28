@@ -153,3 +153,48 @@ async def supprimer_document(
     if not supprime:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Document introuvable")
+
+
+@routeur_documents.post(
+    "/{document_id}/verifier-coherence",
+    summary="Vérifier la cohérence entre le profil et un document",
+)
+async def verifier_coherence_document(
+    requete: Request,
+    document_id: str,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+):
+    """
+    Compare les données du profil (nom/prénom chiffrés) avec
+    les données du document d'identité.
+    Retourne les incohérences détectées.
+    """
+    from uuid import UUID
+    resultat = await service.verifier_coherence_profil_document(
+        session=session,
+        utilisateur=utilisateur,
+        document_id=UUID(document_id),
+    )
+    return resultat
+
+
+@routeur_documents.post(
+    "/synchroniser-profil",
+    summary="Synchroniser le statut de vérification d'identité",
+)
+async def synchroniser_profil(
+    requete: Request,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+):
+    """
+    Vérifie si toutes les conditions sont remplies pour marquer
+    l'utilisateur comme vérifié (CNI + Visage + Document cohérent).
+    Met à jour est_verifie_identite si OK.
+    """
+    resultat = await service.synchroniser_profil_document(
+        session=session,
+        utilisateur=utilisateur,
+    )
+    return resultat
