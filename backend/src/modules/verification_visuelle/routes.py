@@ -1,21 +1,27 @@
 # -*- coding: utf-8 -*-
 """Routes API du module de vérification visuelle."""
 from typing import Annotated
-from fastapi import APIRouter, Depends, File, UploadFile, status
+
+from fastapi import APIRouter, Depends, File, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.base_donnees.session import obtenir_session
 from src.modeles import Utilisateur
-from src.modules.authentification.dependances import utilisateur_courant, obtenir_ip_client, obtenir_agent_utilisateur
-from src.modules.verification_visuelle import service
+from src.modules.authentification.dependances import (
+    obtenir_agent_utilisateur,
+    obtenir_ip_client,
+    utilisateur_courant,
+)
 from src.modules.scoring import declencher_recalcul_score
-from src.noyau import journal as journal_module
-from src.noyau.journal import enregistrer_evenement_audit
+from src.modules.verification_visuelle import service
 from src.modules.verification_visuelle.schemas import (
     ListeVerificationVisuelle,
-    SuppressionVerification,
     RestaurationVerification,
+    SuppressionVerification,
     VerificationVisuelleDetail,
 )
+from src.noyau import journal as journal_module
+from src.noyau.journal import enregistrer_evenement_audit
 
 routeur_verification = APIRouter(
     prefix="/api/v1/utilisateur/verification",
@@ -51,7 +57,6 @@ async def uploader_photo(
         role_acteur=utilisateur.role,
     )
     
-    # Upload photo = signal positif → recalcul score
     try:
         await declencher_recalcul_score(
             session=session,
@@ -84,12 +89,10 @@ async def statut_verification(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
 ):
-    """
-    Retourne le statut de la dernière vérification visuelle.
-    Retourne 204 No Content si aucune vérification n'existe encore.
-    """
-    from fastapi import Response
-    resultat = await service.obtenir_statut_verification(session=session, utilisateur=utilisateur)
+    resultat = await service.obtenir_statut_verification(
+        session=session,
+        utilisateur=utilisateur,
+    )
     if resultat is None:
         return Response(status_code=204)
     return resultat
@@ -103,7 +106,10 @@ async def historique_verification(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
 ):
-    return await service.obtenir_historique_verification(session=session, utilisateur=utilisateur)
+    return await service.obtenir_historique_verification(
+        session=session,
+        utilisateur=utilisateur,
+    )
 
 @routeur_verification.delete(
     "/{verification_id}",
