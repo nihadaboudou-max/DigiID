@@ -1,5 +1,4 @@
 "use client";
-
 /**
  * Page Vérification Visuelle — reconnaissance faciale.
  * 
@@ -8,7 +7,7 @@
  *   - Voir le statut de sa dernière vérification
  *   - Consulter l'historique
  *   - Supprimer/Restaurer une vérification (corbeille)
- *   - ✅ NOUVEAU : Comparer sa photo de profil avec un document d'identité
+ *   - ✅ Comparaison AUTOMATIQUE avec la photo de la CNI
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -16,7 +15,7 @@ import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Alerte } from "@/composants/commun/Alerte";
-import { Bouton } from "@/composants/commun/Bouton";
+import { Badge } from "@/composants/commun/Badge";
 import { UploadPhoto, StatutVerification, HistoriqueVerification } from "@/composants/verification-visuelle";
 import {
   obtenirStatutVerification,
@@ -28,16 +27,15 @@ import {
 } from "@/services/verification_visuelle";
 import {
   listerDocumentsIdentite,
-  LIBELLES_TYPE_DOCUMENT,
-  ICONES_TYPE_DOCUMENT,
+  type DocumentIdentiteDetail,
 } from "@/services/documents_identite";
 import { ErreurAPI } from "@/services/client_api";
 
 export default function PageVerificationVisuelle() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={[      
-      "citoyen", "agent_police", "chef_police", "agent_medical", "chef_medical", 
-      "agent_ong", "chef_ong", "agent_terrain", "chef_agent", "admin_domaine", 
+    <EnvelopperEspaceProtege rolesAutorises={[
+      "citoyen", "agent_police", "chef_police", "agent_medical", "chef_medical",
+      "agent_ong", "chef_ong", "agent_terrain", "chef_agent", "admin_domaine",
       "administrateur", "super_administrateur"
     ]}>
       <Contenu />
@@ -53,9 +51,8 @@ function Contenu() {
   const [histoChargement, setHistoChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
-  // --- NOUVEAU : État pour la comparaison faciale ---
-  const [documents, setDocuments] = useState<any[]>([]);
-  const [documentSelectionne, setDocumentSelectionne] = useState<string>("");
+  // --- NOUVEAU : État pour la comparaison automatique ---
+  const [documentCNI, setDocumentCNI] = useState<DocumentIdentiteDetail | null>(null);
   const [comparaison, setComparaison] = useState<ResultatComparaisonFaciale | null>(null);
   const [comparaisonChargement, setComparaisonChargement] = useState(false);
 
@@ -63,7 +60,7 @@ function Contenu() {
   const toutCharger = useCallback(async () => {
     setErreur(null);
 
-    // Statut
+    // Statut vérification
     setStatutChargement(true);
     try {
       const s = await obtenirStatutVerification();
@@ -80,50 +77,46 @@ function Contenu() {
       const h = await obtenirHistoriqueVerification(20);
       setHistorique(h);
     } catch (e) {
-      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement de l'historique.");
+      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
       setHistorique(null);
     } finally {
       setHistoChargement(false);
     }
   }, []);
 
-  // Charger la liste des documents au montage pour le sélecteur de comparaison
+  // --- Charger le document CNI et lancer la comparaison automatique ---
   useEffect(() => {
-    async function chargerDocuments() {
+    async function chargerEtComparer() {
       try {
-        const resultat = await listerDocumentsIdentite();
-        setDocuments(resultat.documents);
+        // Charger les documents pour trouver la CNI
+        const resultat = await listerDocumentsIdentite("cni");
+        if (resultat.documents.length > 0) {
+          const cni = resultat.documents[0];
+          setDocumentCNI(cni);
+
+          // ✅ Comparaison AUTOMATIQUE si une vérification visuelle existe
+          if (statut && statut.statut === "approuve") {
+            setComparaisonChargement(true);
+            try {
+              const resultatComparaison = await comparerPhotoProfilAvecDocument(cni.id);
+              setComparaison(resultatComparaison);
+            } catch (e) {
+              // Erreur de comparaison silencieuse
+            } finally {
+              setComparaisonChargement(false);
+            }
+          }
+        }
       } catch {
-        // Silencieux : pas de documents = le composant de comparaison affichera un message informatif
+        // Pas de CNI trouvée - c'est OK
       }
     }
-    chargerDocuments();
-  }, []);
 
-  useEffect(() => {
-    toutCharger();
-  }, [toutCharger]);
-
-  // --- NOUVEAU : Gestionnaire de comparaison ---
-  async function lancerComparaison() {
-    if (!documentSelectionne) return;
-    
-    setComparaisonChargement(true);
-    setComparaison(null);
-    
-    try {
-      const resultat = await comparerPhotoProfilAvecDocument(documentSelectionne);
-      setComparaison(resultat);
-    } catch (e) {
-      const msg = e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de la comparaison.";
-      setErreur(msg);
-    } finally {
-      setComparaisonChargement(false);
-    }
-  }
+    chargerEtComparer();
+  }, [statut]);
 
   return (
-    <div className="space-y-8 apparition">
+    <div className="max-w-4xl mx-auto space-y-6 apparition pb-20">
       {/* Fil d'Ariane */}
       <nav className="flex items-center gap-2 text-sm text-ardoise-clair/70">
         <Link href="/identite" className="hover:text-ocre transition-colors">Identité</Link>
@@ -131,149 +124,97 @@ function Contenu() {
         <span className="text-ardoise font-semibold">Reconnaissance faciale</span>
       </nav>
 
-      {/* En-tête */}
-      <header>
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <h1>Vérification Visuelle</h1>
-            <p className="text-ardoise-clair mt-1">
-              Reconnaissance faciale pour renforcer ton identité numérique.
-              Ta photo n&apos;est pas stockée, seul un vecteur facial chiffré est conservé.
-            </p>
-          </div>
-          <Link href="/identite">
-            <button className="px-4 py-2 text-sm text-lagune border border-lagune rounded-lg hover:bg-lagune hover:text-white transition-colors">
-              ← Retour au menu Identité
-            </button>
-          </Link>
-        </div>
-      </header>
+      {/* En-tête compact */}
+      <div>
+        <h1 className="text-2xl font-bold text-ardoise">Vérification Visuelle</h1>
+        <p className="text-sm text-ardoise-clair mt-1">
+          Reconnaissance faciale pour renforcer ton identité numérique.
+        </p>
+      </div>
 
       {erreur && <Alerte variante="erreur" titre="Erreur">{erreur}</Alerte>}
 
       {/* Section : Upload photo */}
       <Carte titre="📸 Nouvelle vérification">
-        <p className="text-sm text-ardoise-clair mb-4">
-          Prends une photo de ton visage ou choisis un fichier.
-          Assure-toi d&apos;avoir un bon éclairage et un visage bien visible.
+        <p className="text-sm text-ardoise-clair mb-3">
+          Prends une photo de ton visage. La comparaison avec ta CNI se fait automatiquement.
         </p>
         <UploadPhoto onSucces={toutCharger} />
       </Carte>
 
-      {/* Section : Statut actuel */}
+      {/* Section : Statut actuel + Comparaison automatique */}
       <Carte titre="📊 Statut actuel">
         <StatutVerification verification={statut} chargement={statutChargement} />
-      </Carte>
-
-      {/* ✅ NOUVEAU : Section Comparaison avec document */}
-      <Carte titre="🔍 Comparaison avec document d'identité">
-        <p className="text-sm text-ardoise-clair mb-4">
-          Comparez votre photo de profil avec la photo extraite de votre document d'identité.
-          Cette vérification renforce la cohérence de votre identité numérique.
-        </p>
-
-        {documents.length === 0 ? (
-          <Alerte variante="info" titre="Aucun document disponible">
-            <p className="text-sm">
-              Vous devez d'abord ajouter un document d'identité (CNI, Permis, Assurance) pour pouvoir comparer votre photo de profil.
-            </p>
-            <Link href="/citoyen/documents-identite">
-              <Bouton variante="primaire" taille="petit" className="mt-3">
-                ➕ Ajouter un document
-              </Bouton>
-            </Link>
-          </Alerte>
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-ardoise mb-2">
-                Sélectionnez un document à comparer
-              </label>
-              <select
-                value={documentSelectionne}
-                onChange={(e) => setDocumentSelectionne(e.target.value)}
-                className="w-full rounded-lg border border-ardoise-clair/20 px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-ocre/50 focus:border-ocre outline-none"
-              >
-                <option value="">— Choisir un document —</option>
-                {documents.map((doc) => (
-                  <option key={doc.id} value={doc.id}>
-                    {ICONES_TYPE_DOCUMENT[doc.type_document]} {LIBELLES_TYPE_DOCUMENT[doc.type_document]}
-                    {doc.nom_complet ? ` — ${doc.nom_complet}` : ""}
-                  </option>
-                ))}
-              </select>
+        
+        {/* ✅ RÉSULTAT DE COMPARAISON AUTOMATIQUE */}
+        {statut?.statut === "approuve" && (
+          <div className="mt-4 pt-4 border-t border-ardoise-clair/10">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-ardoise">
+                🔍 Comparaison avec ta CNI
+              </h3>
+              {documentCNI && (
+                <Badge variante="lagune" taille="petit">
+                  CNI trouvée
+                </Badge>
+              )}
             </div>
 
-            <Bouton
-              variante="primaire"
-              onClick={lancerComparaison}
-              chargement={comparaisonChargement}
-              disabled={!documentSelectionne}
-            >
-              🔍 Lancer la comparaison faciale
-            </Bouton>
-
-            {comparaison && (
-              <div className={`rounded-lg border-2 p-4 ${
-                comparaison.correspond ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"
+            {comparaisonChargement ? (
+              <p className="text-sm text-ardoise-clair italic">Comparaison en cours...</p>
+            ) : comparaison ? (
+              <div className={`rounded-lg p-3 border-2 ${
+                comparaison.correspond
+                  ? "border-green-300 bg-green-50"
+                  : "border-red-300 bg-red-50"
               }`}>
                 <div className="flex items-start gap-3">
-                  <div className="text-3xl">{comparaison.correspond ? "✅" : "❌"}</div>
+                  <span className="text-2xl">
+                    {comparaison.correspond ? "✅" : ""}
+                  </span>
                   <div className="flex-1">
-                    <p className={`font-semibold text-lg ${
+                    <p className={`text-sm font-semibold ${
                       comparaison.correspond ? "text-green-700" : "text-red-700"
                     }`}>
                       {comparaison.correspond ? "Visage correspondant" : "Visage non correspondant"}
                     </p>
-                    <p className="text-sm text-ardoise mt-1">{comparaison.message}</p>
-
-                    {/* Barre de score de confiance */}
-                    <div className="mt-3 flex items-center gap-3">
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-medium text-ardoise-clair">Score de confiance</span>
-                          <span className={`text-sm font-bold ${
-                            comparaison.correspond ? "text-green-600" : "text-red-600"
-                          }`}>
-                            {(comparaison.score_confiance * 100).toFixed(1)}%
-                          </span>
-                        </div>
-                        <div className="h-2 bg-sable rounded-full overflow-hidden">
-                          <div
-                            className={`h-full transition-all ${
-                              comparaison.correspond ? "bg-green-500" : "bg-red-500"
-                            }`}
-                            style={{ width: `${comparaison.score_confiance * 100}%` }}
-                          />
-                        </div>
-                        {comparaison.seuil && (
-                          <p className="text-xs text-ardoise-clair mt-1">
-                            Seuil de validation : {(comparaison.seuil * 100).toFixed(0)}%
-                          </p>
-                        )}
+                    <p className="text-xs text-ardoise mt-0.5">
+                      {comparaison.message}
+                    </p>
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-ardoise-clair">Score de confiance</span>
+                        <span className={`font-bold ${
+                          comparaison.correspond ? "text-green-600" : "text-red-600"
+                        }`}>
+                          {(comparaison.score_confiance * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-sable rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all ${
+                            comparaison.correspond ? "bg-green-500" : "bg-red-500"
+                          }`}
+                          style={{ width: `${comparaison.score_confiance * 100}%` }}
+                        />
                       </div>
                     </div>
-
-                    {/* Conseils en cas d'échec */}
-                    {!comparaison.correspond && (
-                      <Alerte variante="avertissement" titre="Que faire ?" className="mt-3">
-                        <ul className="text-xs space-y-1 list-disc list-inside">
-                          <li>Vérifiez que votre photo de profil est récente et nette</li>
-                          <li>Assurez-vous que le document contient une photo claire</li>
-                          <li>Retentez l'upload avec un meilleur éclairage</li>
-                        </ul>
-                      </Alerte>
-                    )}
                   </div>
                 </div>
               </div>
+            ) : (
+              <Alerte variante="info" titre="Comparaison disponible">
+                <p className="text-xs">
+                  Une fois ta photo approuvée, nous la comparerons automatiquement avec celle de ta CNI.
+                </p>
+              </Alerte>
             )}
           </div>
         )}
       </Carte>
 
       {/* Section : Historique */}
-      <Carte titre="📋 Historique des vérifications">
+      <Carte titre="📋 Historique">
         <HistoriqueVerification
           historique={historique?.historique || []}
           total={historique?.total || 0}
@@ -282,33 +223,26 @@ function Contenu() {
         />
       </Carte>
 
-      {/* Navigation vers les autres pages d'identité */}
-      <div className="flex flex-wrap gap-3 justify-between items-center pt-4">
+      {/* Navigation compacte */}
+      <div className="flex flex-wrap gap-2 justify-between items-center pt-2">
         <div className="flex flex-wrap gap-2">
           <Link href="/identite">
-            <button className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+            <button className="px-3 py-1.5 text-xs text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
               ← Tableau de bord
             </button>
           </Link>
           <Link href="/identite/verification-cni">
-            <button className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+            <button className="px-3 py-1.5 text-xs text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
               Scan CNI →
             </button>
           </Link>
         </div>
-        <Link href="/identite/role">
-          <button className="px-4 py-2 text-sm text-lagune hover:underline transition-colors">
-            Voir mon rôle →
-          </button>
-        </Link>
       </div>
 
       {/* Info légale */}
-      <div className="text-xs text-ardoise-clair/50 border-t border-ardoise-clair/10 pt-4">
+      <div className="text-xs text-ardoise-clair/50 border-t border-ardoise-clair/10 pt-3">
         <p>
-          🔒 Conformité : Aucune photo brute n&apos;est conservée. 
-          Seul un vecteur facial chiffré (embedding 512D) est stocké dans ta base de données.
-          Tu peux supprimer une vérification à tout moment via la corbeille.
+          🔒 Aucune photo brute n'est conservée. Seul un vecteur facial chiffré est stocké.
         </p>
       </div>
     </div>
