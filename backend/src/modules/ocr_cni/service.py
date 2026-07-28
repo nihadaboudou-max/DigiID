@@ -63,7 +63,6 @@ def _extraire_premier_prenom(prenoms_complets: str) -> str:
 # =============================================================================
 # ✅ NOUVEAU : Vérification de cohérence d'identité
 # =============================================================================
-
 async def verifier_coherence_identite(
     session: AsyncSession,
     utilisateur: Utilisateur,
@@ -71,44 +70,38 @@ async def verifier_coherence_identite(
 ) -> Tuple[bool, str]:
     """
     Vérifie la cohérence entre la nouvelle CNI et le profil utilisateur.
-    
-    ⚠️ ATTENTION : Lors de l'inscription, l'utilisateur fournit UNIQUEMENT :
-    - Nom, Prénom, Numéro téléphone, Email
-    
-    La CNI contient : Nom, Prénom, Numéro CNI, Date naissance, Photo
-    
-    On ne peut comparer QUE : Nom et Prénom (et Photo si dispo)
-    Le numéro CNI est DIFFÉRENT du numéro de téléphone → on ne compare PAS
-    La date de naissance n'est PAS dans le profil → on ne compare PAS
-    L'email n'est PAS sur la CNI → on ne compare PAS
-    
-    Retourne: (est_coherent, message)
+    ⚠️ BLOQUANT : Si incohérence détectée, on REJETTE la CNI
     """
     incoherences = []
     
-    # 1. Comparaison Nom (SEUL champ fiable)
+    # 1. Comparaison Nom (STRICT)
     nom_utilisateur = dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else ""
     if nom_utilisateur and nouvelles_donnees.nom_famille:
-        # Comparaison souple : on vérifie que le nom de la CNI contient le nom du profil
-        # (car l'OCR peut extraire des noms composés)
         nom_cni = nouvelles_donnees.nom_famille.upper().strip()
         nom_profil = nom_utilisateur.upper().strip()
         
+        # Comparaison stricte : doit correspondre exactement
         if nom_profil != nom_cni:
             incoherences.append(
-                f"Nom CNI ({nom_cni}) ≠ Nom compte ({nom_profil})"
+                f"Nom CNI ({nom_cni}) ≠ Nom profil ({nom_profil})"
             )
     
-    # 2. Comparaison Prénom (premier prénom uniquement — règle métier)
+    # 2. Comparaison Prénom (premier prénom uniquement)
     prenom_utilisateur = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else ""
     if prenom_utilisateur and nouvelles_donnees.prenoms:
-        # Règle : on ne compare que le premier prénom (split()[0])
-        prenom_cni = _extraire_premier_prenom(nouvelles_donnees.prenoms).upper()
-        prenom_profil = _extraire_premier_prenom(prenom_utilisateur).upper()
+        prenom_cni = nouvelles_donnees.prenoms.upper().strip().split()[0]
+        prenom_profil = prenom_utilisateur.upper().strip().split()[0]
+        
         if prenom_profil != prenom_cni:
             incoherences.append(
-                f"Prénom CNI ({prenom_cni}) ≠ Prénom compte ({prenom_profil})"
+                f"Prénom CNI ({prenom_cni}) ≠ Prénom profil ({prenom_profil})"
             )
+    
+    if incoherences:
+        #  BLOQUANT : On rejette la CNI
+        return False, "Incohérence détectée : " + "; ".join(incoherences)
+    
+    return True, "Identité cohérente"
                 
     # 3. Vérification biométrique (OPTIONNELLE — si photo de profil existe)
     # NOTE : Cette vérification nécessiterait un module de reconnaissance faciale
