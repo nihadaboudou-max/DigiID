@@ -63,12 +63,12 @@ class DocumentIdentite(Base, MelangeTracabilite):
     nom_complet: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     date_naissance: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     lieu_naissance: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    nationalite: Mapped[Optional[str]] = mapped_column(String(100), default="Sénégalaise", nullable=True)
+    nationalite: Mapped[Optional[str]] = mapped_column(String(100), default=None, nullable=True)
     sexe: Mapped[Optional[str]] = mapped_column(String(1), nullable=True)
     adresse: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     date_delivrance: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     date_expiration: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    pays_emetteur: Mapped[Optional[str]] = mapped_column(String(100), default="Sénégal", nullable=True)
+    pays_emetteur: Mapped[Optional[str]] = mapped_column(String(100), default=None, nullable=True)
 
     # --- CNI ---
     autorite_delivrance: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
