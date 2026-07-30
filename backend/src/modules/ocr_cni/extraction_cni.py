@@ -444,6 +444,7 @@ def extraire_donnees_cni(
     date_expiration = None
     autorite = None
     taille = None
+    nationalite = None
     if pays and pays in PATTERNS_DOCUMENTS:
         champs = PATTERNS_DOCUMENTS[pays]["champs"]
         nom = _extraire_valeur_label(texte, champs.get("nom", []), "nom")
@@ -466,6 +467,13 @@ def extraire_donnees_cni(
     if l1 and l2:
         mrz_parse = parser_mrz_complet(l1, l2, l3)
         journal.info(f"MRZ parsée : format={mrz_parse.get('format')}, pays={mrz_parse.get('pays_emetteur')}, type={mrz_parse.get('type_document')}")
+        
+        # ✅ EXTRAIRE LA NATIONALITÉ DEPUIS LE MRZ
+        if len(l1) >= 5:
+            code_nationalite_mrz = l1[2:5]  # Positions 2-4 de la ligne 1
+            nationalite = CODES_PAYS_ICAO.get(code_nationalite_mrz)
+            journal.info(f"Nationalité extraite du MRZ: {nationalite} (code: {code_nationalite_mrz})")
+ 
         # MRZ comble les champs manquants
         if not nom:
             nom = mrz_parse.get("nom_famille")
@@ -515,6 +523,7 @@ def extraire_donnees_cni(
         date_expiration=date_expiration,
         autorite_delivrance=autorite,
         taille=taille,
+        nationalite=nationalite,
         mrz_ligne_1=mrz_lignes[0] if len(mrz_lignes) > 0 else None,
         mrz_ligne_2=mrz_lignes[1] if len(mrz_lignes) > 1 else None,
         mrz_ligne_3=mrz_lignes[2] if len(mrz_lignes) > 2 else None,

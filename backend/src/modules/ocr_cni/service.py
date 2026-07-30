@@ -6,12 +6,11 @@ des Cartes Nationales d'Identité.
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 from uuid import UUID
-
 from fastapi import UploadFile
 from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from datetime import date as date_type
+
 from src.modeles import Utilisateur
 from src.modules.ocr_cni.extraction_cni import extraire_donnees_cni
 from src.modules.ocr_cni.ocr_engine import analyser_image_cni
@@ -26,7 +25,6 @@ from src.modules.ocr_cni.schemas import (
     SuppressionCNI,
     RestaurationCNI,
 )
-
 from src.modules.ocr_cni.validation_cni import (
     valider_donnees_cni,
     verifier_coherence_recto_verso,
@@ -37,7 +35,6 @@ from src.noyau.exceptions import ErreurRessourceIntrouvable, ErreurValidation
 # =============================================================================
 # Constantes
 # =============================================================================
-
 TAILLE_MAX_IMAGE = 15 * 1024 * 1024  # 15 Mo
 TYPES_MIME_AUTORISES = {
     "image/jpeg": "jpg",
@@ -45,6 +42,35 @@ TYPES_MIME_AUTORISES = {
     "image/webp": "webp",
     "image/tiff": "tiff",
 }
+
+# =============================================================================
+# Fonction utilitaire : Déduire la nationalité depuis le pays émetteur
+# =============================================================================
+def _deduire_nationalite_depuis_pays(pays_emetteur: Optional[str]) -> Optional[str]:
+    """
+    Déduit la nationalité depuis le pays émetteur.
+    Ex: "Bénin" → "Béninoise", "Sénégal" → "Sénégalaise"
+    """
+    if not pays_emetteur:
+        return None
+    
+    correspondances = {
+        "Bénin": "Béninoise",
+        "Sénégal": "Sénégalaise",
+        "Mali": "Malienne",
+        "Côte d'Ivoire": "Ivoirienne",
+        "Burkina Faso": "Burkinabè",
+        "Niger": "Nigérienne",
+        "Togo": "Togolaise",
+        "Guinée": "Guinéenne",
+        "Cameroun": "Camerounaise",
+        "Maroc": "Marocaine",
+        "Algérie": "Algérienne",
+        "Tunisie": "Tunisienne",
+        "Ghana": "Ghanéenne",
+        "Nigeria": "Nigériane",
+    }
+    return correspondances.get(pays_emetteur)
 
 # =============================================================================
 # Extraire premier prénom (utile pour la comparaison de cohérence)
@@ -73,66 +99,37 @@ async def verifier_coherence_identite(
     ⚠️ BLOQUANT : Si incohérence détectée, on REJETTE la CNI
     """
     incoherences = []
-    
+
     # 1. Comparaison Nom (STRICT)
     nom_utilisateur = dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else ""
     if nom_utilisateur and nouvelles_donnees.nom_famille:
         nom_cni = nouvelles_donnees.nom_famille.upper().strip()
         nom_profil = nom_utilisateur.upper().strip()
-        
         # Comparaison stricte : doit correspondre exactement
         if nom_profil != nom_cni:
             incoherences.append(
                 f"Nom CNI ({nom_cni}) ≠ Nom profil ({nom_profil})"
             )
-    
+
     # 2. Comparaison Prénom (premier prénom uniquement)
     prenom_utilisateur = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else ""
     if prenom_utilisateur and nouvelles_donnees.prenoms:
         prenom_cni = nouvelles_donnees.prenoms.upper().strip().split()[0]
         prenom_profil = prenom_utilisateur.upper().strip().split()[0]
-        
         if prenom_profil != prenom_cni:
             incoherences.append(
                 f"Prénom CNI ({prenom_cni}) ≠ Prénom profil ({prenom_profil})"
             )
-    
+
     if incoherences:
         #  BLOQUANT : On rejette la CNI
         return False, "Incohérence détectée : " + "; ".join(incoherences)
-    
-    return True, "Identité cohérente"
-                
-    # 3. Vérification biométrique (OPTIONNELLE — si photo de profil existe)
-    # NOTE : Cette vérification nécessiterait un module de reconnaissance faciale
-    # Pour l'instant, on ne l'implémente pas car il faudrait extraire la photo de la CNI
-    # et la comparer avec la photo de profil de l'utilisateur
-    # if utilisateur.photo_profil_url and nouvelles_donnees.photo_cni_url:
-    #     similarite = await comparer_visages(...)
-    #     if similarite < 0.7:
-    #         incoherences.append(f"Photo CNI ≠ Photo profil (similarité: {similarite:.1%})")
-    
-    # 4. ⚠️ IMPORTANT : On NE vérifie PAS :
-    # - La date de naissance (pas dans le profil utilisateur)
-    # - Le numéro CNI (différent du numéro de téléphone)
-    # - L'email (pas sur la CNI)
-    
-    if incoherences:
-        # Journaliser l'alerte de sécurité
-        journal.warning(
-            f"ALERTE SÉCURITÉ | Tentative CNI incohérente | "
-            f"utilisateur_id={utilisateur.id} | "
-            f"incoherences={'; '.join(incoherences)}"
-        )
-        return False, "Incohérence détectée : " + "; ".join(incoherences)
-    
-    return True, "Identité cohérente (nom et prénom vérifiés)"
 
+    return True, "Identité cohérente"
 
 # =============================================================================
 # Fonctions internes
 # =============================================================================
-
 async def _lire_image(fichier: UploadFile) -> bytes:
     """Lit et valide le fichier image uploadé."""
     if fichier.content_type not in TYPES_MIME_AUTORISES:
@@ -142,22 +139,18 @@ async def _lire_image(fichier: UploadFile) -> bytes:
                 "Format d'image non supporté. Utilise JPG, PNG, WEBP ou TIFF."
             ),
         )
-
     contenu = await fichier.read()
     if not contenu:
         raise ErreurValidation(
             "Fichier vide reçu pour l'OCR CNI.",
             message_utilisateur="Le fichier est vide. Merci de sélectionner une image valide.",
         )
-
     if len(contenu) > TAILLE_MAX_IMAGE:
         raise ErreurValidation(
             f"Image trop volumineuse : {len(contenu)} octets (max {TAILLE_MAX_IMAGE})",
             message_utilisateur=f"L'image dépasse la taille maximale de {TAILLE_MAX_IMAGE // 1024 // 1024} Mo.",
         )
-
     return contenu
-
 
 def _compter_champs_extraits(donnees: DonneesCNIExtraites) -> int:
     """Compte le nombre de champs non-nuls extraits."""
@@ -175,7 +168,6 @@ def _compter_champs_extraits(donnees: DonneesCNIExtraites) -> int:
     ]
     return sum(1 for c in champs_pertinents if c is not None and c != "non_detecte" and c != "N/A")
 
-
 def _fusionner_donnees_mrz(
     donnees_ocr: DonneesCNIExtraites,
     mrz_lignes: tuple,
@@ -183,40 +175,28 @@ def _fusionner_donnees_mrz(
     """Fusionne les données OCR avec les données MRZ (priorité MRZ)."""
     if not mrz_lignes or not mrz_lignes[0]:
         return donnees_ocr
-    
     l1, l2, l3 = mrz_lignes
-    
     try:
         resultat_mrz = parser_mrz_complet(l1, l2, l3)
         donnees_finales = donnees_ocr.model_copy()
-        
         if resultat_mrz.get("numero_document"):
             donnees_finales.numero_cni = resultat_mrz["numero_document"]
-        
         if resultat_mrz.get("nom_famille"):
             donnees_finales.nom_famille = resultat_mrz["nom_famille"]
-        
         if resultat_mrz.get("prenoms"):
             donnees_finales.prenoms = resultat_mrz["prenoms"]
-        
         if resultat_mrz.get("date_naissance_date"):
             donnees_finales.date_naissance = resultat_mrz["date_naissance_date"]
-        
         if resultat_mrz.get("date_expiration_date"):
             donnees_finales.date_expiration = resultat_mrz["date_expiration_date"]
-        
         if resultat_mrz.get("sexe") and resultat_mrz["sexe"] in ("M", "F"):
             donnees_finales.sexe = resultat_mrz["sexe"]
-        
         if resultat_mrz.get("pays_emetteur_nom"):
             donnees_finales.autorite_delivrance = resultat_mrz["pays_emetteur_nom"]
-        
         return donnees_finales
-        
     except Exception as e:
         journal.warning(f"Erreur lors du parsing MRZ : {e}")
         return donnees_ocr
-
 
 async def _creer_ou_mettre_a_jour_document_identite(
     session: AsyncSession,
@@ -246,6 +226,12 @@ async def _creer_ou_mettre_a_jour_document_identite(
             doc_existant.nom_complet = f"{donnees.prenoms or ''} {donnees.nom_famille or ''}".strip() or None
             if donnees.sexe and donnees.sexe in ("M", "F"):
                 doc_existant.sexe = donnees.sexe
+            # ✅ MAJ nationalité et pays_emetteur si pas encore définis
+            if not doc_existant.nationalite and donnees.nationalite:
+                doc_existant.nationalite = donnees.nationalite
+            if not doc_existant.pays_emetteur:
+                pays_emetteur_code = donnees.mrz_ligne_1[2:5] if donnees.mrz_ligne_1 and len(donnees.mrz_ligne_1) >= 5 else ""
+                doc_existant.pays_emetteur = CODES_PAYS_ICAO.get(pays_emetteur_code)
             await session.commit()
         return
 
@@ -255,6 +241,13 @@ async def _creer_ou_mettre_a_jour_document_identite(
         m = re.match(r'(\d{2})/(\d{2})/(\d{4})', d)
         if m: return date_type(int(m.group(3)), int(m.group(2)), int(m.group(1)))
         return None
+
+    # ✅ DÉTERMINER LE PAYS ÉMETTEUR DEPUIS LE MRZ
+    pays_emetteur_code = donnees.mrz_ligne_1[2:5] if donnees.mrz_ligne_1 and len(donnees.mrz_ligne_1) >= 5 else ""
+    pays_emetteur_nom = CODES_PAYS_ICAO.get(pays_emetteur_code)
+    
+    # ✅ NATIONALITÉ : extraite du MRZ OU déduite du pays émetteur
+    nationalite_finale = donnees.nationalite or _deduire_nationalite_depuis_pays(pays_emetteur_nom)
 
     doc = DocumentIdentite(
         utilisateur_id=utilisateur.id,
@@ -272,14 +265,11 @@ async def _creer_ou_mettre_a_jour_document_identite(
         date_expiration=_parser_date(donnees.date_expiration),
         autorite_delivrance=donnees.autorite_delivrance,
         taille_cm=int(donnees.taille) if donnees.taille and donnees.taille.isdigit() else None,
-        pays_emetteur=CODES_PAYS_ICAO.get(
-            donnees.mrz_ligne_1[2:5] if donnees.mrz_ligne_1 and len(donnees.mrz_ligne_1) >= 5 else "",
-            "Sénégal"
-        ),
+        nationalite=nationalite_finale,  # ✅ AJOUTÉ
+        pays_emetteur=pays_emetteur_nom,  # ✅ Plus de fallback "Sénégal"
     )
     session.add(doc)
     await session.commit()
-
 
 async def _enregistrer_verification(
     session: AsyncSession,
@@ -295,7 +285,7 @@ async def _enregistrer_verification(
     """Enregistre une vérification CNI en base de données."""
     # ✅ Import local pour éviter le circular import
     from src.modeles.verification_cni import VerificationCNI
-    
+
     verification = VerificationCNI(
         utilisateur_id=utilisateur.id,
         face=face,
@@ -321,32 +311,26 @@ async def _enregistrer_verification(
         taux_confiance_ocr=donnees.taux_confiance_moyen,
         erreurs_ocr=resultat_ocr.erreurs if resultat_ocr else [],
     )
-
     if validation:
         verification.est_valide = validation.est_valide
         verification.scores_validation = validation.scores_validation
         verification.validation_mrz = validation.verification_mrz
         verification.statut = "approuve" if validation.est_valide else "rejete"
         verification.date_traitement = datetime.now(timezone.utc)
-
     session.add(verification)
     await session.commit()
     await session.refresh(verification)
-
     if validation and validation.est_valide:
         utilisateur.est_cni_verifiee = True
         utilisateur.date_verification_cni = datetime.now(timezone.utc)
         utilisateur.date_derniere_mise_a_jour_verifications = datetime.now(timezone.utc)
         await session.commit()
         await _creer_ou_mettre_a_jour_document_identite(session, utilisateur, donnees, verification)
-
     return verification
-
 
 # =============================================================================
 # Services publics
 # =============================================================================
-
 async def traiter_upload_cni(
     session: AsyncSession,
     utilisateur: Utilisateur,
@@ -355,7 +339,7 @@ async def traiter_upload_cni(
 ) -> dict:
     """
     Traite l'upload d'une image de CNI (recto ou verso).
-    ⚠️ BLOQUE l'enregistrement si les données extraites ne correspondent 
+    ⚠️ BLOQUE l'enregistrement si les données extraites ne correspondent
     pas strictement au nom et au premier prénom du profil utilisateur.
     ✅ Extrait et sauvegarde l'embedding facial de la photo CNI (recto).
     """
@@ -364,7 +348,6 @@ async def traiter_upload_cni(
 
     # 1. Analyse OCR
     resultat_analyse = analyser_image_cni(contenu)
-
     succes_ocr = resultat_analyse["succes"]
     texte_brut = resultat_analyse["texte_brut"]
     confiance = resultat_analyse["confiance_moyenne"]
@@ -391,7 +374,6 @@ async def traiter_upload_cni(
         # Normalisation : majuscules, suppression des espaces, et extraction du PREMIER prénom
         nom_cni_pur = donnees.nom_famille.strip().upper()
         prenom_cni_pur = donnees.prenoms.strip().split()[0].upper() if donnees.prenoms else ""
-        
         nom_profil_pur = nom_profil.strip().upper()
         prenom_profil_pur = prenom_profil.strip().split()[0].upper() if prenom_profil else ""
 
@@ -402,22 +384,20 @@ async def traiter_upload_cni(
             incoherences.append(
                 f"Le nom sur la CNI ({nom_cni_pur}) ne correspond pas à votre profil ({nom_profil_pur})."
             )
-        
+
         # Comparaison stricte du premier prénom
         if prenom_profil_pur and prenom_cni_pur and prenom_profil_pur != prenom_cni_pur:
             incoherences.append(
                 f"Le prénom sur la CNI ({prenom_cni_pur}) ne correspond pas à votre profil ({prenom_profil_pur})."
             )
 
-        # 🚨 BLOCAGE : Si incohérence détectée, on rejette l'upload immédiatement
+        #  BLOCAGE : Si incohérence détectée, on rejette l'upload immédiatement
         if incoherences:
             message_erreur = "Incohérence d'identité détectée : " + " ".join(incoherences) + " Veuillez corriger votre nom/prénom dans vos paramètres avant de scanner votre CNI."
-            
             journal.warning(
                 f"REJET CNI | Incohérence identité | utilisateur={utilisateur.id} | "
                 f"CNI(nom={nom_cni_pur}, prenom={prenom_cni_pur}) vs Profil(nom={nom_profil_pur}, prenom={prenom_profil_pur})"
             )
-            
             # Lève une erreur 400 qui sera affichée clairement au frontend
             raise ErreurValidation(
                 message_erreur,
@@ -447,15 +427,12 @@ async def traiter_upload_cni(
     if face == "recto" and succes_ocr and verification.est_valide:
         try:
             from src.modules.verification_visuelle import embedding_facial
-            
             # Générer l'embedding facial à partir de l'image CNI
             embedding_cni = embedding_facial.generer_embedding(contenu)
-            
             # Sauvegarder dans la base
             verification.embedding_photo_cni = embedding_cni
             await session.commit()
             await session.refresh(verification)
-            
             journal.info(
                 f"Embedding photo CNI extrait et sauvegardé | "
                 f"user={utilisateur.id} embedding_dim={len(embedding_cni)}"
@@ -490,7 +467,7 @@ async def obtenir_synthese_verification(
     """Obtient la synthèse de la dernière vérification CNI complète."""
     # ✅ Import local
     from src.modeles.verification_cni import VerificationCNI
-    
+
     resultats = await session.execute(
         select(VerificationCNI)
         .where(
@@ -501,7 +478,6 @@ async def obtenir_synthese_verification(
         .limit(20)
     )
     toutes_verifs = resultats.scalars().all()
-
     dernier_recto = None
     dernier_verso = None
     for v in toutes_verifs:
@@ -618,7 +594,6 @@ async def obtenir_synthese_verification(
         champs_total=10,
     )
 
-
 async def obtenir_verifications(
     session: AsyncSession,
     utilisateur: Utilisateur,
@@ -627,7 +602,7 @@ async def obtenir_verifications(
     """Liste l'historique des vérifications CNI de l'utilisateur."""
     # ✅ Import local
     from src.modeles.verification_cni import VerificationCNI
-    
+
     resultat = await session.execute(
         select(VerificationCNI)
         .where(VerificationCNI.utilisateur_id == utilisateur.id)
@@ -635,7 +610,6 @@ async def obtenir_verifications(
         .limit(limite)
     )
     enregistrements = resultat.scalars().all()
-
     return ListeVerificationsCNI(
         historique=[
             VerificationCNIDetail(
@@ -675,7 +649,6 @@ async def obtenir_verifications(
         total=len(enregistrements),
     )
 
-
 async def supprimer_verification(
     session: AsyncSession,
     utilisateur: Utilisateur,
@@ -684,7 +657,7 @@ async def supprimer_verification(
     """Supprime (soft-delete) une vérification CNI."""
     # ✅ Import local
     from src.modeles.verification_cni import VerificationCNI
-    
+
     resultat = await session.execute(
         select(VerificationCNI).where(
             VerificationCNI.id == verification_id,
@@ -692,19 +665,16 @@ async def supprimer_verification(
         )
     )
     verification = resultat.scalar_one_or_none()
-
     if verification is None:
         raise ErreurRessourceIntrouvable(
             f"Vérification CNI {verification_id} introuvable.",
             message_utilisateur="Cette vérification n'existe pas ou ne t'appartient pas.",
         )
-
     if verification.est_supprime:
         raise ErreurValidation(
             "Vérification déjà supprimée.",
             message_utilisateur="Cette vérification est déjà dans la corbeille.",
         )
-
     maintenant = datetime.now(timezone.utc)
     await session.execute(
         update(VerificationCNI)
@@ -712,9 +682,7 @@ async def supprimer_verification(
         .values(est_supprime=True, date_suppression=maintenant)
     )
     await session.commit()
-
     return SuppressionCNI(id=verification_id)
-
 
 async def restaurer_verification(
     session: AsyncSession,
@@ -724,7 +692,7 @@ async def restaurer_verification(
     """Restaure une vérification CNI depuis la corbeille."""
     # ✅ Import local
     from src.modeles.verification_cni import VerificationCNI
-    
+
     resultat = await session.execute(
         select(VerificationCNI).where(
             VerificationCNI.id == verification_id,
@@ -732,24 +700,20 @@ async def restaurer_verification(
         )
     )
     verification = resultat.scalar_one_or_none()
-
     if verification is None:
         raise ErreurRessourceIntrouvable(
             f"Vérification CNI {verification_id} introuvable.",
             message_utilisateur="Cette vérification n'existe pas ou ne t'appartient pas.",
         )
-
     if not verification.est_supprime:
         raise ErreurValidation(
             "Vérification non supprimée.",
             message_utilisateur="Cette vérification n'est pas dans la corbeille.",
         )
-
     await session.execute(
         update(VerificationCNI)
         .where(VerificationCNI.id == verification_id)
         .values(est_supprime=False, date_suppression=None)
     )
     await session.commit()
-
     return RestaurationCNI(id=verification_id)
