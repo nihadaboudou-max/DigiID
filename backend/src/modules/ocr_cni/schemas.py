@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Schémas Pydantic du module OCR CNI — validation et typage des données
-extraites de la Carte Nationale d'Identité française.
+extraites de la Carte Nationale d'Identité.
 """
 from datetime import date, datetime
 from typing import Literal, Optional
@@ -38,10 +38,14 @@ class DonneesCNIExtraites(BaseModel):
         None, description="Date de naissance (format JJ/MM/AAAA)"
     )
     lieu_naissance: Optional[str] = Field(None, description="Lieu de naissance")
+    
+    # ✅ NOUVEAUX CHAMPS : Nationalité et Pays émetteur
+    nationalite: Optional[str] = Field(None, description="Nationalité (ex: Béninoise, Sénégalaise)")
+    pays_emetteur: Optional[str] = Field(None, description="Pays émetteur (ex: Bénin, Sénégal)")
 
     # --- Carte d'identité ---
     numero_cni: Optional[str] = Field(
-        None, description="Numéro de la carte (12 caractères alphanumériques)"
+        None, description="Numéro de la carte (9 à 15 caractères alphanumériques)"
     )
     date_delivrance: Optional[str] = Field(
         None, description="Date de délivrance (format JJ/MM/AAAA)"
@@ -79,11 +83,7 @@ class DonneesCNIExtraites(BaseModel):
             return valeur
         # Nettoyer
         valeur = valeur.strip().upper().replace(" ", "").replace("-", "")
-        # Le numéro CNI français fait 12 caractères alphanumériques
-        # Format typique : 12AB34567CD (12 caractères)
-        if len(valeur) == 12 and valeur.isalnum():
-            return valeur
-        # On accepte aussi les formats avec préfixe
+        # Le numéro CNI fait généralement 9 à 15 caractères alphanumériques
         import re
         if re.match(r"^[A-Z0-9]{9,15}$", valeur):
             return valeur
@@ -177,6 +177,8 @@ class VerificationCNIDetail(BaseModel):
     sexe: Optional[str] = None
     date_naissance: Optional[str] = None
     lieu_naissance: Optional[str] = None
+    nationalite: Optional[str] = None       # ✅ AJOUTÉ
+    pays_emetteur: Optional[str] = None     # ✅ AJOUTÉ
     numero_cni: Optional[str] = None
     date_delivrance: Optional[str] = None
     date_expiration: Optional[str] = None

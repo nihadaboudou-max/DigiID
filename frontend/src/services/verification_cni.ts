@@ -22,6 +22,8 @@ export interface DonneesCNIExtraites {
   mrz_ligne_3: string | null;
   format_carte: string | null;
   taux_confiance_moyen: number | null;
+  nationalite: string | null;
+  pays_emetteur: string | null;
   texte_brut?: string | null;
 }
 

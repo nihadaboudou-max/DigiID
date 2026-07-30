@@ -61,6 +61,8 @@ export default function PageVerificationCNI() {
       // ✅ Vérifier si la CNI a été rejetée
       if (syntheseData && syntheseData.statut === "rejete") {
         setCniRejetee(true);
+      } else {
+        setCniRejetee(false);
       }
     } catch {
       // Erreur silencieuse si aucune donnée
@@ -69,7 +71,7 @@ export default function PageVerificationCNI() {
     }
   };
 
-  // --- Gestion des succès d'upload ---
+  // --- Gestion des succès d'upload (Mise à jour optimiste) ---
   const handleSuccesRecto = useCallback(
     (resultat: ReponseUploadCNI, imageUrl?: string) => {
       setDernierResultatRecto(resultat);
@@ -80,16 +82,34 @@ export default function PageVerificationCNI() {
       if (resultat.resultat_ocr && !resultat.resultat_ocr.succes) {
         setErreur("L'OCR n'a pas pu extraire les données. Vérifie la qualité de l'image.");
       } else if (resultat.resultat_ocr?.erreurs && resultat.resultat_ocr.erreurs.length > 0) {
-        // Vérifier les erreurs d'incohérence
-        const erreursIncoherence = resultat.resultat_ocr.erreurs.filter(e => e.includes("⚠️") || e.includes("Incohérence"));
+        const erreursIncoherence = resultat.resultat_ocr.erreurs.filter(e => 
+          e.includes("⚠️") || e.includes("Incohérence") || e.includes("ne correspond pas")
+        );
         if (erreursIncoherence.length > 0) {
           setCniRejetee(true);
           setErreur(erreursIncoherence.join("\n"));
+          return; // On s'arrête ici
         }
       }
-      
+
+      // ✅ Mise à jour OPTIMISTE pour un affichage instantané sans rechargement
+      setCniRejetee(false);
+      setSynthese(prevSynthese => ({
+        id_recto: resultat.id,
+        id_verso: prevSynthese?.id_verso || null,
+        statut: resultat.statut || "approuve",
+        message: resultat.message || "Recto scanné avec succès",
+        donnees_recto: resultat.resultat_ocr?.donnees || null,
+        donnees_verso: prevSynthese?.donnees_verso || null,
+        validation_globale: null, // ✅ Requis par le type SyntheseVerificationCNI
+        champs_verifies: resultat.resultat_ocr?.champs_extraits || 0,
+        champs_total: 10,
+      }));
+
+      setOngletActif("resultats"); // Changement d'onglet immédiat
+
+      // Rechargement en arrière-plan pour synchronisation finale avec le backend
       chargerDonnees();
-      setOngletActif("resultats");
     },
     []
   );
@@ -100,19 +120,35 @@ export default function PageVerificationCNI() {
       setErreur(null);
       if (imageUrl) setImageVerso(imageUrl);
       
-      // ✅ CORRECTION : Vérifier si la CNI est rejetée
       if (resultat.resultat_ocr && !resultat.resultat_ocr.succes) {
         setErreur("L'OCR n'a pas pu extraire les données. Vérifie la qualité de l'image.");
       } else if (resultat.resultat_ocr?.erreurs && resultat.resultat_ocr.erreurs.length > 0) {
-        const erreursIncoherence = resultat.resultat_ocr.erreurs.filter(e => e.includes("⚠️") || e.includes("Incohérence"));
+        const erreursIncoherence = resultat.resultat_ocr.erreurs.filter(e => 
+          e.includes("⚠️") || e.includes("Incohérence")
+        );
         if (erreursIncoherence.length > 0) {
           setCniRejetee(true);
           setErreur(erreursIncoherence.join("\n"));
+          return;
         }
       }
-      
-      chargerDonnees();
+
+      // ✅ Mise à jour OPTIMISTE
+      setCniRejetee(false);
+      setSynthese(prevSynthese => ({
+        id_recto: prevSynthese?.id_recto || null,
+        id_verso: resultat.id,
+        statut: resultat.statut || "approuve",
+        message: resultat.message || "Verso scanné avec succès",
+        donnees_recto: prevSynthese?.donnees_recto || null,
+        donnees_verso: resultat.resultat_ocr?.donnees || null,
+        validation_globale: null, // ✅ Requis par le type SyntheseVerificationCNI
+        champs_verifies: (prevSynthese?.champs_verifies || 0) + (resultat.resultat_ocr?.champs_extraits || 0),
+        champs_total: 10,
+      }));
+
       setOngletActif("resultats");
+      chargerDonnees();
     },
     []
   );
@@ -151,7 +187,7 @@ export default function PageVerificationCNI() {
 
   // --- Navigation ---
   const onglets: { id: OngletType; label: string; icone: string }[] = [
-    { id: "scan", label: "Scanner", icone: "" },
+    { id: "scan", label: "Scanner", icone: "📷" },
     { id: "resultats", label: "Résultats", icone: "📋" },
     { id: "historique", label: "Historique", icone: "📜" },
   ];
@@ -159,7 +195,7 @@ export default function PageVerificationCNI() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       {/* Fil d'Ariane */}
-      <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6">
+      <nav className="flex items-center gap-2 text-sm text-ardoise-clair mb-6">
         <a href="/identite" className="hover:text-lagune transition-colors">Identité</a>
         <span>/</span>
         <span className="text-ardoise font-semibold">Scan CNI</span>
@@ -169,10 +205,10 @@ export default function PageVerificationCNI() {
       <div className="mb-8">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-2xl font-bold text-ardoise">
               Vérification d&apos;identité — CNI
             </h1>
-            <p className="text-gray-600 mt-1">
+            <p className="text-ardoise-clair mt-1">
               Scanne ta Carte Nationale d&apos;Identité pour vérifier ton identité.
               Les données sont extraites automatiquement par OCR et validées.
             </p>
@@ -189,7 +225,7 @@ export default function PageVerificationCNI() {
       {erreur && (
         <Alerte 
           variante={cniRejetee ? "erreur" : "avertissement"} 
-          titre={cniRejetee ? " CNI rejetée" : "️ Attention"}
+          titre={cniRejetee ? "CNI rejetée" : "Attention"}
           className="mb-6"
         >
           <div className="whitespace-pre-line">{erreur}</div>
@@ -233,7 +269,7 @@ export default function PageVerificationCNI() {
       )}
 
       {/* Onglets de navigation */}
-      <div className="flex border-b border-gray-200 mb-6">
+      <div className="flex border-b border-ardoise-clair/20 mb-6">
         {onglets.map((onglet) => (
           <button
             key={onglet.id}
@@ -245,8 +281,8 @@ export default function PageVerificationCNI() {
               flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors
               ${
                 ongletActif === onglet.id
-                  ? "border-b-2 border-blue-600 text-blue-600"
-                  : "text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  ? "border-b-2 border-lagune text-lagune"
+                  : "text-ardoise-clair hover:text-ardoise hover:border-ardoise-clair/30"
               }
             `}
           >
@@ -297,7 +333,7 @@ export default function PageVerificationCNI() {
           {/* ✅ CORRECTION : Afficher UNIQUEMENT la synthèse globale (pas de répétition) */}
           {synthese ? (
             <div>
-              <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
+              <h3 className="text-sm font-bold text-ardoise uppercase tracking-wide mb-3">
                 Résultat de la vérification
               </h3>
               <ResultatCNI
@@ -307,33 +343,40 @@ export default function PageVerificationCNI() {
                 face="recto"
               />
               
-              {/* Afficher les détails recto/verso seulement si nécessaire */}
+              {/* ✅ NOUVEAU : Afficher les détails recto avec Nationalité et Pays émetteur */}
               {synthese.donnees_recto && (
                 <div className="mt-6">
-                  <h4 className="text-xs font-semibold text-gray-600 uppercase mb-2">
-                    Détails Recto
+                  <h4 className="text-xs font-semibold text-ardoise-clair uppercase mb-2">
+                    Détails extraits (Recto)
                   </h4>
-                  <div className="bg-gray-50 p-3 rounded-lg text-sm">
+                  <div className="bg-sable/30 p-4 rounded-lg text-sm space-y-2 border border-ardoise-clair/10">
                     {synthese.donnees_recto.nom_famille && (
-                      <p><strong>Nom:</strong> {synthese.donnees_recto.nom_famille}</p>
+                      <p><strong>Nom :</strong> {synthese.donnees_recto.nom_famille}</p>
                     )}
                     {synthese.donnees_recto.prenoms && (
-                      <p><strong>Prénoms:</strong> {synthese.donnees_recto.prenoms}</p>
+                      <p><strong>Prénoms :</strong> {synthese.donnees_recto.prenoms}</p>
+                    )}
+                    {/* ✅ Affichage de la nationalité corrigée */}
+                    {synthese.donnees_recto.nationalite && (
+                      <p><strong>Nationalité :</strong> <span className="text-lagune font-semibold">{synthese.donnees_recto.nationalite}</span></p>
+                    )}
+                    {synthese.donnees_recto.pays_emetteur && (
+                      <p><strong>Pays émetteur :</strong> {synthese.donnees_recto.pays_emetteur}</p>
                     )}
                     {synthese.donnees_recto.numero_cni && (
-                      <p><strong>N° CNI:</strong> {synthese.donnees_recto.numero_cni}</p>
+                      <p><strong>N° CNI :</strong> <span className="font-mono">{synthese.donnees_recto.numero_cni}</span></p>
                     )}
                   </div>
                 </div>
               )}
             </div>
           ) : (
-            <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
-              <p className="text-gray-400 text-5xl mb-2">📋</p>
-              <p className="text-gray-500 font-medium">
+            <div className="text-center py-12 bg-sable/30 rounded-lg border border-ardoise-clair/10">
+              <p className="text-4xl mb-2">📋</p>
+              <p className="text-ardoise font-medium">
                 Aucune vérification disponible.
               </p>
-              <p className="text-gray-400 text-sm mt-1">
+              <p className="text-ardoise-clair text-sm mt-1">
                 Scanne ta CNI pour voir les résultats.
               </p>
               <button
@@ -349,24 +392,24 @@ export default function PageVerificationCNI() {
 
       {ongletActif === "historique" && (
         <div>
-          <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-4">
+          <h3 className="text-sm font-bold text-ardoise uppercase tracking-wide mb-4">
             Historique des vérifications CNI
           </h3>
 
           {chargement && (
             <div className="text-center py-8">
-              <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto" />
-              <p className="text-gray-500 mt-2">Chargement...</p>
+              <div className="animate-spin h-8 w-8 border-4 border-lagune border-t-transparent rounded-full mx-auto" />
+              <p className="text-ardoise-clair mt-2">Chargement...</p>
             </div>
           )}
 
           {!chargement && (!historique || historique.historique.length === 0) && (
-            <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
-              <p className="text-gray-400 text-5xl mb-2"></p>
-              <p className="text-gray-500 font-medium">
+            <div className="text-center py-12 bg-sable/30 rounded-lg border border-ardoise-clair/10">
+              <p className="text-4xl mb-2">📜</p>
+              <p className="text-ardoise font-medium">
                 Aucune vérification CNI pour le moment.
               </p>
-              <p className="text-gray-400 text-sm mt-1">
+              <p className="text-ardoise-clair text-sm mt-1">
                 Scanne ta carte d&apos;identité pour commencer.
               </p>
             </div>
@@ -390,14 +433,14 @@ export default function PageVerificationCNI() {
                       </span>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900">
+                          <span className="font-medium text-ardoise">
                             {verif.face === "recto" ? "Recto" : "Verso"}
                           </span>
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-ardoise-clair/20 text-ardoise">
                             {verif.statut}
                           </span>
                           {verif.est_supprime && (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-300 text-gray-500">
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-terre/20 text-terre">
                               Corbeille
                             </span>
                           )}
@@ -407,32 +450,19 @@ export default function PageVerificationCNI() {
                             </span>
                           )}
                         </div>
-                        <p className="text-sm text-gray-600 mt-1">
+                        <p className="text-sm text-ardoise-clair mt-1">
                           {verif.nom_fichier}
                         </p>
                         {verif.numero_cni && (
-                          <p className="text-xs text-gray-500 mt-1 font-mono">
+                          <p className="text-xs text-ardoise-clair mt-1 font-mono">
                             N°: {verif.numero_cni}
                           </p>
                         )}
-                        {verif.taux_confiance_ocr !== null && (
-                          <p className="text-xs text-gray-400 mt-1">
-                            Confiance OCR: {verif.taux_confiance_ocr.toFixed(1)}%
-                            {verif.validation_mrz !== null && (
-                              <>
-                                {" | "}
-                                MRZ: {verif.validation_mrz ? "✓" : "✗"}
-                              </>
-                            )}
-                          </p>
-                        )}
-                        <p className="text-xs text-gray-400 mt-1">
+                        <p className="text-xs text-ardoise-clair/60 mt-1">
                           {new Date(verif.cree_le).toLocaleDateString("fr-FR", {
                             day: "numeric",
                             month: "long",
                             year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
                           })}
                         </p>
                       </div>
@@ -442,14 +472,14 @@ export default function PageVerificationCNI() {
                       {!verif.est_supprime ? (
                         <button
                           onClick={() => handleSupprimer(verif.id)}
-                          className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50"
+                          className="text-xs text-terre hover:text-terre/80 px-2 py-1 rounded hover:bg-terre/10"
                         >
                           Supprimer
                         </button>
                       ) : (
                         <button
                           onClick={() => handleRestaurer(verif.id)}
-                          className="text-xs text-blue-500 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50"
+                          className="text-xs text-lagune hover:text-lagune/80 px-2 py-1 rounded hover:bg-lagune/10"
                         >
                           Restaurer
                         </button>
@@ -464,15 +494,15 @@ export default function PageVerificationCNI() {
       )}
 
       {/* Navigation vers les autres pages d'identité */}
-      <div className="mt-8 flex flex-wrap gap-3 justify-between items-center border-t border-gray-200 pt-6">
+      <div className="mt-8 flex flex-wrap gap-3 justify-between items-center border-t border-ardoise-clair/10 pt-6">
         <div className="flex flex-wrap gap-2">
           <a href="/identite">
-            <button className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+            <button className="px-4 py-2 text-sm text-ardoise-clair border border-ardoise-clair/30 rounded-lg hover:bg-ardoise-clair/10 transition-colors">
               ← Tableau de bord
             </button>
           </a>
           <a href="/identite/verification-visuelle">
-            <button className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+            <button className="px-4 py-2 text-sm text-ardoise-clair border border-ardoise-clair/30 rounded-lg hover:bg-ardoise-clair/10 transition-colors">
               Reconnaissance faciale →
             </button>
           </a>
@@ -485,14 +515,14 @@ export default function PageVerificationCNI() {
       </div>
 
       {/* Pied de page avec info sécurité */}
-      <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+      <div className="mt-4 p-4 bg-lagune/5 rounded-lg border border-lagune/20">
         <div className="flex items-start gap-3">
-          <span className="text-blue-600 text-lg">🔒</span>
+          <span className="text-lagune text-lg">🔒</span>
           <div>
-            <h4 className="text-sm font-semibold text-blue-800">
+            <h4 className="text-sm font-semibold text-lagune">
               Tes données sont protégées
             </h4>
-            <p className="text-xs text-blue-600 mt-1">
+            <p className="text-xs text-ardoise-clair mt-1">
               Les données extraites de ta CNI sont stockées de manière sécurisée
               et ne sont accessibles que par toi. Elles sont utilisées uniquement
               pour la vérification d&apos;identité dans le cadre du système DigiID.

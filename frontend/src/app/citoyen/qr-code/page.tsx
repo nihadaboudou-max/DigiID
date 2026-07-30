@@ -1,9 +1,12 @@
 "use client";
+
 import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import AffichageQR from "@/composants/qr-dynamique/AffichageQR";
+//  Import du composant de protection
+import ProtectionContenuSensible from "@/composants/commun/ProtectionContenuSensible";
 
 export default function QRCodePage() {
   return (
@@ -37,18 +40,23 @@ function Contenu() {
         </p>
       </div>
 
-      {/* Alerte sécurité */}
+      {/* Alerte sécurité (Texte renforcé) */}
       <div className="bg-ocre/10 border-l-4 border-ocre p-3 rounded">
         <p className="text-sm text-ocre font-semibold">
           ⚠️ Important : Ce QR Code change toutes les 30 secondes.
         </p>
         <p className="text-xs text-ardoise-clair mt-1">
-          Ne faites pas de capture d'écran : elle serait invalide après quelques secondes.
+          Toute tentative de capture d'écran rendra le contenu flou et apposera un filigrane traçable avec votre identifiant.
         </p>
       </div>
 
-      {/* Composant QR Code dynamique */}
-      <AffichageQR />
+      {/*Composant QR Code dynamique PROTÉGÉ */}
+      <ProtectionContenuSensible 
+        identifiantFiligrane="DigiID CONFIDENTIEL" 
+        niveau="strict"
+      >
+        <AffichageQR />
+      </ProtectionContenuSensible>
 
       {/* Bouton retour */}
       <Link href="/citoyen/dashboard">
