@@ -42,7 +42,7 @@ class ListeVerificationVisuelle(BaseModel):
     total: int
 
 
-# ✅ NOUVEAU SCHÉMA AJOUTÉ ICI
+# ✅ NOUVEAU SCHÉMA : Résultat de la comparaison faciale
 class ResultatComparaisonFaciale(BaseModel):
     """
     Résultat de la comparaison entre la photo de profil (selfie) 

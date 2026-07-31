@@ -6,7 +6,7 @@ avec l'empreinte faciale extraite de la CNI.
 """
 from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID  # ✅ AJOUT : pour le typage de la nouvelle fonction
+from uuid import UUID
 
 import numpy as np
 from fastapi import UploadFile
@@ -27,7 +27,7 @@ from src.modules.verification_visuelle.schemas import (
     SuppressionVerification,
     RestaurationVerification,
     VerificationVisuelleDetail,
-    ResultatComparaisonFaciale,  # ✅ AJOUT : pour le retour de la nouvelle fonction
+    ResultatComparaisonFaciale,
 )
 from src.noyau import journal
 from src.noyau.exceptions import ErreurValidation
@@ -126,9 +126,8 @@ async def traiter_upload_photo(
             statut = "rejete"
             date_verification = None
 
-    # 5. ✅ NOUVEAU : Comparaison avec la photo de la CNI (si les étapes précédentes sont OK)
+    # 5. Comparaison avec la photo de la CNI (si les étapes précédentes sont OK)
     if statut == "approuve":
-        # Import local pour éviter les dépendances circulaires au démarrage
         from src.modeles.verification_cni import VerificationCNI
         
         resultat_cni = await session.execute(
@@ -154,8 +153,7 @@ async def traiter_upload_photo(
             )
             score_similarite = doublons_cni[0]["similarite"] if doublons_cni else 0.0
             
-            # ✅ CORRECTION : Seuil abaissé à 50% (0.50) pour tolérer les différences 
-            # d'angle, d'éclairage et de qualité entre une photo de CNI et un selfie.
+            # Seuil abaissé à 50% (0.50) pour tolérer les différences d'angle/éclairage
             if score_similarite < 0.50:  
                 statut = "rejete"
                 raison = (
@@ -207,7 +205,6 @@ async def traiter_upload_photo(
         utilisateur.est_visage_verifie = True
         utilisateur.date_verification_visage = datetime.now(timezone.utc)
         utilisateur.date_derniere_mise_a_jour_verifications = datetime.now(timezone.utc)
-        # Stockage de l'empreinte sous forme de bytes pour l'Utilisateur
         utilisateur.empreinte_faciale = np.array(embedding, dtype=np.float32).tobytes()
         await session.commit()
 
@@ -372,7 +369,7 @@ async def restaurer_verification(
 
 
 # =============================================================================
-# ✅ NOUVELLE FONCTION AJOUTÉE (pour corriger l'AttributeError dans routes.py)
+# NOUVELLE FONCTION : Comparaison explicite Selfie vs Document CNI
 # =============================================================================
 async def comparer_photo_profil_avec_document(
     session: AsyncSession,
