@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-Génération d'embedding facial via deepface.
-Optimisé pour la comparaison CNI/Selfie avec RetinaFace et VGG-Face.
+Génération d'embedding facial via deepface (Facenet512).
+Solution robuste : utilise un fichier temporaire pour éviter les bugs de DeepFace 
+avec les tableaux NumPy, garantissant un alignement et un score de qualité.
 """
 import os
 import tempfile
 from typing import Iterable, Optional
 import numpy as np
+from PIL import Image
 
 # ── deepface : chargement paresseux (lazy) ──
-_BACKEND: str = "retinaface"  # ✅ CHANGÉ : retinaface est bien plus robuste que opencv
-_MODELE: str = "VGG-Face"     # ✅ CHANGÉ : VGG-Face est excellent pour les photos d'identité
+_BACKEND: str = "opencv"      # On garde opencv comme demandé
+_MODELE: str = "Facenet512"   # On garde Facenet512 (excellent modèle)
 _HANDLE_DEEPFACE = None
 
 def _obtenir_deepface():
@@ -23,7 +25,7 @@ def _obtenir_deepface():
         except ImportError:
             raise RuntimeError(
                 "deepface n'est pas installé. "
-                "Exécute : docker compose exec backend pip install deepface tensorflow opencv-python"
+                "Exécute : docker compose exec backend pip install deepface tensorflow"
             )
     return _HANDLE_DEEPFACE
 
@@ -33,32 +35,31 @@ def generer_embedding(
     detecter_visage: bool = True,
 ) -> list[float]:
     """
-    Extrait un embedding facial via deepface.
-    ✅ Utilise un fichier temporaire pour éviter les bugs de DeepFace avec les numpy arrays
-    ✅ Utilise RetinaFace pour une détection bien plus robuste (angles, CNI, selfies)
+    Extrait un embedding facial (vecteur 512D) via deepface Facenet512.
+    ✅ Utilise un fichier temporaire pour une compatibilité 100% fiable avec DeepFace.
     """
     DeepFace = _obtenir_deepface()
     
-    # 1. Écrire les bytes dans un fichier temporaire (méthode la plus fiable pour DeepFace)
+    # 1. Écrire les bytes dans un fichier temporaire (méthode la plus fiable)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
         tmp_file.write(image_bytes)
         tmp_file_path = tmp_file.name
     
     try:
-        # 2. DeepFace.Represent extrait l'embedding
+        # 2. DeepFace.Represent extrait l'embedding via le chemin du fichier
         resultat = DeepFace.represent(
-            img_path=tmp_file_path,
+            img_path=tmp_file_path,          # ✅ CHEMIN DU FICHIER (pas de tableau NumPy)
             model_name=modele,
-            detector_backend=_BACKEND,  # ✅ RetinaFace
+            detector_backend=_BACKEND,
             enforce_detection=detecter_visage,
-            align=True,  # ✅ Alignement automatique du visage
+            align=True,                      # ✅ L'alignement fonctionne parfaitement avec un fichier
         )
     except ValueError as exc:
         raise ValueError(f"Aucun visage détecté dans l'image : {exc}") from exc
     except Exception as exc:
         raise RuntimeError(f"Erreur lors de l'extraction de l'embedding : {exc}") from exc
     finally:
-        # 3. Nettoyer le fichier temporaire
+        # 3. Nettoyer impérativement le fichier temporaire pour éviter de saturer le disque
         if os.path.exists(tmp_file_path):
             os.remove(tmp_file_path)
             
@@ -103,9 +104,7 @@ def meilleur_score(
     embeddings_cibles: list[tuple[str, list[float]]],
     embedding_source: list[float],
 ) -> tuple[Optional[str], float]:
-    """
-    Trouve la meilleure correspondance parmi une liste d'embeddings.
-    """
+    """Trouve la meilleure correspondance parmi une liste d'embeddings."""
     meilleur_id = None
     meilleur_score_val = 0.0
     
