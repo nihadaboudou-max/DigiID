@@ -135,9 +135,9 @@ async def traiter_upload_photo(
             .where(
                 VerificationCNI.utilisateur_id == utilisateur.id,
                 VerificationCNI.face == "recto",
-                VerificationCNI.est_valide.is_(True),
+                VerificationCNI.est_valide == True,
                 VerificationCNI.embedding_photo_cni.isnot(None),
-                VerificationCNI.est_supprime.is_(False),
+                VerificationCNI.est_supprime == False,
             )
             .order_by(desc(VerificationCNI.cree_le))
             .limit(1)
@@ -417,9 +417,9 @@ async def comparer_photo_profil_avec_document(
             VerificationCNI.id == doc_uuid,
             VerificationCNI.utilisateur_id == utilisateur.id,
             VerificationCNI.face == "recto",
-            VerificationCNI.est_valide.is_(True),
+            VerificationCNI.est_valide == True,
             VerificationCNI.embedding_photo_cni.isnot(None),
-            VerificationCNI.est_supprime.is_(False),
+            VerificationCNI.est_supprime == False,
         )
     )
     verification_cni = resultat_cni.scalar_one_or_none()
