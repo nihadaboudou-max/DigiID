@@ -510,8 +510,6 @@ async def obtenir_synthese_verification(
             date_expiration=dernier_recto.date_expiration,
             autorite_delivrance=dernier_recto.autorite_delivrance,
             taille=dernier_recto.taille,
-            nationalite=dernier_recto.nationalite,
-            pays_emetteur=dernier_recto.pays_emetteur,
             mrz_ligne_1=dernier_recto.mrz_ligne_1,
             mrz_ligne_2=dernier_recto.mrz_ligne_2,
             mrz_ligne_3=dernier_recto.mrz_ligne_3,
@@ -535,8 +533,6 @@ async def obtenir_synthese_verification(
             date_expiration=dernier_verso.date_expiration,
             autorite_delivrance=dernier_verso.autorite_delivrance,
             taille=dernier_verso.taille,
-            nationalite=dernier_verso.nationalite,
-            pays_emetteur=dernier_verso.pays_emetteur,
             mrz_ligne_1=dernier_verso.mrz_ligne_1,
             mrz_ligne_2=dernier_verso.mrz_ligne_2,
             mrz_ligne_3=dernier_verso.mrz_ligne_3,
@@ -597,6 +593,7 @@ async def obtenir_synthese_verification(
         champs_verifies=champs_verifies,
         champs_total=10,
     )
+    
 
 async def obtenir_verifications(
     session: AsyncSession,

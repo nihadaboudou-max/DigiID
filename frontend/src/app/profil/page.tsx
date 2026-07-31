@@ -1,5 +1,4 @@
 "use client";
-
 import { useState } from "react";
 import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
@@ -9,8 +8,6 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Alerte } from "@/composants/commun/Alerte";
 import { IconeCopier, IconeCheck } from "@/composants/commun/Icones";
 import { useAuthentification } from "@/contextes/authentification";
-// ✅ NOUVEAU : Import du composant de protection contre la capture d'écran
-import ProtectionContenuSensible from "@/composants/commun/ProtectionContenuSensible";
 
 export default function PageProfil() {
   return (
@@ -87,6 +84,7 @@ function Contenu() {
     }
   }
 
+  // ✅ CORRECTION : Utiliser les champs existants (est_cni_verifiee + est_visage_verifie)
   const identiteVerifiee = utilisateur.est_cni_verifiee && utilisateur.est_visage_verifie;
   const aIncoherencePotentielle = !identiteVerifiee && (utilisateur.est_cni_verifiee || utilisateur.est_visage_verifie);
 
@@ -101,7 +99,7 @@ function Contenu() {
         </p>
       </div>
 
-      {/* Alerte d'incohérence */}
+      {/* Alerte d'incohérence (si CNI ou visage OK mais pas les deux) */}
       {aIncoherencePotentielle && (
         <Alerte variante="avertissement" titre="⚠️ Vérification d'identité incomplète">
           <p className="text-sm">
@@ -112,133 +110,133 @@ function Contenu() {
         </Alerte>
       )}
 
-      {/* ✅ CARTE PRINCIPALE PROTÉGÉE */}
-      <ProtectionContenuSensible identifiantFiligrane={digiId} niveau="strict">
-        <Carte>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
-            <div className="w-20 h-20 rounded-full bg-lagune/10 flex items-center justify-center text-lagune text-3xl font-bold flex-shrink-0 border-2 border-lagune/20">
-              {initiales}
-            </div>
-            <div className="flex-1 space-y-2">
-              <h2 className="text-2xl font-bold text-ardoise">{nomComplet}</h2>
-              <p className="text-sm text-ardoise-clair font-mono">{digiId}</p>
-              <div className="flex flex-wrap gap-2">
-                <Badge variante="lagune" taille="petit">
-                  {utilisateur.role?.replace(/_/g, " ").toUpperCase()}
-                </Badge>
-                <Badge variante="succes" taille="petit">
-                  ✓ Connecté
-                </Badge>
-                {identiteVerifiee && (
-                  <Badge variante="succes" taille="petit" className="border border-lagune/30">
-                    🛡️ Identité vérifiée
-                  </Badge>
-                )}
-              </div>
-            </div>
+      {/* Carte principale d'identité */}
+      <Carte>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+          {/* ✅ CORRECTION : Suppression de photo_profil_url - utilisation des initiales uniquement */}
+          <div className="w-20 h-20 rounded-full bg-lagune/10 flex items-center justify-center text-lagune text-3xl font-bold flex-shrink-0 border-2 border-lagune/20">
+            {initiales}
           </div>
-
-          <div className="grid md:grid-cols-2 gap-6 mt-8 pt-6 border-t border-ardoise-clair/10">
-            {/* Coordonnées */}
-            <div className="space-y-3">
-              <p className="text-xs uppercase text-ardoise-clair font-semibold">Coordonnées</p>
-              <div>
-                <span className="text-sm text-ardoise-clair">Email :</span> 
-                <span className="text-sm text-ardoise ml-2">{utilisateur.email}</span>
-              </div>
-              <div>
-                <span className="text-sm text-ardoise-clair">Téléphone :</span> 
-                <span className="text-sm text-ardoise ml-2">{utilisateur.telephone || "Non renseigné"}</span>
-              </div>
-              <div>
-                <span className="text-sm text-ardoise-clair">Ville :</span> 
-                <span className="text-sm text-ardoise ml-2">{utilisateur.ville || "Non renseignée"}</span>
-              </div>
-            </div>
-
-            {/* État des vérifications */}
-            <div className="space-y-3">
-              <p className="text-xs uppercase text-ardoise-clair font-semibold">État des vérifications</p>
-              <div className="flex items-center justify-between p-2 bg-sable rounded-lg">
-                <span className="text-sm text-ardoise">📧 Email vérifié</span>
-                <Badge variante={utilisateur.est_email_verifie ? "succes" : "terre"} taille="petit">
-                  {utilisateur.est_email_verifie ? "Oui" : "Non"}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between p-2 bg-sable rounded-lg">
-                <span className="text-sm text-ardoise">👤 Visage vérifié</span>
-                <Badge variante={utilisateur.est_visage_verifie ? "succes" : "terre"} taille="petit">
-                  {utilisateur.est_visage_verifie ? "Oui" : "Non"}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between p-2 bg-sable rounded-lg">
-                <span className="text-sm text-ardoise">🪪 CNI vérifiée</span>
-                <Badge variante={utilisateur.est_cni_verifiee ? "succes" : "terre"} taille="petit">
-                  {utilisateur.est_cni_verifiee ? "Oui" : "Non"}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between p-2 bg-lagune/10 rounded-lg border border-lagune/20">
-                <span className="text-sm text-ardoise font-medium">🛡️ Identité globale vérifiée</span>
-                <Badge variante={identiteVerifiee ? "succes" : "terre"} taille="petit">
-                  {identiteVerifiee ? "Oui" : "Non"}
-                </Badge>
-              </div>
-            </div>
-          </div>
-        </Carte>
-      </ProtectionContenuSensible>
-
-      {/* ✅ SECTION IDENTIFIANT PROTÉGÉE */}
-      <ProtectionContenuSensible identifiantFiligrane={digiId} niveau="strict">
-        <Carte>
-          <p className="text-xs uppercase text-ocre font-bold mb-4 tracking-wider">
-            Mon identifiant DigiID
-          </p>
-          <p className="text-3xl font-mono font-bold text-lagune break-all mb-6 tracking-wider">
-            {digiId}
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <Bouton variante="secondaire" onClick={copierIdentifiant}>
-              {copie ? (
-                <><IconeCheck className="w-4 h-4" /> Copié !</>
-              ) : (
-                <><IconeCopier className="w-4 h-4" /> Copier mon DigiID</>
-              )}
-            </Bouton>
-            {typeof navigator?.share === 'function' ? (
-              <Bouton variante="primaire" onClick={partager}>
-                📤 Partager
-              </Bouton>
-            ) : (
-              <Bouton variante="primaire" onClick={copierLien}>
-                🔗 Copier le lien
-              </Bouton>
-            )}
-            <Link href="/profil/telecharger">
-              <Bouton variante="ghost"> Télécharger mon profil numérique</Bouton>
-            </Link>
-          </div>
-          <div className="mt-6 pt-4 border-t border-ardoise-clair/10">
-            <p className="text-xs text-ardoise-clair font-semibold mb-2">Statut du profil</p>
+          <div className="flex-1 space-y-2">
+            <h2 className="text-2xl font-bold text-ardoise">{nomComplet}</h2>
+            <p className="text-sm text-ardoise-clair font-mono">{digiId}</p>
             <div className="flex flex-wrap gap-2">
+              <Badge variante="lagune" taille="petit">
+                {utilisateur.role?.replace(/_/g, " ").toUpperCase()}
+              </Badge>
+              <Badge variante={utilisateur.est_actif ? "succes" : "terre"} taille="petit">
+                {utilisateur.est_actif ? "Compte actif" : "Compte inactif"}
+              </Badge>
+              {/* ✅ CORRECTION : Utiliser identiteVerifiee (calculé localement) */}
+              {identiteVerifiee && (
+                <Badge variante="succes" taille="petit" className="border border-lagune/30">
+                  ️ Identité vérifiée
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-6 mt-8 pt-6 border-t border-ardoise-clair/10">
+          {/* Coordonnées */}
+          <div className="space-y-3">
+            <p className="text-xs uppercase text-ardoise-clair font-semibold">Coordonnées</p>
+            <div>
+              <span className="text-sm text-ardoise-clair">Email :</span> 
+              <span className="text-sm text-ardoise ml-2">{utilisateur.email}</span>
+            </div>
+            <div>
+              <span className="text-sm text-ardoise-clair">Téléphone :</span> 
+              <span className="text-sm text-ardoise ml-2">{utilisateur.telephone || "Non renseigné"}</span>
+            </div>
+            <div>
+              <span className="text-sm text-ardoise-clair">Ville :</span> 
+              <span className="text-sm text-ardoise ml-2">{utilisateur.ville || "Non renseignée"}</span>
+            </div>
+          </div>
+
+          {/* État des vérifications */}
+          <div className="space-y-3">
+            <p className="text-xs uppercase text-ardoise-clair font-semibold">État des vérifications</p>
+            <div className="flex items-center justify-between p-2 bg-sable rounded-lg">
+              <span className="text-sm text-ardoise">📧 Email vérifié</span>
               <Badge variante={utilisateur.est_email_verifie ? "succes" : "terre"} taille="petit">
-                ✉️ {utilisateur.est_email_verifie ? "Vérifié" : "Non vérifié"}
+                {utilisateur.est_email_verifie ? "Oui" : "Non"}
               </Badge>
+            </div>
+            <div className="flex items-center justify-between p-2 bg-sable rounded-lg">
+              <span className="text-sm text-ardoise">👤 Visage vérifié</span>
               <Badge variante={utilisateur.est_visage_verifie ? "succes" : "terre"} taille="petit">
-                👤 Visage {utilisateur.est_visage_verifie ? "✓" : "✗"}
+                {utilisateur.est_visage_verifie ? "Oui" : "Non"}
               </Badge>
+            </div>
+            <div className="flex items-center justify-between p-2 bg-sable rounded-lg">
+              <span className="text-sm text-ardoise">🪪 CNI vérifiée</span>
               <Badge variante={utilisateur.est_cni_verifiee ? "succes" : "terre"} taille="petit">
-                 CNI {utilisateur.est_cni_verifiee ? "✓" : "✗"}
+                {utilisateur.est_cni_verifiee ? "Oui" : "Non"}
               </Badge>
+            </div>
+            {/* ✅ CORRECTION : Badge calculé localement */}
+            <div className="flex items-center justify-between p-2 bg-lagune/10 rounded-lg border border-lagune/20">
+              <span className="text-sm text-ardoise font-medium">️ Identité globale vérifiée</span>
               <Badge variante={identiteVerifiee ? "succes" : "terre"} taille="petit">
-                🛡️ Identité {identiteVerifiee ? "✓" : "✗"}
+                {identiteVerifiee ? "Oui" : "Non"}
               </Badge>
             </div>
           </div>
-        </Carte>
-      </ProtectionContenuSensible>
+        </div>
+      </Carte>
 
-      {/* Qui peut interroger mon DigiID (Non protégé car ce sont des infos générales) */}
+      {/* Section identifiant DigiID */}
+      <Carte>
+        <p className="text-xs uppercase text-ocre font-bold mb-4 tracking-wider">
+          Mon identifiant DigiID
+        </p>
+        <p className="text-3xl font-mono font-bold text-lagune break-all mb-6 tracking-wider">
+          {digiId}
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Bouton variante="secondaire" onClick={copierIdentifiant}>
+            {copie ? (
+              <><IconeCheck className="w-4 h-4" /> Copié !</>
+            ) : (
+              <><IconeCopier className="w-4 h-4" /> Copier mon DigiID</>
+            )}
+          </Bouton>
+          {typeof navigator?.share === 'function' ? (
+            <Bouton variante="primaire" onClick={partager}>
+              📤 Partager
+            </Bouton>
+          ) : (
+            <Bouton variante="primaire" onClick={copierLien}>
+              🔗 Copier le lien
+            </Bouton>
+          )}
+          <Link href="/profil/telecharger">
+            <Bouton variante="ghost"> Télécharger mon profil numérique</Bouton>
+          </Link>
+        </div>
+        <div className="mt-6 pt-4 border-t border-ardoise-clair/10">
+          <p className="text-xs text-ardoise-clair font-semibold mb-2">Statut du profil</p>
+          <div className="flex flex-wrap gap-2">
+            <Badge variante={utilisateur.est_email_verifie ? "succes" : "terre"} taille="petit">
+              ✉️ {utilisateur.est_email_verifie ? "Vérifié" : "Non vérifié"}
+            </Badge>
+            <Badge variante={utilisateur.est_visage_verifie ? "succes" : "terre"} taille="petit">
+              👤 Visage {utilisateur.est_visage_verifie ? "✓" : "✗"}
+            </Badge>
+            <Badge variante={utilisateur.est_cni_verifiee ? "succes" : "terre"} taille="petit">
+               CNI {utilisateur.est_cni_verifiee ? "✓" : "✗"}
+            </Badge>
+            {/* ✅ CORRECTION : Utiliser identiteVerifiee */}
+            <Badge variante={identiteVerifiee ? "succes" : "terre"} taille="petit">
+              🛡️ Identité {identiteVerifiee ? "✓" : "✗"}
+            </Badge>
+          </div>
+        </div>
+      </Carte>
+
+      {/* Qui peut interroger mon DigiID */}
       <Carte titre="Qui peut interroger mon DigiID ?">
         <div className="grid sm:grid-cols-3 gap-4">
           <BlocUsage titre="Banques" detail="Vérification d'identité avant ouverture de compte." statut="actif" />
@@ -249,7 +247,7 @@ function Contenu() {
 
       {/* Sécurité */}
       <Alerte variante="avertissement" titre="🔐 Sécurité">
-        <p className="text-sm">Ne partage ton DigiID qu'avec des institutions de confiance. Chaque consultation est tracée. Toute capture d'écran de cette page est marquée d'un filigrane unique.</p>
+        <p className="text-sm">Ne partage ton DigiID qu'avec des institutions de confiance. Chaque consultation est tracée.</p>
       </Alerte>
 
       {/* Actions rapides */}
