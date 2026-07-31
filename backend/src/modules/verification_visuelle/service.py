@@ -6,6 +6,7 @@ avec l'empreinte faciale extraite de la CNI.
 """
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID  # ✅ AJOUT : pour le typage de la nouvelle fonction
 
 import numpy as np
 from fastapi import UploadFile
@@ -26,6 +27,7 @@ from src.modules.verification_visuelle.schemas import (
     SuppressionVerification,
     RestaurationVerification,
     VerificationVisuelleDetail,
+    ResultatComparaisonFaciale,  # ✅ AJOUT : pour le retour de la nouvelle fonction
 )
 from src.noyau import journal
 from src.noyau.exceptions import ErreurValidation
@@ -367,3 +369,99 @@ async def restaurer_verification(
 
     journal.info(f"Vérification restaurée : id={verification_id} user={utilisateur.id}")
     return RestaurationVerification(id=uid)
+
+
+# =============================================================================
+# ✅ NOUVELLE FONCTION AJOUTÉE (pour corriger l'AttributeError dans routes.py)
+# =============================================================================
+async def comparer_photo_profil_avec_document(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    document_id: str,
+) -> ResultatComparaisonFaciale:
+    """
+    Compare l'embedding facial de la dernière vérification visuelle (selfie) 
+    avec l'embedding de la CNI (document_id).
+    """
+    import uuid
+    try:
+        doc_uuid = uuid.UUID(document_id)
+    except ValueError:
+        raise ErreurValidation(
+            "ID de document invalide.",
+            message_utilisateur="L'identifiant du document est invalide."
+        )
+
+    # 1. Récupérer la dernière vérification visuelle approuvée de l'utilisateur
+    resultat_visuelle = await session.execute(
+        select(VerificationVisuelle)
+        .where(
+            VerificationVisuelle.utilisateur_id == utilisateur.id,
+            VerificationVisuelle.statut == "approuve",
+            VerificationVisuelle.embedding.isnot(None),
+            VerificationVisuelle.est_supprime.is_(False),
+        )
+        .order_by(desc(VerificationVisuelle.cree_le))
+        .limit(1)
+    )
+    verification_visuelle = resultat_visuelle.scalar_one_or_none()
+
+    if not verification_visuelle or not verification_visuelle.embedding:
+        raise ErreurValidation(
+            "Aucune vérification visuelle approuvée trouvée.",
+            message_utilisateur="Vous devez d'abord effectuer une vérification visuelle réussie."
+        )
+
+    # 2. Récupérer la vérification CNI correspondante
+    from src.modeles.verification_cni import VerificationCNI
+    resultat_cni = await session.execute(
+        select(VerificationCNI)
+        .where(
+            VerificationCNI.id == doc_uuid,
+            VerificationCNI.utilisateur_id == utilisateur.id,
+            VerificationCNI.face == "recto",
+            VerificationCNI.est_valide.is_(True),
+            VerificationCNI.embedding_photo_cni.isnot(None),
+            VerificationCNI.est_supprime.is_(False),
+        )
+    )
+    verification_cni = resultat_cni.scalar_one_or_none()
+
+    if not verification_cni or not verification_cni.embedding_photo_cni:
+        raise ErreurValidation(
+            "Document CNI invalide ou sans empreinte faciale.",
+            message_utilisateur="Le document sélectionné n'est pas une CNI validée avec photo."
+        )
+
+    # 3. Comparer les embeddings (seuil=0.0 pour obtenir le score brut)
+    resultat_comparaison = comparaison.comparer_embeddings(
+        verification_visuelle.embedding,
+        [("cni", verification_cni.embedding_photo_cni)],
+        seuil=0.0
+    )
+    
+    score_similarite = resultat_comparaison[0]["similarite"] if resultat_comparaison else 0.0
+    
+    # 4. Construire la réponse avec le seuil optimisé à 50%
+    SEUIL_RECOMMANDE = 0.50
+    correspond = score_similarite >= SEUIL_RECOMMANDE
+    
+    if correspond:
+        if score_similarite >= 0.65:
+            message = "Excellente correspondance. Visage confirmé."
+        elif score_similarite >= 0.55:
+            message = "Bonne correspondance. Visage confirmé."
+        else:
+            message = "Correspondance acceptable. Visage confirmé."
+    else:
+        if score_similarite >= 0.40:
+            message = "Faible similarité. La photo CNI peut être ancienne ou l'angle différent."
+        else:
+            message = "Visage non correspondant. Assurez-vous que c'est bien vous."
+
+    return ResultatComparaisonFaciale(
+        correspond=correspond,
+        score_confiance=round(score_similarite, 3),
+        message=message,
+        seuil_utilise=SEUIL_RECOMMANDE,
+    )
