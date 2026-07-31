@@ -134,7 +134,7 @@ export async function restaurerPhoto(
 export interface ResultatComparaisonFaciale {
   correspond: boolean;
   score_confiance: number;
-  seuil?: number;
+  seuil_utilise?: number;
   message: string;
 }
 
