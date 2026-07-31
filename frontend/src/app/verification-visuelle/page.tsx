@@ -44,14 +44,14 @@ export default function PageVerificationVisuelle() {
 }
 
 function Contenu() {
-  // --- État existant ---
+  // --- État ---
   const [statut, setStatut] = useState<VerificationDetail | null>(null);
   const [statutChargement, setStatutChargement] = useState(true);
   const [historique, setHistorique] = useState<ListeVerifications | null>(null);
   const [histoChargement, setHistoChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
-  // --- NOUVEAU : État pour la comparaison automatique ---
+  // --- État pour la comparaison automatique ---
   const [documentCNI, setDocumentCNI] = useState<DocumentIdentiteDetail | null>(null);
   const [comparaison, setComparaison] = useState<ResultatComparaisonFaciale | null>(null);
   const [comparaisonChargement, setComparaisonChargement] = useState(false);
@@ -84,36 +84,44 @@ function Contenu() {
     }
   }, []);
 
+  // ✅ CORRECTION PRINCIPALE : Appeler toutCharger au montage
+  useEffect(() => {
+    toutCharger();
+  }, [toutCharger]);
+
   // --- Charger le document CNI et lancer la comparaison automatique ---
   useEffect(() => {
     async function chargerEtComparer() {
-      try {
-        // Charger les documents pour trouver la CNI
-        const resultat = await listerDocumentsIdentite("cni");
-        if (resultat.documents.length > 0) {
-          const cni = resultat.documents[0];
-          setDocumentCNI(cni);
+      // Ne lancer que si le statut est chargé et approuvé
+      if (!statutChargement && statut?.statut === "approuve") {
+        try {
+          // Charger les documents pour trouver la CNI
+          const resultat = await listerDocumentsIdentite("cni");
+          if (resultat.documents.length > 0) {
+            const cni = resultat.documents[0];
+            setDocumentCNI(cni);
 
-          // ✅ Comparaison AUTOMATIQUE si une vérification visuelle existe
-          if (statut && statut.statut === "approuve") {
+            // Lancer la comparaison
             setComparaisonChargement(true);
             try {
               const resultatComparaison = await comparerPhotoProfilAvecDocument(cni.id);
               setComparaison(resultatComparaison);
             } catch (e) {
               // Erreur de comparaison silencieuse
+              setComparaison(null);
             } finally {
               setComparaisonChargement(false);
             }
           }
+        } catch {
+          // Pas de CNI trouvée - c'est OK
+          setDocumentCNI(null);
         }
-      } catch {
-        // Pas de CNI trouvée - c'est OK
       }
     }
 
     chargerEtComparer();
-  }, [statut]);
+  }, [statut, statutChargement]);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 apparition pb-20">
@@ -144,71 +152,97 @@ function Contenu() {
 
       {/* Section : Statut actuel + Comparaison automatique */}
       <Carte titre="📊 Statut actuel">
-        <StatutVerification verification={statut} chargement={statutChargement} />
-        
-        {/* ✅ RÉSULTAT DE COMPARAISON AUTOMATIQUE */}
-        {statut?.statut === "approuve" && (
-          <div className="mt-4 pt-4 border-t border-ardoise-clair/10">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-ardoise">
-                🔍 Comparaison avec ta CNI
-              </h3>
-              {documentCNI && (
-                <Badge variante="lagune" taille="petit">
-                  CNI trouvée
-                </Badge>
-              )}
-            </div>
+        {statutChargement ? (
+          <div className="text-center py-8">
+            <div className="animate-spin h-8 w-8 border-4 border-lagune border-t-transparent rounded-full mx-auto mb-3" />
+            <p className="text-sm text-ardoise-clair italic">Chargement du statut...</p>
+          </div>
+        ) : statut ? (
+          <>
+            <StatutVerification verification={statut} chargement={false} />
+            
+            {/* RÉSULTAT DE COMPARAISON AUTOMATIQUE */}
+            {statut.statut === "approuve" && (
+              <div className="mt-4 pt-4 border-t border-ardoise-clair/10">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-ardoise">
+                    🔍 Comparaison avec ta CNI
+                  </h3>
+                  {documentCNI && (
+                    <Badge variante="lagune" taille="petit">
+                      CNI trouvée
+                    </Badge>
+                  )}
+                </div>
 
-            {comparaisonChargement ? (
-              <p className="text-sm text-ardoise-clair italic">Comparaison en cours...</p>
-            ) : comparaison ? (
-              <div className={`rounded-lg p-3 border-2 ${
-                comparaison.correspond
-                  ? "border-green-300 bg-green-50"
-                  : "border-red-300 bg-red-50"
-              }`}>
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl">
-                    {comparaison.correspond ? "✅" : ""}
-                  </span>
-                  <div className="flex-1">
-                    <p className={`text-sm font-semibold ${
-                      comparaison.correspond ? "text-green-700" : "text-red-700"
-                    }`}>
-                      {comparaison.correspond ? "Visage correspondant" : "Visage non correspondant"}
-                    </p>
-                    <p className="text-xs text-ardoise mt-0.5">
-                      {comparaison.message}
-                    </p>
-                    <div className="mt-2">
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-ardoise-clair">Score de confiance</span>
-                        <span className={`font-bold ${
-                          comparaison.correspond ? "text-green-600" : "text-red-600"
+                {comparaisonChargement ? (
+                  <p className="text-sm text-ardoise-clair italic">Comparaison en cours...</p>
+                ) : comparaison ? (
+                  <div className={`rounded-lg p-3 border-2 ${
+                    comparaison.correspond
+                      ? "border-green-300 bg-green-50"
+                      : "border-red-300 bg-red-50"
+                  }`}>
+                    <div className="flex items-start gap-3">
+                      <span className="text-2xl">
+                        {comparaison.correspond ? "✅" : "❌"}
+                      </span>
+                      <div className="flex-1">
+                        <p className={`text-sm font-semibold ${
+                          comparaison.correspond ? "text-green-700" : "text-red-700"
                         }`}>
-                          {(comparaison.score_confiance * 100).toFixed(1)}%
-                        </span>
-                      </div>
-                      <div className="h-1.5 bg-sable rounded-full overflow-hidden">
-                        <div
-                          className={`h-full transition-all ${
-                            comparaison.correspond ? "bg-green-500" : "bg-red-500"
-                          }`}
-                          style={{ width: `${comparaison.score_confiance * 100}%` }}
-                        />
+                          {comparaison.correspond ? "Visage correspondant" : "Visage non correspondant"}
+                        </p>
+                        <p className="text-xs text-ardoise mt-0.5">
+                          {comparaison.message}
+                        </p>
+                        <div className="mt-2">
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="text-ardoise-clair">Score de confiance</span>
+                            <span className={`font-bold ${
+                              comparaison.correspond ? "text-green-600" : "text-red-600"
+                            }`}>
+                              {(comparaison.score_confiance * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="h-1.5 bg-sable rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all ${
+                                comparaison.correspond ? "bg-green-500" : "bg-red-500"
+                              }`}
+                              style={{ width: `${comparaison.score_confiance * 100}%` }}
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                ) : !documentCNI ? (
+                  <Alerte variante="avertissement" titre="CNI requise">
+                    <p className="text-xs">
+                      Tu dois d'abord scanner ta CNI avant de pouvoir comparer ton visage.
+                      <Link href="/identite/verification-cni" className="underline font-semibold ml-1">
+                        Scanner ma CNI →
+                      </Link>
+                    </p>
+                  </Alerte>
+                ) : (
+                  <Alerte variante="info" titre="Comparaison disponible">
+                    <p className="text-xs">
+                      Une fois ta photo approuvée, nous la comparerons automatiquement avec celle de ta CNI.
+                    </p>
+                  </Alerte>
+                )}
               </div>
-            ) : (
-              <Alerte variante="info" titre="Comparaison disponible">
-                <p className="text-xs">
-                  Une fois ta photo approuvée, nous la comparerons automatiquement avec celle de ta CNI.
-                </p>
-              </Alerte>
             )}
+          </>
+        ) : (
+          <div className="text-center py-8">
+            <p className="text-4xl mb-2"></p>
+            <p className="text-ardoise font-medium">Aucune vérification visuelle</p>
+            <p className="text-ardoise-clair text-sm mt-1">
+              Prends une photo pour commencer la vérification.
+            </p>
           </div>
         )}
       </Carte>
@@ -242,7 +276,7 @@ function Contenu() {
       {/* Info légale */}
       <div className="text-xs text-ardoise-clair/50 border-t border-ardoise-clair/10 pt-3">
         <p>
-          🔒 Aucune photo brute n'est conservée. Seul un vecteur facial chiffré est stocké.
+          Aucune photo brute n'est conservée. Seul un vecteur facial chiffré est stocké.
         </p>
       </div>
     </div>
