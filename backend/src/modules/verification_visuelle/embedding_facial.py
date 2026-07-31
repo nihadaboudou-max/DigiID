@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 Génération d'embedding facial via deepface (Facenet512/ArcFace).
-Version optimisée : passage direct du tableau NumPy à DeepFace pour éviter 
-les erreurs de lecture de fichier et les écritures disque inutiles.
+Version optimisée et corrigée pour éviter les erreurs de type 'tuple' ou de lecture.
 """
+import os
+import tempfile
 from typing import Iterable, Optional
 import numpy as np
 import cv2
@@ -56,20 +57,16 @@ def generer_embedding(
     detecter_visage: bool = True,
     appliquer_clahe: bool = True,
 ) -> list[float]:
-    """
-    Extrait un embedding facial (vecteur 512D) via deepface Facenet512.
-    """
+    """Extrait un embedding facial (vecteur 512D) via deepface Facenet512."""
     DeepFace = _obtenir_deepface()
     
-    # Prétraitement optionnel pour les CNI
     if appliquer_clahe:
         image_bytes = _optimiser_image_cni(image_bytes)
 
-    # Vérification stricte du type
     if not isinstance(image_bytes, (bytes, bytearray)):
         raise ValueError(f"Type d'image invalide attendu: bytes, reçu: {type(image_bytes)}")
 
-    # Décoder l'image en tableau numpy directement (évite les écritures disque et les bugs de cv2.imread dans DeepFace)
+    # Décoder l'image en tableau numpy directement (évite les écritures disque)
     nparr = np.frombuffer(image_bytes, np.uint8)
     img_array = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     
@@ -77,8 +74,7 @@ def generer_embedding(
         raise ValueError("Le fichier image est corrompu ou illisible par OpenCV.")
 
     try:
-        # 2. DeepFace.represent avec le tableau numpy directement
-        # CORRECTION CRITIQUE : On passe le tableau numpy, pas un chemin de fichier (str)
+        # CORRECTION CRITIQUE : On passe le tableau numpy directement, pas un chemin de fichier
         resultat = DeepFace.represent(
             img_path=img_array,  
             model_name=modele,
@@ -87,7 +83,6 @@ def generer_embedding(
             align=True,
         )
     except ValueError as exc:
-        # Fallback : Si retinaface échoue, on tente avec opencv
         journal.warning(f"Échec avec {_BACKEND}, tentative avec opencv : {exc}")
         try:
             resultat = DeepFace.represent(
@@ -107,9 +102,55 @@ def generer_embedding(
         
     embedding: list[float] = resultat[0]["embedding"]
     
-    # 3. Normalisation L2
+    # Normalisation L2
     norme = np.linalg.norm(embedding)
     if norme > 0:
         embedding = (np.array(embedding) / norme).tolist()
         
     return embedding
+
+# =============================================================================
+# ⚠️ CES FONCTIONS SONT OBLIGATOIRES POUR QUE L'IMPORT FONCTIONNE ⚠️
+# =============================================================================
+
+def calculer_similarite(
+    emb1: Iterable[float],
+    emb2: Iterable[float],
+) -> float:
+    """Calcule la similarité cosinus entre deux embeddings."""
+    a = np.array(list(emb1), dtype=np.float64)
+    b = np.array(list(emb2), dtype=np.float64)
+    
+    if a.ndim != 1 or b.ndim != 1:
+        return 0.0
+    
+    if a.shape != b.shape:
+        return 0.0
+    
+    norme_a = np.linalg.norm(a)
+    norme_b = np.linalg.norm(b)
+    if norme_a == 0 or norme_b == 0:
+        return 0.0
+    
+    a = a / norme_a
+    b = b / norme_b
+    
+    produit_scalaire = float(np.dot(a, b))
+    return max(0.0, min(1.0, produit_scalaire))
+
+
+def meilleur_score(
+    embeddings_cibles: list[tuple[str, list[float]]],
+    embedding_source: list[float],
+) -> tuple[Optional[str], float]:
+    """Trouve le meilleur score de similarité parmi une liste d'embeddings."""
+    meilleur_id = None
+    meilleur_score_val = 0.0
+    
+    for identifiant, vecteur in embeddings_cibles:
+        score = calculer_similarite(embedding_source, vecteur)
+        if score > meilleur_score_val:
+            meilleur_score_val = score
+            meilleur_id = identifiant
+    
+    return meilleur_id, meilleur_score_val
