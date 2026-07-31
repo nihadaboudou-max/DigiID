@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 Génération d'embedding facial via deepface (Facenet512/ArcFace).
-Version optimisée et corrigée pour éviter les erreurs de type 'tuple' ou de lecture.
+Version optimisée : passage direct du tableau NumPy à DeepFace pour éviter 
+les erreurs de lecture de fichier et les écritures disque inutiles.
 """
-import os
-import tempfile
 from typing import Iterable, Optional
 import numpy as np
 import cv2
@@ -70,21 +69,18 @@ def generer_embedding(
     if not isinstance(image_bytes, (bytes, bytearray)):
         raise ValueError(f"Type d'image invalide attendu: bytes, reçu: {type(image_bytes)}")
 
-    # 1. Écrire les bytes dans un fichier temporaire de manière sécurisée
-    tmp_fd, tmp_file_path = tempfile.mkstemp(suffix=".jpg")
-    try:
-        with os.fdopen(tmp_fd, 'wb') as tmp_file:
-            tmp_file.write(image_bytes)
-        
-        # Vérification que le fichier a bien été écrit et est lisible par OpenCV AVANT DeepFace
-        test_img = cv2.imread(tmp_file_path)
-        if test_img is None:
-            raise ValueError("Le fichier image temporaire est corrompu ou illisible par OpenCV.")
+    # Décoder l'image en tableau numpy directement (évite les écritures disque et les bugs de cv2.imread dans DeepFace)
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    img_array = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    
+    if img_array is None:
+        raise ValueError("Le fichier image est corrompu ou illisible par OpenCV.")
 
-        # 2. DeepFace.represent avec un backend robuste
-        # CORRECTION CRITIQUE : Forcer le type str pour éviter l'erreur 'tuple' dans DeepFace
+    try:
+        # 2. DeepFace.represent avec le tableau numpy directement
+        # CORRECTION CRITIQUE : On passe le tableau numpy, pas un chemin de fichier (str)
         resultat = DeepFace.represent(
-            img_path=str(tmp_file_path), 
+            img_path=img_array,  
             model_name=modele,
             detector_backend=_BACKEND,
             enforce_detection=detecter_visage,
@@ -95,7 +91,7 @@ def generer_embedding(
         journal.warning(f"Échec avec {_BACKEND}, tentative avec opencv : {exc}")
         try:
             resultat = DeepFace.represent(
-                img_path=str(tmp_file_path),
+                img_path=img_array,
                 model_name=modele,
                 detector_backend="opencv",
                 enforce_detection=detecter_visage,
@@ -105,10 +101,6 @@ def generer_embedding(
             raise ValueError(f"Aucun visage détecté dans l'image : {fallback_exc}") from fallback_exc
     except Exception as exc:
         raise RuntimeError(f"Erreur lors de l'extraction de l'embedding : {exc}") from exc
-    finally:
-        # Nettoyage garanti du fichier temporaire
-        if os.path.exists(tmp_file_path):
-            os.remove(tmp_file_path)
             
     if not resultat or not isinstance(resultat, list) or len(resultat) == 0 or "embedding" not in resultat[0]:
         raise ValueError("deepface n'a pas retourné d'embedding valide.")
