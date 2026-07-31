@@ -2,7 +2,7 @@
 """Routes API du module de vérification visuelle."""
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
@@ -19,6 +19,7 @@ from src.modules.verification_visuelle.schemas import (
     RestaurationVerification,
     SuppressionVerification,
     VerificationVisuelleDetail,
+    ResultatComparaisonFaciale,  # ✅ Ajouté pour le retour de la comparaison
 )
 from src.noyau import journal as journal_module
 from src.noyau.journal import enregistrer_evenement_audit
@@ -109,6 +110,27 @@ async def historique_verification(
     return await service.obtenir_historique_verification(
         session=session,
         utilisateur=utilisateur,
+    )
+
+# ✅ NOUVEAU ENDPOINT : Comparaison photo profil avec document
+@routeur_verification.post(
+    "/comparer-photo-profil",
+    response_model=ResultatComparaisonFaciale,
+    summary="Comparer la photo de profil avec un document d'identité",
+)
+async def comparer_photo_profil(
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    document_id: str = Query(..., description="ID du document d'identité (CNI) à comparer"),
+):
+    """
+    Compare l'embedding facial de l'utilisateur avec celui stocké dans un document d'identité.
+    Utilise le seuil optimisé (50%) pour tolérer les différences d'angle/éclairage CNI vs Selfie.
+    """
+    return await service.comparer_photo_profil_avec_document(
+        session=session,
+        utilisateur=utilisateur,
+        document_id=document_id,
     )
 
 @routeur_verification.delete(
