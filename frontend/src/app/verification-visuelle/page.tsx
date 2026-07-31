@@ -84,7 +84,7 @@ function Contenu() {
     }
   }, []);
 
-  // ✅ CORRECTION PRINCIPALE : Appeler toutCharger au montage
+  // Appeler toutCharger au montage
   useEffect(() => {
     toutCharger();
   }, [toutCharger]);

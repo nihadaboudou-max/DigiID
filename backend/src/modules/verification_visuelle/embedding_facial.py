@@ -1,30 +1,22 @@
 # -*- coding: utf-8 -*-
 """
-Génération d'embedding facial via deepface (Facenet512).
-Remplace l'ancienne version basée sur SHA-512.
-
-Modèles supportés par deepface :
-  - Facenet512 (512D, recommandé) — bon équilibre précision/performance
-  - ArcFace (512D) — meilleure précision, plus lent
-  - VGG-Face (4096D) — plus lent, plus lourd
-  - OpenFace (128D) — rapide mais moins précis
-
-Usage :
-    embedding = generer_embedding(image_bytes)
-    similarity = calculer_similarite(emb1, emb2)  # cosinus 0‑1
+Génération d'embedding facial via deepface (VGG-Face + RetinaFace).
+OPTIMISÉ pour la comparaison CNI/Selfie avec pré-traitement avancé.
+Modèles supportés :
+- VGG-Face (4096D) - Meilleur pour CNI/Selfie
+- Facenet512 (512D) - Bon équilibre
+- ArcFace (512D) - Très précis
 """
 from io import BytesIO
 from typing import Iterable, Optional
-
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageFilter
+import cv2
 
-# ── deepface : chargement paresseux (lazy) pour éviter le gel au démarrage ──
-_BACKEND: str = "opencv"      # detection
-_MODELE: str = "Facenet512"    # embedding
-
-_HANDLE_DEEPFACE = None       # lazy import cache
-
+# ── deepface : chargement paresseux (lazy) ─
+_BACKEND: str = "retinaface"  # ✅ CHANGÉ : retinaface au lieu de opencv
+_MODELE: str = "VGG-Face"      # ✅ CHANGÉ : VGG-Face meilleur pour CNI
+_HANDLE_DEEPFACE = None
 
 def _obtenir_deepface():
     """Importe et retourne le module DeepFace (lazy)."""
@@ -36,13 +28,39 @@ def _obtenir_deepface():
         except ImportError:
             raise RuntimeError(
                 "deepface n'est pas installé. "
-                "Exécute : pip install deepface tensorflow"
+                "Exécute : pip install deepface tensorflow opencv-python"
             )
     return _HANDLE_DEEPFACE
 
-
-DEEPFACE_DISPONIBLE: bool = True
-
+def _preparer_image_pour_embedding(image_bytes: bytes) -> np.ndarray:
+    """
+    Pré-traitement avancé de l'image pour améliorer la détection :
+    - Égalisation d'histogramme (CLAHE)
+    - Réduction du bruit
+    - Amélioration du contraste
+    - Normalisation de la luminosité
+    """
+    # Conversion bytes → PIL → OpenCV
+    pil_image = Image.open(BytesIO(image_bytes)).convert("RGB")
+    img_array = np.array(pil_image)
+    
+    # Conversion RGB → BGR pour OpenCV
+    img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+    
+    # Conversion en niveaux de gris
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    
+    # Égalisation d'histogramme adaptative (CLAHE)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
+    
+    # Réduction du bruit (filtre bilatéral préserve les contours)
+    denoised = cv2.bilateralFilter(enhanced, 9, 75, 75)
+    
+    # Conversion finale en RGB pour DeepFace
+    final_rgb = cv2.cvtColor(denoised, cv2.COLOR_GRAY2RGB)
+    
+    return final_rgb
 
 def generer_embedding(
     image_bytes: bytes,
@@ -50,22 +68,25 @@ def generer_embedding(
     detecter_visage: bool = True,
 ) -> list[float]:
     """
-    Extrait un embedding facial (vecteur 512D) via deepface Facenet512.
-
+    Extrait un embedding facial optimisé via deepface.
+    ✅ Utilise RetinaFace pour la détection (beaucoup plus robuste)
+    ✅ Pré-traitement CLAHE pour améliorer les photos sombres/CNI
+    ✅ Alignement automatique activé
+    
     Paramètres
     ----------
     image_bytes : bytes
         Contenu brut de l'image (JPEG, PNG, …)
     modele : str
-        Nom du modèle deepface (Facenet512, ArcFace, VGG-Face, OpenFace)
+        Nom du modèle deepface (VGG-Face, Facenet512, ArcFace)
     detecter_visage : bool
         Si True, deepface détecte/aligne le visage automatiquement
-
+        
     Retourne
     -------
     list[float]
-        Vecteur d'embedding normalisé (L2). Longueur = 512 pour Facenet512/ArcFace.
-
+        Vecteur d'embedding normalisé (L2).
+        
     Lève
     ----
     RuntimeError
@@ -74,35 +95,53 @@ def generer_embedding(
         Si aucun visage n'est détecté dans l'image
     """
     DeepFace = _obtenir_deepface()
-
-    # 1. Décoder l'image en RGB via PIL → numpy array (H, W, 3)
-    pil_image = Image.open(BytesIO(image_bytes)).convert("RGB")
-    img_array = np.array(pil_image)
-
-    # 2. DeepFace.Represent extrait l'embedding (Facenet512)
+    
+    # 1. Pré-traitement avancé de l'image
+    try:
+        img_preprocessed = _preparer_image_pour_embedding(image_bytes)
+    except Exception as e:
+        # Fallback sur l'image originale si pré-traitement échoue
+        pil_image = Image.open(BytesIO(image_bytes)).convert("RGB")
+        img_preprocessed = np.array(pil_image)
+    
+    # 2. DeepFace.Represent avec RetinaFace
     try:
         resultat = DeepFace.represent(
-            img_path=img_array,
+            img_path=img_preprocessed,
             model_name=modele,
-            detector_backend=_BACKEND,
+            detector_backend=_BACKEND,  # ✅ RetinaFace
             enforce_detection=detecter_visage,
-            align=True,
+            align=True,  # ✅ Alignement activé
+            normalization="base",  # Normalisation recommandée
         )
     except ValueError as exc:
-        raise ValueError(f"Aucun visage détecté dans l'image : {exc}") from exc
-
+        # Si RetinaFace échoue, essayer avec OpenCV en fallback
+        try:
+            resultat = DeepFace.represent(
+                img_path=img_preprocessed,
+                model_name=modele,
+                detector_backend="opencv",
+                enforce_detection=detecter_visage,
+                align=True,
+            )
+        except ValueError:
+            raise ValueError(
+                f"Aucun visage détecté dans l'image. "
+                f"Assurez-vous que la photo montre clairement un visage de face. "
+                f"Détails: {exc}"
+            ) from exc
+    
     if not resultat or "embedding" not in resultat[0]:
         raise ValueError("deepface n'a pas retourné d'embedding.")
-
+    
     embedding: list[float] = resultat[0]["embedding"]
-
-    # Normalisation L2
+    
+    # 3. Normalisation L2 (améliore la comparaison cosinus)
     norme = np.linalg.norm(embedding)
     if norme > 0:
         embedding = (np.array(embedding) / norme).tolist()
-
+    
     return embedding
-
 
 def _lire_embedding_depuis_liste(v: Iterable[float]) -> np.ndarray:
     """Convertit un itérable en tableau numpy 1D normalisé."""
@@ -111,33 +150,24 @@ def _lire_embedding_depuis_liste(v: Iterable[float]) -> np.ndarray:
         raise ValueError(f"L'embedding doit être 1D, reçu {arr.ndim}D")
     return arr
 
-
 def calculer_similarite(
     emb1: Iterable[float],
     emb2: Iterable[float],
 ) -> float:
     """
     Calcule la similarité cosinus entre deux embeddings.
-
-    Retourne un score entre 0 (orthogonal / différent) et 1 (colinéaire / identique).
+    Retourne un score entre 0 (différent) et 1 (identique).
+    ✅ Optimisé pour les embeddings normalisés L2
     """
     a = _lire_embedding_depuis_liste(emb1)
     b = _lire_embedding_depuis_liste(emb2)
-
+    
     if a.shape != b.shape:
         return 0.0
-
-    # Normalisation L2
-    norme_a = np.linalg.norm(a)
-    norme_b = np.linalg.norm(b)
-    if norme_a == 0 or norme_b == 0:
-        return 0.0
-    a = a / norme_a
-    b = b / norme_b
-
+    
+    # Similarité cosinus (déjà normalisés L2)
     produit_scalaire = float(np.dot(a, b))
     return max(0.0, min(1.0, produit_scalaire))
-
 
 def meilleur_score(
     embeddings_cibles: list[tuple[str, list[float]]],
@@ -145,27 +175,14 @@ def meilleur_score(
 ) -> tuple[Optional[str], float]:
     """
     Trouve la meilleure correspondance parmi une liste d'embeddings.
-
-    Paramètres
-    ----------
-    embeddings_cibles : list[tuple[str, list[float]]]
-        Liste de (identifiant, vecteur_embedding)
-    embedding_source : list[float]
-        Vecteur à comparer
-
-    Retourne
-    --------
-    tuple[Optional[str], float]
-        (identifiant de la meilleure correspondance, score de similarité max)
-        (None, 0.0) si la liste est vide
     """
     meilleur_id = None
     meilleur_score_val = 0.0
-
+    
     for identifiant, vecteur in embeddings_cibles:
         score = calculer_similarite(embedding_source, vecteur)
         if score > meilleur_score_val:
             meilleur_score_val = score
             meilleur_id = identifiant
-
+    
     return meilleur_id, meilleur_score_val
