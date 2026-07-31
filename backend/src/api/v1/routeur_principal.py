@@ -91,6 +91,12 @@ from src.modules.chefs import routeur_chefs
 # Module Recherche Faciale Médicale
 from src.modules.recherche_faciale import routeur_recherche_faciale
 
+# Module OCR Permis de Conduire
+from src.modules.ocr_permis.routes import routeur_permis
+
+# Module OCR Assurance Automobile
+from src.modules.ocr_assurance.routes import routeur_assurance
+
 # Routeur racine — préfixe et tag globaux gérés au montage
 routeur_v1 = APIRouter()
 
@@ -175,3 +181,9 @@ routeur_v1.include_router(routeur_admin_domaine)
 
 ## Module Recherche Faciale Médicale — routeur pour la recherche faciale par les agents médicaux
 routeur_v1.include_router(routeur_recherche_faciale)
+
+# Module OCR Permis de Conduire — routeur pour l'upload et l'analyse OCR des permis de conduire
+routeur_v1.include_router(routeur_permis)  # Module OCR Permis de Conduire
+
+# Module OCR Assurance Automobile — routeur pour l'upload et l'analyse OCR des assurances automobiles
+routeur_v1.include_router(routeur_assurance)  # Module OCR Assurance Automobile
