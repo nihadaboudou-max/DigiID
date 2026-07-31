@@ -86,17 +86,21 @@ def calculer_similarite(
     emb1: Iterable[float],
     emb2: Iterable[float],
 ) -> float:
-    """
-    Calcule la similarité cosinus entre deux embeddings.
-    Retourne un score entre 0 (différent) et 1 (identique).
-    """
     a = _lire_embedding_depuis_liste(emb1)
     b = _lire_embedding_depuis_liste(emb2)
     
     if a.shape != b.shape:
         return 0.0
     
-    # Les vecteurs sont déjà normalisés L2, le produit scalaire est la similarité cosinus
+    # Normalisation L2 explicite (sécurité)
+    norme_a = np.linalg.norm(a)
+    norme_b = np.linalg.norm(b)
+    if norme_a == 0 or norme_b == 0:
+        return 0.0
+        
+    a = a / norme_a
+    b = b / norme_b
+    
     produit_scalaire = float(np.dot(a, b))
     return max(0.0, min(1.0, produit_scalaire))
 
