@@ -152,13 +152,14 @@ async def traiter_upload_photo(
             )
             score_similarite = doublons_cni[0]["similarite"] if doublons_cni else 0.0
             
-            # Si le score est trop bas, on rejete la vérification
-            if score_similarite < 0.6:  # Seuil de similarité strict (60%)
+            # ✅ CORRECTION : Seuil abaissé à 50% (0.50) pour tolérer les différences 
+            # d'angle, d'éclairage et de qualité entre une photo de CNI et un selfie.
+            if score_similarite < 0.50:  
                 statut = "rejete"
                 raison = (
                     f"La photo ne correspond pas à celle de votre CNI "
                     f"(similarité: {score_similarite:.1%}). "
-                    f"Assurez-vous que c'est bien vous sur la photo."
+                    f"Assurez-vous que c'est bien vous sur la photo, bien éclairé et face à la caméra."
                 )
                 date_verification = None
                 journal.warning(

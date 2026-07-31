@@ -23,6 +23,7 @@ class RestaurationVerification(BaseModel):
 
 
 class VerificationVisuelleDetail(BaseModel):
+    """Détail d'une vérification visuelle."""
     id: UUID
     statut: VerificationStatut
     raison: Optional[str] = None
@@ -36,5 +37,34 @@ class VerificationVisuelleDetail(BaseModel):
 
 
 class ListeVerificationVisuelle(BaseModel):
+    """Liste des vérifications visuelles d'un utilisateur."""
     historique: list[VerificationVisuelleDetail]
     total: int
+
+
+# ✅ NOUVEAU SCHÉMA AJOUTÉ ICI
+class ResultatComparaisonFaciale(BaseModel):
+    """
+    Résultat de la comparaison entre la photo de profil (selfie) 
+    et la photo d'un document d'identité (CNI).
+    """
+    correspond: bool = Field(
+        ..., 
+        description="Indique si les visages correspondent selon le seuil défini."
+    )
+    score_confiance: float = Field(
+        ..., 
+        ge=0.0, 
+        le=1.0, 
+        description="Score de similarité brut entre 0.0 et 1.0."
+    )
+    message: str = Field(
+        ..., 
+        description="Message explicatif du résultat destiné à l'utilisateur."
+    )
+    seuil_utilise: float = Field(
+        ..., 
+        ge=0.0, 
+        le=1.0, 
+        description="Le seuil de similarité utilisé pour prendre la décision."
+    )
