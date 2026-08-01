@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import Utilisateur
 from src.modeles.permis_conduire import PermisConduire
+from src.modules.ocr_cni.ocr_engine import extraire_texte_ocr  # ✅ IMPORT DU MOTEUR OCR
 from src.modules.ocr_permis.extraction_permis import extraire_donnees_permis
 from src.modules.ocr_permis.schemas import (
     DonneesPermisExtraites,
@@ -72,15 +73,22 @@ async def traiter_upload_permis(
     """
     Traite l'upload d'une image de permis de conduire.
     """
-    contenu = await _lire_image(fichier)  # ✅ CORRECTION: ajout du _
+    contenu = await _lire_image(fichier)
     nom_fichier = fichier.filename or f"permis_{face}.jpg"
     
-    # 1. Analyse OCR
-    texte_brut = ""  # À remplacer par l'appel à ocr_engine.analyser_image()
-    confiance = 0.0
-    mrz_lignes = (None, None, None)
+    # 1. ✅ Analyse OCR RÉELLE avec le même moteur que la CNI
+    try:
+        resultat_ocr = await extraire_texte_ocr(contenu)
+        texte_brut = resultat_ocr.get("texte", "")
+        confiance = resultat_ocr.get("confiance_moyenne", 0.0)
+        mrz_lignes = resultat_ocr.get("mrz", (None, None, None))
+    except Exception as e:
+        journal.error(f"Erreur OCR permis: {e}")
+        texte_brut = ""
+        confiance = 0.0
+        mrz_lignes = (None, None, None)
     
-    # 2. Extraction des données
+    # 2. Extraction des données spécifiques au permis
     donnees = extraire_donnees_permis(
         texte_brut=texte_brut,
         confiance=confiance,
@@ -136,7 +144,7 @@ async def traiter_upload_permis(
     )
     
     return ReponseUploadPermis(
-        id=nouveau_permis.id,  # ✅ VRAI UUID de la base
+        id=nouveau_permis.id,
         statut="approuve",
         resultat_ocr=resultat_ocr,
         message="Permis enregistré avec succès.",
@@ -162,9 +170,9 @@ async def obtenir_historique_permis(
             id=permis.id,
             utilisateur_id=permis.utilisateur_id,
             statut="approuve" if permis.est_valide else "rejete",
-            face="recto",  # Permis n'a qu'une face
+            face="recto",
             nom_fichier=f"permis_{permis.numero_permis}.jpg",
-            nom_famille=None,  # À remplir si stocké
+            nom_famille=None,
             prenoms=None,
             numero_permis=permis.numero_permis,
             categories=permis.categories or [],
