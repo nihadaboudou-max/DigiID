@@ -26,9 +26,23 @@ export interface ReponseUploadPermis {
   message: string;
 }
 
-export async function uploaderPermis(
-  fichier: File,
-): Promise<ReponseUploadPermis> {
+export interface VerificationPermisDetail {
+  id: string;
+  statut: string;
+  numero_permis?: string;
+  date_expiration?: string;
+  cree_le: string;
+}
+
+export interface ListeVerificationsPermis {
+  historique: VerificationPermisDetail[];
+  total: number;
+}
+
+/**
+ * Uploader un permis de conduire pour extraction OCR.
+ */
+export async function uploaderPermis(fichier: File): Promise<ReponseUploadPermis> {
   const formData = new FormData();
   formData.append("fichier", fichier);
 
@@ -45,7 +59,7 @@ export async function uploaderPermis(
       } else {
         try {
           const err = JSON.parse(xhr.responseText);
-          reject(new Error(err.message || "Erreur lors de l'upload"));
+          reject(new Error(err.message || "Erreur lors de l'upload du permis"));
         } catch {
           reject(new Error("Erreur lors de l'upload du permis"));
         }
@@ -58,4 +72,14 @@ export async function uploaderPermis(
     Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
     xhr.send(formData);
   });
+}
+
+/**
+ * Récupérer l'historique des permis scannés.
+ */
+export async function obtenirHistoriquePermis(limite: number = 10): Promise<ListeVerificationsPermis> {
+  return clientAPI.get<ListeVerificationsPermis>(
+    `${PREFIXE}/historique?limite=${limite}`,
+    { authentifie: true }
+  );
 }

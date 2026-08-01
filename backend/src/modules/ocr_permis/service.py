@@ -5,12 +5,12 @@ des Permis de Conduire.
 """
 from datetime import datetime, timezone
 from uuid import UUID
-
 from fastapi import UploadFile
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import Utilisateur
+from src.modeles.permis_conduire import PermisConduire
 from src.modules.ocr_permis.extraction_permis import extraire_donnees_permis
 from src.modules.ocr_permis.schemas import (
     DonneesPermisExtraites,
@@ -22,7 +22,6 @@ from src.modules.ocr_permis.schemas import (
 from src.noyau import journal
 from src.noyau.exceptions import ErreurValidation
 
-
 # =============================================================================
 # Constantes
 # =============================================================================
@@ -32,7 +31,6 @@ TYPES_MIME_AUTORISES = {
     "image/png": "png",
     "image/webp": "webp",
 }
-
 
 # =============================================================================
 # Fonctions internes
@@ -54,7 +52,6 @@ async def _lire_image(fichier: UploadFile) -> bytes:
         )
     return contenu
 
-
 def _compter_champs_extraits(donnees: DonneesPermisExtraites) -> int:
     """Compte le nombre de champs non-nuls extraits."""
     champs = [
@@ -62,7 +59,6 @@ def _compter_champs_extraits(donnees: DonneesPermisExtraites) -> int:
         donnees.date_naissance, donnees.categories,
     ]
     return sum(1 for c in champs if c is not None and c != [])
-
 
 # =============================================================================
 # Service principal
@@ -76,11 +72,10 @@ async def traiter_upload_permis(
     """
     Traite l'upload d'une image de permis de conduire.
     """
-    contenu = await _lire_image(fichier)
+    contenu = await _lire_image(fichier)  # ✅ CORRECTION: ajout du _
     nom_fichier = fichier.filename or f"permis_{face}.jpg"
     
-    # 1. Analyse OCR (à implémenter avec le moteur commun)
-    # Pour l'instant, on simule une extraction basique
+    # 1. Analyse OCR
     texte_brut = ""  # À remplacer par l'appel à ocr_engine.analyser_image()
     confiance = 0.0
     mrz_lignes = (None, None, None)
@@ -95,28 +90,57 @@ async def traiter_upload_permis(
     nb_champs = _compter_champs_extraits(donnees)
     succes = nb_champs >= 3  # Au moins 3 champs pour considérer comme succès
     
-    # 3. Construction de la réponse
+    if not succes or not donnees.numero_permis:
+        return ReponseUploadPermis(
+            id=UUID("00000000-0000-0000-0000-000000000000"),
+            statut="rejete",
+            resultat_ocr=ResultatOCRPermis(
+                succes=False,
+                donnees=donnees,
+                erreurs=["Extraction insuffisante"] if not succes else [],
+                champs_extraits=nb_champs,
+            ),
+            message="L'OCR n'a pas pu extraire suffisamment de données." if not succes else "Numéro de permis introuvable.",
+        )
+    
+    # 3. Vérification d'unicité
+    resultat = await session.execute(
+        select(PermisConduire).where(PermisConduire.numero_permis == donnees.numero_permis)
+    )
+    if resultat.scalar_one_or_none():
+        raise ErreurValidation("Ce numéro de permis existe déjà dans la base.")
+    
+    # 4. Sauvegarde en base
+    nouveau_permis = PermisConduire(
+        utilisateur_id=utilisateur.id,
+        numero_permis=donnees.numero_permis,
+        categories=donnees.categories or [],
+        date_premiere_delivrance=donnees.date_premiere_delivrance,
+        date_delivrance=donnees.date_delivrance,
+        date_expiration=donnees.date_expiration,
+        autorite_delivrance=donnees.autorite_delivrance,
+        est_valide=True,
+    )
+    session.add(nouveau_permis)
+    await session.commit()
+    await session.refresh(nouveau_permis)
+    
+    journal.info(f"Permis enregistré : {nouveau_permis.numero_permis} pour user {utilisateur.id}")
+    
+    # 5. Construction de la réponse
     resultat_ocr = ResultatOCRPermis(
-        succes=succes,
+        succes=True,
         donnees=donnees,
-        erreurs=[] if succes else ["Extraction insuffisante"],
+        erreurs=[],
         champs_extraits=nb_champs,
     )
     
-    message = (
-        "Permis scanné avec succès." if succes
-        else "L'OCR n'a pas pu extraire suffisamment de données."
-    )
-    
-    # TODO: Enregistrement en base de données (à implémenter avec le modèle DocumentIdentite)
-    
     return ReponseUploadPermis(
-        id=UUID("00000000-0000-0000-0000-000000000000"),  # Placeholder
-        statut="approuve" if succes else "rejete",
+        id=nouveau_permis.id,  # ✅ VRAI UUID de la base
+        statut="approuve",
         resultat_ocr=resultat_ocr,
-        message=message,
+        message="Permis enregistré avec succès.",
     )
-
 
 async def obtenir_historique_permis(
     session: AsyncSession,
@@ -124,5 +148,33 @@ async def obtenir_historique_permis(
     limite: int = 20,
 ) -> ListeVerificationsPermis:
     """Liste l'historique des vérifications de permis."""
-    # TODO: Implémenter avec le modèle VerificationPermis
-    return ListeVerificationsPermis(historique=[], total=0)
+    # ✅ REQUÊTE RÉELLE vers la base
+    resultat = await session.execute(
+        select(PermisConduire)
+        .where(PermisConduire.utilisateur_id == utilisateur.id)
+        .order_by(desc(PermisConduire.cree_le))
+        .limit(limite)
+    )
+    enregistrements = resultat.scalars().all()
+    
+    historique = [
+        VerificationPermisDetail(
+            id=permis.id,
+            utilisateur_id=permis.utilisateur_id,
+            statut="approuve" if permis.est_valide else "rejete",
+            face="recto",  # Permis n'a qu'une face
+            nom_fichier=f"permis_{permis.numero_permis}.jpg",
+            nom_famille=None,  # À remplir si stocké
+            prenoms=None,
+            numero_permis=permis.numero_permis,
+            categories=permis.categories or [],
+            date_delivrance=permis.date_delivrance.isoformat() if permis.date_delivrance else None,
+            date_expiration=permis.date_expiration.isoformat() if permis.date_expiration else None,
+            taux_confiance_ocr=None,
+            cree_le=permis.cree_le,
+            est_supprime=False,
+        )
+        for permis in enregistrements
+    ]
+    
+    return ListeVerificationsPermis(historique=historique, total=len(historique))

@@ -1,16 +1,9 @@
-/**
- * Tableau de bord des vérifications d'identité — Étape 3.
- *
- * Interface unifiée pour les 3 fonctionnalités :
- *   🔹 Étape 1 : Reconnaissance faciale
- *   🔹 Étape 2 : Extension RBAC (rôles)
- *   🔹 Étape 3 : OCR CNI (scan carte d'identité)
- *
- * Chaque nouvel inscrit voit les 3 étapes à compléter.
- * Le niveau global de vérification est affiché.
- */
 "use client";
 
+/**
+ * Tableau de bord des vérifications d'identité — Compact & Connecté.
+ * Interface unifiée pour toutes les étapes de vérification.
+ */
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Utilisateur } from "@/types/api";
@@ -23,13 +16,16 @@ import {
   obtenirSynthese,
   type SyntheseVerificationCNI,
 } from "@/services/verification_cni";
+// Imports pour les nouvelles vérifications (à adapter selon tes fichiers de service)
+import { obtenirHistoriquePermis } from "@/services/permis_conduire";
+import { obtenirHistoriqueAssurance } from "@/services/assurance_auto";
 
 // =============================================================================
 // Types
 // =============================================================================
 
 interface EtapeVerification {
-  id: "email" | "visage" | "cni" | "role" | "2fa";
+  id: "email" | "visage" | "cni" | "permis" | "assurance" | "role" | "2fa";
   titre: string;
   description: string;
   icone: string;
@@ -45,55 +41,67 @@ interface EtapeVerification {
 
 export default function TableauBordVerifications() {
   const { utilisateur } = useAuthentification();
-  const [verifVisage, setVerifVisage] = useState<VerificationDetail | null>(
-    null
-  );
-  const [syntheseCNI, setSyntheseCNI] =
-    useState<SyntheseVerificationCNI | null>(null);
-  const [chargementVisage, setChargementVisage] = useState(true);
-  const [chargementCNI, setChargementCNI] = useState(true);
+  
+  // États des vérifications
+  const [verifVisage, setVerifVisage] = useState<VerificationDetail | null>(null);
+  const [syntheseCNI, setSyntheseCNI] = useState<SyntheseVerificationCNI | null>(null);
+  const [hasPermis, setHasPermis] = useState(false);
+  const [hasAssurance, setHasAssurance] = useState(false);
+  
+  const [chargement, setChargement] = useState(true);
 
   useEffect(() => {
-    if (utilisateur) {
-      obtenirStatutVerification()
-        .then(setVerifVisage)
-        .catch(() => setVerifVisage(null))
-        .finally(() => setChargementVisage(false));
+    if (!utilisateur) return;
 
-      obtenirSynthese()
-        .then(setSyntheseCNI)
-        .catch(() => setSyntheseCNI(null))
-        .finally(() => setChargementCNI(false));
-    }
+    const chargerDonnees = async () => {
+      try {
+        const [visage, cni, permis, assurance] = await Promise.allSettled([
+          obtenirStatutVerification(),
+          obtenirSynthese(),
+          obtenirHistoriquePermis(1),
+          obtenirHistoriqueAssurance(1),
+        ]);
+
+        if (visage.status === "fulfilled") setVerifVisage(visage.value);
+        if (cni.status === "fulfilled") setSyntheseCNI(cni.value);
+        if (permis.status === "fulfilled") setHasPermis(permis.value.total > 0);
+        if (assurance.status === "fulfilled") setHasAssurance(assurance.value.total > 0);
+      } catch (err) {
+        console.error("Erreur chargement tableau de bord:", err);
+      } finally {
+        setChargement(false);
+      }
+    };
+
+    chargerDonnees();
   }, [utilisateur]);
 
-  if (!utilisateur) return null;
+  if (!utilisateur || chargement) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin h-8 w-8 border-4 border-lagune border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
-  const etapes = construireEtapes(
-    utilisateur,
-    verifVisage,
-    syntheseCNI,
-    chargementVisage,
-    chargementCNI
-  );
-
+  const etapes = construireEtapes(utilisateur, verifVisage, syntheseCNI, hasPermis, hasAssurance);
   const progres = utilisateur.progres_verifications ?? 0;
   const niveau = utilisateur.niveau_verification ?? "aucune";
+  const totalEtapes = 7; // Email, Visage, CNI, Permis, Assurance, Role, 2FA
 
   return (
-    <div className="space-y-6">
-      {/* Barre de progression globale */}
+    <div className="space-y-4">
+      {/* Barre de progression globale compacte */}
       <CarteProgression
-        titre="Niveau de vérification de ton identité"
-        description="Plus tu vérifies ton identité, plus tu débloques de fonctionnalités et plus ton score DigiID augmente."
+        titre="Progression de ton identité"
         etapes={etapes}
         progres={progres}
-        total={5}
+        total={totalEtapes}
         niveau={niveau}
       />
 
-      {/* Grille des étapes */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Grille des étapes (Compacte : 1 col mobile, 2 col tablette, 3 col desktop) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {etapes.map((etape) => (
           <CarteEtape
             key={etape.id}
@@ -103,39 +111,39 @@ export default function TableauBordVerifications() {
         ))}
       </div>
 
-      {/* Résumé du score de vérification */}
+      {/* Résumé du score */}
       <CarteScoreVerification
         utilisateur={utilisateur}
         verifVisage={verifVisage}
         syntheseCNI={syntheseCNI}
+        hasPermis={hasPermis}
+        hasAssurance={hasAssurance}
       />
     </div>
   );
 }
 
 // =============================================================================
-// Sous-composants
+// Sous-composants (Optimisés pour la compacité)
 // =============================================================================
 
 function CarteProgression({
   titre,
-  description,
   etapes,
   progres,
   total,
   niveau,
 }: {
   titre: string;
-  description: string;
   etapes: EtapeVerification[];
   progres: number;
   total: number;
   niveau: string;
 }) {
-  const pourcentage = Math.round((progres / total) * 100);
+  const pourcentage = Math.min(100, Math.round((progres / total) * 100));
 
   const couleurs: Record<string, string> = {
-    aucune: "bg-gray-200",
+    aucune: "bg-gray-300",
     partielle: "bg-amber-400",
     renforcee: "bg-blue-500",
     complete: "bg-green-500",
@@ -143,67 +151,48 @@ function CarteProgression({
 
   const libelles: Record<string, string> = {
     aucune: "Aucune vérification",
-    partielle: "Partiellement vérifié",
-    renforcee: "Identité renforcée",
-    complete: "Identité complète ✓",
+    partielle: "Partiel",
+    renforcee: "Renforcée",
+    complete: "Complète ✓",
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h3 className="text-lg font-bold text-gray-800">{titre}</h3>
-          <p className="text-sm text-gray-500 mt-1">{description}</p>
-        </div>
-        <span
-          className={`px-3 py-1 rounded-full text-xs font-bold ${
-            niveau === "complete"
-              ? "bg-green-100 text-green-700"
-              : niveau === "renforcee"
-              ? "bg-blue-100 text-blue-700"
-              : niveau === "partielle"
-              ? "bg-amber-100 text-amber-700"
-              : "bg-gray-100 text-gray-500"
-          }`}
-        >
+    <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-bold text-gray-800">{titre}</h3>
+        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+          niveau === "complete" ? "bg-green-100 text-green-700" :
+          niveau === "renforcee" ? "bg-blue-100 text-blue-700" :
+          niveau === "partielle" ? "bg-amber-100 text-amber-700" :
+          "bg-gray-100 text-gray-500"
+        }`}>
           {libelles[niveau]}
         </span>
       </div>
 
-      {/* Barre de progression */}
-      <div className="relative pt-1">
-        <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-          <span>
-            {progres}/{total} vérifications
-          </span>
-          <span>{pourcentage}%</span>
+      <div className="relative">
+        <div className="flex justify-between text-[10px] text-gray-500 mb-1.5">
+          <span>{progres}/{total} étapes</span>
+          <span className="font-semibold">{pourcentage}%</span>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-3">
+        <div className="w-full bg-gray-100 rounded-full h-2">
           <div
-            className={`h-3 rounded-full transition-all duration-700 ${
-              couleurs[niveau] || "bg-gray-200"
-            }`}
+            className={`h-2 rounded-full transition-all duration-700 ${couleurs[niveau] || "bg-gray-300"}`}
             style={{ width: `${pourcentage}%` }}
           />
         </div>
       </div>
 
-      {/* Légende des étapes */}
-      <div className="flex flex-wrap gap-4 mt-4">
+      {/* Légende ultra-compacte */}
+      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3">
         {etapes.map((e) => (
-          <div key={e.id} className="flex items-center gap-1.5 text-xs">
-            <span
-              className={`w-2.5 h-2.5 rounded-full ${
-                e.statut === "complete"
-                  ? "bg-green-500"
-                  : e.statut === "en_cours"
-                  ? "bg-blue-500 animate-pulse"
-                  : e.statut === "a_faire"
-                  ? "bg-gray-300"
-                  : "bg-gray-200"
-              }`}
-            />
-            <span className="text-gray-600">{e.titre.split(" ")[0]}</span>
+          <div key={e.id} className="flex items-center gap-1 text-[10px] text-gray-600">
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              e.statut === "complete" ? "bg-green-500" :
+              e.statut === "en_cours" ? "bg-blue-500 animate-pulse" :
+              "bg-gray-300"
+            }`} />
+            <span>{e.titre.split(" ")[0]}</span>
           </div>
         ))}
       </div>
@@ -219,63 +208,35 @@ function CarteEtape({
   estPremierInscrit: boolean;
 }) {
   const statuts = {
-    complete: {
-      border: "border-green-200 bg-green-50",
-      badge: "bg-green-500 text-white",
-      texte: "Vérifié",
-    },
-    en_cours: {
-      border: "border-blue-200 bg-blue-50",
-      badge: "bg-blue-500 text-white",
-      texte: "En cours",
-    },
-    a_faire: {
-      border: "border-gray-200 bg-white hover:border-blue-300 hover:shadow-md",
-      badge: "bg-gray-300 text-gray-600",
-      texte: estPremierInscrit ? "À mettre à jour" : "À faire",
-    },
-    indisponible: {
-      border: "border-gray-100 bg-gray-50 opacity-60",
-      badge: "bg-gray-200 text-gray-400",
-      texte: "Indisponible",
-    },
+    complete: { border: "border-green-200 bg-green-50/50", badge: "bg-green-500 text-white", texte: "OK" },
+    en_cours: { border: "border-blue-200 bg-blue-50/50", badge: "bg-blue-500 text-white", texte: "En cours" },
+    a_faire: { border: "border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm", badge: "bg-gray-200 text-gray-600", texte: "À faire" },
+    indisponible: { border: "border-gray-100 bg-gray-50 opacity-60", badge: "bg-gray-200 text-gray-400", texte: "N/A" },
   };
 
   const style = statuts[etape.statut];
 
   const contenu = (
-    <div
-      className={`rounded-xl border-2 p-5 transition-all duration-200 cursor-pointer ${style.border}`}
-    >
-      <div className="flex items-start gap-4">
-        <span className="text-3xl">{etape.icone}</span>
+    <div className={`rounded-lg border p-3 transition-all duration-200 cursor-pointer ${style.border}`}>
+      <div className="flex items-start gap-3">
+        <span className="text-xl leading-none mt-0.5">{etape.icone}</span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="font-bold text-gray-800 text-sm">{etape.titre}</h4>
-            <span
-              className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${style.badge}`}
-            >
+            <h4 className="font-bold text-gray-800 text-xs truncate">{etape.titre}</h4>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${style.badge}`}>
               {style.texte}
             </span>
           </div>
-          <p className="text-xs text-gray-500 mt-1.5">{etape.description}</p>
+          <p className="text-[11px] text-gray-500 mt-1 line-clamp-2 leading-tight">{etape.description}</p>
 
           {etape.detail && (
-            <p className="text-xs text-gray-400 mt-2 italic">{etape.detail}</p>
+            <p className="text-[10px] text-gray-400 mt-1.5 italic truncate">{etape.detail}</p>
           )}
 
           {etape.statut === "a_faire" && etape.action && (
-            <div className="mt-3">
-              <span className="text-xs font-medium text-blue-600 hover:text-blue-800">
+            <div className="mt-2">
+              <span className="text-[11px] font-semibold text-blue-600 hover:text-blue-800">
                 {etape.action} →
-              </span>
-            </div>
-          )}
-
-          {etape.statut === "en_cours" && (
-            <div className="mt-3 flex gap-2">
-              <span className="text-xs text-blue-600 font-medium">
-                {etape.action}
               </span>
             </div>
           )}
@@ -284,7 +245,6 @@ function CarteEtape({
     </div>
   );
 
-  // Si l'étape a un lien et est cliquable
   if (etape.lien && etape.statut !== "indisponible") {
     return <Link href={etape.lien}>{contenu}</Link>;
   }
@@ -296,51 +256,46 @@ function CarteScoreVerification({
   utilisateur,
   verifVisage,
   syntheseCNI,
+  hasPermis,
+  hasAssurance,
 }: {
   utilisateur: Utilisateur;
   verifVisage: VerificationDetail | null;
   syntheseCNI: SyntheseVerificationCNI | null;
+  hasPermis: boolean;
+  hasAssurance: boolean;
 }) {
-  const points: string[] = [];
+  const points: { label: string; pts: number }[] = [];
 
-  // Points bonus selon vérifications
-  if (utilisateur.est_email_verifie) points.push("Email vérifié (+10 pts)");
-  if (utilisateur.est_visage_verifie)
-    points.push("Visage reconnu (+25 pts)");
-  if (utilisateur.est_cni_verifiee) points.push("CNI authentifiée (+30 pts)");
-  if (utilisateur.deux_fa_active) points.push("2FA active (+15 pts)");
+  if (utilisateur.est_email_verifie) points.push({ label: "Email", pts: 10 });
+  if (utilisateur.est_visage_verifie) points.push({ label: "Visage", pts: 25 });
+  if (utilisateur.est_cni_verifiee) points.push({ label: "CNI", pts: 30 });
+  if (hasPermis) points.push({ label: "Permis", pts: 15 });
+  if (hasAssurance) points.push({ label: "Assurance", pts: 10 });
+  if (utilisateur.deux_fa_active) points.push({ label: "2FA", pts: 15 });
+
+  const totalPts = points.reduce((sum, p) => sum + p.pts, 0);
 
   return (
-    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-5">
-      <div className="flex items-start gap-4">
-        <span className="text-2xl">🏆</span>
-        <div>
-          <h4 className="font-bold text-gray-800 text-sm mb-1">
-            Impact sur ton score DigiID
-          </h4>
-          <p className="text-xs text-gray-600 mb-3">
-            Chaque vérification d&apos;identité augmente ton score de confiance
-            numérique.
-          </p>
+    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-4">
+      <div className="flex items-start gap-3">
+        <span className="text-xl">🏆</span>
+        <div className="flex-1">
+          <h4 className="font-bold text-gray-800 text-xs mb-1">Impact sur ton score DigiID</h4>
           {points.length > 0 ? (
-            <ul className="space-y-1">
+            <div className="flex flex-wrap gap-2 mt-2">
               {points.map((p, i) => (
-                <li
-                  key={i}
-                  className="text-xs text-gray-700 flex items-center gap-2"
-                >
-                  <span className="text-green-500">✓</span> {p}
-                </li>
+                <span key={i} className="inline-flex items-center gap-1 bg-white/60 border border-blue-100 rounded px-2 py-1 text-[10px] text-gray-700">
+                  <span className="text-green-500">✓</span> {p.label} <span className="font-bold text-blue-600">+{p.pts}</span>
+                </span>
               ))}
-              <li className="text-xs text-gray-500 flex items-center gap-2 mt-2 pt-2 border-t border-blue-200">
-                <span className="font-bold text-blue-600">+{points.length * 10} pts</span>
-                <span>bonus total estimé</span>
-              </li>
-            </ul>
+              <span className="inline-flex items-center gap-1 bg-blue-100 border border-blue-200 rounded px-2 py-1 text-[10px] font-bold text-blue-800 ml-auto">
+                Total: +{totalPts} pts
+              </span>
+            </div>
           ) : (
-            <p className="text-xs text-gray-400 italic">
-              Aucune vérification pour le moment. Complète les étapes
-              ci-dessus pour débloquer des points bonus.
+            <p className="text-[11px] text-gray-500 italic">
+              Complète les étapes ci-dessus pour gagner des points.
             </p>
           )}
         </div>
@@ -353,170 +308,96 @@ function CarteScoreVerification({
 // Fonctions utilitaires
 // =============================================================================
 
-/**
- * Vérifie si l'utilisateur est un premier inscrit (date récente).
- * Un "premier inscrit" est quelqu'un inscrit depuis moins de 7 jours
- * OU qui n'a encore aucune vérification complétée.
- */
 function estPremierInscrit(utilisateur: Utilisateur): boolean {
-  // Si aucune vérification complétée
-  if (
-    !utilisateur.est_email_verifie &&
-    !utilisateur.est_visage_verifie &&
-    !utilisateur.est_cni_verifiee &&
-    !utilisateur.deux_fa_active
-  ) {
+  if (!utilisateur.est_email_verifie && !utilisateur.est_visage_verifie && !utilisateur.est_cni_verifiee && !utilisateur.deux_fa_active) {
     return true;
   }
-
-  // Si inscrit depuis moins de 7 jours
   if (utilisateur.date_creation) {
-    const dateCreation = new Date(utilisateur.date_creation);
-    const maintenant = new Date();
-    const diffJours =
-      (maintenant.getTime() - dateCreation.getTime()) / (1000 * 60 * 60 * 24);
+    const diffJours = (Date.now() - new Date(utilisateur.date_creation).getTime()) / (1000 * 60 * 60 * 24);
     if (diffJours <= 7) return true;
   }
-
   return false;
 }
 
-/**
- * Construit la liste des étapes avec leurs statuts dynamiques.
- */
 function construireEtapes(
   utilisateur: Utilisateur,
   verifVisage: VerificationDetail | null,
   syntheseCNI: SyntheseVerificationCNI | null,
-  chargementVisage: boolean,
-  chargementCNI: boolean
+  hasPermis: boolean,
+  hasAssurance: boolean
 ): EtapeVerification[] {
   const estPremier = estPremierInscrit(utilisateur);
 
   return [
     {
       id: "email",
-      titre: "📧 Vérification email",
-      description:
-        "Confirme ton adresse email pour sécuriser ton compte et recevoir les notifications.",
+      titre: "📧 Email",
+      description: "Sécurise ton compte et reçois les notifications.",
       icone: "📧",
       statut: utilisateur.est_email_verifie ? "complete" : "a_faire",
       lien: utilisateur.est_email_verifie ? undefined : "/verification",
-      action: "Vérifier mon email",
-      detail: utilisateur.est_email_verifie
-        ? "Email vérifié"
-        : estPremier
-        ? "Requis dès l'inscription"
-        : undefined,
+      action: "Vérifier",
+      detail: utilisateur.est_email_verifie ? "Vérifié" : (estPremier ? "Requis" : undefined),
     },
     {
       id: "visage",
-      titre: "🔹 Reconnaissance faciale",
-      description:
-        "Prends une photo de toi pour vérifier ton identité par reconnaissance faciale.",
+      titre: "👤 Reconnaissance faciale",
+      description: "Photo de ton visage pour vérification biométrique.",
       icone: "👤",
-      statut: verifVisage?.statut === "approuve"
-        ? "complete"
-        : verifVisage?.statut === "rejete" ||
-          verifVisage?.statut === "en_attente"
-        ? "en_cours"
-        : chargementVisage
-        ? "a_faire"
-        : "a_faire",
-      lien:
-        verifVisage?.statut === "approuve"
-          ? undefined
-          : "/verification-visuelle",
-      action:
-        verifVisage?.statut === "rejete"
-          ? "Réessayer"
-          : verifVisage?.statut === "en_attente"
-          ? "En attente de validation..."
-          : estPremier
-          ? "Mettre à jour ma photo"
-          : "Ajouter ma photo",
-      detail:
-        verifVisage?.statut === "approuve"
-          ? `Validé à ${Math.round(verifVisage.score_liveness * 100)}%`
-          : verifVisage?.statut === "rejete"
-          ? verifVisage.raison || "Photo rejetée"
-          : estPremier
-          ? "Clique pour configurer"
-          : "Recommandé pour +25 pts",
+      statut: verifVisage?.statut === "approuve" ? "complete" : (verifVisage?.statut ? "en_cours" : "a_faire"),
+      lien: verifVisage?.statut === "approuve" ? undefined : "/verification-visuelle",
+      action: verifVisage?.statut === "rejete" ? "Réessayer" : (verifVisage?.statut === "en_attente" ? "En attente..." : "Ajouter"),
+      detail: verifVisage?.statut === "approuve" ? `${Math.round(verifVisage.score_liveness * 100)}%` : undefined,
     },
     {
       id: "cni",
-      titre: "🔹 Scan CNI (carte d'identité)",
-      description:
-        "Scanne ta Carte Nationale d'Identité pour authentifier ton identité officielle.",
+      titre: "🆔 CNI",
+      description: "Scanne ta Carte Nationale d'Identité.",
       icone: "🆔",
-      statut: syntheseCNI?.statut === "approuve"
-        ? "complete"
-        : syntheseCNI?.statut === "rejete"
-        ? "en_cours"
-        : chargementCNI
-        ? "a_faire"
-        : "a_faire",
-      lien:
-        syntheseCNI?.statut === "approuve"
-          ? undefined
-          : "/verification-cni",
-      action:
-        syntheseCNI?.statut === "rejete"
-          ? "Re-scanner"
-          : estPremier
-          ? "Mettre à jour ma CNI"
-          : "Scanner ma CNI",
-      detail:
-        syntheseCNI?.statut === "approuve"
-          ? "Carte authentifiée ✓"
-          : syntheseCNI?.statut === "rejete"
-          ? "Échec de validation"
-          : estPremier
-          ? "Clique pour scanner"
-          : "Requis pour les rôles institutionnels",
+      statut: syntheseCNI?.statut === "approuve" ? "complete" : (syntheseCNI?.statut === "rejete" ? "en_cours" : "a_faire"),
+      lien: syntheseCNI?.statut === "approuve" ? undefined : "/verification-cni",
+      action: syntheseCNI?.statut === "rejete" ? "Re-scanner" : "Scanner",
+      detail: syntheseCNI?.statut === "approuve" ? "Authentifiée" : undefined,
+    },
+    {
+      id: "permis",
+      titre: "🚗 Permis",
+      description: "Scanne ton permis de conduire.",
+      icone: "🚗",
+      statut: hasPermis ? "complete" : "a_faire",
+      lien: "/permis-conduire",
+      action: hasPermis ? "Voir" : "Scanner",
+      detail: hasPermis ? "Enregistré" : undefined,
+    },
+    {
+      id: "assurance",
+      titre: "🛡️ Assurance",
+      description: "Carte verte ou attestation d'assurance.",
+      icone: "🛡️",
+      statut: hasAssurance ? "complete" : "a_faire",
+      lien: "/assurance-auto",
+      action: hasAssurance ? "Voir" : "Scanner",
+      detail: hasAssurance ? "Enregistrée" : undefined,
     },
     {
       id: "role",
-      titre: "🔹 Rôle & permissions (RBAC)",
-      description:
-        "Ton rôle détermine tes accès. Les rôles institutionnels (agent, police, médecin) offrent plus de fonctionnalités.",
+      titre: "🔑 Rôle",
+      description: "Gère tes accès et permissions.",
       icone: "🔑",
-      statut: utilisateur.role !== "citoyen"
-        ? "complete"
-        : "a_faire",
+      statut: utilisateur.role !== "citoyen" ? "complete" : "a_faire",
       lien: "/parametres/role",
-      action:
-        utilisateur.role !== "citoyen"
-          ? "Voir mes permissions"
-          : estPremier
-          ? "Configurer mon rôle"
-          : "Demander un rôle",
-      detail:
-        utilisateur.role !== "citoyen"
-          ? `Rôle actuel : ${utilisateur.role}`
-          : estPremier
-          ? "Choisis ton rôle dès maintenant"
-          : "Rôle citoyen par défaut",
+      action: utilisateur.role !== "citoyen" ? "Voir" : "Demander",
+      detail: utilisateur.role !== "citoyen" ? utilisateur.role : undefined,
     },
     {
       id: "2fa",
-      titre: "🔐 Double authentification (2FA)",
-      description:
-        "Ajoute une couche de sécurité avec un code TOTP à 6 chiffres généré sur ton téléphone.",
+      titre: "🔐 2FA",
+      description: "Double authentification par code TOTP.",
       icone: "🔐",
       statut: utilisateur.deux_fa_active ? "complete" : "a_faire",
       lien: utilisateur.deux_fa_active ? undefined : "/parametres/2fa",
-      action: utilisateur.deux_fa_active
-        ? "Configurée"
-        : estPremier
-        ? "Activer la 2FA"
-        : "Configurer",
-      detail: utilisateur.deux_fa_active
-        ? "Protection active"
-        : estPremier
-        ? "Fortement recommandé"
-        : "Recommandé pour +15 pts",
+      action: utilisateur.deux_fa_active ? "OK" : "Activer",
+      detail: utilisateur.deux_fa_active ? "Active" : undefined,
     },
   ];
 }

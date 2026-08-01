@@ -26,9 +26,24 @@ export interface ReponseUploadAssurance {
   message: string;
 }
 
-export async function uploaderAssurance(
-  fichier: File,
-): Promise<ReponseUploadAssurance> {
+export interface VerificationAssuranceDetail {
+  id: string;
+  statut: string;
+  compagnie_assurance?: string;
+  immatriculation_vehicule?: string;
+  date_expiration?: string;
+  cree_le: string;
+}
+
+export interface ListeVerificationsAssurance {
+  historique: VerificationAssuranceDetail[];
+  total: number;
+}
+
+/**
+ * Uploader une carte verte ou attestation d'assurance pour extraction OCR.
+ */
+export async function uploaderAssurance(fichier: File): Promise<ReponseUploadAssurance> {
   const formData = new FormData();
   formData.append("fichier", fichier);
 
@@ -45,7 +60,7 @@ export async function uploaderAssurance(
       } else {
         try {
           const err = JSON.parse(xhr.responseText);
-          reject(new Error(err.message || "Erreur lors de l'upload"));
+          reject(new Error(err.message || "Erreur lors de l'upload de l'assurance"));
         } catch {
           reject(new Error("Erreur lors de l'upload de l'assurance"));
         }
@@ -58,4 +73,14 @@ export async function uploaderAssurance(
     Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
     xhr.send(formData);
   });
+}
+
+/**
+ * Récupérer l'historique des assurances scannées.
+ */
+export async function obtenirHistoriqueAssurance(limite: number = 10): Promise<ListeVerificationsAssurance> {
+  return clientAPI.get<ListeVerificationsAssurance>(
+    `${PREFIXE}/historique?limite=${limite}`,
+    { authentifie: true }
+  );
 }
