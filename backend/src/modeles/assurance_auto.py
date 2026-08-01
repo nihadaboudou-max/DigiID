@@ -10,7 +10,7 @@ class AssuranceAuto(Base):
     __tablename__ = "assurances_auto"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    utilisateur_id = Column(UUID(as_uuid=True), ForeignKey("utilisateurs.id", ondelete="CASCADE"), nullable=False, index=True)
+    utilisateur_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id", ondelete="CASCADE"), nullable=False, index=True)
     
     # Assureur
     compagnie_assurance = Column(String, nullable=False)

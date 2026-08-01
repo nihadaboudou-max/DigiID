@@ -24,7 +24,7 @@ from src.modeles import (  # noqa: F401
     activite_quotidienne, badge, notification, parrainage,
     fraude_incident, verification_visuelle,
     configuration_systeme,
-    verification_cni,
+    verification_cni, PermisConduire, AssuranceAuto,
     attestation_communautaire,
     dossier_medical,
     enrolement,

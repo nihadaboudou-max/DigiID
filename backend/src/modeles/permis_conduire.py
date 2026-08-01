@@ -10,7 +10,7 @@ class PermisConduire(Base):
     __tablename__ = "permis_conduire"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    utilisateur_id = Column(UUID(as_uuid=True), ForeignKey("utilisateurs.id", ondelete="CASCADE"), nullable=False, index=True)
+    utilisateur_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id", ondelete="CASCADE"), nullable=False, index=True)
     
     # Données du document
     numero_permis = Column(String, unique=True, nullable=False, index=True)

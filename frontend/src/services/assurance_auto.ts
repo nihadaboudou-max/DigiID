@@ -69,7 +69,8 @@ export async function uploaderAssurance(fichier: File): Promise<ReponseUploadAss
 
     xhr.addEventListener("error", () => reject(new Error("Erreur réseau")));
 
-    xhr.open("POST", PREFIXE);
+    // ✅ CORRECTION : Ajout de /upload à la fin
+    xhr.open("POST", `${PREFIXE}/upload`);
     Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
     xhr.send(formData);
   });
