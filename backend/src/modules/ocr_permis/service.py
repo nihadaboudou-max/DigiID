@@ -3,7 +3,8 @@
 Service OCR Permis — orchestration du scan et de la validation
 des Permis de Conduire.
 """
-from datetime import datetime, timezone
+import re
+from datetime import datetime, date
 from uuid import UUID
 from fastapi import UploadFile
 from sqlalchemy import desc, select
@@ -11,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import Utilisateur
 from src.modeles.permis_conduire import PermisConduire
-from src.modules.ocr_cni.ocr_engine import analyser_image_cni  # ✅ CORRECTION DU NOM
+from src.modules.ocr_cni.ocr_engine import analyser_image_cni  # ✅ Moteur OCR partagé
 from src.modules.ocr_permis.extraction_permis import extraire_donnees_permis
 from src.modules.ocr_permis.schemas import (
     DonneesPermisExtraites,
@@ -32,6 +33,38 @@ TYPES_MIME_AUTORISES = {
     "image/png": "png",
     "image/webp": "webp",
 }
+
+# =============================================================================
+# Fonctions utilitaires
+# =============================================================================
+def parser_date(chaine_date: str | None, est_expiration: bool = False) -> date | None:
+    """
+    Convertit une chaîne de date brute (ex: '15.03.2021' ou '15.03.2021 14.03.2031') 
+    en objet datetime.date valide pour la base de données.
+    """
+    if not chaine_date:
+        return None
+    
+    # Extraire tous les motifs de date (JJ.MM.AAAA, JJ/MM/AAAA, JJ-MM-AAAA)
+    dates_trouvees = re.findall(r'\d{1,2}[./-]\d{1,2}[./-]\d{2,4}', chaine_date)
+    if not dates_trouvees:
+        return None
+    
+    # Si c'est une date d'expiration et que l'OCR en a capturé deux, on prend la dernière (la plus lointaine)
+    # Sinon, on prend la première (pour la date de délivrance)
+    date_cible = dates_trouvees[-1] if est_expiration else dates_trouvees[0]
+    
+    # Formats de date courants dans les documents officiels
+    formats = ["%d.%m.%Y", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%y", "%d/%m/%y", "%d-%m-%y"]
+    
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_cible, fmt).date()
+        except ValueError:
+            continue
+            
+    journal.warning(f"Impossible de parser la date : {chaine_date}")
+    return None
 
 # =============================================================================
 # Fonctions internes
@@ -71,12 +104,11 @@ async def traiter_upload_permis(
     face: str = "recto",
 ) -> ReponseUploadPermis:
     """Traite l'upload d'une image de permis de conduire."""
-    contenu = await _lire_image(fichier)
-    nom_fichier = fichier.filename or f"permis_{face}.jpg"
+    contenu = await _lire_image(fichier)  # ✅ Correction du nom de fonction
     
-    # 1. ✅ Analyse OCR RÉELLE avec le moteur commun (fonction SYNCHRONE)
+    # 1. Analyse OCR RÉELLE
     try:
-        resultat_ocr = analyser_image_cni(contenu)  # Pas de 'await' ici
+        resultat_ocr = analyser_image_cni(contenu)  # ✅ Appel synchrone au moteur
         texte_brut = resultat_ocr.get("texte_brut", "")
         confiance = resultat_ocr.get("confiance_moyenne", 0.0)
         mrz_lignes = resultat_ocr.get("mrz_lignes", (None, None, None))
@@ -116,14 +148,14 @@ async def traiter_upload_permis(
     if resultat.scalar_one_or_none():
         raise ErreurValidation("Ce numéro de permis existe déjà dans la base.")
     
-    # 4. Sauvegarde en base
+    # 4. Sauvegarde en base avec PARSING DES DATES ✅
     nouveau_permis = PermisConduire(
         utilisateur_id=utilisateur.id,
         numero_permis=donnees.numero_permis,
         categories=donnees.categories or [],
-        date_premiere_delivrance=donnees.date_premiere_delivrance,
-        date_delivrance=donnees.date_delivrance,
-        date_expiration=donnees.date_expiration,
+        date_premiere_delivrance=parser_date(donnees.date_premiere_delivrance),
+        date_delivrance=parser_date(donnees.date_delivrance),
+        date_expiration=parser_date(donnees.date_expiration, est_expiration=True), # ✅ Prend la dernière date si l'OCR en a capturé deux
         autorite_delivrance=donnees.autorite_delivrance,
         est_valide=True,
     )
