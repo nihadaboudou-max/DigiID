@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import Utilisateur
 from src.modeles.assurance_auto import AssuranceAuto
-from src.modules.ocr_cni.ocr_engine import extraire_texte_ocr  # ✅ IMPORT DU MOTEUR OCR PARTAGÉ
+from src.modules.ocr_cni.ocr_engine import analyser_image_cni  # ✅ IMPORT DU MOTEUR OCR PARTAGÉ
 from src.modules.ocr_assurance.extraction_assurance import extraire_donnees_assurance
 from src.modules.ocr_assurance.schemas import (
     DonneesAssuranceExtraites,
@@ -84,7 +84,7 @@ async def traiter_upload_assurance(
     
     # 1. ✅ Analyse OCR RÉELLE avec le même moteur que la CNI et le Permis
     try:
-        resultat_ocr = await extraire_texte_ocr(contenu)
+        resultat_ocr = analyser_image_cni(contenu)
         texte_brut = resultat_ocr.get("texte", "")
         confiance = resultat_ocr.get("confiance_moyenne", 0.0)
     except Exception as e:

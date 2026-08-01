@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import Utilisateur
 from src.modeles.permis_conduire import PermisConduire
-from src.modules.ocr_cni.ocr_engine import extraire_texte_ocr  # ✅ IMPORT DU MOTEUR OCR
+from src.modules.ocr_cni.ocr_engine import analyser_image_cni  # ✅ CORRECTION DU NOM
 from src.modules.ocr_permis.extraction_permis import extraire_donnees_permis
 from src.modules.ocr_permis.schemas import (
     DonneesPermisExtraites,
@@ -70,18 +70,16 @@ async def traiter_upload_permis(
     fichier: UploadFile,
     face: str = "recto",
 ) -> ReponseUploadPermis:
-    """
-    Traite l'upload d'une image de permis de conduire.
-    """
+    """Traite l'upload d'une image de permis de conduire."""
     contenu = await _lire_image(fichier)
     nom_fichier = fichier.filename or f"permis_{face}.jpg"
     
-    # 1. ✅ Analyse OCR RÉELLE avec le même moteur que la CNI
+    # 1. ✅ Analyse OCR RÉELLE avec le moteur commun (fonction SYNCHRONE)
     try:
-        resultat_ocr = await extraire_texte_ocr(contenu)
-        texte_brut = resultat_ocr.get("texte", "")
+        resultat_ocr = analyser_image_cni(contenu)  # Pas de 'await' ici
+        texte_brut = resultat_ocr.get("texte_brut", "")
         confiance = resultat_ocr.get("confiance_moyenne", 0.0)
-        mrz_lignes = resultat_ocr.get("mrz", (None, None, None))
+        mrz_lignes = resultat_ocr.get("mrz_lignes", (None, None, None))
     except Exception as e:
         journal.error(f"Erreur OCR permis: {e}")
         texte_brut = ""
@@ -136,7 +134,7 @@ async def traiter_upload_permis(
     journal.info(f"Permis enregistré : {nouveau_permis.numero_permis} pour user {utilisateur.id}")
     
     # 5. Construction de la réponse
-    resultat_ocr = ResultatOCRPermis(
+    resultat_ocr_final = ResultatOCRPermis(
         succes=True,
         donnees=donnees,
         erreurs=[],
@@ -146,7 +144,7 @@ async def traiter_upload_permis(
     return ReponseUploadPermis(
         id=nouveau_permis.id,
         statut="approuve",
-        resultat_ocr=resultat_ocr,
+        resultat_ocr=resultat_ocr_final,
         message="Permis enregistré avec succès.",
     )
 
@@ -156,7 +154,6 @@ async def obtenir_historique_permis(
     limite: int = 20,
 ) -> ListeVerificationsPermis:
     """Liste l'historique des vérifications de permis."""
-    # ✅ REQUÊTE RÉELLE vers la base
     resultat = await session.execute(
         select(PermisConduire)
         .where(PermisConduire.utilisateur_id == utilisateur.id)
