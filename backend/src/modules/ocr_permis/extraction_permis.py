@@ -1,22 +1,56 @@
 # -*- coding: utf-8 -*-
 """
-Extraction des champs d'un Permis de Conduire.
-Version ROBUSTE pour gérer le bruit OCR.
+Extraction INTELLIGENTE des champs d'un Permis de Conduire.
+Utilise une approche multi-stratégies pour gérer le bruit OCR.
 """
 import re
-from typing import Optional
+from typing import Optional, List, Tuple
 from src.modules.ocr_permis.schemas import DonneesPermisExtraites
 from src.noyau.journal import journal
 
-def _nettoyer_texte(texte: str) -> str:
-    """Nettoie le texte OCR en supprimant les caractères parasites."""
-    # Conserve uniquement les caractères utiles
+def _nettoyer_texte_intelligent(texte: str) -> str:
+    """Nettoie le texte OCR tout en préservant la structure."""
+    # Convertir en majuscules
     texte = texte.upper()
-    # Supprime les caractères spéciaux parasites (garde lettres, chiffres, espaces, ponctuation basique)
-    texte = re.sub(r'[^A-ZÀ-Ÿ0-9\s.:,\-/]', ' ', texte)
-    # Remplace les multiples espaces par un seul
+    
+    # Étape 1: Normaliser les espaces (remplacer multiples espaces par un seul)
     texte = re.sub(r'\s+', ' ', texte)
+    
+    # Étape 2: Supprimer les caractères très spéciaux mais garder la structure
+    texte = re.sub(r'[><+\[\]{}|\\]', ' ', texte)
+    
+    # Étape 3: Séparer les mots collés avant les chiffres
+    texte = re.sub(r'([A-Z])(\d)', r'\1 \2', texte)
+    texte = re.sub(r'(\d)([A-Z])', r'\1 \2', texte)
+    
+    # Étape 4: Normaliser la ponctuation
+    texte = re.sub(r'\s*:\s*', ': ', texte)
+    texte = re.sub(r'\s*\.\s*', '. ', texte)
+    
     return texte.strip()
+
+def _extraire_par_numero_champ(texte: str, numero: int, label: str) -> Optional[str]:
+    """
+    Extrait la valeur après un numéro de champ (ex: "1.Nom:" ou "2.Prénom(s):")
+    """
+    # Pattern flexible: cherche le numéro suivi du label
+    pattern = rf'{numero}\s*\.?\s*{label}\s*[:\-]?\s*([^2-9\.]+?)(?=\d+\.|$)'
+    match = re.search(pattern, texte, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    return None
+
+def _extraire_date_apres_label(texte: str, label: str) -> Optional[str]:
+    """Extrait une date (format JJ.MM.AAAA) après un label donné."""
+    pattern = rf'{label}\s*[:\-]?\s*(\d{{1,2}}[\./-]\d{{1,2}}[\./-]\d{{2,4}})'
+    match = re.search(pattern, texte, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    return None
+
+def _extraire_toutes_dates(texte: str) -> List[str]:
+    """Extrait toutes les dates du texte au format JJ.MM.AAAA."""
+    return re.findall(r'\d{1,2}[\./-]\d{1,2}[\./-]\d{2,4}', texte)
 
 def extraire_donnees_permis(
     texte_brut: str,
@@ -24,13 +58,13 @@ def extraire_donnees_permis(
     mrz_lignes: tuple = (None, None, None),
 ) -> DonneesPermisExtraites:
     """
-    Extrait les champs d'un permis de conduire (version robuste au bruit OCR).
+    Extraction intelligente multi-stratégies pour permis de conduire.
     """
     if not texte_brut:
         return DonneesPermisExtraites(texte_brut="", taux_confiance_moyen=confiance)
 
-    texte = _nettoyer_texte(texte_brut)
-    journal.info(f"Texte nettoyé: {texte[:200]}...")
+    texte = _nettoyer_texte_intelligent(texte_brut)
+    journal.info(f"Texte nettoyé: {texte[:300]}...")
     
     # Initialisation
     nom_famille = None
@@ -44,79 +78,106 @@ def extraire_donnees_permis(
     autorite_delivrance = None
     pays_emetteur = None
     
-    # === DÉTECTION DU PAYS ===
-    if "BENIN" in texte:
+    # === STRATÉGIE 1: Extraction par numéros de champ (la plus fiable) ===
+    
+    # Champ 1: NOM
+    nom_extrait = _extraire_par_numero_champ(texte, 1, r'NOM\s*/?\s*SURNAME?')
+    if nom_extrait:
+        # Nettoyer le nom (supprimer les caractères restants)
+        nom_famille = re.sub(r'[^A-ZÀ-Ÿ\s\-]', '', nom_extrait).strip()
+        journal.info(f"✓ Nom extrait (champ 1): {nom_famille}")
+    
+    # Champ 2: PRÉNOM(S)
+    prenoms_extrait = _extraire_par_numero_champ(texte, 2, r'PRÉNOM\(S\)\s*/?\s*(?:GIVEN\s*NAME)?')
+    if prenoms_extrait:
+        prenoms = re.sub(r'[^A-ZÀ-Ÿ\s\-]', '', prenoms_extrait).strip()
+        journal.info(f"✓ Prénoms extraits (champ 2): {prenoms}")
+    
+    # Champ 3: DATE ET LIEU DE NAISSANCE
+    naissance_text = _extraire_par_numero_champ(texte, 3, r'(?:NAISSANCE\s*/?\s*DATE\s*&?\s*PLACE|DATE\s*ET\s*LIEU\s*DE\s*NAISS)')
+    if naissance_text:
+        # Extraire la date (première date trouvée)
+        dates_naiss = re.findall(r'\d{1,2}[\./-]\d{1,2}[\./-]\d{2,4}', naissance_text)
+        if dates_naiss:
+            date_naissance = dates_naiss[0]
+        # Extraire le lieu (après la date)
+        lieu_match = re.search(r'\d{1,2}[\./-]\d{1,2}[\./-]\d{2,4}\s*(?:À|A)?\s*([A-ZÀ-Ÿ\s]+)', naissance_text)
+        if lieu_match:
+            lieu_naissance = lieu_match.group(1).strip()
+        journal.info(f"✓ Naissance: {date_naissance} à {lieu_naissance}")
+    
+    # Champ 4a: DATE DE DÉLIVRANCE
+    date_delivrance = _extraire_date_apres_label(texte, r'4A\s*\.?\s*DATE\s*D[ÉE]LIVR')
+    if not date_delivrance:
+        # Fallback: chercher juste "4a." suivi d'une date
+        match_4a = re.search(r'4A\s*\.?\s*(\d{1,2}[\./-]\d{1,2}[\./-]\d{2,4})', texte)
+        if match_4a:
+            date_delivrance = match_4a.group(1)
+    if date_delivrance:
+        journal.info(f"✓ Date délivrance (champ 4a): {date_delivrance}")
+    
+    # Champ 4b: DATE D'EXPIRATION
+    date_expiration = _extraire_date_apres_label(texte, r'4B\s*\.?\s*EXPIRATION')
+    if not date_expiration:
+        # Fallback: chercher "4b." suivi d'une date
+        match_4b = re.search(r'4B\s*\.?\s*(\d{1,2}[\./-]\d{1,2}[\./-]\d{2,4})', texte)
+        if match_4b:
+            date_expiration = match_4b.group(1)
+    if date_expiration:
+        journal.info(f"✓ Date expiration (champ 4b): {date_expiration}")
+    
+    # Champ 4c: AUTORITÉ
+    autorite_extrait = _extraire_par_numero_champ(texte, 4, r'C\s*\.?\s*(?:AUTORIT[ÉE]\s*/?\s*AUTHORITY|D[ÉE]LIVR[ÉE]\s*PAR)')
+    if autorite_extrait:
+        autorite_delivrance = re.sub(r'[^A-ZÀ-Ÿ\s\.]', '', autorite_extrait).strip()
+        journal.info(f"✓ Autorité (champ 4c): {autorite_delivrance}")
+    
+    # Champ 5: NUMÉRO DE PERMIS
+    numero_extrait = _extraire_par_numero_champ(texte, 5, r'N[°O]\s*PERMIS\s*/?\s*(?:LICENSE\s*NO)?')
+    if numero_extrait:
+        # Extraire le numéro (format: SN-2021-0094821 ou similaire)
+        match_num = re.search(r'([A-Z]{2,3}[\-]?\d{4}[\-]?\d{5,7})', numero_extrait)
+        if match_num:
+            numero_permis = match_num.group(1)
+        else:
+            numero_permis = re.sub(r'[^A-Z0-9\-]', '', numero_extrait).strip()
+        journal.info(f"✓ Numéro permis (champ 5): {numero_permis}")
+    
+    # Champ 9: CATÉGORIES
+    categories_text = _extraire_par_numero_champ(texte, 9, r'CAT[ÉE]GORIES?')
+    if categories_text:
+        # Extraire les catégories individuelles (A1, B, C1, etc.)
+        categories = re.findall(r'\b(A1|A2|A|B|C1|C2|C|D1|D2|D|E|F|G)\b', categories_text)
+        journal.info(f"✓ Catégories (champ 9): {categories}")
+    
+    # === STRATÉGIE 2: Détection du pays ===
+    if "BENIN" in texte or "BÉNIN" in texte:
         pays_emetteur = "Bénin"
-    elif "SENEGAL" in texte or "SENEGAL" in texte:
+    elif "SENEGAL" in texte or "SÉNÉGAL" in texte:
         pays_emetteur = "Sénégal"
     elif "COTE" in texte and "IVOIRE" in texte:
         pays_emetteur = "Côte d'Ivoire"
     
-    # === EXTRACTION NOM (Pattern flexible) ===
-    # Cherche "1. NOM/SURNAME : ABOUDOU TRAORE" ou variations
-    match_nom = re.search(r'1\s*\.?\s*NOM\s*/?\s*SURNAME?\s*:?\s*([A-ZÀ-Ÿ]+(?:\s+[A-ZÀ-Ÿ]+)+)', texte)
-    if match_nom:
-        nom_famille = match_nom.group(1).strip()
-        journal.info(f"Nom trouvé: {nom_famille}")
+    # === STRATÉGIE 3: Fallback pour les dates ===
+    # Si on n'a pas trouvé les dates par les champs 4a/4b, chercher toutes les dates
+    toutes_dates = _extraire_toutes_dates(texte)
+    if len(toutes_dates) >= 2:
+        if not date_delivrance:
+            # La première date est souvent la délivrance
+            date_delivrance = toutes_dates[0]
+            journal.info(f"✓ Date délivrance (fallback): {date_delivrance}")
+        if not date_expiration:
+            # La dernière date est souvent l'expiration
+            date_expiration = toutes_dates[-1]
+            journal.info(f"✓ Date expiration (fallback): {date_expiration}")
     
-    # === EXTRACTION PRÉNOMS ===
-    # Cherche "2. PRÉNOM(S)/GIVEN NAME : Nihad"
-    match_prenoms = re.search(r'2\s*\.?\s*PRENOM\s*\(?S\)?\s*/?\s*(?:GIVEN\s*NAME)?\s*:?\s*([A-ZÀ-Ÿ]+(?:\s+[A-ZÀ-Ÿ]+)*)', texte)
-    if match_prenoms:
-        prenoms = match_prenoms.group(1).strip()
-        journal.info(f"Prénoms trouvés: {prenoms}")
+    # === Validation et retour ===
+    champs_remplis = sum([
+        bool(nom_famille), bool(prenoms), bool(numero_permis),
+        bool(date_delivrance), bool(date_expiration)
+    ])
     
-    # === EXTRACTION DATE ET LIEU DE NAISSANCE ===
-    # Cherche "3. NAISSANCE/DATE & PLACE OF BIRTH : 12.10.2002 À PARAKOU"
-    match_naissance = re.search(
-        r'3\s*\.?\s*(?:NAISSANCE\s*/?\s*DATE\s*&?\s*PLACE\s*(?:OF\s*)?BIRTH|DATE\s*ET\s*LIEU\s*DE\s*NAISS(?:ANCE)?)\s*:?\s*'
-        r'(\d{1,2}[\./-]\d{1,2}[\./-]\d{2,4})\s*(?:À|A)?\s*([A-ZÀ-Ÿ]+(?:\s+[A-ZÀ-Ÿ]+)*)?',
-        texte
-    )
-    if match_naissance:
-        date_naissance = match_naissance.group(1).strip()
-        lieu_naissance = match_naissance.group(2).strip() if match_naissance.group(2) else None
-        journal.info(f"Naissance: {date_naissance} à {lieu_naissance}")
-    
-    # === EXTRACTION DATE DE DÉLIVRANCE ===
-    # Cherche "4a. DATE DÉLIVR. : 10.11.2021"
-    match_deliv = re.search(r'4a\s*\.?\s*DATE\s*D[ÉE]LIVR(?:\.|ANCE)?\s*:?\s*(\d{1,2}[\./-]\d{1,2}[\./-]\d{2,4})', texte)
-    if match_deliv:
-        date_delivrance = match_deliv.group(1).strip()
-        journal.info(f"Date délivrance: {date_delivrance}")
-    
-    # === EXTRACTION DATE D'EXPIRATION ===
-    # Cherche "4b. EXPIRATION : 09.11.2031"
-    match_expir = re.search(r'4b\s*\.?\s*EXPIRATION\s*:?\s*(\d{1,2}[\./-]\d{1,2}[\./-]\d{2,4})', texte)
-    if match_expir:
-        date_expiration = match_expir.group(1).strip()
-        journal.info(f"Date expiration: {date_expiration}")
-    
-    # === EXTRACTION AUTORITÉ ===
-    # Cherche "4c. AUTORITÉ/AUTHORITY : MINISTERE TRANSPORTS"
-    match_autorite = re.search(
-        r'4c\s*\.?\s*(?:AUTORIT[ÉE]\s*/?\s*AUTHORITY|D[ÉE]LIVR[ÉE]\s*PAR)\s*:?\s*([A-ZÀ-Ÿ\s\.]+?)(?=\d+\.|$)',
-        texte
-    )
-    if match_autorite:
-        autorite_delivrance = match_autorite.group(1).strip()
-        journal.info(f"Autorité: {autorite_delivrance}")
-    
-    # === EXTRACTION NUMÉRO DE PERMIS ===
-    # Cherche "5. N° PERMIS/LICENSE NO : SN-2021-0098412"
-    match_numero = re.search(r'5\s*\.?\s*N[°O]\s*PERMIS\s*/?\s*(?:LICENSE\s*NO)?\s*:?\s*([A-Z0-9\-]+)', texte)
-    if match_numero:
-        numero_permis = match_numero.group(1).strip()
-        journal.info(f"Numéro permis: {numero_permis}")
-    
-    # === EXTRACTION CATÉGORIES ===
-    # Cherche "9. CATÉGORIES : A B C" ou en bas du document
-    match_cats = re.search(r'9\s*\.?\s*CAT[ÉE]GORIES?\s*:?\s*([A-Z0-9\s]+?)(?:\s*J\.M\.|$)', texte)
-    if match_cats:
-        cats_str = match_cats.group(1)
-        # Extraire les catégories individuelles
-        categories = re.findall(r'(?:A1|A2|A|B|C1|C2|C|D1|D2|D|E|F|G)', cats_str)
-        journal.info(f"Catégories: {categories}")
+    journal.info(f"Extraction terminée: {champs_remplis}/5 champs principaux remplis")
     
     return DonneesPermisExtraites(
         nom_famille=nom_famille,
