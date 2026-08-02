@@ -22,6 +22,7 @@ function Contenu() {
   const [chargement, setChargement] = useState(false);
   const [resultat, setResultat] = useState<ReponseUploadPermis | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [afficherTexteBrut, setAfficherTexteBrut] = useState(false);
 
   async function gererUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -108,37 +109,44 @@ function Contenu() {
 
           <p className="text-sm text-ardoise-clair mb-4">{resultat.message}</p>
 
-          {resultat.resultat_ocr.succes && (
-            <div className="space-y-2 text-sm">
-              {resultat.resultat_ocr.donnees.nom_famille && (
-                <p><strong>Nom :</strong> {resultat.resultat_ocr.donnees.nom_famille}</p>
-              )}
-              {resultat.resultat_ocr.donnees.prenoms && (
-                <p><strong>Prénoms :</strong> {resultat.resultat_ocr.donnees.prenoms}</p>
-              )}
-              {resultat.resultat_ocr.donnees.numero_permis && (
-                <p><strong>N° Permis :</strong> <span className="font-mono">{resultat.resultat_ocr.donnees.numero_permis}</span></p>
-              )}
-              {resultat.resultat_ocr.donnees.categories && resultat.resultat_ocr.donnees.categories.length > 0 && (
-                <p>
-                  <strong>Catégories :</strong>{" "}
-                  {resultat.resultat_ocr.donnees.categories.map((c) => (
-                    <Badge key={c} variante="lagune" taille="petit" className="ml-1">{c}</Badge>
-                  ))}
-                </p>
-              )}
-              {resultat.resultat_ocr.donnees.date_delivrance && (
-                <p><strong>Délivré le :</strong> {resultat.resultat_ocr.donnees.date_delivrance}</p>
-              )}
-              {resultat.resultat_ocr.donnees.date_expiration && (
-                <p><strong>Expire le :</strong> {resultat.resultat_ocr.donnees.date_expiration}</p>
-              )}
-              {resultat.resultat_ocr.donnees.autorite_delivrance && (
-                <p><strong>Autorité :</strong> {resultat.resultat_ocr.donnees.autorite_delivrance}</p>
-              )}
-            </div>
-          )}
+          {/* ✅ AFFICHAGE DES DONNÉES EXTRAITES (TOUJOURS, MÊME EN CAS D'ÉCHEC) */}
+          <div className="space-y-2 text-sm">
+            {resultat.resultat_ocr.donnees.nom_famille && (
+              <p><strong>Nom :</strong> {resultat.resultat_ocr.donnees.nom_famille}</p>
+            )}
+            {resultat.resultat_ocr.donnees.prenoms && (
+              <p><strong>Prénoms :</strong> {resultat.resultat_ocr.donnees.prenoms}</p>
+            )}
+            {resultat.resultat_ocr.donnees.numero_permis && (
+              <p><strong>N° Permis :</strong> <span className="font-mono">{resultat.resultat_ocr.donnees.numero_permis}</span></p>
+            )}
+            {resultat.resultat_ocr.donnees.categories && resultat.resultat_ocr.donnees.categories.length > 0 && (
+              <p>
+                <strong>Catégories :</strong>{" "}
+                {resultat.resultat_ocr.donnees.categories.map((c) => (
+                  <Badge key={c} variante="lagune" taille="petit" className="ml-1">{c}</Badge>
+                ))}
+              </p>
+            )}
+            {resultat.resultat_ocr.donnees.date_delivrance && (
+              <p><strong>Délivré le :</strong> {resultat.resultat_ocr.donnees.date_delivrance}</p>
+            )}
+            {resultat.resultat_ocr.donnees.date_expiration && (
+              <p><strong>Expire le :</strong> {resultat.resultat_ocr.donnees.date_expiration}</p>
+            )}
+            {resultat.resultat_ocr.donnees.autorite_delivrance && (
+              <p><strong>Autorité :</strong> {resultat.resultat_ocr.donnees.autorite_delivrance}</p>
+            )}
+            
+            {/* Indicateur visuel si aucun champ extrait */}
+            {!resultat.resultat_ocr.donnees.nom_famille && 
+             !resultat.resultat_ocr.donnees.prenoms && 
+             !resultat.resultat_ocr.donnees.numero_permis && (
+              <p className="text-terre italic">⚠️ Aucun champ extrait du document</p>
+            )}
+          </div>
 
+          {/* Erreurs */}
           {resultat.resultat_ocr.erreurs.length > 0 && (
             <div className="mt-4 p-3 bg-terre/10 rounded-lg">
               <p className="text-sm font-semibold text-terre mb-1">Erreurs :</p>
@@ -149,6 +157,28 @@ function Contenu() {
               </ul>
             </div>
           )}
+
+          {/* ✅ BOUTON POUR AFFICHER LE TEXTE BRUT OCR (DÉBOGAGE) */}
+          <div className="mt-6 pt-6 border-t border-ardoise-clair/20">
+            <button
+              onClick={() => setAfficherTexteBrut(!afficherTexteBrut)}
+              className="text-xs text-lagune hover:underline font-medium"
+            >
+              {afficherTexteBrut ? " Masquer" : "🔍 Voir le texte brut extrait par l'OCR"}
+            </button>
+            
+            {afficherTexteBrut && resultat.resultat_ocr.donnees.texte_brut && (
+              <div className="mt-3 p-3 bg-ardoise-clair/10 rounded-lg">
+                <p className="text-xs font-semibold text-ardoise mb-2">Texte brut extrait ({resultat.resultat_ocr.donnees.texte_brut.length} caractères) :</p>
+                <pre className="text-xs text-ardoise whitespace-pre-wrap font-mono bg-white p-2 rounded border border-ardoise-clair/20 max-h-64 overflow-auto">
+                  {resultat.resultat_ocr.donnees.texte_brut}
+                </pre>
+                <p className="text-xs text-ardoise-clair mt-2">
+                  Confiance OCR : <span className="font-semibold">{resultat.resultat_ocr.donnees.taux_confiance_moyen?.toFixed(1) || 0}%</span>
+                </p>
+              </div>
+            )}
+          </div>
         </Carte>
       )}
 
