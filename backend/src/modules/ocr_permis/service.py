@@ -104,11 +104,11 @@ async def traiter_upload_permis(
     face: str = "recto",
 ) -> ReponseUploadPermis:
     """Traite l'upload d'une image de permis de conduire."""
-    contenu = await _lire_image(fichier)  # ✅ Correction du nom de fonction
+    contenu = await _lire_image(fichier)
     
-    # 1. Analyse OCR RÉELLE
+    # 1. Analyse OCR
     try:
-        resultat_ocr = analyser_image_cni(contenu)  # ✅ Appel synchrone au moteur
+        resultat_ocr = analyser_image_cni(contenu)
         texte_brut = resultat_ocr.get("texte_brut", "")
         confiance = resultat_ocr.get("confiance_moyenne", 0.0)
         mrz_lignes = resultat_ocr.get("mrz_lignes", (None, None, None))
@@ -118,7 +118,7 @@ async def traiter_upload_permis(
         confiance = 0.0
         mrz_lignes = (None, None, None)
     
-    # 2. Extraction des données spécifiques au permis
+    # 2. Extraction des données
     donnees = extraire_donnees_permis(
         texte_brut=texte_brut,
         confiance=confiance,
@@ -126,19 +126,38 @@ async def traiter_upload_permis(
     )
     
     nb_champs = _compter_champs_extraits(donnees)
-    succes = nb_champs >= 3  # Au moins 3 champs pour considérer comme succès
     
-    if not succes or not donnees.numero_permis:
+    # ✅ VÉRIFICATION DES CHAMPS OBLIGATOIRES
+    if not donnees.numero_permis:
         return ReponseUploadPermis(
             id=UUID("00000000-0000-0000-0000-000000000000"),
             statut="rejete",
             resultat_ocr=ResultatOCRPermis(
                 succes=False,
                 donnees=donnees,
-                erreurs=["Extraction insuffisante"] if not succes else [],
+                erreurs=["Numéro de permis introuvable"],
                 champs_extraits=nb_champs,
             ),
-            message="L'OCR n'a pas pu extraire suffisamment de données." if not succes else "Numéro de permis introuvable.",
+            message="Impossible de trouver le numéro de permis sur le document.",
+        )
+    
+    # Parser les dates
+    date_delivrance = parser_date(donnees.date_delivrance)
+    date_expiration = parser_date(donnees.date_expiration, est_expiration=True)
+    date_premiere_delivrance = parser_date(donnees.date_premiere_delivrance)
+    
+    # ✅ VÉRIFIER QUE date_delivrance EST PRÉSENTE (champ NOT NULL)
+    if not date_delivrance:
+        return ReponseUploadPermis(
+            id=UUID("00000000-0000-0000-0000-000000000000"),
+            statut="rejete",
+            resultat_ocr=ResultatOCRPermis(
+                succes=False,
+                donnees=donnees,
+                erreurs=["Date de délivrance introuvable"],
+                champs_extraits=nb_champs,
+            ),
+            message="Impossible de trouver la date de délivrance sur le permis.",
         )
     
     # 3. Vérification d'unicité
@@ -148,14 +167,14 @@ async def traiter_upload_permis(
     if resultat.scalar_one_or_none():
         raise ErreurValidation("Ce numéro de permis existe déjà dans la base.")
     
-    # 4. Sauvegarde en base avec PARSING DES DATES ✅
+    # 4. Sauvegarde (maintenant on est sûr que date_delivrance n'est pas None)
     nouveau_permis = PermisConduire(
         utilisateur_id=utilisateur.id,
         numero_permis=donnees.numero_permis,
         categories=donnees.categories or [],
-        date_premiere_delivrance=parser_date(donnees.date_premiere_delivrance),
-        date_delivrance=parser_date(donnees.date_delivrance),
-        date_expiration=parser_date(donnees.date_expiration, est_expiration=True), # ✅ Prend la dernière date si l'OCR en a capturé deux
+        date_premiere_delivrance=date_premiere_delivrance,  # Peut être None
+        date_delivrance=date_delivrance,  # ✅ Garanti non-None
+        date_expiration=date_expiration,  # Peut être None
         autorite_delivrance=donnees.autorite_delivrance,
         est_valide=True,
     )
@@ -165,7 +184,6 @@ async def traiter_upload_permis(
     
     journal.info(f"Permis enregistré : {nouveau_permis.numero_permis} pour user {utilisateur.id}")
     
-    # 5. Construction de la réponse
     resultat_ocr_final = ResultatOCRPermis(
         succes=True,
         donnees=donnees,
@@ -179,7 +197,8 @@ async def traiter_upload_permis(
         resultat_ocr=resultat_ocr_final,
         message="Permis enregistré avec succès.",
     )
-
+    
+    
 async def obtenir_historique_permis(
     session: AsyncSession,
     utilisateur: Utilisateur,
