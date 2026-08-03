@@ -220,6 +220,46 @@ def envoyer_email_verification(
     return envoyer_email(destinataire, sujet, corps_texte, corps_html)
 
 
+def envoyer_email_code_connexion(
+    destinataire: str,
+    code: str,
+    prenom: Optional[str] = None,
+) -> bool:
+    """Envoie un email avec un code 2FA de connexion."""
+    prenom_texte = f"{prenom}, " if prenom else ""
+    sujet = "DigiID — Code de connexion"
+
+    corps_texte = (
+        "Bonjour " + prenom_texte + "\n\n"
+        "Une tentative de connexion à ton compte DigiID est en cours.\n"
+        "Pour la sécuriser, saisis le code de connexion suivant :\n\n"
+        "    " + code + "\n\n"
+        "Ce code expire dans 10 minutes.\n\n"
+        "Si tu n'es pas à l'origine de cette connexion, ignore cet email\n"
+        "et contacte immédiatement le support DigiID.\n\n"
+        "---\n"
+        "L'équipe DigiID\n"
+    )
+
+    corps_html = (
+        '<div style="max-width:480px;margin:0 auto;padding:20px;font-family:Arial,sans-serif">'
+        '<h1 style="color:#1a73e8;font-size:24px;text-align:center">DigiID</h1>'
+        f"<p>Bonjour {prenom_texte}</p>"
+        "<p>Une tentative de connexion à ton compte DigiID est en cours. "
+        "Pour la sécuriser, saisis le code de connexion suivant :</p>"
+        '<div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;margin:20px 0">'
+        f'<span style="font-size:32px;letter-spacing:8px;font-weight:bold;color:#1a73e8">{code}</span>'
+        "</div>"
+        '<p style="color:#666;font-size:14px">Ce code expire dans 10 minutes.</p>'
+        '<hr style="border:none;border-top:1px solid #eee;margin:20px 0">'
+        '<p style="color:#999;font-size:12px">Si tu n\'es pas à l\'origine de cette connexion, ignore cet email '
+        'et contacte immédiatement le support DigiID.</p>'
+        "</div>"
+    )
+
+    return envoyer_email(destinataire, sujet, corps_texte, corps_html)
+
+
 def envoyer_email_changement(
     destinataire: str,
     code: str,

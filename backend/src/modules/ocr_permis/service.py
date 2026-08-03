@@ -185,6 +185,8 @@ async def traiter_upload_permis(
     # 6. ✅ SAUVEGARDE EN BASE DE DONNÉES (avec PARSING DES DATES pour éviter l'erreur 'toordinal')
     nouveau_permis = PermisConduire(
         utilisateur_id=utilisateur.id,
+        nom_famille=donnees.nom_famille,
+        prenoms=donnees.prenoms,
         numero_permis=donnees.numero_permis,
         categories=donnees.categories or [],
         date_premiere_delivrance=_parser_date(donnees.date_premiere_delivrance),
@@ -234,18 +236,21 @@ async def obtenir_historique_permis(
     enregistrements = resultat.scalars().all()
     
     historique = [
-        VerificationPermisDetail(
+                VerificationPermisDetail(
             id=permis.id,
             utilisateur_id=permis.utilisateur_id,
             statut="approuve" if permis.est_valide else "rejete",
             face="recto",
             nom_fichier=f"permis_{permis.numero_permis}.jpg",
-            nom_famille=None,
-            prenoms=None,
+            nom_famille=permis.nom_famille,
+            prenoms=permis.prenoms,
             numero_permis=permis.numero_permis,
             categories=permis.categories or [],
             date_delivrance=permis.date_delivrance.isoformat() if permis.date_delivrance else None,
             date_expiration=permis.date_expiration.isoformat() if permis.date_expiration else None,
+            date_premiere_delivrance=permis.date_premiere_delivrance.isoformat() if permis.date_premiere_delivrance else None,
+            lieu_delivrance=permis.lieu_delivrance,
+            autorite_delivrance=permis.autorite_delivrance,
             taux_confiance_ocr=None,
             cree_le=permis.cree_le,
             est_supprime=False,

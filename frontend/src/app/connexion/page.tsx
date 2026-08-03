@@ -14,6 +14,7 @@ import { EnTete } from "@/composants/layouts/EnTete";
 import { Logo } from "@/composants/commun/Logo";
 import { useAuthentification } from "@/contextes/authentification";
 import { ErreurAPI } from "@/services/client_api";
+import { envoyerCodeConnexion } from "@/services/authentification";
 
 // ✅ NOUVEAU : Mapping des redirections par rôle
 const REDIRECTIONS_PAR_ROLE: Record<string, string> = {
@@ -37,18 +38,30 @@ const REDIRECTIONS_PAR_ROLE: Record<string, string> = {
   "agent_terrain": "/agent/dashboard",
 };
 
+// Code d'erreur : l'email du compte n'est pas encore confirmé (première connexion)
+const CODE_EMAIL_NON_VERIFIE = "AUTH_003";
+// Code d'erreur : double authentification requise
+const CODE_2FA_REQUIS = "AUTH_004";
+// Délai minimum avant de renvoyer un code (secondes) — aligné sur le backend (30 s)
+const DELAI_RENVOI_CODE_SECONDES = 30;
+
+type EtapeConnexion = "identifiants" | "verification_email" | "2fa";
+
 export default function PageConnexion() {
   const router = useRouter();
   const { seConnecter, utilisateur } = useAuthentification();
 
   const [email, setEmail] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
-  const [code2fa, setCode2fa] = useState("");
-  const [afficher2fa, setAfficher2fa] = useState(false);
+  const [code, setCode] = useState("");
+  const [etape, setEtape] = useState<EtapeConnexion>("identifiants");
+  const [methode2fa, setMethode2fa] = useState<"totp" | "email">("totp");
   const [erreur, setErreur] = useState<string | null>(null);
   const [chargement, setChargement] = useState(false);
-  const [info2fa, setInfo2fa] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [destinationMasquee, setDestinationMasquee] = useState<string | null>(null);
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  const [compteARebours, setCompteARebours] = useState(0);
 
   // ✅ CORRECTION : Redirection automatique après connexion réussie selon le rôle
   useEffect(() => {
@@ -59,6 +72,15 @@ export default function PageConnexion() {
     }
   }, [utilisateur, router]);
 
+  // ⏱️ Compte à rebours avant de pouvoir renvoyer un code
+  useEffect(() => {
+    if (compteARebours <= 0) return;
+    const id = setInterval(() => {
+      setCompteARebours((valeur) => (valeur > 0 ? valeur - 1 : 0));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [compteARebours]);
+
   async function gererSoumission(evt: React.FormEvent) {
     evt.preventDefault();
     setErreur(null);
@@ -68,27 +90,123 @@ export default function PageConnexion() {
       await seConnecter({
         email,
         mot_de_passe: motDePasse,
-        ...(afficher2fa && code2fa ? { code_2fa: code2fa } : {}),
+        ...(etape === "2fa" && code ? { code_2fa: code, canal_2fa: methode2fa } : {}),
+        ...(etape === "verification_email" && code ? { code_email: code } : {}),
       });
       
       // La redirection se fera via le useEffect ci-dessus
       // quand l'utilisateur sera mis à jour dans le contexte
     } catch (e) {
       if (e instanceof ErreurAPI) {
-        if (e.code_erreur === "AUTH_004") {
-          // 2FA requise — afficher le champ 2FA sans effacer les champs déjà remplis
-          setAfficher2fa(true);
-          setInfo2fa("🔐 Un code supplémentaire est requis. Saisis le code à 6 chiffres de ton application d'authentification.");
+        // 📧 Email pas encore confirmé (première connexion)
+        if (e.code_erreur === CODE_EMAIL_NON_VERIFIE) {
+          const details = (e.details ?? {}) as Record<string, unknown>;
+          const destination = (details.destination_masquee as string) || null;
+
+          setEtape("verification_email");
+          if (destination) {
+            // Le code vient d'être (ré)envoyé par email
+            setDestinationMasquee(destination);
+            setInfo(
+              `Un code de vérification a été envoyé à ${destination}. ` +
+              "Saisis-le pour confirmer ton adresse email et finaliser ta connexion.",
+            );
+            if (details.code_dev) {
+              setCode(String(details.code_dev));
+            } else {
+              setCompteARebours(DELAI_RENVOI_CODE_SECONDES);
+            }
+          } else {
+            // Code incorrect / expiré → on reste sur l'étape avec le message d'erreur
+            setErreur(e.message_utilisateur);
+          }
           setChargement(false);
           return;
-        } else {
-          setErreur(e.message_utilisateur);
         }
+
+        // 🔐 Double authentification requise
+        if (e.code_erreur === CODE_2FA_REQUIS) {
+          setEtape("2fa");
+          setMethode2fa("totp");
+          setCode("");
+          setInfo("🔐 Un code supplémentaire est requis pour sécuriser ta connexion.");
+          setChargement(false);
+          return;
+        }
+
+        setErreur(e.message_utilisateur);
       } else {
         setErreur("Erreur inattendue. Réessaie dans un instant.");
       }
       setChargement(false);
     }
+  }
+
+  /** 📧 Renvoie le code de vérification d'email (première connexion). */
+  async function renvoyerCodeEmail() {
+    setErreur(null);
+    setEnvoiEnCours(true);
+    try {
+      // Le backend renvoie le code et relève AUTH_003 avec la destination
+      await seConnecter({ email, mot_de_passe: motDePasse });
+    } catch (e) {
+      if (e instanceof ErreurAPI && e.code_erreur === CODE_EMAIL_NON_VERIFIE) {
+        const details = (e.details ?? {}) as Record<string, unknown>;
+        const destination = (details.destination_masquee as string) || null;
+        if (destination) {
+          setDestinationMasquee(destination);
+          setInfo(`Un nouveau code de vérification a été envoyé à ${destination}.`);
+          if (details.code_dev) {
+            setCode(String(details.code_dev));
+          } else {
+            setCompteARebours(DELAI_RENVOI_CODE_SECONDES);
+          }
+        } else {
+          setErreur(e.message_utilisateur);
+        }
+      } else if (e instanceof ErreurAPI) {
+        setErreur(e.message_utilisateur);
+      } else {
+        setErreur("Erreur inattendue. Réessaie dans un instant.");
+      }
+    } finally {
+      setEnvoiEnCours(false);
+    }
+  }
+
+  /** 📧 Envoie un code 2FA de connexion par email (méthode « email »). */
+  async function envoyerCodeParEmail2fa() {
+    setErreur(null);
+    setEnvoiEnCours(true);
+    try {
+      const reponse = await envoyerCodeConnexion(email, motDePasse);
+      setDestinationMasquee(reponse.destination_masquee);
+      setInfo(`Un code de connexion a été envoyé à ${reponse.destination_masquee}.`);
+      if (reponse.code_dev) {
+        setCode(String(reponse.code_dev));
+      } else {
+        setCompteARebours(DELAI_RENVOI_CODE_SECONDES);
+      }
+    } catch (e) {
+      if (e instanceof ErreurAPI) {
+        setErreur(e.message_utilisateur);
+      } else {
+        setErreur("Erreur inattendue. Réessaie dans un instant.");
+      }
+    } finally {
+      setEnvoiEnCours(false);
+    }
+  }
+
+  /** Retour à la saisie des identifiants. */
+  function revenirAuxIdentifiants() {
+    setEtape("identifiants");
+    setCode("");
+    setInfo(null);
+    setErreur(null);
+    setDestinationMasquee(null);
+    setCompteARebours(0);
+    setMethode2fa("totp");
   }
 
   return (
@@ -101,18 +219,22 @@ export default function PageConnexion() {
               <Logo taille="moyen" />
             </div>
             <h1 className="text-2xl mb-1">
-              {afficher2fa ? "Vérification 2FA" : "Connexion à ton espace"}
+              {etape === "identifiants" && "Connexion à ton espace"}
+              {etape === "verification_email" && "Vérifie ton adresse email"}
+              {etape === "2fa" && "Vérification 2FA"}
             </h1>
             <p className="text-sm text-ardoise-clair">
-              {afficher2fa
-                ? "Étape 2 — confirme ton identité avec ton application d'authentification."
-                : "Retrouve ton DigiID et ton score."}
+              {etape === "identifiants" && "Retrouve ton DigiID et ton score."}
+              {etape === "verification_email" &&
+                "Première connexion : confirme ton email avec le code reçu."}
+              {etape === "2fa" &&
+                "Étape 2 — confirme ton identité avec un code supplémentaire."}
             </p>
           </div>
 
-          {info2fa && (
+          {info && (
             <div className="bg-lagune/10 border-l-4 border-lagune p-4 mb-5 rounded">
-              <p className="text-sm text-lagune font-medium">{info2fa}</p>
+              <p className="text-sm text-lagune font-medium">{info}</p>
             </div>
           )}
 
@@ -123,8 +245,8 @@ export default function PageConnexion() {
           )}
 
           <form onSubmit={gererSoumission} className="space-y-4">
-            {/* Champs email + mot de passe (masqués si 2FA affichée) */}
-            {!afficher2fa ? (
+            {/* Étape 1 : identifiants */}
+            {etape === "identifiants" && (
               <>
                 <ChampSaisie
                   libelle="Email"
@@ -152,26 +274,108 @@ export default function PageConnexion() {
                   </Link>
                 </div>
               </>
-            ) : (
-              // En mode 2FA, afficher les champs en lecture seule + le champ code
-              <>
+            )}
+
+            {/* Étape 2 : vérification de l'email (première connexion) */}
+            {etape === "verification_email" && (
+              <div className="space-y-4">
                 <div className="bg-sable rounded-lg p-3 text-sm text-ardoise-clair">
                   <span className="font-medium text-ardoise">Email :</span> {email}
                 </div>
                 <ChampSaisie
-                  libelle="Code 2FA"
+                  libelle="Code de vérification"
                   type="text"
                   required
                   inputMode="numeric"
                   pattern="[0-9]{6}"
                   maxLength={6}
-                  value={code2fa}
-                  onChange={(e) => setCode2fa(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                   placeholder="123456"
                   autoComplete="one-time-code"
                   autoFocus
                 />
-              </>
+                <button
+                  type="button"
+                  disabled={envoiEnCours || compteARebours > 0}
+                  onClick={renvoyerCodeEmail}
+                  className="w-full text-center text-sm text-lagune hover:underline disabled:text-ardoise-clair/40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {compteARebours > 0
+                    ? `Renvoyer le code dans ${compteARebours} s`
+                    : envoiEnCours
+                      ? "Envoi en cours…"
+                      : "Renvoyer le code"}
+                </button>
+              </div>
+            )}
+
+            {/* Étape 3 : double authentification */}
+            {etape === "2fa" && (
+              <div className="space-y-4">
+                {/* Choix de la méthode 2FA */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMethode2fa("totp")}
+                    className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                      methode2fa === "totp"
+                        ? "border-lagune bg-lagune/10 text-lagune"
+                        : "border-ardoise-clair/20 text-ardoise-clair hover:border-lagune/40"
+                    }`}
+                  >
+                    📱 Application
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMethode2fa("email")}
+                    className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                      methode2fa === "email"
+                        ? "border-lagune bg-lagune/10 text-lagune"
+                        : "border-ardoise-clair/20 text-ardoise-clair hover:border-lagune/40"
+                    }`}
+                  >
+                    📧 Code par email
+                  </button>
+                </div>
+
+                {methode2fa === "email" && (
+                  <div className="space-y-2">
+                    <Bouton
+                      type="button"
+                      variante="secondaire"
+                      chargement={envoiEnCours}
+                      disabled={compteARebours > 0}
+                      onClick={envoyerCodeParEmail2fa}
+                      className="w-full"
+                    >
+                      {compteARebours > 0
+                        ? `Recevoir le code dans ${compteARebours} s`
+                        : "Recevoir le code par email"}
+                    </Bouton>
+                    {destinationMasquee && (
+                      <p className="text-xs text-ardoise-clair text-center">
+                        Code envoyé à{" "}
+                        <span className="font-medium text-ardoise">{destinationMasquee}</span>
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <ChampSaisie
+                  libelle={methode2fa === "email" ? "Code reçu par email" : "Code 2FA"}
+                  type="text"
+                  required
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="123456"
+                  autoComplete="one-time-code"
+                  autoFocus
+                />
+              </div>
             )}
 
             <Bouton
@@ -180,17 +384,13 @@ export default function PageConnexion() {
               chargement={chargement}
               className="w-full mt-2"
             >
-              {afficher2fa ? "Valider le code" : "Se connecter"}
+              {etape === "identifiants" ? "Se connecter" : "Valider le code"}
             </Bouton>
 
-            {afficher2fa && (
+            {etape !== "identifiants" && (
               <button
                 type="button"
-                onClick={() => {
-                  setAfficher2fa(false);
-                  setCode2fa("");
-                  setInfo2fa(null);
-                }}
+                onClick={revenirAuxIdentifiants}
                 className="w-full text-center text-sm text-ardoise-clair hover:text-lagune transition-colors"
               >
                 ← Revenir à la connexion

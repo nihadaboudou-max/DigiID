@@ -63,11 +63,15 @@ class VerificationAssuranceDetail(BaseModel):
     statut: StatutAssurance
     nom_fichier: str
     
-    # Données extraites
+            # Données extraites
+    nom_famille: Optional[str] = None
+    prenoms: Optional[str] = None
     compagnie_assurance: Optional[str] = None
     numero_contrat: Optional[str] = None
     immatriculation_vehicule: Optional[str] = None
     marque_vehicule: Optional[str] = None
+    modele_vehicule: Optional[str] = None
+    date_effet: Optional[str] = None
     date_expiration: Optional[str] = None
     
     # Métadonnées

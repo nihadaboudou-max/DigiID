@@ -174,6 +174,8 @@ async def traiter_upload_assurance(
     # 5. Enregistrement en base de données
     nouvelle_assurance = AssuranceAuto(
         utilisateur_id=utilisateur.id,
+        nom_famille=donnees.nom_assure,
+        prenoms=donnees.prenoms_assure,
         compagnie_assurance=donnees.compagnie_assurance or "Inconnue",
         numero_contrat=donnees.numero_contrat,
         immatriculation=donnees.immatriculation_vehicule.upper(),
@@ -222,15 +224,19 @@ async def obtenir_historique_assurance(
     enregistrements = resultat.scalars().all()
     
     historique = [
-        VerificationAssuranceDetail(
+                VerificationAssuranceDetail(
             id=str(assurance.id),
             utilisateur_id=str(assurance.utilisateur_id),
             statut="approuve" if assurance.est_active else "expiree",
             nom_fichier=f"assurance_{assurance.immatriculation}.jpg",
+            nom_famille=assurance.nom_famille,
+            prenoms=assurance.prenoms,
             compagnie_assurance=assurance.compagnie_assurance,
             numero_contrat=assurance.numero_contrat,
             immatriculation_vehicule=assurance.immatriculation,
             marque_vehicule=assurance.marque_vehicule,
+            modele_vehicule=assurance.modele_vehicule,
+            date_effet=assurance.date_effet.isoformat() if assurance.date_effet else None,
             date_expiration=assurance.date_expiration.isoformat() if assurance.date_expiration else None,
             taux_confiance_ocr=None,
             cree_le=assurance.cree_le.isoformat(),

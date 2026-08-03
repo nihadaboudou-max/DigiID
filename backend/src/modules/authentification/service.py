@@ -31,8 +31,15 @@ from src.noyau import (
 from src.noyau.exceptions import (
     ErreurAuthentification, ErreurCompteVerrouille,
     ErreurConflit, ErreurValidation, Erreur2FARequis, Erreur2FAInvalide,
+    ErreurEmailNonVerifie,
 )
 from src.modules.authentification.totp import verifier_code_totp
+from src.modules.authentification.verification_code import (
+    CANAL_EMAIL,
+    renvoyer_code,
+    verifier_code,
+    verifier_code_connexion,
+)
 from src.modeles.token_reinitialisation import TokenReinitialisation
 from src.noyau.notification import envoyer_email
 from src.noyau.journal import journal_audit
@@ -229,6 +236,8 @@ async def authentifier_utilisateur(
     email: str,
     mot_de_passe: str,
     code_2fa: Optional[str] = None,
+    code_email: Optional[str] = None,
+    canal_2fa: str = "totp",
     adresse_ip: str = "",
     agent_utilisateur: Optional[str] = None,
 ) -> Tuple[Utilisateur, str, str]:
@@ -301,7 +310,62 @@ async def authentifier_utilisateur(
         await session.commit()
         raise ErreurAuthentification("Email ou mot de passe incorrect")
 
-    # 4. Vérifier 2FA si activé (ou obligatoire pour ce rôle sans configuration)
+    # 4. Vérification de l'email — première connexion d'un compte qui n'a pas
+    #    encore confirmé son adresse : on envoie un code par email et on exige
+    #    qu'il soit saisi avant d'émettre les jetons.
+    if not utilisateur.est_email_verifie:
+        if code_email:
+            try:
+                await verifier_code(
+                    session=session,
+                    utilisateur_id=utilisateur.id,
+                    code_saisi=code_email,
+                    canal=CANAL_EMAIL,
+                    type_verification="inscription",
+                    activer_compte=True,
+                )
+            except ErreurValidation as erreur:
+                raise ErreurEmailNonVerifie(
+                    str(erreur),
+                    message_utilisateur=erreur.message_utilisateur,
+                )
+            # Code valide → l'email est marqué vérifié, on poursuit vers la 2FA
+        else:
+            email_clair = dechiffrer_donnee(utilisateur.email_chiffre)
+            telephone = dechiffrer_donnee(utilisateur.telephone_chiffre) if utilisateur.telephone_chiffre else None
+            resultat_envoi = await renvoyer_code(
+                session=session,
+                utilisateur=utilisateur,
+                email=email_clair,
+                telephone=telephone,
+                canal=CANAL_EMAIL,
+                type_verification="inscription",
+            )
+            await _enregistrer_audit(
+                session, utilisateur_id=utilisateur.id,
+                role_acteur=utilisateur.role,
+                type_evenement="demande_verification_email_connexion",
+                description=(
+                    f"Code de vérification email envoyé à la connexion "
+                    f"({_masquer_email(email_clair)})"
+                ),
+                adresse_ip=adresse_ip,
+            )
+            await session.commit()
+            raise ErreurEmailNonVerifie(
+                "Vérification de l'email requise avant connexion",
+                message_utilisateur=(
+                    "Ton adresse email n'est pas encore confirmée. "
+                    "Un code de vérification vient de t'être envoyé par email."
+                ),
+                donnees_supplementaires={
+                    "destination_masquee": resultat_envoi["destination_masquee"],
+                    "duree_validite_minutes": resultat_envoi["duree_validite_minutes"],
+                    "code_dev": resultat_envoi.get("code"),
+                },
+            )
+
+    # 5. Vérifier 2FA si activé (ou obligatoire pour ce rôle sans configuration)
     role_necessite_2fa = (
         utilisateur.role in (RolesUtilisateur.ADMINISTRATEUR.value,
                               RolesUtilisateur.SUPER_ADMINISTRATEUR.value)
@@ -320,22 +384,38 @@ async def authentifier_utilisateur(
     if utilisateur.deux_fa_active:
         if not code_2fa:
             raise Erreur2FARequis("Code 2FA manquant")
-        if not utilisateur.secret_2fa_chiffre:
-            raise ErreurAuthentification(
-                f"2FA active sans secret pour id={utilisateur.id}",
-                message_utilisateur="Configuration 2FA invalide. Contactez le support.",
-            )
-        if not verifier_code_totp(utilisateur.secret_2fa_chiffre, code_2fa):
-            await _enregistrer_audit(
-                session, utilisateur_id=utilisateur.id,
-                type_evenement=TypesEvenementAudit.VERIFICATION_2FA_ECHOUEE.value,
-                description="Code 2FA incorrect",
-                adresse_ip=adresse_ip,
-            )
-            await session.commit()
-            raise Erreur2FAInvalide("Code TOTP incorrect")
 
-    # 5. Réussite — réinitialiser les compteurs et créer la session
+        if canal_2fa == "email":
+            # 2FA par code envoyé par email (type_verification="connexion")
+            try:
+                await verifier_code_connexion(session, utilisateur.id, code_2fa)
+            except Erreur2FAInvalide as erreur:
+                await _enregistrer_audit(
+                    session, utilisateur_id=utilisateur.id,
+                    type_evenement=TypesEvenementAudit.VERIFICATION_2FA_ECHOUEE.value,
+                    description="Code 2FA email incorrect",
+                    adresse_ip=adresse_ip,
+                )
+                await session.commit()
+                raise erreur
+        else:
+            # TOTP (application d'authentification)
+            if not utilisateur.secret_2fa_chiffre:
+                raise ErreurAuthentification(
+                    f"2FA active sans secret pour id={utilisateur.id}",
+                    message_utilisateur="Configuration 2FA invalide. Contactez le support.",
+                )
+            if not verifier_code_totp(utilisateur.secret_2fa_chiffre, code_2fa):
+                await _enregistrer_audit(
+                    session, utilisateur_id=utilisateur.id,
+                    type_evenement=TypesEvenementAudit.VERIFICATION_2FA_ECHOUEE.value,
+                    description="Code 2FA incorrect",
+                    adresse_ip=adresse_ip,
+                )
+                await session.commit()
+                raise Erreur2FAInvalide("Code TOTP incorrect")
+
+    # 6. Réussite — réinitialiser les compteurs et créer la session
     utilisateur.tentatives_connexion_echouees = 0
     utilisateur.date_derniere_connexion = datetime.now(timezone.utc)
     utilisateur.ip_derniere_connexion = adresse_ip
@@ -368,6 +448,100 @@ async def authentifier_utilisateur(
 
     journal.info(f"Connexion réussie : utilisateur={utilisateur.id} rôle={utilisateur.role}")
     return utilisateur, token_acces, token_rafraichissement
+
+
+async def envoyer_code_connexion_email(
+    session: AsyncSession,
+    email: str,
+    mot_de_passe: str,
+    adresse_ip: str = "",
+) -> dict:
+    """
+    Envoie un code 2FA par email pour finaliser une connexion déjà authentifiée.
+
+    Vérifie d'abord les identifiants (email + mot de passe) et que la 2FA
+    est bien activée sur le compte, puis réutilise le service de codes
+    existant (generer_et_envoyer_code) avec type_verification="connexion".
+
+    Retourne un dict avec destination_masquee, duree_validite_minutes, code.
+    """
+    email_hash = _hasher_email(email)
+
+    resultat = await session.execute(
+        select(Utilisateur).where(
+            Utilisateur.email_hash == email_hash,
+            Utilisateur.est_supprime == False,
+        )
+    )
+    utilisateur = resultat.scalar_one_or_none()
+
+    # Même message que la connexion classique (anti-énumération de comptes)
+    if utilisateur is None:
+        verifier_mot_de_passe(mot_de_passe, "$argon2id$v=19$m=65536,t=3,p=4$invalide$invalide")
+        await _enregistrer_audit(
+            session, utilisateur_id=None,
+            type_evenement=TypesEvenementAudit.CONNEXION_ECHOUEE.value,
+            description=f"Demande de code connexion — email inconnu (hash={email_hash[:8]}...)",
+            adresse_ip=adresse_ip,
+        )
+        await session.commit()
+        raise ErreurAuthentification("Email ou mot de passe incorrect")
+
+    if not utilisateur.est_actif:
+        raise ErreurAuthentification(
+            f"Compte désactivé (id={utilisateur.id})",
+            message_utilisateur="Compte désactivé. Contactez le support.",
+        )
+
+    if not verifier_mot_de_passe(mot_de_passe, utilisateur.mot_de_passe_hash):
+        utilisateur.tentatives_connexion_echouees += 1
+        if utilisateur.tentatives_connexion_echouees >= parametres.seuil_tentatives_connexion_echec:
+            utilisateur.est_verrouille = True
+            utilisateur.date_verrouillage = datetime.now(timezone.utc)
+            journal.warning(
+                f"Compte verrouillé après {utilisateur.tentatives_connexion_echouees} échecs : id={utilisateur.id}"
+            )
+        await _enregistrer_audit(
+            session, utilisateur_id=utilisateur.id,
+            type_evenement=TypesEvenementAudit.CONNEXION_ECHOUEE.value,
+            description="Mot de passe incorrect (demande de code connexion)",
+            adresse_ip=adresse_ip,
+        )
+        await session.commit()
+        raise ErreurAuthentification("Email ou mot de passe incorrect")
+
+    if not utilisateur.deux_fa_active:
+        raise ErreurValidation(
+            "2FA non activée sur ce compte",
+            message_utilisateur=(
+                "La double authentification n'est pas activée sur ce compte. "
+                "Tu peux te connecter directement."
+            ),
+        )
+
+    email_clair = dechiffrer_donnee(utilisateur.email_chiffre)
+    telephone = dechiffrer_donnee(utilisateur.telephone_chiffre) if utilisateur.telephone_chiffre else None
+
+    # Générer + envoyer le code (respecte le délai anti-spam de 30 s)
+    resultat_envoi = await renvoyer_code(
+        session=session,
+        utilisateur=utilisateur,
+        email=email_clair,
+        telephone=telephone,
+        canal=CANAL_EMAIL,
+        type_verification="connexion",
+    )
+
+    await _enregistrer_audit(
+        session, utilisateur_id=utilisateur.id,
+        role_acteur=utilisateur.role,
+        type_evenement="demande_code_connexion",
+        description=f"Code 2FA de connexion envoyé par email à {_masquer_email(email_clair)}",
+        adresse_ip=adresse_ip,
+    )
+    await session.commit()
+
+    return resultat_envoi
 
 
 async def deconnecter_session(

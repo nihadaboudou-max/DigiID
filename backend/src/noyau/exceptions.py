@@ -81,6 +81,12 @@ class Erreur2FAInvalide(ErreurAuthentification):
     message_utilisateur = "Code de vérification invalide."
 
 
+class ErreurEmailNonVerifie(ErreurAuthentification):
+    """L'utilisateur doit confirmer son adresse email avant la première connexion."""
+    code_erreur = CodesErreur.AUTH_COMPTE_NON_VERIFIE.value
+    message_utilisateur = "Vérifie ton adresse email pour finaliser ta connexion."
+
+
 # -----------------------------------------------------------------------------
 # Autorisations (HTTP 403)
 # -----------------------------------------------------------------------------

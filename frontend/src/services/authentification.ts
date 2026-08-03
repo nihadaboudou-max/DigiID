@@ -63,6 +63,32 @@ export async function seConnecter(
   return reponse;
 }
 
+// =============================================================================
+// Code 2FA de connexion par email
+// =============================================================================
+
+export interface EnvoyerCodeConnexionReponse {
+  succes: boolean;
+  message: string;
+  destination_masquee: string;
+  duree_validite_minutes: number;
+  code_dev?: string | null;
+}
+
+/**
+ * Envoie un code 2FA de connexion par email (le mot de passe est vérifié
+ * côté serveur avant l'envoi).
+ */
+export async function envoyerCodeConnexion(
+  email: string,
+  motDePasse: string,
+): Promise<EnvoyerCodeConnexionReponse> {
+  return clientAPI.post<EnvoyerCodeConnexionReponse>(
+    `${PREFIXE}/connexion/code`,
+    { email, mot_de_passe: motDePasse },
+  );
+}
+
 /**
  * Déconnecte l'utilisateur courant — révoque la session côté serveur
  * ET supprime les jetons locaux.

@@ -67,13 +67,16 @@ class VerificationPermisDetail(BaseModel):
     face: Literal["recto", "verso"]
     nom_fichier: str
     
-    # Données extraites
+            # Données extraites
     nom_famille: Optional[str] = None
     prenoms: Optional[str] = None
     numero_permis: Optional[str] = None
     categories: list[str] = Field(default_factory=list)
     date_delivrance: Optional[str] = None
     date_expiration: Optional[str] = None
+    date_premiere_delivrance: Optional[str] = None
+    lieu_delivrance: Optional[str] = None
+    autorite_delivrance: Optional[str] = None
     
     # Métadonnées
     taux_confiance_ocr: Optional[float] = None

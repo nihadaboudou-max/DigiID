@@ -12,9 +12,14 @@ class PermisConduire(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     utilisateur_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id", ondelete="CASCADE"), nullable=False, index=True)
     
+            
     # Données du document
     numero_permis = Column(String, unique=True, nullable=False, index=True)
     categories = Column(JSON, default=list)  # Ex: ["A", "B", "C"]
+
+    # Identité du titulaire (extrait par OCR)
+    nom_famille = Column(String(255), nullable=True)
+    prenoms = Column(String(255), nullable=True)
     
     # Dates clés
     date_premiere_delivrance = Column(Date, nullable=True)

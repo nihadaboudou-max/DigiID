@@ -252,6 +252,10 @@ export interface DonneesConnexion {
   email: string;
   mot_de_passe: string;
   code_2fa?: string;
+  /** Code de vérification d'email saisi à la première connexion */
+  code_email?: string;
+  /** Méthode 2FA : 'totp' (application) ou 'email' (code envoyé par mail) */
+  canal_2fa?: string;
 }
 
 export interface DonneesInscription {

@@ -80,6 +80,30 @@ class ConnexionRequete(BaseModel):
     email: EmailStr
     mot_de_passe: str = Field(..., min_length=1)
     code_2fa: Optional[str] = Field(default=None, min_length=6, max_length=6)
+    # ✅ NOUVEAU : Vérification de l'email à la première connexion
+    # Code reçu par email à saisir quand le compte n'a pas encore confirmé son adresse.
+    code_email: Optional[str] = Field(default=None, min_length=6, max_length=6)
+    # ✅ NOUVEAU : Méthode 2FA choisie par l'utilisateur
+    # 'totp' (application d'authentification) ou 'email' (code envoyé par mail)
+    canal_2fa: Optional[str] = Field(default=None, description="Méthode 2FA : 'totp' ou 'email'")
+
+
+class ConnexionCodeEnvoyerRequete(BaseModel):
+    """Requête pour envoyer un code 2FA de connexion par email."""
+    email: EmailStr
+    mot_de_passe: str = Field(..., min_length=1)
+
+
+class ConnexionCodeEnvoyerReponse(BaseModel):
+    """Réponse après envoi du code 2FA de connexion par email."""
+    succes: bool
+    message: str
+    destination_masquee: str
+    duree_validite_minutes: int
+    code_dev: Optional[str] = Field(
+        default=None,
+        description="Code visible uniquement en mode développement",
+    )
 
 
 class RafraichissementRequete(BaseModel):

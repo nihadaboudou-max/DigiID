@@ -134,6 +134,7 @@ export class ErreurAPI extends Error {
     public message_utilisateur: string,
     public code_http: number,
     public request_id?: string,
+    public details?: Record<string, unknown> | null,
   ) {
     super(message_utilisateur);
     this.name = "ErreurAPI";
@@ -249,6 +250,7 @@ async function appel_api<T>(
       message,
       reponse.status,
       erreurApi.request_id || undefined,
+      erreurApi.details || null,
     );
   }
 

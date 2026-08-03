@@ -25,6 +25,7 @@ from src.noyau.chiffrement import dechiffrer_donnee
 from src.schemas.authentification import (
     InscriptionRequete, InscriptionReponse,
     ConnexionRequete, ConnexionReponse,
+    ConnexionCodeEnvoyerRequete, ConnexionCodeEnvoyerReponse,
     RafraichissementRequete, JetonsReponse,
     UtilisateurReponse,
     VerificationEnvoyerRequete as VerifEnvoyerReq,
@@ -124,6 +125,8 @@ async def connexion(
         email=donnees.email,
         mot_de_passe=donnees.mot_de_passe,
         code_2fa=donnees.code_2fa,
+        code_email=donnees.code_email,
+        canal_2fa=donnees.canal_2fa or "totp",
         adresse_ip=obtenir_ip_client(requete),
         agent_utilisateur=obtenir_agent_utilisateur(requete),
     )
@@ -134,6 +137,38 @@ async def connexion(
             token_rafraichissement=token_rafraichissement,
             duree_validite_secondes=parametres.duree_token_acces_minutes * 60,
         ),
+    )
+
+
+@routeur_authentification.post(
+    "/connexion/code",
+    response_model=ConnexionCodeEnvoyerReponse,
+    summary="Envoyer un code 2FA de connexion par email",
+)
+async def envoyer_code_connexion(
+    requete: Request,
+    donnees: ConnexionCodeEnvoyerRequete,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """
+    Vérifie les identifiants (email + mot de passe) puis envoie un code
+    2FA par email pour finaliser la connexion.
+
+    Réutilise le même service d'envoi de code que les messages de
+    confirmation (verification_code.generer_et_envoyer_code).
+    """
+    resultat = await service.envoyer_code_connexion_email(
+        session=session,
+        email=donnees.email,
+        mot_de_passe=donnees.mot_de_passe,
+        adresse_ip=obtenir_ip_client(requete),
+    )
+    return ConnexionCodeEnvoyerReponse(
+        succes=True,
+        message="Code de connexion envoyé par email.",
+        destination_masquee=resultat["destination_masquee"],
+        duree_validite_minutes=resultat["duree_validite_minutes"],
+        code_dev=resultat.get("code"),
     )
 
 

@@ -25,10 +25,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import Utilisateur, CodeVerification
-from src.noyau.exceptions import ErreurValidation
+from src.noyau.exceptions import Erreur2FAInvalide, ErreurValidation
 from src.noyau.notification import (
     generer_code_verification,
     envoyer_email_verification,
+    envoyer_email_code_connexion,
     envoyer_sms_verification,
     passer_appel_verification,
 )
@@ -129,7 +130,10 @@ async def generer_et_envoyer_code(
     if canal == CANAL_EMAIL:
         # Déchiffrer le prénom pour un email plus personnalisé
         prenom = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else None
-        succes = envoyer_email_verification(destination, code, prenom)
+        if type_verification == "connexion":
+            succes = envoyer_email_code_connexion(destination, code, prenom)
+        else:
+            succes = envoyer_email_verification(destination, code, prenom)
     elif canal == CANAL_SMS:
         succes = envoyer_sms_verification(destination, code)
     elif canal == CANAL_APPEL:
@@ -261,6 +265,71 @@ async def verifier_code(
 
     await session.commit()
     return resultat_verification
+
+
+async def verifier_code_connexion(
+    session: AsyncSession,
+    utilisateur_id: UUID,
+    code_saisi: str,
+) -> bool:
+    """
+    Vérifie un code 2FA de connexion envoyé par email (type_verification="connexion").
+
+    Contrairement à `verifier_code`, cette fonction ne modifie PAS l'état du
+    compte (pas d'activation, pas de marquage email vérifié) : elle valide
+    simplement le code et le marque comme utilisé en cas de succès.
+
+    Lève Erreur2FAInvalide si le code est absent, expiré ou incorrect.
+    """
+    # Chercher le code non utilisé le plus récent pour cet utilisateur
+    resultat = await session.execute(
+        select(CodeVerification)
+        .where(
+            CodeVerification.utilisateur_id == utilisateur_id,
+            CodeVerification.canal == CANAL_EMAIL,
+            CodeVerification.est_utilise == False,
+            CodeVerification.type_verification == "connexion",
+            CodeVerification.date_expiration > datetime.now(timezone.utc),
+        )
+        .order_by(CodeVerification.cree_le.desc())
+        .limit(1)
+    )
+    code_verification = resultat.scalar_one_or_none()
+
+    if code_verification is None:
+        raise Erreur2FAInvalide(
+            "Aucun code de connexion actif",
+            message_utilisateur="Aucun code en attente. Demande un nouveau code par email.",
+        )
+
+    # Vérifier le nombre de tentatives
+    if code_verification.tentative >= MAX_TENTATIVES:
+        code_verification.est_utilise = True  # Invalider après trop de tentatives
+        await session.commit()
+        raise Erreur2FAInvalide(
+            "Trop de tentatives échouées",
+            message_utilisateur="Trop de tentatives. Demande un nouveau code.",
+        )
+
+    # Incrémenter les tentatives
+    code_verification.tentative += 1
+
+    # Vérifier le code
+    if code_verification.code != code_saisi.strip():
+        await session.commit()
+        tentatives_restantes = MAX_TENTATIVES - code_verification.tentative
+        raise Erreur2FAInvalide(
+            "Code incorrect",
+            message_utilisateur=f"Code incorrect. Il te reste {tentatives_restantes} tentative(s).",
+        )
+
+    # ✅ Code valide — marquer comme utilisé
+    code_verification.est_utilise = True
+    await session.commit()
+    journal.info(
+        f"Code 2FA de connexion validé : utilisateur={utilisateur_id}"
+    )
+    return True
 
 
 async def renvoyer_code(

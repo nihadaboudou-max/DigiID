@@ -40,9 +40,11 @@ export interface VerificationPermisDetail {
   categories?: string[];         
   date_delivrance?: string;      
   date_expiration?: string;
-  date_naissance?: string;
+    date_naissance?: string;
   lieu_naissance?: string;
   autorite_delivrance?: string;
+  date_premiere_delivrance?: string;
+  lieu_delivrance?: string;
   taux_confiance_ocr?: number;
   cree_le: string;
 }
