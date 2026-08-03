@@ -10,6 +10,9 @@ export interface DonneesPermis {
   date_delivrance?: string;
   date_expiration?: string;
   autorite_delivrance?: string;
+  date_naissance?: string;
+  lieu_naissance?: string;
+  pays_emetteur?: string;
   texte_brut?: string;
   taux_confiance_moyen?: number;
 }

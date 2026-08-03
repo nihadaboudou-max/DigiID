@@ -2,17 +2,17 @@
 """
 Service OCR Permis — orchestration du scan, validation stricte d'identité et sauvegarde.
 """
+import re
 import time
-from datetime import datetime
+from datetime import datetime, date
 from uuid import UUID
 from fastapi import UploadFile
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# ✅ IMPORTS NÉCESSAIRES
 from src.modeles import Utilisateur
 from src.modeles.permis_conduire import PermisConduire
-from src.modules.ocr_cni.ocr_engine import analyser_image_cni  # Moteur OCR partagé
+from src.modules.ocr_cni.ocr_engine import analyser_image_cni  # ✅ Moteur OCR partagé
 from src.modules.ocr_permis.extraction_permis import extraire_donnees_permis
 from src.modules.ocr_permis.schemas import (
     DonneesPermisExtraites,
@@ -23,7 +23,8 @@ from src.modules.ocr_permis.schemas import (
 )
 from src.noyau import journal
 from src.noyau.exceptions import ErreurValidation
-from src.noyau import dechiffrer_donnee
+
+from src.noyau.chiffrement import dechiffrer_donnee
 
 # =============================================================================
 # Constantes
@@ -34,6 +35,35 @@ TYPES_MIME_AUTORISES = {
     "image/png": "png",
     "image/webp": "webp",
 }
+
+# =============================================================================
+# ✅ FONCTION DE PARSING DES DATES (Résout l'erreur 'toordinal')
+# =============================================================================
+def _parser_date(chaine_date: str | None, est_expiration: bool = False) -> date | None:
+    """Convertit une chaîne de date brute en objet datetime.date valide pour la base de données."""
+    if not chaine_date:
+        return None
+    
+    # Extraire tous les motifs de date (JJ.MM.AAAA, JJ/MM/AAAA, JJ-MM-AAAA)
+    dates_trouvees = re.findall(r'\d{1,2}[./-]\d{1,2}[./-]\d{2,4}', chaine_date)
+    if not dates_trouvees:
+        return None
+    
+    # Si c'est une date d'expiration et que l'OCR en a capturé deux, on prend la dernière (la plus lointaine)
+    # Sinon, on prend la première (pour la date de délivrance)
+    date_cible = dates_trouvees[-1] if est_expiration else dates_trouvees[0]
+    
+    # Formats de date courants dans les documents officiels
+    formats = ["%d.%m.%Y", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%y", "%d/%m/%y", "%d-%m-%y"]
+    
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_cible, fmt).date()
+        except ValueError:
+            continue
+            
+    journal.warning(f"Impossible de parser la date : {chaine_date}")
+    return None
 
 # =============================================================================
 # Fonctions internes
@@ -76,10 +106,12 @@ async def traiter_upload_permis(
     Traite l'upload d'une image de permis de conduire avec vérification stricte d'identité.
     """
     debut = time.time()
+    
+    # 1. Lecture du fichier (✅ avec le underscore corrigé)
     contenu = await _lire_image(fichier)
     nom_fichier = fichier.filename or f"permis_{face}.jpg"
     
-    # 1. Analyse OCR réelle
+    # 2. Analyse OCR RÉELLE avec le moteur partagé
     try:
         resultat_ocr_engine = analyser_image_cni(contenu)
         texte_brut = resultat_ocr_engine.get("texte_brut", "")
@@ -89,7 +121,7 @@ async def traiter_upload_permis(
         journal.error(f"Erreur OCR permis: {e}")
         texte_brut, confiance, mrz_lignes = "", 0.0, (None, None, None)
     
-    # 2. Extraction des données
+    # 3. Extraction des données
     donnees = extraire_donnees_permis(
         texte_brut=texte_brut,
         confiance=confiance,
@@ -101,7 +133,7 @@ async def traiter_upload_permis(
     erreurs = [] if succes_ocr else ["Extraction insuffisante"]
     temps_ms = int((time.time() - debut) * 1000)
 
-    # 3. ✅ VÉRIFICATION STRICTE DE COHÉRENCE (Inspirée de la CNI)
+    # 4. ✅ VÉRIFICATION STRICTE DE COHÉRENCE (Inspirée de la CNI)
     if succes_ocr and donnees.nom_famille:
         # Déchiffrement des données du profil
         nom_profil = dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else ""
@@ -139,7 +171,7 @@ async def traiter_upload_permis(
                 message_utilisateur=message_erreur
             )
 
-    # 4. Vérification d'unicité du numéro de permis
+    # 5. Vérification d'unicité du numéro de permis
     if succes_ocr and donnees.numero_permis:
         resultat = await session.execute(
             select(PermisConduire).where(PermisConduire.numero_permis == donnees.numero_permis)
@@ -150,14 +182,14 @@ async def traiter_upload_permis(
                 message_utilisateur="Ce numéro de permis existe déjà dans la base de données."
             )
 
-    # 5. Enregistrement en base de données
+    # 6. ✅ SAUVEGARDE EN BASE DE DONNÉES (avec PARSING DES DATES pour éviter l'erreur 'toordinal')
     nouveau_permis = PermisConduire(
         utilisateur_id=utilisateur.id,
         numero_permis=donnees.numero_permis,
         categories=donnees.categories or [],
-        date_premiere_delivrance=donnees.date_premiere_delivrance,
-        date_delivrance=donnees.date_delivrance,
-        date_expiration=donnees.date_expiration,
+        date_premiere_delivrance=_parser_date(donnees.date_premiere_delivrance),
+        date_delivrance=_parser_date(donnees.date_delivrance),          # ✅ Converti en datetime.date
+        date_expiration=_parser_date(donnees.date_expiration, est_expiration=True), # ✅ Converti en datetime.date
         autorite_delivrance=donnees.autorite_delivrance,
         est_valide=succes_ocr,
     )
@@ -170,7 +202,7 @@ async def traiter_upload_permis(
         f"succes={succes_ocr} | numero={donnees.numero_permis or 'N/A'} | temps={temps_ms}ms"
     )
 
-    # 6. Construction de la réponse
+    # 7. Construction de la réponse
     resultat_ocr = ResultatOCRPermis(
         succes=succes_ocr,
         donnees=donnees,
