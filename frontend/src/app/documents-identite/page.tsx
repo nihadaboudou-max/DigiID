@@ -1,58 +1,46 @@
 "use client";
+
 /**
  * Page Documents d'Identité — CNI, Permis de Conduire, Assurance.
- * L'utilisateur :
- * - Saisit/modifie ses informations d'identité (champs non officiels uniquement)
- * - Voit les données officielles extraites par l'OCR en lecture seule
- * - Voit l'impact sur son score
+ * Mise à jour pour utiliser les nouveaux modules OCR dédiés.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Alerte } from "@/composants/commun/Alerte";
 import { useNotifications } from "@/contextes/notifications";
-import {
-  listerDocumentsIdentite,
-  ajouterDocumentIdentite,
-  modifierDocumentIdentite,
-  supprimerDocumentIdentite,
-  champsParType,
-  champsOfficielsDocument, // ✅ NOUVEAU : pour l'affichage en lecture seule
-  LIBELLES_TYPE_DOCUMENT,
-  ICONES_TYPE_DOCUMENT,
-  COULEURS_TYPE_DOCUMENT,
-  COULEURS_BORDURE,
-  OPTIONS_COUVERTURE,
-  OPTIONS_SEXE,
-  type DocumentIdentiteDetail,
-  type DocumentIdentitePayload,
-} from "@/services/documents_identite";
 import { ErreurAPI } from "@/services/client_api";
+
+// ✅ IMPORTS DES NOUVEAUX SERVICES DÉDIÉS
+import { 
+  obtenirHistoriquePermis, 
+  type VerificationPermisDetail 
+} from "@/services/permis_conduire";
+import { 
+  obtenirHistoriqueAssurance, 
+  type VerificationAssuranceDetail 
+} from "@/services/assurance_auto";
 
 type OngletType = "cni" | "permis" | "assurance";
 
-// =============================================================================
-// Champs obligatoires par type de document (uniquement les modifiables)
-// =============================================================================
-const CHAMPS_OBLIGATOIRES: Record<OngletType, string[]> = {
-  cni: ["nom_complet", "numero_document", "nationalite"],
-  permis: ["nom_complet", "numero_permis", "categories_permis"],
-  assurance: ["compagnie_assurance", "type_couverture", "numero_contrat", "date_expiration"],
+const LIBELLES_TYPE_DOCUMENT: Record<OngletType, string> = {
+  cni: "Carte Nationale d'Identité",
+  permis: "Permis de Conduire",
+  assurance: "Assurance Automobile",
 };
 
-// Libellés lisibles pour les messages d'erreur
-const LIBELLES_CHAMPS: Record<string, string> = {
-  nom_complet: "Nom complet",
-  numero_document: "Numéro du document",
-  nationalite: "Nationalité",
-  numero_permis: "Numéro du permis",
-  categories_permis: "Catégories de permis",
-  compagnie_assurance: "Compagnie d'assurance",
-  type_couverture: "Type de couverture",
-  numero_contrat: "Numéro de contrat",
-  date_expiration: "Date d'expiration",
+const ICONES_TYPE_DOCUMENT: Record<OngletType, string> = {
+  cni: "🆔",
+  permis: "🚗",
+  assurance: "🛡️",
+};
+
+const COULEURS_BORDURE: Record<OngletType, string> = {
+  cni: "border-lagune",
+  permis: "border-amber-500",
+  assurance: "border-green-500",
 };
 
 export default function PageDocumentsIdentite() {
@@ -71,17 +59,41 @@ export default function PageDocumentsIdentite() {
 
 function Contenu() {
   const { notifier } = useNotifications();
-  const [documents, setDocuments] = useState<DocumentIdentiteDetail[]>([]);
   const [chargement, setChargement] = useState(true);
   const [onglet, setOnglet] = useState<OngletType>("cni");
-  const [editionId, setEditionId] = useState<string | null>(null);
+  
+  // ✅ États spécifiques pour chaque type de document
+  const [permis, setPermis] = useState<VerificationPermisDetail | null>(null);
+  const [assurance, setAssurance] = useState<VerificationAssuranceDetail | null>(null);
+  // (Tu peux ajouter l'état CNI ici si tu as un service dédié, sinon on le garde en placeholder)
+  const [cni, setCni] = useState<any>(null); 
 
   const chargerDocuments = useCallback(async () => {
+    setChargement(true);
     try {
-      const resultat = await listerDocumentsIdentite();
-      setDocuments(resultat.documents);
+      // Appel parallèle aux nouvelles API dédiées
+      const [resPermis, resAssurance] = await Promise.allSettled([
+        obtenirHistoriquePermis(1), // On récupère le plus récent
+        obtenirHistoriqueAssurance(1)
+      ]);
+
+      if (resPermis.status === "fulfilled" && resPermis.value.historique.length > 0) {
+        setPermis(resPermis.value.historique[0]);
+      } else {
+        setPermis(null);
+      }
+
+      if (resAssurance.status === "fulfilled" && resAssurance.value.historique.length > 0) {
+        setAssurance(resAssurance.value.historique[0]);
+      } else {
+        setAssurance(null);
+      }
+      
+      // Placeholder pour la CNI (à adapter avec ton vrai service CNI)
+      setCni(null); 
+
     } catch (e) {
-      const msg = e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement";
+      const msg = e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement des documents";
       notifier(msg, "erreur");
     } finally {
       setChargement(false);
@@ -92,113 +104,89 @@ function Contenu() {
     chargerDocuments();
   }, [chargerDocuments]);
 
-  const docCourant = documents.find((d) => d.type_document === onglet);
-  const aUnDocument = !!docCourant;
+  // Déterminer le document actif en fonction de l'onglet
+  const docActif = onglet === "permis" ? permis : onglet === "assurance" ? assurance : cni;
+  const aUnDocument = !!docActif;
 
   return (
-    <div className="space-y-8 apparition">
+    <div className="space-y-8 apparition max-w-5xl mx-auto">
       {/* En-tête */}
       <header>
         <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
           Mon identité
         </p>
-        <h1 className="mt-1">Mes documents d'identité</h1>
+        <h1 className="mt-1 text-2xl font-bold text-ardoise">Mes documents d'identité</h1>
         <p className="text-ardoise-clair mt-2 max-w-3xl">
-          Ajoute tes documents d'identité (CNI, Permis de Conduire, Assurance)
-          pour renforcer ton profil. Les données officielles (dates, lieu de naissance, etc.) 
-          sont extraites automatiquement par l'OCR et ne peuvent pas être modifiées manuellement 
-          pour garantir l'intégrité de ton identité.
+          Consulte les données officielles extraites automatiquement par l'OCR. 
+          Ces informations sont verrouillées pour garantir l'intégrité et la traçabilité de ton identité numérique.
         </p>
       </header>
 
       {/* Onglets */}
       <div className="flex gap-2 border-b border-ardoise-clair/10 pb-2 overflow-x-auto">
         {(["cni", "permis", "assurance"] as const).map((type) => {
-          const doc = documents.find((d) => d.type_document === type);
+          const aDoc = type === "permis" ? !!permis : type === "assurance" ? !!assurance : !!cni;
           return (
             <button
               key={type}
-              onClick={() => { setOnglet(type); setEditionId(null); }}
+              onClick={() => setOnglet(type)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg transition-all whitespace-nowrap text-sm font-medium ${
                 onglet === type
                   ? "bg-ocre/10 text-ocre border-b-2 border-ocre"
-                  : "text-ardoise-clair hover:text-ardoise hover:bg-sable"
+                  : "text-ardoise-clair hover:text-ardoise hover:bg-sable/50"
               }`}
             >
               <span className="text-lg">{ICONES_TYPE_DOCUMENT[type]}</span>
               <span>{LIBELLES_TYPE_DOCUMENT[type]}</span>
-              {doc && <Badge variante="succes" taille="petit">✓</Badge>}
+              {aDoc && <Badge variante="succes" taille="petit">✓</Badge>}
             </button>
           );
         })}
       </div>
 
       {chargement ? (
-        <p className="text-center text-ardoise-clair italic py-8">Chargement de tes documents...</p>
+        <div className="flex justify-center py-12">
+          <div className="animate-spin h-8 w-8 border-4 border-lagune border-t-transparent rounded-full" />
+        </div>
       ) : (
         <>
           {aUnDocument ? (
-            <VueDocument
-              document={docCourant!}
-              onModifier={() => setEditionId(docCourant!.id)}
+            <VueDocument 
+              typeDocument={onglet} 
+              document={docActif!} 
               onSupprimer={async () => {
-                await supprimerDocumentIdentite(docCourant!.id);
-                notifier("Document supprimé", "info");
-                chargerDocuments();
+                // Note: La suppression réelle devra être implémentée dans les services dédiés
+                notifier("Fonction de suppression à implémenter dans le service dédié", "info");
               }}
-              notifier={notifier}
             />
           ) : (
-            <Alerte variante="info" titre={`Ajoute ta ${LIBELLES_TYPE_DOCUMENT[onglet].toLowerCase()}`}>
-              Tu n&apos;as pas encore enregistré ce document. Clique ci-dessous pour le renseigner.
-              Les données que tu fournis sont privées et sécurisées.
+            <Alerte variante="info" titre={`Aucun ${LIBELLES_TYPE_DOCUMENT[onglet].toLowerCase()} enregistré`}>
+              <p className="mb-3">
+                Tu n'as pas encore scanné ce document. Les données seront extraites automatiquement 
+                et de manière sécurisée via notre moteur OCR.
+              </p>
+              <Bouton 
+                variante="primaire" 
+                onClick={() => {
+                  // Redirection vers la page d'upload dédiée
+                  window.location.href = onglet === "permis" ? "/permis-conduire" : "/assurance-auto";
+                }}
+              >
+                📷 Scanner mon document
+              </Bouton>
             </Alerte>
           )}
 
-          {/* Formulaire */}
-          {editionId || !aUnDocument ? (
-            <FormulaireDocument
-              typeDocument={onglet}
-              document={editionId ? docCourant : null}
-              onSauvegarder={async (donnees) => {
-                try {
-                  if (editionId) {
-                    await modifierDocumentIdentite(editionId, donnees);
-                    notifier("Document mis à jour", "succes");
-                  } else {
-                    await ajouterDocumentIdentite({ ...donnees, type_document: onglet });
-                    notifier(`${LIBELLES_TYPE_DOCUMENT[onglet]} ajouté`, "succes");
-                  }
-                  setEditionId(null);
-                  chargerDocuments();
-                } catch (e) {
-                  const msg = e instanceof ErreurAPI ? e.message_utilisateur : "Erreur";
-                  notifier(msg, "erreur");
-                }
-              }}
-              onAnnuler={() => setEditionId(null)}
-            />
-          ) : (
-            <div className="text-center">
-              <Bouton
-                variante="primaire"
-                onClick={() => setEditionId(docCourant!.id)}
-              >
-                ✏️ Modifier les informations
-              </Bouton>
-            </div>
-          )}
-
           {/* Impact score */}
-          <Carte variante="pointilles" titre="📊 Impact sur ton score">
+          <Carte variante="pointilles" titre="📊 Impact sur ton score DigiID">
             <div className="space-y-2 text-sm">
               <p className="text-ardoise">
-                Chaque document d&apos;identité que tu renseignes améliore ton score :
+                Chaque document vérifié améliore ton score de confiance :
               </p>
               <ul className="space-y-1.5 text-ardoise-clair">
                 <li className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-lagune" />
-                  <strong>CNI présente</strong> — jusqu&apos;à <strong className="text-lagune">4 pts</strong>
+                  <strong>CNI authentifiée</strong> — jusqu&apos;à <strong className="text-lagune">4 pts</strong>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
@@ -206,16 +194,9 @@ function Contenu() {
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                  <strong>Assurance</strong> — jusqu&apos;à <strong className="text-green-600">2 pts</strong>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-lagune" />
-                  <strong>Stabilité</strong> — pas de modification depuis 3 mois → <strong className="text-lagune">2 pts</strong>
+                  <strong>Assurance valide</strong> — jusqu&apos;à <strong className="text-green-600">2 pts</strong>
                 </li>
               </ul>
-              <p className="text-xs text-ardoise-clair italic mt-3">
-                Total possible pour les documents : <strong>11 pts</strong> sur 20 dédiés à l&apos;identité.
-              </p>
             </div>
           </Carte>
         </>
@@ -225,359 +206,139 @@ function Contenu() {
 }
 
 // =============================================================================
-// Vue d'un document existant (lecture)
+// Vue d'un document existant (Lecture seule des données OCR)
 // =============================================================================
 function VueDocument({
-  document: doc,
-  onModifier,
-  onSupprimer,
-  notifier,
-}: {
-  document: DocumentIdentiteDetail;
-  onModifier: () => void;
-  onSupprimer: () => Promise<void>;
-  notifier: (msg: string, type: "succes" | "erreur" | "info") => void;
-}) {
-  const champs = champsParType(doc.type_document);
-  const champsOfficiels = champsOfficielsDocument(); // ✅ Récupération des champs en lecture seule
-  const sourceLabel = doc.source === "ocr" ? "Extrait par OCR" : "Saisi manuellement";
-  const modifDate = new Date(doc.modifie_le).toLocaleDateString("fr-FR", {
-    day: "numeric", month: "long", year: "numeric",
-  });
-  const modifDays = Math.floor((Date.now() - new Date(doc.modifie_le).getTime()) / (1000 * 60 * 60 * 24));
-
-  return (
-    <div className={`carte border-l-4 ${COULEURS_BORDURE[doc.type_document]}`}>
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${COULEURS_TYPE_DOCUMENT[doc.type_document]}`}>
-              {ICONES_TYPE_DOCUMENT[doc.type_document]} {sourceLabel}
-            </span>
-            {doc.a_ete_corrige && (
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-                ⚠️ Corrigé
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Bouton variante="secondaire" taille="petit" onClick={onModifier}>
-            ✏️ Modifier
-          </Bouton>
-          <Bouton
-            variante="danger"
-            taille="petit"
-            onClick={async () => {
-              if (confirm(`Supprimer ce ${LIBELLES_TYPE_DOCUMENT[doc.type_document].toLowerCase()} ?`)) {
-                await onSupprimer();
-              }
-            }}
-          >
-            🗑️ Supprimer
-          </Bouton>
-        </div>
-      </div>
-
-      {/* Grille des champs MODIFIABLES */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {champs.map((champ) => {
-          const valeur = (doc as any)[champ.key];
-          if (!valeur && valeur !== 0) return null;
-          return (
-            <div key={champ.key} className="bg-sable rounded-lg p-3">
-              <p className="text-xs text-ardoise-clair font-medium uppercase tracking-wider mb-1">
-                {champ.libelle}
-              </p>
-              <p className="text-sm font-medium text-ardoise">
-                {champ.key === "sexe" ? (valeur === "M" ? "Masculin" : valeur === "F" ? "Féminin" : valeur) : String(valeur)}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ✅ NOUVEAU : Champs officiels (lecture seule — extraits par OCR) */}
-      <div className="mt-6 pt-6 border-t border-ardoise-clair/10">
-        <p className="text-xs uppercase text-ardoise-clair font-semibold mb-3 flex items-center gap-2">
-          <span>🔒</span>
-          <span>Données officielles du document (non modifiables)</span>
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {champsOfficiels.map((champ) => {
-            const valeur = (doc as any)[champ.key];
-            if (!valeur) return null;
-            
-            let valeurAffichee = String(valeur);
-            
-            // Formater les dates
-            if (champ.key.startsWith("date_")) {
-              try {
-                const date = new Date(valeur);
-                valeurAffichee = date.toLocaleDateString("fr-FR", {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                });
-              } catch {
-                valeurAffichee = String(valeur);
-              }
-            }
-            
-            // Sexe : libellé lisible
-            if (champ.key === "sexe") {
-              valeurAffichee = valeur === "M" ? "Masculin" : valeur === "F" ? "Féminin" : valeur;
-            }
-            
-            // Alerte si date d'expiration proche
-            let alerteExpiration = null;
-            if (champ.key === "date_expiration") {
-              try {
-                const dateExp = new Date(valeur);
-                const joursRestants = Math.ceil((dateExp.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                if (joursRestants < 0) {
-                  alerteExpiration = (
-                    <span className="text-xs text-red-600 font-semibold ml-2">
-                      ⚠️ Expiré depuis {Math.abs(joursRestants)} jours
-                    </span>
-                  );
-                } else if (joursRestants < 90) {
-                  alerteExpiration = (
-                    <span className="text-xs text-amber-600 font-semibold ml-2">
-                      ⚠️ Expire dans {joursRestants} jours
-                    </span>
-                  );
-                }
-              } catch {
-                // Ignore les erreurs de parsing
-              }
-            }
-            
-            return (
-              <div key={champ.key} className="bg-sable/50 rounded-lg p-3 border border-ardoise-clair/10">
-                <p className="text-xs text-ardoise-clair font-medium uppercase tracking-wider mb-1 flex items-center gap-1">
-                  <span>🔒</span>
-                  {champ.libelle}
-                </p>
-                <p className="text-sm font-medium text-ardoise">
-                  {valeurAffichee}
-                  {alerteExpiration}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-        <p className="text-xs text-ardoise-clair italic mt-3">
-          💡 Ces données sont extraites automatiquement de votre document et ne peuvent pas être modifiées manuellement pour garantir l'intégrité de votre identité.
-        </p>
-      </div>
-
-      {/* Métadonnées */}
-      <div className="mt-4 flex flex-wrap gap-4 text-xs text-ardoise-clair border-t border-ardoise-clair/10 pt-4">
-        <span>Créé le {new Date(doc.cree_le).toLocaleDateString("fr-FR")}</span>
-        <span>Modifié le {modifDate}</span>
-        <span>
-          Stabilité : {modifDays < 30 ? (
-            <Badge variante="neutre" taille="petit">Récemment modifié</Badge>
-          ) : modifDays < 90 ? (
-            <Badge variante="ocre" taille="petit">Stable</Badge>
-          ) : (
-            <Badge variante="succes" taille="petit">Très stable ✓</Badge>
-          )}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-// =============================================================================
-// Formulaire d'édition / création
-// =============================================================================
-function FormulaireDocument({
   typeDocument,
   document,
-  onSauvegarder,
-  onAnnuler,
+  onSupprimer,
 }: {
   typeDocument: OngletType;
-  document: DocumentIdentiteDetail | null | undefined;
-  onSauvegarder: (donnees: Partial<DocumentIdentitePayload>) => Promise<void>;
-  onAnnuler: () => void;
+  document: any; // Typé 'any' ici pour accepter PermisDetail ou AssuranceDetail
+  onSupprimer: () => Promise<void>;
 }) {
-  // ✅ FIX : mémoïser champs pour éviter une nouvelle référence à chaque render
-  const champs = useMemo(() => champsParType(typeDocument), [typeDocument]);
-  const [valeurs, setValeurs] = useState<Record<string, any>>({});
-  const [sauvegarde, setSauvegarde] = useState(false);
-  const [erreurs, setErreurs] = useState<Record<string, string>>({});
-  const obligatoires = CHAMPS_OBLIGATOIRES[typeDocument];
+  // Définition des champs à afficher selon le type de document
+  const champsOfficiels = typeDocument === "permis" 
+    ? [
+        { key: "numero_permis", libelle: "N° Permis" },
+        { key: "categories", libelle: "Catégories", isList: true },
+        { key: "date_delivrance", libelle: "Délivré le", isDate: true },
+        { key: "date_expiration", libelle: "Expire le", isDate: true, checkExpiration: true },
+      ]
+    : typeDocument === "assurance"
+    ? [
+        { key: "compagnie_assurance", libelle: "Compagnie d'assurance" },
+        { key: "numero_contrat", libelle: "N° Contrat / Police" },
+        { key: "immatriculation_vehicule", libelle: "Immatriculation" },
+        { key: "marque_vehicule", libelle: "Marque du véhicule" },
+        { key: "date_expiration", libelle: "Valable jusqu'au", isDate: true, checkExpiration: true },
+      ]
+    : []; // Ajouter les champs CNI ici
 
-  // ✅ FIX : dépendances corrigées (document + typeDocument, pas champs)
-  useEffect(() => {
-    const initiales: Record<string, any> = {};
-    champs.forEach((c) => {
-      if (document) {
-        initiales[c.key] = (document as any)[c.key] ?? "";
-      } else {
-        initiales[c.key] = "";
-      }
-    });
-    setValeurs(initiales);
-    setErreurs({});
-  }, [document, typeDocument, champs]);
-
-  function setValeur(key: string, valeur: any) {
-    setValeurs((v) => ({ ...v, [key]: valeur }));
-    // Supprimer l'erreur dès que l'utilisateur modifie le champ
-    if (erreurs[key]) {
-      setErreurs((prev) => {
-        const copie = { ...prev };
-        delete copie[key];
-        return copie;
-      });
-    }
-  }
-
-  function validerFormulaire(): boolean {
-    const nouvellesErreurs: Record<string, string> = {};
-    for (const champKey of obligatoires) {
-      const valeur = valeurs[champKey];
-      if (!valeur || (typeof valeur === "string" && valeur.trim() === "")) {
-        const libelle = LIBELLES_CHAMPS[champKey] || champKey;
-        nouvellesErreurs[champKey] = `${libelle} est obligatoire`;
-      }
-    }
-    setErreurs(nouvellesErreurs);
-    return Object.keys(nouvellesErreurs).length === 0;
-  }
-
-  async function soumettre() {
-    if (!validerFormulaire()) {
-      return;
-    }
-    setSauvegarde(true);
-    try {
-      const donnees: Record<string, any> = {};
-      for (const [key, valeur] of Object.entries(valeurs)) {
-        if (valeur !== "" && valeur !== null) {
-          donnees[key] = key === "taille_cm" || key === "annee_vehicule"
-            ? Number(valeur)
-            : valeur;
-        }
-      }
-      await onSauvegarder(donnees);
-    } finally {
-      setSauvegarde(false);
-    }
-  }
-
-  const nombreErreurs = Object.keys(erreurs).length;
+  const modifDate = new Date(document.cree_le).toLocaleDateString("fr-FR", {
+    day: "numeric", month: "long", year: "numeric",
+  });
 
   return (
-    <Carte titre={document ? `✏️ Corriger ${LIBELLES_TYPE_DOCUMENT[typeDocument].toLowerCase()}` : `➕ Ajouter ${LIBELLES_TYPE_DOCUMENT[typeDocument].toLowerCase()}`}>
-      <p className="text-sm text-ardoise-clair mb-4">
-        {document?.source === "ocr"
-          ? "Les données ont été extraites automatiquement. Corrige les champs modifiables mal lus."
-          : "Renseigne les informations de ton document. "}
-      </p>
-
-      {/* Indicateur de champs obligatoires */}
-      <p className="text-xs text-ardoise-clair mb-6 flex items-center gap-2">
-        <span className="text-red-500 font-bold">*</span>
-        <span>Champs obligatoires pour {LIBELLES_TYPE_DOCUMENT[typeDocument]}</span>
-      </p>
-
-      {/* Alerte d'erreurs */}
-      {nombreErreurs > 0 && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3">
-          <p className="text-sm font-medium text-red-700 mb-1">
-            ⚠️ {nombreErreurs} champ{nombreErreurs > 1 ? "s" : ""} obligatoire{nombreErreurs > 1 ? "s" : ""} manquant{nombreErreurs > 1 ? "s" : ""} :
-          </p>
-          <ul className="text-xs text-red-600 list-disc list-inside space-y-0.5">
-            {Object.entries(erreurs).map(([key, message]) => (
-              <li key={key}>{message}</li>
-            ))}
-          </ul>
+    <div className={`bg-white rounded-xl border border-ardoise-clair/20 shadow-sm border-l-4 ${COULEURS_BORDURE[typeDocument]} p-6`}>
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-lagune/10 text-lagune border border-lagune/20">
+              {ICONES_TYPE_DOCUMENT[typeDocument]} Extrait par OCR
+            </span>
+            <Badge variante={document.statut === "approuve" ? "succes" : "ocre"}>
+              {document.statut === "approuve" ? "Validé" : "En attente"}
+            </Badge>
+          </div>
+          <h3 className="text-lg font-bold text-ardoise">
+            {LIBELLES_TYPE_DOCUMENT[typeDocument]}
+          </h3>
         </div>
-      )}
+        <Bouton
+          variante="danger"
+          taille="petit"
+          onClick={async () => {
+            if (confirm(`Supprimer ce document et ses données associées ?`)) {
+              await onSupprimer();
+            }
+          }}
+        >
+          🗑️ Supprimer
+        </Bouton>
+      </div>
 
+      {/* Grille des champs officiels (lecture seule) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {champs.map((champ) => {
-          const valeur = valeurs[champ.key] ?? "";
-          const estObligatoire = obligatoires.includes(champ.key);
-          const aErreur = !!erreurs[champ.key];
+        {champsOfficiels.map((champ) => {
+          const valeur = document[champ.key];
+          if (!valeur) return null;
           
-          if (champ.type_champ === "select") {
-            const options = champ.key === "sexe" ? OPTIONS_SEXE
-              : champ.key === "type_couverture" ? OPTIONS_COUVERTURE
-              : [];
-            return (
-              <div key={champ.key}>
-                <label className="block text-xs font-medium text-ardoise mb-1">
-                  {champ.libelle}
-                  {estObligatoire && <span className="text-red-500 ml-0.5">*</span>}
-                </label>
-                <select
-                  value={valeur}
-                  onChange={(e) => setValeur(champ.key, e.target.value)}
-                  required={estObligatoire}
-                  className={`w-full rounded-lg border px-3 py-2 text-sm bg-white focus:ring-2 outline-none ${
-                    aErreur
-                      ? "border-red-400 focus:ring-red-300 focus:border-red-500"
-                      : estObligatoire
-                      ? "border-ocre/40 focus:ring-ocre/50 focus:border-ocre"
-                      : "border-ardoise-clair/20 focus:ring-ocre/50 focus:border-ocre"
-                  }`}
-                >
-                  <option value="">
-                    {estObligatoire ? `— Choisir ${champ.libelle} —` : "— Non renseigné —"}
-                  </option>
-                  {options.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                {aErreur && (
-                  <p className="text-xs text-red-500 mt-1">{erreurs[champ.key]}</p>
-                )}
+          let valeurAffichee: string | React.ReactNode = String(valeur);
+          
+          // Formatage des listes (ex: catégories de permis)
+          if (champ.isList && Array.isArray(valeur)) {
+            valeurAffichee = (
+              <div className="flex flex-wrap gap-1">
+                {valeur.map((cat: string, i: number) => (
+                  <Badge key={i} variante="lagune" taille="petit">{cat}</Badge>
+                ))}
               </div>
             );
           }
           
+          // Formatage des dates
+          if (champ.isDate && typeof valeur === "string") {
+            try {
+              const date = new Date(valeur);
+              valeurAffichee = date.toLocaleDateString("fr-FR", {
+                day: "numeric", month: "long", year: "numeric",
+              });
+            } catch {
+              valeurAffichee = String(valeur);
+            }
+          }
+          
+          // Alerte d'expiration
+          let alerteExpiration = null;
+          if (champ.checkExpiration && typeof valeur === "string") {
+            try {
+              const dateExp = new Date(valeur);
+              const joursRestants = Math.ceil((dateExp.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+              if (joursRestants < 0) {
+                alerteExpiration = (
+                  <span className="block mt-1 text-xs text-red-600 font-semibold bg-red-50 px-2 py-1 rounded">
+                    ⚠️ Expiré depuis {Math.abs(joursRestants)} jours
+                  </span>
+                );
+              } else if (joursRestants < 90) {
+                alerteExpiration = (
+                  <span className="block mt-1 text-xs text-amber-600 font-semibold bg-amber-50 px-2 py-1 rounded">
+                    ⚠️ Expire dans {joursRestants} jours
+                  </span>
+                );
+              }
+            } catch { /* Ignore */ }
+          }
+          
           return (
-            <div key={champ.key}>
-              <label className="block text-xs font-medium text-ardoise mb-1">
-                {champ.libelle}
-                {estObligatoire && <span className="text-red-500 ml-0.5">*</span>}
-              </label>
-              <input
-                type={champ.type_champ}
-                value={valeur}
-                onChange={(e) => setValeur(champ.key, e.target.value)}
-                placeholder={estObligatoire ? `${champ.libelle} (obligatoire)` : champ.libelle}
-                required={estObligatoire}
-                className={`w-full rounded-lg border px-3 py-2 text-sm bg-white focus:ring-2 outline-none ${
-                  aErreur
-                    ? "border-red-400 focus:ring-red-300 focus:border-red-500"
-                    : estObligatoire
-                    ? "border-ocre/40 focus:ring-ocre/50 focus:border-ocre"
-                    : "border-ardoise-clair/20 focus:ring-ocre/50 focus:border-ocre"
-                }`}
-              />
-              {aErreur && (
-                <p className="text-xs text-red-500 mt-1">{erreurs[champ.key]}</p>
-              )}
+            <div key={champ.key} className="bg-sable/30 rounded-lg p-4 border border-ardoise-clair/10">
+              <p className="text-[10px] uppercase text-ardoise-clair font-bold tracking-wider mb-1.5 flex items-center gap-1">
+                <span>🔒</span> {champ.libelle}
+              </p>
+              <div className="text-sm font-semibold text-ardoise break-words">
+                {valeurAffichee}
+              </div>
+              {alerteExpiration}
             </div>
           );
         })}
       </div>
 
-      <div className="flex items-center gap-3 mt-6 pt-4 border-t border-ardoise-clair/10">
-        <Bouton variante="primaire" onClick={soumettre} chargement={sauvegarde}>
-          💾 Enregistrer
-        </Bouton>
-        <Bouton variante="secondaire" onClick={onAnnuler}>
-          Annuler
-        </Bouton>
+      <div className="mt-6 pt-4 border-t border-ardoise-clair/10 flex flex-wrap gap-4 text-xs text-ardoise-clair">
+        <span>📅 Ajouté le {modifDate}</span>
+        <span>🔒 Source: Extraction OCR automatique</span>
       </div>
-    </Carte>
+    </div>
   );
 }

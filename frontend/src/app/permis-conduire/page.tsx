@@ -1,13 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Alerte } from "@/composants/commun/Alerte";
 import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
-import { uploaderPermis, type ReponseUploadPermis } from "@/services/permis_conduire";
+import { 
+  uploaderPermis, 
+  obtenirHistoriquePermis, 
+  type ReponseUploadPermis,
+  type VerificationPermisDetail
+} from "@/services/permis_conduire";
 
 export default function PagePermisConduire() {
   return (
@@ -19,17 +24,55 @@ export default function PagePermisConduire() {
 
 function Contenu() {
   const [fichier, setFichier] = useState<File | null>(null);
-  const [chargement, setChargement] = useState(false);
+  const [chargement, setChargement] = useState(true); // ✅ Commence à true pour charger les données existantes
   const [resultat, setResultat] = useState<ReponseUploadPermis | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   const [afficherTexteBrut, setAfficherTexteBrut] = useState(false);
+
+  // ✅ Charger les données existantes au montage de la page (comme la CNI)
+  useEffect(() => {
+    async function chargerDonneesExistantes() {
+      try {
+        const hist = await obtenirHistoriquePermis(1); // Récupère le dernier document
+        if (hist && hist.historique.length > 0) {
+          const dernier: VerificationPermisDetail = hist.historique[0];
+          
+          // On reconstruit un objet compatible avec ReponseUploadPermis pour l'affichage
+          setResultat({
+            id: dernier.id,
+            statut: dernier.statut as "approuve" | "rejete" | "en_attente",
+            message: "Document déjà enregistré dans votre profil.",
+            resultat_ocr: {
+              succes: dernier.statut === "approuve",
+              donnees: {
+                nom_famille: dernier.nom_famille,
+                prenoms: dernier.prenoms,
+                numero_permis: dernier.numero_permis,
+                categories: dernier.categories || [],
+                date_delivrance: dernier.date_delivrance,
+                date_expiration: dernier.date_expiration,
+              },
+              erreurs: [],
+              champs_extraits: dernier.numero_permis ? 5 : 0,
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Erreur lors du chargement de l'historique:", err);
+      } finally {
+        setChargement(false);
+      }
+    }
+    
+    chargerDonneesExistantes();
+  }, []);
 
   async function gererUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setFichier(file);
     setErreur(null);
-    setResultat(null);
+    setResultat(null); // Réinitialise pour montrer le nouveau chargement
     setChargement(true);
 
     try {
@@ -40,6 +83,16 @@ function Contenu() {
     } finally {
       setChargement(false);
     }
+  }
+
+  // ✅ Écran de chargement initial
+  if (chargement && !resultat) {
+    return (
+      <div className="max-w-3xl mx-auto space-y-6 apparition pb-20 flex items-center justify-center min-h-[50vh]">
+        <div className="animate-spin h-8 w-8 border-4 border-lagune border-t-transparent rounded-full" />
+        <p className="text-ardoise-clair">Chargement de vos données...</p>
+      </div>
+    );
   }
 
   return (
@@ -70,7 +123,7 @@ function Contenu() {
           <div className="flex flex-col items-center justify-center pt-5 pb-6">
             <p className="text-4xl mb-2">📄</p>
             <p className="text-sm text-ardoise-clair">
-              {fichier ? fichier.name : "Clique pour choisir un fichier"}
+              {fichier ? fichier.name : "Clique pour choisir un nouveau fichier"}
             </p>
           </div>
           <input
@@ -82,7 +135,7 @@ function Contenu() {
           />
         </label>
 
-        {chargement && (
+        {chargement && !resultat && (
           <div className="text-center py-4">
             <div className="animate-spin h-8 w-8 border-4 border-lagune border-t-transparent rounded-full mx-auto" />
             <p className="text-sm text-ardoise-clair mt-2">Analyse en cours...</p>
@@ -103,7 +156,7 @@ function Contenu() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-ardoise">Résultat de l'extraction</h2>
             <Badge variante={resultat.statut === "approuve" ? "succes" : "terre"}>
-              {resultat.statut}
+              {resultat.statut === "approuve" ? "Validé" : resultat.statut}
             </Badge>
           </div>
 

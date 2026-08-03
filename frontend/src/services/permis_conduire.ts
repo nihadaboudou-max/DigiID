@@ -31,7 +31,11 @@ export interface ReponseUploadPermis {
 export interface VerificationPermisDetail {
   id: string;
   statut: string;
+  nom_famille?: string;         
+  prenoms?: string;            
   numero_permis?: string;
+  categories?: string[];         
+  date_delivrance?: string;      
   date_expiration?: string;
   cree_le: string;
 }
