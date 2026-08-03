@@ -42,6 +42,11 @@ export interface VerificationAssuranceDetail {
   modele_vehicule?: string | null;
   date_effet?: string | null;
   date_expiration?: string | null;
+  nom_famille?: string | null;
+  prenoms?: string | null;
+  date_naissance?: string | null;
+  lieu_naissance?: string | null;
+  date_delivrance?: string | null;
   
   // Métadonnées
   taux_confiance_ocr?: number | null;

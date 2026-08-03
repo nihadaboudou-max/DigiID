@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Service OCR Permis — orchestration du scan et de la validation
-des Permis de Conduire.
+Service OCR Permis — orchestration du scan, validation d'identité et sauvegarde.
 """
 import re
+import unicodedata
 from datetime import datetime, date
 from uuid import UUID
 from fastapi import UploadFile
@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import Utilisateur
 from src.modeles.permis_conduire import PermisConduire
-from src.modules.ocr_cni.ocr_engine import analyser_image_cni  # ✅ Moteur OCR partagé
+from src.modules.ocr_cni.ocr_engine import analyser_image_cni  # Moteur OCR partagé
 from src.modules.ocr_permis.extraction_permis import extraire_donnees_permis
 from src.modules.ocr_permis.schemas import (
     DonneesPermisExtraites,
@@ -35,42 +35,65 @@ TYPES_MIME_AUTORISES = {
 }
 
 # =============================================================================
-# Fonctions utilitaires
+# Fonctions utilitaires de vérification d'identité
 # =============================================================================
-def parser_date(chaine_date: str | None, est_expiration: bool = False) -> date | None:
+def _normaliser_chaine(texte: str | None) -> str:
+    """Normalise une chaîne : minuscules, sans accents, sans espaces multiples."""
+    if not texte:
+        return ""
+    # Supprime les accents
+    texte_norm = unicodedata.normalize('NFKD', texte).encode('ascii', 'ignore').decode('utf-8')
+    # Minuscules et nettoyage des espaces
+    return re.sub(r'\s+', ' ', texte_norm.lower().strip())
+
+def verifier_correspondance_identite(
+    nom_extrait: str | None, 
+    prenoms_extraits: str | None, 
+    utilisateur: Utilisateur
+) -> tuple[bool, str]:
     """
-    Convertit une chaîne de date brute (ex: '15.03.2021' ou '15.03.2021 14.03.2031') 
-    en objet datetime.date valide pour la base de données.
+    Compare les noms extraits par l'OCR avec le profil utilisateur.
+    Retourne (True, "Message succès") ou (False, "Message d'erreur").
     """
-    if not chaine_date:
-        return None
+    # Si le profil n'a pas de nom, on ne peut pas vérifier (ou on accepte par défaut)
+    if not utilisateur.nom or not utilisateur.prenoms:
+        return True, "Profil utilisateur incomplet, validation du nom ignorée."
+
+    nom_extrait_norm = _normaliser_chaine(nom_extrait)
+    prenoms_extraits_norm = _normaliser_chaine(prenoms_extraits)
+    nom_profil_norm = _normaliser_chaine(utilisateur.nom)
+    prenoms_profil_norm = _normaliser_chaine(utilisateur.prenoms)
+
+    # 1. Vérification du NOM (doit être contenu l'un dans l'autre pour tolérer les particules)
+    nom_correspond = (nom_extrait_norm in nom_profil_norm) or (nom_profil_norm in nom_extrait_norm)
+
+    # 2. Vérification des PRÉNOMS (vérifie le chevauchement des mots)
+    mots_extraits = set(prenoms_extraits_norm.split())
+    mots_profil = set(prenoms_profil_norm.split())
     
-    # Extraire tous les motifs de date (JJ.MM.AAAA, JJ/MM/AAAA, JJ-MM-AAAA)
-    dates_trouvees = re.findall(r'\d{1,2}[./-]\d{1,2}[./-]\d{2,4}', chaine_date)
-    if not dates_trouvees:
-        return None
-    
-    # Si c'est une date d'expiration et que l'OCR en a capturé deux, on prend la dernière (la plus lointaine)
-    # Sinon, on prend la première (pour la date de délivrance)
-    date_cible = dates_trouvees[-1] if est_expiration else dates_trouvees[0]
-    
-    # Formats de date courants dans les documents officiels
-    formats = ["%d.%m.%Y", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%y", "%d/%m/%y", "%d-%m-%y"]
-    
-    for fmt in formats:
-        try:
-            return datetime.strptime(date_cible, fmt).date()
-        except ValueError:
-            continue
-            
-    journal.warning(f"Impossible de parser la date : {chaine_date}")
-    return None
+    # On considère comme valide si au moins la moitié des prénoms du profil sont dans l'extrait, 
+    # ou si c'est une correspondance exacte après normalisation.
+    if not mots_profil:
+        prenoms_correspondent = True
+    else:
+        intersection = len(mots_extraits.intersection(mots_profil))
+        prenoms_correspondent = (intersection >= max(1, len(mots_profil) // 2)) or (prenoms_extraits_norm == prenoms_profil_norm)
+
+    if nom_correspond and prenoms_correspondent:
+        return True, "Identité vérifiée avec succès."
+    else:
+        msg_erreur = (
+            f"Incohérence d'identité détectée. "
+            f"Profil : {utilisateur.nom} {utilisateur.prenoms} | "
+            f"Extrait OCR : {nom_extrait or 'N/A'} {prenoms_extraits or 'N/A'}. "
+            f"Veuillez vérifier que le permis appartient bien au titulaire du compte."
+        )
+        return False, msg_erreur
 
 # =============================================================================
 # Fonctions internes
 # =============================================================================
 async def _lire_image(fichier: UploadFile) -> bytes:
-    """Lit et valide le fichier image uploadé."""
     if fichier.content_type not in TYPES_MIME_AUTORISES:
         raise ErreurValidation(
             f"Type MIME refusé : {fichier.content_type}",
@@ -87,11 +110,7 @@ async def _lire_image(fichier: UploadFile) -> bytes:
     return contenu
 
 def _compter_champs_extraits(donnees: DonneesPermisExtraites) -> int:
-    """Compte le nombre de champs non-nuls extraits."""
-    champs = [
-        donnees.nom_famille, donnees.prenoms, donnees.numero_permis,
-        donnees.date_naissance, donnees.categories,
-    ]
+    champs = [donnees.nom_famille, donnees.prenoms, donnees.numero_permis, donnees.categories]
     return sum(1 for c in champs if c is not None and c != [])
 
 # =============================================================================
@@ -103,10 +122,12 @@ async def traiter_upload_permis(
     fichier: UploadFile,
     face: str = "recto",
 ) -> ReponseUploadPermis:
-    """Traite l'upload d'une image de permis de conduire."""
+    """Traite l'upload, vérifie l'identité et sauvegarde le permis."""
+    
+    # 1. Lecture du fichier
     contenu = await _lire_image(fichier)
     
-    # 1. Analyse OCR
+    # 2. Analyse OCR réelle
     try:
         resultat_ocr = analyser_image_cni(contenu)
         texte_brut = resultat_ocr.get("texte_brut", "")
@@ -118,7 +139,7 @@ async def traiter_upload_permis(
         confiance = 0.0
         mrz_lignes = (None, None, None)
     
-    # 2. Extraction des données
+    # 3. Extraction des données
     donnees = extraire_donnees_permis(
         texte_brut=texte_brut,
         confiance=confiance,
@@ -126,55 +147,40 @@ async def traiter_upload_permis(
     )
     
     nb_champs = _compter_champs_extraits(donnees)
-    
-    # ✅ VÉRIFICATION DES CHAMPS OBLIGATOIRES
-    if not donnees.numero_permis:
+    if nb_champs < 2 or not donnees.numero_permis:
         return ReponseUploadPermis(
             id=UUID("00000000-0000-0000-0000-000000000000"),
             statut="rejete",
-            resultat_ocr=ResultatOCRPermis(
-                succes=False,
-                donnees=donnees,
-                erreurs=["Numéro de permis introuvable"],
-                champs_extraits=nb_champs,
-            ),
-            message="Impossible de trouver le numéro de permis sur le document.",
+            resultat_ocr=ResultatOCRPermis(succes=False, donnees=donnees, erreurs=["Extraction insuffisante"], champs_extraits=nb_champs),
+            message="L'OCR n'a pas pu extraire suffisamment de données ou le numéro de permis est manquant.",
         )
     
-    # Parser les dates
-    date_delivrance = parser_date(donnees.date_delivrance)
-    date_expiration = parser_date(donnees.date_expiration, est_expiration=True)
-    date_premiere_delivrance = parser_date(donnees.date_premiere_delivrance)
+    # 4. ✅ VÉRIFICATION D'IDENTITÉ (Comparaison avec le profil)
+    est_conforme, message_validation = verifier_correspondance_identite(
+        nom_extrait=donnees.nom_famille,
+        prenoms_extraits=donnees.prenoms,
+        utilisateur=utilisateur
+    )
     
-    # ✅ VÉRIFIER QUE date_delivrance EST PRÉSENTE (champ NOT NULL)
-    if not date_delivrance:
-        return ReponseUploadPermis(
-            id=UUID("00000000-0000-0000-0000-000000000000"),
-            statut="rejete",
-            resultat_ocr=ResultatOCRPermis(
-                succes=False,
-                donnees=donnees,
-                erreurs=["Date de délivrance introuvable"],
-                champs_extraits=nb_champs,
-            ),
-            message="Impossible de trouver la date de délivrance sur le permis.",
-        )
+    if not est_conforme:
+        journal.warning(f"Rejet permis user {utilisateur.id} : {message_validation}")
+        # On rejette l'upload en levant une exception que le frontend affichera
+        raise ErreurValidation("Incohérence d'identité", message_utilisateur=message_validation)
     
-    # 3. Vérification d'unicité
+    # 5. Vérification d'unicité du numéro de permis
     resultat = await session.execute(
         select(PermisConduire).where(PermisConduire.numero_permis == donnees.numero_permis)
     )
     if resultat.scalar_one_or_none():
-        raise ErreurValidation("Ce numéro de permis existe déjà dans la base.")
+        raise ErreurValidation("Ce numéro de permis est déjà enregistré dans la base.")
     
-    # 4. Sauvegarde (maintenant on est sûr que date_delivrance n'est pas None)
+    # 6. Sauvegarde en base de données
     nouveau_permis = PermisConduire(
         utilisateur_id=utilisateur.id,
         numero_permis=donnees.numero_permis,
         categories=donnees.categories or [],
-        date_premiere_delivrance=date_premiere_delivrance,  # Peut être None
-        date_delivrance=date_delivrance,  # ✅ Garanti non-None
-        date_expiration=date_expiration,  # Peut être None
+        date_delivrance=donnees.date_delivrance,
+        date_expiration=donnees.date_expiration,
         autorite_delivrance=donnees.autorite_delivrance,
         est_valide=True,
     )
@@ -182,23 +188,16 @@ async def traiter_upload_permis(
     await session.commit()
     await session.refresh(nouveau_permis)
     
-    journal.info(f"Permis enregistré : {nouveau_permis.numero_permis} pour user {utilisateur.id}")
+    journal.info(f"Permis enregistré et validé : {nouveau_permis.numero_permis} pour user {utilisateur.id}")
     
-    resultat_ocr_final = ResultatOCRPermis(
-        succes=True,
-        donnees=donnees,
-        erreurs=[],
-        champs_extraits=nb_champs,
-    )
-    
+    # 7. Construction de la réponse
     return ReponseUploadPermis(
         id=nouveau_permis.id,
         statut="approuve",
-        resultat_ocr=resultat_ocr_final,
-        message="Permis enregistré avec succès.",
+        resultat_ocr=ResultatOCRPermis(succes=True, donnees=donnees, erreurs=[], champs_extraits=nb_champs),
+        message=f"Permis enregistré avec succès. {message_validation}",
     )
-    
-    
+
 async def obtenir_historique_permis(
     session: AsyncSession,
     utilisateur: Utilisateur,
@@ -220,7 +219,7 @@ async def obtenir_historique_permis(
             statut="approuve" if permis.est_valide else "rejete",
             face="recto",
             nom_fichier=f"permis_{permis.numero_permis}.jpg",
-            nom_famille=None,
+            nom_famille=None, # À mapper si tu stockes ces champs dans le modèle
             prenoms=None,
             numero_permis=permis.numero_permis,
             categories=permis.categories or [],
