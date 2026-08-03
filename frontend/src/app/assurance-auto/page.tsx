@@ -203,7 +203,6 @@ function Contenu() {
               </ul>
             </div>
           )}
-
           {/* ✅ BOUTON POUR AFFICHER LE TEXTE BRUT OCR (DÉBOGAGE) */}
           <div className="mt-6 pt-6 border-t border-ardoise-clair/20">
             <button
@@ -213,17 +212,37 @@ function Contenu() {
               {afficherTexteBrut ? "🔽 Masquer" : "🔍 Voir le texte brut extrait par l'OCR"}
             </button>
             
-            {afficherTexteBrut && resultat.resultat_ocr.donnees.texte_brut && (
+            {afficherTexteBrut && (
               <div className="mt-3 p-3 bg-ardoise-clair/10 rounded-lg">
-                <p className="text-xs font-semibold text-ardoise mb-2">
-                  Texte brut extrait ({resultat.resultat_ocr.donnees.texte_brut.length} caractères) :
-                </p>
-                <pre className="text-xs text-ardoise whitespace-pre-wrap font-mono bg-white p-2 rounded border border-ardoise-clair/20 max-h-64 overflow-auto">
-                  {resultat.resultat_ocr.donnees.texte_brut}
-                </pre>
-                <p className="text-xs text-ardoise-clair mt-2">
-                  Confiance OCR : <span className="font-semibold">{resultat.resultat_ocr.donnees.taux_confiance_moyen?.toFixed(1) || 0}%</span>
-                </p>
+                {resultat.resultat_ocr.donnees.texte_brut ? (
+                  <>
+                    <p className="text-xs font-semibold text-ardoise mb-2">
+                      Texte brut extrait ({resultat.resultat_ocr.donnees.texte_brut.length} caractères) :
+                    </p>
+                    <pre className="text-xs text-ardoise whitespace-pre-wrap font-mono bg-white p-2 rounded border border-ardoise-clair/20 max-h-64 overflow-auto">
+                      {resultat.resultat_ocr.donnees.texte_brut}
+                    </pre>
+                    <p className="text-xs text-ardoise-clair mt-2">
+                      Confiance OCR : <span className="font-semibold">{resultat.resultat_ocr.donnees.taux_confiance_moyen?.toFixed(1) || 0}%</span>
+                    </p>
+                  </>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-ardoise-clair italic mb-2">
+                      🔒 Texte brut non disponible
+                    </p>
+                    <p className="text-xs text-ardoise-clair">
+                      Le texte brut de l'OCR n'est conservé que temporairement 
+                      juste après le scan. Pour des raisons de sécurité et de 
+                      confidentialité, il n'est pas stocké en base de données.
+                    </p>
+                    {resultat.message.includes("déjà enregistré") && (
+                      <p className="text-xs text-ardoise-clair mt-2 font-medium">
+                        💡 Pour voir le texte brut, scannez à nouveau le document.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
