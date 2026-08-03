@@ -3,13 +3,15 @@ import { clientAPI } from "./client_api";
 const PREFIXE = "/api/v1/utilisateur/assurance";
 
 export interface DonneesAssurance {
-  compagnie_assurance?: string;
-  numero_contrat?: string;
-  immatriculation_vehicule?: string;
-  marque_vehicule?: string;
-  modele_vehicule?: string;
-  date_effet?: string;
-  date_expiration?: string;
+  compagnie_assurance?: string | null;
+  numero_contrat?: string | null;
+  immatriculation_vehicule?: string | null;
+  marque_vehicule?: string | null;
+  modele_vehicule?: string | null;
+  date_effet?: string | null;
+  date_expiration?: string | null;
+  texte_brut?: string | null;
+  taux_confiance_moyen?: number | null;
 }
 
 export interface ResultatOCRAssurance {
@@ -28,11 +30,23 @@ export interface ReponseUploadAssurance {
 
 export interface VerificationAssuranceDetail {
   id: string;
+  utilisateur_id?: string;
   statut: string;
-  compagnie_assurance?: string;
-  immatriculation_vehicule?: string;
-  date_expiration?: string;
+  nom_fichier?: string;
+  
+  // Données extraites
+  compagnie_assurance?: string | null;
+  numero_contrat?: string | null;
+  immatriculation_vehicule?: string | null;
+  marque_vehicule?: string | null;
+  modele_vehicule?: string | null;
+  date_effet?: string | null;
+  date_expiration?: string | null;
+  
+  // Métadonnées
+  taux_confiance_ocr?: number | null;
   cree_le: string;
+  est_supprime?: boolean;
 }
 
 export interface ListeVerificationsAssurance {
@@ -69,7 +83,6 @@ export async function uploaderAssurance(fichier: File): Promise<ReponseUploadAss
 
     xhr.addEventListener("error", () => reject(new Error("Erreur réseau")));
 
-    // ✅ CORRECTION : Ajout de /upload à la fin
     xhr.open("POST", `${PREFIXE}/upload`);
     Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
     xhr.send(formData);
