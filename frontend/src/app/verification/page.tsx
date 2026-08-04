@@ -16,7 +16,6 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
 import { Logo } from "@/composants/commun/Logo";
-import { EnTete } from "@/composants/layouts/EnTete";
 import { clientAPI, ErreurAPI } from "@/services/client_api";
 import { cheminTableauDeBord } from "@/types/api";
 
@@ -184,7 +183,6 @@ export default function PageVerification() {
   if (etape === "termine") {
     return (
       <>
-        <EnTete />
         <main className="flex-grow flex items-center justify-center px-6 py-12 bg-sable-clair">
           <div className="max-w-md carte text-center apparition">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -207,7 +205,6 @@ export default function PageVerification() {
 
   return (
     <>
-      <EnTete />
       <main className="flex-grow flex items-center justify-center px-6 py-12 bg-sable-clair">
         <div className="max-w-lg w-full carte apparition">
           <div className="text-center mb-6">

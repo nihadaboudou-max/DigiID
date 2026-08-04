@@ -168,10 +168,14 @@ async def obtenir_document(
 # Champs officiels du document — NON modifiables par l'utilisateur
 # Ces champs doivent UNIQUEMENT provenir de l'OCR (source="ocr")
 CHAMPS_NON_MODIFIABLES = {
+    # Identité — verrouillée pour garantir l'authenticité du document
+    "nom_complet",
+    "numero_document",
     "date_naissance",
     "lieu_naissance",
     "sexe",
     "nationalite",
+    # Données officielles du document
     "date_delivrance",
     "date_expiration",
 }

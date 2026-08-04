@@ -3,7 +3,8 @@
 Service OCR Assurance — orchestration du scan, validation stricte d'identité et sauvegarde.
 """
 import time
-from datetime import datetime, date
+from datetime import datetime, date, timezone
+from typing import Optional
 from uuid import UUID
 
 from fastapi import UploadFile
@@ -15,6 +16,7 @@ from src.modeles.assurance_auto import AssuranceAuto
 from src.modules.ocr_cni.ocr_engine import analyser_image_cni
 from src.modules.ocr_assurance.extraction_assurance import extraire_donnees_assurance
 from src.modules.ocr_assurance.schemas import (
+    AssuranceModification,
     DonneesAssuranceExtraites,
     ListeVerificationsAssurance,
     ReponseUploadAssurance,
@@ -245,6 +247,30 @@ async def traiter_upload_assurance(
         message="Assurance scannée et enregistrée avec succès." if succes_ocr else "L'OCR n'a pas pu extraire suffisamment de données.",
     )
 
+def _assurance_vers_detail(assurance: AssuranceAuto) -> VerificationAssuranceDetail:
+    """Convertit un enregistrement AssuranceAuto en schéma de détail."""
+    return VerificationAssuranceDetail(
+        id=str(assurance.id),
+        utilisateur_id=str(assurance.utilisateur_id),
+        statut="approuve" if assurance.est_active else "expiree",
+        nom_fichier=f"assurance_{assurance.immatriculation}.jpg",
+        nom_famille=assurance.nom_famille,
+        prenoms=assurance.prenoms,
+        date_naissance=assurance.date_naissance.isoformat() if assurance.date_naissance else None,
+        lieu_naissance=assurance.lieu_naissance,
+        compagnie_assurance=assurance.compagnie_assurance,
+        numero_contrat=assurance.numero_contrat,
+        immatriculation_vehicule=assurance.immatriculation,
+        marque_vehicule=assurance.marque_vehicule,
+        modele_vehicule=assurance.modele_vehicule,
+        date_effet=assurance.date_effet.isoformat() if assurance.date_effet else None,
+        date_expiration=assurance.date_expiration.isoformat() if assurance.date_expiration else None,
+        taux_confiance_ocr=None,
+        cree_le=assurance.cree_le.isoformat(),
+        est_supprime=False,
+    )
+
+
 async def obtenir_historique_assurance(
     session: AsyncSession,
     utilisateur: Utilisateur,
@@ -259,28 +285,58 @@ async def obtenir_historique_assurance(
     )
     enregistrements = resultat.scalars().all()
     
-    historique = [
-                VerificationAssuranceDetail(
-            id=str(assurance.id),
-            utilisateur_id=str(assurance.utilisateur_id),
-            statut="approuve" if assurance.est_active else "expiree",
-            nom_fichier=f"assurance_{assurance.immatriculation}.jpg",
-            nom_famille=assurance.nom_famille,
-            prenoms=assurance.prenoms,
-            date_naissance=assurance.date_naissance.isoformat() if assurance.date_naissance else None,
-            lieu_naissance=assurance.lieu_naissance,
-            compagnie_assurance=assurance.compagnie_assurance,
-            numero_contrat=assurance.numero_contrat,
-            immatriculation_vehicule=assurance.immatriculation,
-            marque_vehicule=assurance.marque_vehicule,
-            modele_vehicule=assurance.modele_vehicule,
-            date_effet=assurance.date_effet.isoformat() if assurance.date_effet else None,
-            date_expiration=assurance.date_expiration.isoformat() if assurance.date_expiration else None,
-            taux_confiance_ocr=None,
-            cree_le=assurance.cree_le.isoformat(),
-            est_supprime=False,
-        )
-        for assurance in enregistrements
-    ]
+    historique = [_assurance_vers_detail(assurance) for assurance in enregistrements]
     
     return ListeVerificationsAssurance(historique=historique, total=len(historique))
+
+
+# =============================================================================
+# Modification limitée (champs non sensibles uniquement)
+# =============================================================================
+# 🔒 Whitelist stricte : seuls ces champs sont corrigeables par l'utilisateur.
+# L'identité (nom, prénom, naissance) et les données officielles sont VERROUILLÉES.
+CHAMPS_ASSURANCE_MODIFIABLES = {"marque_vehicule", "modele_vehicule"}
+
+
+async def modifier_assurance(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    assurance_id: UUID,
+    donnees: AssuranceModification,
+) -> Optional[VerificationAssuranceDetail]:
+    """
+    Corrige les champs NON SENSIBLES d'une assurance (marque / modèle du véhicule).
+
+    Toute tentative de modification de l'identité ou des dates officielles
+    est ignorée (whitelist stricte).
+    """
+    resultat = await session.execute(
+        select(AssuranceAuto).where(
+            AssuranceAuto.id == assurance_id,
+            AssuranceAuto.utilisateur_id == utilisateur.id,
+        )
+    )
+    assurance = resultat.scalar_one_or_none()
+    if not assurance:
+        return None
+
+    modifications = donnees.model_dump(exclude_none=True)
+    # Whitelist stricte : ignorer tout champ non autorisé
+    for champ in list(modifications):
+        if champ not in CHAMPS_ASSURANCE_MODIFIABLES:
+            del modifications[champ]
+
+    if not modifications:
+        return _assurance_vers_detail(assurance)
+
+    for champ, valeur in modifications.items():
+        setattr(assurance, champ, valeur)
+    assurance.mis_a_jour_le = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(assurance)
+
+    journal.info(
+        f"Assurance corrigée (champs non sensibles) | user={utilisateur.id} "
+        f"assurance={assurance_id} champs={list(modifications.keys())}"
+    )
+    return _assurance_vers_detail(assurance)

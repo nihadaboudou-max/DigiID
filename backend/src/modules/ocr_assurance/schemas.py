@@ -87,3 +87,14 @@ class ListeVerificationsAssurance(BaseModel):
     """Liste des vérifications d'assurance."""
     historique: list[VerificationAssuranceDetail]
     total: int
+
+
+class AssuranceModification(BaseModel):
+    """Champs NON SENSIBLES modifiables d'une assurance (whitelist stricte).
+
+    Seuls les champs liés au véhicule (marque / modèle) sont corrigeables.
+    L'identité (nom, prénom, dates, N° contrat) reste verrouillée pour
+    garantir l'authenticité du document.
+    """
+    marque_vehicule: Optional[str] = None
+    modele_vehicule: Optional[str] = None

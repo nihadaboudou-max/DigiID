@@ -103,3 +103,16 @@ export async function obtenirHistoriqueAssurance(limite: number = 10): Promise<L
     { authentifie: true }
   );
 }
+
+/**
+ * Corriger les champs NON SENSIBLES d'une assurance (marque / modèle du véhicule).
+ * L'identité et les données officielles restent verrouillées côté backend.
+ */
+export async function modifierAssurance(
+  id: string,
+  payload: { marque_vehicule?: string | null; modele_vehicule?: string | null }
+): Promise<VerificationAssuranceDetail> {
+  return clientAPI.patch<VerificationAssuranceDetail>(`${PREFIXE}/${id}`, payload, {
+    authentifie: true,
+  });
+}

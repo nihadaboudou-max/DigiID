@@ -34,14 +34,26 @@ import {
 
 // NOUVEAUX SERVICES DÉDIÉS
 import { obtenirHistoriquePermis, type VerificationPermisDetail } from "@/services/permis_conduire";
-import { obtenirHistoriqueAssurance, type VerificationAssuranceDetail } from "@/services/assurance_auto";
+import { obtenirHistoriqueAssurance, modifierAssurance, type VerificationAssuranceDetail } from "@/services/assurance_auto";
 
 type OngletType = "cni" | "permis" | "assurance";
 
 const CHAMPS_OBLIGATOIRES: Record<OngletType, string[]> = {
-  cni: ["nom_complet", "numero_document", "nationalite"],
-  permis: ["nom_complet", "numero_permis", "categories_permis"],
-  assurance: ["compagnie_assurance", "type_couverture", "numero_contrat", "date_expiration"],
+  cni: [],
+  permis: [],
+  assurance: [],
+};
+
+/**
+ * 🔒 Champs MODIFIABLES (non sensibles) par type de document.
+ * Seules ces informations peuvent être corrigées — l'identité (nom, prénom,
+ * naissance, N° document) reste VERROUILLÉE pour garantir que le document
+ * est authentique et appartient réellement à l'utilisateur.
+ */
+const CHAMPS_MODIFIABLES: Record<OngletType, string[]> = {
+  cni: ["adresse", "pays_emetteur", "profession", "taille_cm"],
+  permis: [], // aucun champ modifiable — données officielles verrouillées
+  assurance: ["marque_vehicule", "modele_vehicule"],
 };
 
 const LIBELLES_CHAMPS: Record<string, string> = {
@@ -54,6 +66,17 @@ const LIBELLES_CHAMPS: Record<string, string> = {
   type_couverture: "Type de couverture",
   numero_contrat: "Numéro de contrat",
   date_expiration: "Date d'expiration",
+};
+
+/**
+ * Message explicite par type de document — rend le formulaire
+ * spécifique et adapté : on indique exactement ce qui est modifiable
+ * et ce qui reste verrouillé.
+ */
+const LIBELLES_MODIFIABLES: Record<OngletType, string> = {
+  cni: "Seuls l'adresse, le pays émetteur, la profession et la taille (cm) sont modifiables. L'identité (nom, prénom, naissance, N° document) reste verrouillée.",
+  permis: "Aucune donnée n'est modifiable — le permis de conduire est entièrement verrouillé.",
+  assurance: "Seules la marque et le modèle du véhicule sont modifiables. L'identité et le contrat restent verrouillés.",
 };
 
 export default function PageDocumentsIdentite() {
@@ -254,7 +277,15 @@ function Contenu() {
                   document={docCourant!}
                   onSauvegarder={async (donnees) => {
                     try {
-                      await modifierDocumentIdentite(editionId, donnees);
+                      if (onglet === "assurance") {
+                        // L'assurance vit dans sa propre table → PATCH dédié (whitelist stricte)
+                        await modifierAssurance(docCourant!.id, {
+                          marque_vehicule: (donnees.marque_vehicule as string | undefined) ?? null,
+                          modele_vehicule: (donnees.modele_vehicule as string | undefined) ?? null,
+                        });
+                      } else if (onglet === "cni") {
+                        await modifierDocumentIdentite(editionId, donnees);
+                      }
                       notifier("Document mis à jour avec succès", "succes");
                       setEditionId(null);
                       chargerDocuments();
@@ -288,8 +319,23 @@ function VueDocument({
   onSupprimer: () => Promise<void>;
   notifier: (msg: string, type: "succes" | "erreur" | "info") => void;
 }) {
-  const champs = champsParType(doc.type_document);
-  const champsOfficielsOriginaux = doc.type_document === "cni" ? champsOfficielsDocument() : [];
+  // Seuls les champs non sensibles sont modifiables/affichés comme tels
+  const champs = champsParType(doc.type_document).filter(
+    (c) => CHAMPS_MODIFIABLES[doc.type_document].includes(c.key)
+  );
+  const champsOfficielsOriginaux = doc.type_document === "cni"
+    ? [
+        { key: "numero_document", libelle: "N° Document (officiel)" },
+        { key: "nom_complet", libelle: "Nom complet (officiel)" },
+        ...champsOfficielsDocument().map((c) => ({
+          ...c,
+          isDate:
+            c.key === "date_naissance" ||
+            c.key === "date_delivrance" ||
+            c.key === "date_expiration",
+        })),
+      ]
+    : [];
   
   const modifDate = new Date(doc.modifie_le).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 
@@ -332,6 +378,11 @@ function VueDocument({
             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${COULEURS_TYPE_DOCUMENT[doc.type_document]}`}>
               {ICONES_TYPE_DOCUMENT[doc.type_document]} {doc.source === "ocr" ? "Extrait par OCR" : "Saisi manuellement"}
             </span>
+            {doc.type_document === "permis" && (
+              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                🔒 Données verrouillées
+              </span>
+            )}
             {doc.a_ete_corrige && (
               <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
                 ⚠️ Corrigé manuellement
@@ -340,14 +391,25 @@ function VueDocument({
           </div>
         </div>
         <div className="flex gap-2">
-          <Bouton variante="secondaire" taille="petit" onClick={onModifier}>
-            ✏️ Modifier
-          </Bouton>
-          <Bouton variante="danger" taille="petit" onClick={async () => {
-            if (confirm(`Supprimer ce ${LIBELLES_TYPE_DOCUMENT[doc.type_document].toLowerCase()} ?`)) await onSupprimer();
-          }}>
-            🗑️ Supprimer
-          </Bouton>
+          {/* CNI : stockée dans document_identite → CRUD complet */}
+          {doc.type_document === "cni" && (
+            <>
+              <Bouton variante="secondaire" taille="petit" onClick={onModifier}>
+                ✏️ Modifier
+              </Bouton>
+              <Bouton variante="danger" taille="petit" onClick={async () => {
+                if (confirm(`Supprimer ce ${LIBELLES_TYPE_DOCUMENT[doc.type_document].toLowerCase()} ?`)) await onSupprimer();
+              }}>
+                🗑️ Supprimer
+              </Bouton>
+            </>
+          )}
+          {/* Assurance : seule la marque/modèle (non sensibles) est corrigeable */}
+          {doc.type_document === "assurance" && (
+            <Bouton variante="secondaire" taille="petit" onClick={onModifier}>
+              ✏️ Modifier
+            </Bouton>
+          )}
         </div>
       </div>
 
@@ -412,7 +474,9 @@ function VueDocument({
             })}
           </div>
           <p className="text-xs text-ardoise-clair italic mt-3">
-            💡 Ces données sont extraites automatiquement. Utilise le bouton "Modifier" ci-dessus pour corriger les champs autorisés.
+            {doc.type_document === "permis"
+              ? "🔒 Données extraites par OCR et verrouillées pour garantir l'authenticité du document."
+              : "💡 Ces données sont extraites automatiquement. Utilise le bouton \"Modifier\" ci-dessus pour corriger les champs autorisés."}
           </p>
         </div>
       )}
@@ -439,7 +503,14 @@ function FormulaireDocument({
   onSauvegarder: (donnees: Partial<DocumentIdentitePayload>) => Promise<void>;
   onAnnuler: () => void;
 }) {
-  const champs = useMemo(() => champsParType(typeDocument), [typeDocument]);
+  // Seuls les champs non sensibles sont affichés dans le formulaire
+  const champs = useMemo(
+    () =>
+      champsParType(typeDocument).filter((c) =>
+        CHAMPS_MODIFIABLES[typeDocument].includes(c.key)
+      ),
+    [typeDocument]
+  );
   const [valeurs, setValeurs] = useState<Record<string, any>>({});
   const [sauvegarde, setSauvegarde] = useState(false);
   const [erreurs, setErreurs] = useState<Record<string, string>>({});
@@ -453,6 +524,11 @@ function FormulaireDocument({
     setValeurs(initiales);
     setErreurs({});
   }, [document, typeDocument, champs]);
+
+  // Aucun champ modifiable pour ce type → on ne rend rien
+  if (champs.length === 0) {
+    return null;
+  }
 
   function setValeur(key: string, valeur: any) {
     setValeurs((v) => ({ ...v, [key]: valeur }));
@@ -495,8 +571,11 @@ function FormulaireDocument({
 
   return (
     <Carte titre={`✏️ Corriger ${LIBELLES_TYPE_DOCUMENT[typeDocument].toLowerCase()}`}>
-      <p className="text-sm text-ardoise-clair mb-4">
+      <p className="text-sm text-ardoise-clair mb-2">
         Les données ont été extraites automatiquement. Corrige uniquement les champs modifiables ci-dessous si l'OCR a fait une erreur.
+      </p>
+      <p className="text-xs font-medium text-ocre mb-4">
+        {LIBELLES_MODIFIABLES[typeDocument]}
       </p>
 
       {Object.keys(erreurs).length > 0 && (

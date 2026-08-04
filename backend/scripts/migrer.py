@@ -109,6 +109,14 @@ COLONNES_A_VERIFIER = [
     ("verification_visuelle", "est_supprime", "BOOLEAN NOT NULL DEFAULT false"),
     ("verification_visuelle", "date_suppression", "TIMESTAMP WITH TIME ZONE"),
     
+    # ─── Module Identité : Permis & Assurance (date/lieu de naissance) ──
+    # ⚠️ CRITIQUE : migrer.py ne lance PAS `alembic upgrade head` sur une base
+    # existante (simple stamp) → ces colonnes doivent être ajoutées ici.
+    ("permis_conduire", "date_naissance", "DATE"),
+    ("permis_conduire", "lieu_naissance", "VARCHAR(255)"),
+    ("assurances_auto", "date_naissance", "DATE"),
+    ("assurances_auto", "lieu_naissance", "VARCHAR(255)"),
+
     # ─── Module Police : Cloisonnement ───────────────────────────────
     ("alertes_police", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
     ("alertes_police", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),

@@ -102,9 +102,11 @@ function Contenu() {
             setDocumentCNI(cni);
 
             // Lancer la comparaison
+            // 🎯 Préférence à verification_id (UUID de la VerificationCNI),
+            // sinon l'ID du document (le backend résout les deux).
             setComparaisonChargement(true);
             try {
-              const resultatComparaison = await comparerPhotoProfilAvecDocument(cni.id);
+              const resultatComparaison = await comparerPhotoProfilAvecDocument(cni.verification_id ?? cni.id);
               setComparaison(resultatComparaison);
             } catch (e) {
               // Erreur de comparaison silencieuse

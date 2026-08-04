@@ -409,12 +409,30 @@ async def comparer_photo_profil_avec_document(
             message_utilisateur="Vous devez d'abord effectuer une vérification visuelle réussie."
         )
 
-    # 2. Récupérer la vérification CNI correspondante
+    # 2. Résoudre l'ID du document → ID de la vérification CNI.
+    #    Le frontend peut passer soit l'ID de la VerificationCNI directement,
+    #    soit l'ID d'une ligne document_identite (qui référence verification_id).
+    from src.modeles import DocumentIdentite
     from src.modeles.verification_cni import VerificationCNI
+
+    resultat_doc = await session.execute(
+        select(DocumentIdentite).where(
+            DocumentIdentite.id == doc_uuid,
+            DocumentIdentite.utilisateur_id == utilisateur.id,
+            DocumentIdentite.est_actif.is_(True),
+        )
+    )
+    document_identite = resultat_doc.scalar_one_or_none()
+
+    verification_cni_id = doc_uuid
+    if document_identite and document_identite.verification_id:
+        verification_cni_id = document_identite.verification_id
+
+    # 3. Récupérer la vérification CNI correspondante
     resultat_cni = await session.execute(
         select(VerificationCNI)
         .where(
-            VerificationCNI.id == doc_uuid,
+            VerificationCNI.id == verification_cni_id,
             VerificationCNI.utilisateur_id == utilisateur.id,
             VerificationCNI.face == "recto",
             VerificationCNI.est_valide == True,
