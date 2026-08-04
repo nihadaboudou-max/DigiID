@@ -1,64 +1,246 @@
-# Notebooks d'analyse et d'entraînement DigiID
+# =============================================================================
+# DigiID - Script de lancement complet
+# =============================================================================
+# Lance tous les services dans l'ordre, applique les migrations,
+# verifie que tout est OK, et affiche les URLs.
+#
+# Usage : ouvre PowerShell, va dans le dossier digiid/, et tape :
+#   .\lancer_digiid.ps1
+# =============================================================================
 
-Ce dossier contient les notebooks Jupyter utilisés pour :
+$ErrorActionPreference = "Stop"
 
-- Générer des données synthétiques d'utilisateurs
-- Entraîner les modèles de scoring (régression linéaire, Random Forest, XGBoost)
-- Évaluer les performances
-- Exporter les modèles pour usage en production
+# Couleurs pour la lisibilite
+function Ecrire-Etape($message) { Write-Host "`n>> $message" -ForegroundColor Cyan }
+function Ecrire-OK($message)    { Write-Host "[OK]   $message" -ForegroundColor Green }
+function Ecrire-Info($message)  { Write-Host "[INFO] $message" -ForegroundColor Yellow }
+function Ecrire-Err($message)   { Write-Host "[ERR]  $message" -ForegroundColor Red }
 
-## Notebooks disponibles
+Write-Host ""
+Write-Host "==============================================" -ForegroundColor Cyan
+Write-Host "   DigiID -- Lancement complet du projet" -ForegroundColor Cyan
+Write-Host "==============================================" -ForegroundColor Cyan
 
-| Notebook                                       | Rôle                                          |
-| ---------------------------------------------- | --------------------------------------------- |
-| `01_entrainement_modele_scoring.ipynb`         | Pipeline complet d'entraînement du scoring    |
+# ----------------------------------------------------------------------------
+# 1. Verifier les prerequis
+# ----------------------------------------------------------------------------
+Ecrire-Etape "Verification des prerequis"
 
-## Comment exécuter
+# Verifier Docker
+try {
+    docker --version | Out-Null
+    Ecrire-OK "Docker installe"
+} catch {
+    Ecrire-Err "Docker n'est pas installe ou ne tourne pas."
+    Ecrire-Info "Installer Docker Desktop : https://www.docker.com/products/docker-desktop"
+    exit 1
 
-### Depuis le container Docker
+# Verifier docker compose
+    docker compose version | Out-Null
+    Ecrire-OK "docker compose disponible"
+} catch {
+    Ecrire-Err "docker compose ne fonctionne pas."
+    exit 1
+} catch {
+    Ecrire-Err "Node.js n'est pas installe."
+    Ecrire-Info "Installer Node.js 20+ : https://nodejs.org"
+    exit 1
+}
 
-```bash
-docker compose exec backend pip install jupyter matplotlib seaborn scikit-learn xgboost faker joblib
-docker compose exec backend jupyter nbconvert --to notebook --execute notebooks/01_entrainement_modele_scoring.ipynb --output 01_resultats.ipynb
-```
+# ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+Ecrire-Etape "Verification de la configuration backend"
 
-### Depuis ton environnement Python local
+$envBackend = "backend\.env"
 
-```powershell
-cd E:\NOUVEAU_PROJET_MEMOIRE\DIGI_ID\digiid\backend
-pip install jupyter matplotlib seaborn scikit-learn xgboost faker joblib
-jupyter notebook notebooks/01_entrainement_modele_scoring.ipynb
-```
+    Write-Host ""
+    Ecrire-Err "ATTENTION : edite back  end\.env et change CLE_SECRETE_JWT et CLE_CHIFFREMENT_DONNEES"
+    Write-Host "  Pour generer les cles, lance dans un terminal Python :"
+    Write-Host '    python -c "import secrets; print(secrets.token_urlsafe(64))"' -ForegroundColor White
+    Write-Host '    python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode())"' -ForegroundColor White
+    Write-Host ""
+    Read-Host "Appuie sur Entree quand c'est fait pour continuer"
+} else {
+    Ecrire-OK "backend\.env present"
+}
 
-## Sortie attendue
+# ----------------------------------------------------------------------------
+# 3. Verifier la configuration frontend
+# ----------------------------------------------------------------------------
+Ecrire-Etape "Verification de la configuration frontend"
 
-Après exécution, tu trouveras :
+$envFrontend = "frontend\.env.local"
+if (-not (Test-Path $envFrontend)) {
+    Ecrire-Info "Creation du fichier frontend\.env.local"
+    @"
+NEXT_PUBLIC_URL_BACKEND=http://localhost:8000
+URL_BACKEND=http://localhost:8000
+NEXT_PUBLIC_NOM_APPLICATION=DigiID
+"@ | Set-Content $envFrontend -Encoding UTF8
+    Ecrire-OK "frontend\.env.local cree"
+} else {
+    Ecrire-OK "frontend\.env.local present"
+}
 
-- `../modeles_entraines/scoring_v1.joblib` — le modèle XGBoost entraîné, prêt à être chargé par le backend
-- Graphiques de distribution du score
-- Comparaison des performances des 3 modèles
-- Importance des variables (interprétabilité)
+# ----------------------------------------------------------------------------
+# 4. Demarrer les services Docker
+# ----------------------------------------------------------------------------
+Ecrire-Etape "Demarrage des services Docker (PostgreSQL, Redis, Backend, Ollama, ChromaDB)"
+Push-Location infrastructure
+try {
+    docker compose up -d
+    Ecrire-OK "Services Docker demarres"
+} catch {
+    Ecrire-Err "Echec du demarrage Docker. Logs :"
+    docker compose logs --tail=30
+    Pop-Location
+    exit 1
+}
 
-## Spécifications du dataset
+# ----------------------------------------------------------------------------
+# 5. Attendre que le backend soit pret
+# ----------------------------------------------------------------------------
+Ecrire-Etape "Attente du backend (peut prendre 30s au premier demarrage)"
+$maxTentatives = 30
+$pret = $false
+for ($i = 1; $i -le $maxTentatives; $i++) {
+    Start-Sleep -Seconds 2
+    try {
+        $reponse = Invoke-WebRequest -Uri "http://localhost:8000/api/v1/sante" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
+        if ($reponse.StatusCode -eq 200) {
+            $pret = $true
+            $secondes = $i * 2
+            Ecrire-OK "Backend operationnel apres $secondes secondes"
+            break
+        }
+    } catch {
+        Write-Host "." -NoNewline
+    }
+}
+Write-Host ""
 
-- **10 000 profils synthétiques** générés avec `numpy.random` (seed=42 pour reproductibilité)
-- **12 variables comportementales** : ancienneté SIM, transactions mobile money,
-  régularité, stabilité géographique, réseau de contacts, etc.
-- **Variable cible** : score 0-100 calculé selon la formule pondérée du Cahier des Charges
-  (25% SIM, 35% mobile money, 20% géographie, 20% réseau)
-- **Distributions calibrées** sur les données ANSD (Sénégal) et GSMA Mobile Money 2024
+if (-not $pret) {
+    Ecrire-Err "Le backend ne repond pas apres 60s. Logs :"
+    docker compose logs backend --tail=20
+    Pop-Location
+    exit 1
+}
 
-## Métriques typiques obtenues
+# ----------------------------------------------------------------------------
+# 6. Appliquer les migrations si necessaire
+# ----------------------------------------------------------------------------
+Ecrire-Etape "Application des migrations de base de donnees"
+try {
+    docker compose exec -T backend alembic upgrade head 2>&1 | Out-Null
+    Ecrire-OK "Migrations appliquees (ou deja a jour)"
+} catch {
+    Ecrire-Info "Pas de migration en attente, ou erreur -- verifier les logs"
+}
 
-| Modèle              | MAE test | R² test | Commentaire                          |
-| ------------------- | -------- | ------- | ------------------------------------ |
-| Régression linéaire | ~2.5     | ~0.96   | Baseline interprétable               |
-| Random Forest       | ~1.0     | ~0.99   | Capture les non-linéarités           |
-| XGBoost             | ~0.7     | ~0.99   | Meilleure performance générale       |
+Pop-Location
 
-## Roadmap
+# ----------------------------------------------------------------------------
+# 7. Verifier le modele ML
+# ----------------------------------------------------------------------------
+Ecrire-Etape "Verification du modele ML entraine"
 
-- ✅ Phase 3 : génération synthétique + entraînement de base
-- 🔜 Phase 4 : intégration SHAP pour explicabilité par utilisateur
-- 🔜 Phase 6 : ré-entraînement périodique sur données réelles collectées
-- 🔜 Phase 6 : monitoring de la dérive du modèle (concept drift)
+$cheminModele = "backend\modeles_entraines\scoring_v2.joblib"
+if (Test-Path $cheminModele) {
+    $tailleKo = [math]::Round((Get-Item $cheminModele).Length / 1KB, 1)
+    Ecrire-OK "Modele ML trouve ($tailleKo Ko)"
+} else {
+    Ecrire-Info "Modele ML non trouve. Le scoring utilisera le modele pondere."
+    Ecrire-Info "Pour entrainer : lance le notebook backend\notebooks\01_entrainement_modele_scoring.ipynb"
+}
+
+# ----------------------------------------------------------------------------
+# 8. Nettoyage des caches
+# ----------------------------------------------------------------------------
+Ecrire-Etape "Nettoyage des caches"
+
+$cacheNext = "frontend\.next"
+if (Test-Path $cacheNext) {
+    Remove-Item -Recurse -Force $cacheNext -ErrorAction SilentlyContinue
+    Ecrire-OK "Cache Next.js (.next) supprime"
+} else {
+    Ecrire-OK "Pas de cache Next.js a nettoyer"
+}
+
+$cacheTurbopack = "$env:TEMP\turbopack"
+if (Test-Path $cacheTurbopack) {
+    Remove-Item -Recurse -Force $cacheTurbopack -ErrorAction SilentlyContinue
+    Ecrire-OK "Cache Turbopack supprime"
+}
+
+# Nettoyer le cache npm (evite les conflits de versions)
+try {
+    npm cache clean --force 2>&1 | Out-Null
+    Ecrire-OK "Cache npm nettoye"
+} catch {
+    Ecrire-Info "Impossible de nettoyer le cache npm (pas grave)"
+}
+
+# Nettoyer les caches Python du backend
+$cachesPython = @(
+    "backend\__pycache__",
+    "backend\src\__pycache__",
+    "backend\src\api\__pycache__",
+    "backend\src\api\v1\__pycache__",
+    "backend\src\base_donnees\__pycache__",
+    "backend\src\config\__pycache__",
+    "backend\src\middleware\__pycache__",
+    "backend\src\modeles\__pycache__",
+    "backend\src\modules\__pycache__",
+    "backend\src\noyau\__pycache__",
+    "backend\src\schemas\__pycache__"
+)
+foreach ($cache in $cachesPython) {
+    if (Test-Path $cache) {
+        Remove-Item -Recurse -Force $cache -ErrorAction SilentlyContinue
+    }
+}
+Ecrire-OK "Caches Python backend nettoyes"
+
+# ----------------------------------------------------------------------------
+# 9. Lancer le frontend (npm install si besoin)
+# ----------------------------------------------------------------------------
+Ecrire-Etape "Preparation du frontend"
+Push-Location frontend
+
+if (-not (Test-Path "node_modules")) {
+    Ecrire-Info "Premier lancement : installation des dependances npm (peut prendre 2-3 min)"
+    npm install 2>&1 | Out-Null
+    Ecrire-OK "Dependances npm installees"
+} else {
+    Ecrire-OK "Dependances npm deja installees"
+}
+
+Pop-Location
+
+# ----------------------------------------------------------------------------
+# 10. Recapitulatif final
+# ----------------------------------------------------------------------------
+Write-Host ""
+Write-Host "==============================================" -ForegroundColor Green
+Write-Host "   DigiID est PRET" -ForegroundColor Green
+Write-Host "==============================================" -ForegroundColor Green
+Write-Host ""
+Write-Host "URLs disponibles :" -ForegroundColor Cyan
+Write-Host "  - API Backend  : http://localhost:8000" -ForegroundColor White
+Write-Host "  - Swagger docs : http://localhost:8000/docs" -ForegroundColor White
+Write-Host "  - Sante API    : http://localhost:8000/api/v1/sante" -ForegroundColor White
+Write-Host ""
+$cheminFrontend = Join-Path (Get-Location) "frontend"
+Write-Host "Pour lancer le frontend, ouvre un NOUVEAU terminal et tape :" -ForegroundColor Cyan
+Write-Host "  cd $cheminFrontend" -ForegroundColor White
+Write-Host "  npm run dev" -ForegroundColor White
+Write-Host ""
+Write-Host "Puis ouvre : http://localhost:3000" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "Pour creer ton super admin (premiere fois uniquement) :" -ForegroundColor Cyan
+Write-Host "  cd infrastructure" -ForegroundColor White
+Write-Host "  docker compose exec -it backend python -m src.base_donnees.seed" -ForegroundColor White
+Write-Host ""
+Write-Host "Pour arreter tout :" -ForegroundColor Cyan
+Write-Host "  .\arreter_digiid.ps1" -ForegroundColor White
+Write-Host ""

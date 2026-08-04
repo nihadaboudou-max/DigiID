@@ -36,6 +36,40 @@ export interface ListeHistoriqueScore {
   nombre_points: number;
 }
 
+// ============================================================================
+// Evaluation contextuelle (score asymetrique par cas d'usage) — backend v2
+// ============================================================================
+
+export interface SeuilContexte {
+  contexte: string;
+  libelle: string;
+  seuil_requis: number;
+  score_utilisateur: number;
+  eligible: boolean;
+  message: string;
+}
+
+export interface ResultatEvaluationContextuelle {
+  digiid: string;
+  score: number;
+  contextes: SeuilContexte[];
+}
+
+export interface DemandeEvaluationContextuelle {
+  digiid: string;
+  contexte: string;
+  montant_estime?: number | null;
+}
+
+export const evaluerScorePourContexte = (
+  demande: DemandeEvaluationContextuelle,
+) =>
+  clientAPI.post<ResultatEvaluationContextuelle>(
+    `${PREFIXE}/evaluer`,
+    demande,
+    { authentifie: true },
+  );
+
 export const obtenirMonScore = () =>
   clientAPI.get<ScoreDetail>(PREFIXE, { authentifie: true });
 

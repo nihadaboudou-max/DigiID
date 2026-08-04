@@ -109,12 +109,41 @@ const STYLES_NIVEAU: Record<string, string> = {
   expert: "bg-terre/10 text-terre border-terre/20",
 };
 
+const ROLES_AUTORISES = [
+  "citoyen",
+  "agent_police",
+  "chef_police",
+  "agent_medical",
+  "chef_medical",
+  "agent_ong",
+  "chef_ong",
+  "agent_terrain",
+  "chef_agent",
+  "admin_domaine",
+  "administrateur",
+  "super_administrateur",
+];
+
 export default function PageAmeliorationScore() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["citoyen", "agent", "medecin", "police", "ong", "administrateur", "super_administrateur"]}>
+    <EnvelopperEspaceProtege rolesAutorises={ROLES_AUTORISES}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
+}
+
+/** Mapping niveau backend → variante Badge. */
+function badgeNiveau(niveau: string): "succes" | "info" | "ocre" | "terre" {
+  switch (niveau) {
+    case "Expert":
+      return "succes";
+    case "Fiable":
+      return "info";
+    case "Etabli":
+      return "ocre";
+    default:
+      return "terre";
+  }
 }
 
 function Contenu() {
@@ -158,9 +187,7 @@ function Contenu() {
           <p className="text-4xl font-bold text-lagune">{score.score_total}</p>
           <div>
             <p className="text-sm font-medium text-ardoise">Ton score actuel</p>
-            <Badge
-              variante={score.niveau === "Élevé" ? "succes" : score.niveau === "Moyen" ? "ocre" : "terre"}
-            >
+            <Badge variante={badgeNiveau(score.niveau)}>
               {score.niveau}
             </Badge>
           </div>
@@ -228,12 +255,15 @@ function Contenu() {
       </Carte>
 
       {/* Navigation */}
-      <div className="flex gap-3 pt-4 border-t border-ardoise-clair/10">
+      <div className="flex flex-wrap gap-3 pt-4 border-t border-ardoise-clair/10">
         <Link href="/score">
           <Bouton variante="ghost" taille="petit">← Vue d&apos;ensemble du score</Bouton>
         </Link>
+        <Link href="/score/contextes">
+          <Bouton variante="secondaire" taille="petit">Mes accès ouverts →</Bouton>
+        </Link>
         <Link href="/score/facteurs">
-          <Bouton variante="secondaire" taille="petit">Facteurs d&apos;impact →</Bouton>
+          <Bouton variante="ghost" taille="petit">Facteurs d&apos;impact →</Bouton>
         </Link>
       </div>
     </div>

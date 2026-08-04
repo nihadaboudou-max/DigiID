@@ -10,6 +10,7 @@
  *   - Le score brut reste accessible dans les details techniques (pour l'API institutionnelle)
  */
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
@@ -225,6 +226,25 @@ function Contenu() {
           </div>
         </Carte>
       )}
+
+      {/* Acces rapides */}
+      <div className="flex flex-wrap gap-3">
+        <Link href="/score/contextes">
+          <Bouton variante="secondaire" taille="petit">
+            Mes accès ouverts
+          </Bouton>
+        </Link>
+        <Link href="/score/facteurs">
+          <Bouton variante="ghost" taille="petit">
+            Facteurs d&apos;impact
+          </Bouton>
+        </Link>
+        <Link href="/score/amelioration">
+          <Bouton variante="ghost" taille="petit">
+            Conseils d&apos;amélioration
+          </Bouton>
+        </Link>
+      </div>
 
       {/* Comment ameliorer */}
       <Carte variante="pointilles" titre="Comment ameliorer mon niveau">

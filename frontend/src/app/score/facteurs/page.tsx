@@ -73,9 +73,7 @@ function Contenu() {
           <p className="text-5xl font-bold text-lagune">{score.score_total}</p>
           <div>
             <p className="text-xs uppercase text-ocre font-bold">Score total</p>
-            <Badge
-              variante={score.niveau === "Élevé" ? "succes" : score.niveau === "Moyen" ? "ocre" : "terre"}
-            >
+            <Badge variante={badgeNiveau(score.niveau)}>
               {score.niveau}
             </Badge>
           </div>
@@ -105,16 +103,33 @@ function Contenu() {
       </Carte>
 
       {/* Navigation */}
-      <div className="flex gap-3 pt-4 border-t border-ardoise-clair/10">
+      <div className="flex flex-wrap gap-3 pt-4 border-t border-ardoise-clair/10">
         <Link href="/score">
           <Bouton variante="ghost" taille="petit">← Vue d&apos;ensemble du score</Bouton>
         </Link>
+        <Link href="/score/contextes">
+          <Bouton variante="secondaire" taille="petit">Mes accès ouverts →</Bouton>
+        </Link>
         <Link href="/score/amelioration">
-          <Bouton variante="secondaire" taille="petit">Conseils d&apos;amélioration →</Bouton>
+          <Bouton variante="ghost" taille="petit">Conseils d&apos;amélioration →</Bouton>
         </Link>
       </div>
     </div>
   );
+}
+
+/** Mapping niveau backend → variante Badge. */
+function badgeNiveau(niveau: string): "succes" | "info" | "ocre" | "terre" {
+  switch (niveau) {
+    case "Expert":
+      return "succes";
+    case "Fiable":
+      return "info";
+    case "Etabli":
+      return "ocre";
+    default:
+      return "terre";
+  }
 }
 
 function CarteFacteurCle({ facteur }: { facteur: FacteurScore }) {

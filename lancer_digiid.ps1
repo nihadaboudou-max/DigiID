@@ -155,7 +155,7 @@ Pop-Location
 # 7. Verifier le modele ML
 # ----------------------------------------------------------------------------
 Ecrire-Etape "Verification du modele ML entraine"
-$cheminModele = "backend\modeles_entraines\scoring_v1.joblib"
+$cheminModele = "backend\modeles_entraines\scoring_v2.joblib"
 if (Test-Path $cheminModele) {
     $tailleKo = [math]::Round((Get-Item $cheminModele).Length / 1KB, 1)
     Ecrire-OK "Modele ML trouve ($tailleKo Ko)"

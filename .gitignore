@@ -62,6 +62,9 @@ Thumbs.db
 # --- Dossier DigiID imbrique (copie accidentelle du projet) ---
 /DigiID/
 
+# --- Notebooks Jupyter ---
+.ipynb_checkpoints/
+
 # --- Fichiers temporaires ---
 *.tmp
 *.bak
