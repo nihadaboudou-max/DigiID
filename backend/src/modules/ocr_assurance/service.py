@@ -151,13 +151,20 @@ async def traiter_upload_assurance(
 
         identite_profil_brute = f"{nom_profil} {prenom_profil}".strip()
         identite_assurance_brute = f"{donnees.nom_assure or ''} {donnees.prenoms_assure or ''}".strip()
+        identite_profil_norm = _normaliser_identite(identite_profil_brute)
         identite_assurance_norm = _normaliser_identite(identite_assurance_brute)
         mots_profil = [_normaliser_identite(m) for m in re.split(r"\s+", identite_profil_brute) if m]
+        mots_assurance = [_normaliser_identite(m) for m in re.split(r"\s+", identite_assurance_brute) if m]
 
-        # Tous les mots du profil doivent être présents dans l'identité extraite
-        identite_globale_coherente = bool(mots_profil) and all(
-            mot in identite_assurance_norm for mot in mots_profil
-        )
+        # ✅ Comparaison GLOBALE robuste (DOUBLE SENS) :
+        #  - Sens 1 : chaque mot du profil est présent dans l'identité extraite
+        #    (cas où l'OCR extrait tout le nom, éventuellement inversé/collé)
+        #  - Sens 2 : chaque mot extrait est présent dans le profil
+        #    (cas où l'OCR n'extrait qu'une PARTIE du nom, ex: "ABOUDOUTRAORÉ")
+        # → évite les FAUX POSITIFS tout en rejetant les vraies incohérences.
+        sens_1 = bool(mots_profil) and all(mot in identite_assurance_norm for mot in mots_profil)
+        sens_2 = bool(mots_assurance) and all(mot in identite_profil_norm for mot in mots_assurance)
+        identite_globale_coherente = sens_1 or sens_2
 
         if not identite_globale_coherente:
             # Comparaison stricte du nom
