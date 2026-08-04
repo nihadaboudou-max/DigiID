@@ -84,7 +84,14 @@ def _extraire_valeur_apres_label(
     return None
 
 def _separer_nom_prenom(valeur_complete: str) -> Tuple[Optional[str], Optional[str]]:
-    """Sépare intelligemment un nom complet en nom et prénom(s)."""
+    """Sépare un nom complet en nom et prénom(s).
+
+    Convention française « NOM Prénom(s) » : le premier mot est le nom de famille.
+    NB : le texte OCR est en MAJUSCULES → la détection par casse est inutile
+    (l'ancienne heuristique renvoyait toujours le DERNIER mot comme nom, ce qui
+    produisait des inversions type nom=NIHAD). La vérification d'identité finale
+    (service.py) compare l'identité GLOBALE pour couvrir les cas imparfaits.
+    """
     if not valeur_complete:
         return None, None
     valeur = re.sub(r'[^A-ZÀ-Ÿ\s\-]', '', valeur_complete).strip()
@@ -95,10 +102,8 @@ def _separer_nom_prenom(valeur_complete: str) -> Tuple[Optional[str], Optional[s
     elif len(mots) == 1:
         return mots[0], None
     else:
-        if len(mots[-1]) > 3 and mots[-1].isupper():
-            return mots[-1], " ".join(mots[:-1]) # Format: JEAN MICHEL DUPONT
-        else:
-            return mots[0], " ".join(mots[1:])   # Format: DUPONT JEAN
+        # Convention française : NOM en premier (ex: DUPONT JEAN MICHEL)
+        return mots[0], " ".join(mots[1:])
 
 def _extraire_date_par_contexte(texte: str, contextes: List[str]) -> Optional[str]:
     """Extrait une date qui suit un contexte donné."""

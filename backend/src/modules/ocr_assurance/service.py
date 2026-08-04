@@ -2,6 +2,7 @@
 """
 Service OCR Assurance — orchestration du scan, validation stricte d'identité et sauvegarde.
 """
+import re
 import time
 from datetime import datetime, date, timezone
 from typing import Optional
@@ -138,28 +139,59 @@ async def traiter_upload_assurance(
 
         incoherences = []
 
-        # Comparaison stricte du nom
-        if nom_profil_pur and nom_assurance_pur and nom_profil_pur != nom_assurance_pur:
-            incoherences.append(
-                f"Le nom sur l'assurance ({nom_assurance_pur}) ne correspond pas à votre profil ({nom_profil_pur})."
-            )
+        # ✅ Comparaison GLOBALE robuste : l'OCR peut inverser ou coller nom/prénom
+        # (ex: "ABOUDOUTRAORÉ NIHAD" vs profil "ABOUDOU TRAORE" + "NIHAD").
+        # On compare l'identité complète (nom + prénoms) en ignorant casse,
+        # accents et espaces → évite les FAUX POSITIFS.
+        def _normaliser_identite(texte: str) -> str:
+            import unicodedata
+            texte = unicodedata.normalize("NFD", texte)
+            texte = "".join(c for c in texte if unicodedata.category(c) != "Mn")
+            return re.sub(r"[^a-z0-9]", "", texte.lower())
 
-        # Comparaison stricte du premier prénom
-        if prenom_profil_pur and prenom_assurance_pur and prenom_profil_pur != prenom_assurance_pur:
-            incoherences.append(
-                f"Le prénom sur l'assurance ({prenom_assurance_pur}) ne correspond pas à votre profil ({prenom_profil_pur})."
-            )
+        identite_profil_brute = f"{nom_profil} {prenom_profil}".strip()
+        identite_assurance_brute = f"{donnees.nom_assure or ''} {donnees.prenoms_assure or ''}".strip()
+        identite_assurance_norm = _normaliser_identite(identite_assurance_brute)
+        mots_profil = [_normaliser_identite(m) for m in re.split(r"\s+", identite_profil_brute) if m]
+
+        # Tous les mots du profil doivent être présents dans l'identité extraite
+        identite_globale_coherente = bool(mots_profil) and all(
+            mot in identite_assurance_norm for mot in mots_profil
+        )
+
+        if not identite_globale_coherente:
+            # Comparaison stricte du nom
+            if nom_profil_pur and nom_assurance_pur and nom_profil_pur != nom_assurance_pur:
+                incoherences.append(
+                    f"Le nom sur l'assurance ({nom_assurance_pur}) ne correspond pas à votre profil ({nom_profil_pur})."
+                )
+
+            # Comparaison stricte du premier prénom
+            if prenom_profil_pur and prenom_assurance_pur and prenom_profil_pur != prenom_assurance_pur:
+                incoherences.append(
+                    f"Le prénom sur l'assurance ({prenom_assurance_pur}) ne correspond pas à votre profil ({prenom_profil_pur})."
+                )
 
         # 🚨 BLOCAGE : Si incohérence détectée, on rejette l'upload immédiatement
+        # (on RENVOIE une réponse structurée avec les données OCR, afin que le
+        #  frontend puisse afficher le texte brut et aider au débogage)
         if incoherences:
             message_erreur = "Incohérence d'identité détectée : " + " ".join(incoherences) + " Veuillez corriger votre nom/prénom dans vos paramètres avant de scanner votre assurance."
             journal.warning(
                 f"REJET ASSURANCE | Incohérence identité | utilisateur={utilisateur.id} | "
                 f"Assurance(nom={nom_assurance_pur}, prenom={prenom_assurance_pur}) vs Profil(nom={nom_profil_pur}, prenom={prenom_profil_pur})"
             )
-            raise ErreurValidation(
-                message_erreur,
-                message_utilisateur=message_erreur
+            return ReponseUploadAssurance(
+                id=UUID("00000000-0000-0000-0000-000000000000"),
+                statut="rejete",
+                resultat_ocr=ResultatOCRAssurance(
+                    succes=False,
+                    donnees=donnees,
+                    erreurs=incoherences + [message_erreur],
+                    champs_extraits=nb_champs,
+                    temps_analyse_ms=temps_ms,
+                ),
+                message=message_erreur,
             )
 
     # 4. Validation des champs critiques

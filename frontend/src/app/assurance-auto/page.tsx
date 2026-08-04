@@ -186,6 +186,7 @@ function Contenu() {
     try {
       const res = await uploaderAssurance(file);
       setResultat(res);
+      setAfficherTexteBrut(true); // ✅ Affiche le texte brut dès l'extraction (débogage)
     } catch (err: any) {
       setErreur(err?.message || "Erreur inconnue lors de l'analyse.");
     } finally {
