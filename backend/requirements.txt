@@ -21,7 +21,7 @@ psycopg2-binary
 
 # --- NLP (analyse de texte) ---
 spacy==3.7.4
-fr_core_news_sm==3.7.0
+fr_core_news_sm==3.8.0
 
 # --- Sécurité et authentification ---
 argon2-cffi==23.1.0
