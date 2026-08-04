@@ -27,6 +27,8 @@ class DonneesAssuranceExtraites(BaseModel):
     # --- Assuré ---
     nom_assure: Optional[str] = None
     prenoms_assure: Optional[str] = None
+    date_naissance: Optional[str] = None
+    lieu_naissance: Optional[str] = None
     
     # --- Couverture ---
     type_couverture: Optional[str] = None  # "Responsabilité Civile", "Tous risques"
@@ -62,10 +64,11 @@ class VerificationAssuranceDetail(BaseModel):
     utilisateur_id: UUID
     statut: StatutAssurance
     nom_fichier: str
-    
-            # Données extraites
+    # Données extraites
     nom_famille: Optional[str] = None
     prenoms: Optional[str] = None
+    date_naissance: Optional[str] = None
+    lieu_naissance: Optional[str] = None
     compagnie_assurance: Optional[str] = None
     numero_contrat: Optional[str] = None
     immatriculation_vehicule: Optional[str] = None
@@ -73,7 +76,7 @@ class VerificationAssuranceDetail(BaseModel):
     modele_vehicule: Optional[str] = None
     date_effet: Optional[str] = None
     date_expiration: Optional[str] = None
-    
+
     # Métadonnées
     taux_confiance_ocr: Optional[float] = None
     cree_le: datetime

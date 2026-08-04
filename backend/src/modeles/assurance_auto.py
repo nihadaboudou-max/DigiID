@@ -15,6 +15,8 @@ class AssuranceAuto(Base):
     # Identité de l'assuré (extrait par OCR)
     nom_famille = Column(String(255), nullable=True)
     prenoms = Column(String(255), nullable=True)
+    date_naissance = Column(Date, nullable=True)
+    lieu_naissance = Column(String(255), nullable=True)
     
     # Assureur
     compagnie_assurance = Column(String, nullable=False)

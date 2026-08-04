@@ -118,6 +118,10 @@ async def traiter_upload_assurance(
     erreurs = [] if succes_ocr else ["Extraction insuffisante des champs critiques (immatriculation, contrat)"]
     temps_ms = int((time.time() - debut) * 1000)
 
+    # Dates de couverture — obligatoires (colonnes NOT NULL en base)
+    date_effet_parsee = _parser_date(donnees.date_effet)
+    date_expiration_parsee = _parser_date(donnees.date_expiration, est_expiration=True)
+
     # 3. ✅ VÉRIFICATION STRICTE DE COHÉRENCE (Inspirée exactement de la CNI)
     if succes_ocr and (donnees.nom_assure or donnees.prenoms_assure):
         # Déchiffrement des données du profil
@@ -170,19 +174,51 @@ async def traiter_upload_assurance(
             ),
             message="L'OCR n'a pas pu extraire l'immatriculation ou le numéro de contrat.",
         )
-    
-    # 5. Enregistrement en base de données
+
+    # 5. Validation des dates — rejet si la période de couverture est incomplète
+    if date_effet_parsee is None or date_expiration_parsee is None:
+        if date_effet_parsee is None and date_expiration_parsee is None:
+            libelle = "Les dates d'effet et d'expiration n'ont pas pu être extraites"
+        elif date_effet_parsee is None:
+            libelle = "La date d'effet n'a pas pu être extraite"
+        else:
+            libelle = "La date d'expiration n'a pas pu être extraite"
+        message = (
+            f"{libelle} de votre document. "
+            "Veuillez fournir une image plus nette et bien éclairée de votre carte verte, "
+            "puis réessayer."
+        )
+        journal.warning(
+            f"REJET ASSURANCE | Dates non extraites | utilisateur={utilisateur.id} | "
+            f"contrat={donnees.numero_contrat or 'N/A'}"
+        )
+        return ReponseUploadAssurance(
+            id=UUID("00000000-0000-0000-0000-000000000000"),
+            statut="rejete",
+            resultat_ocr=ResultatOCRAssurance(
+                succes=False,
+                donnees=donnees,
+                erreurs=[message],
+                champs_extraits=nb_champs,
+                temps_analyse_ms=temps_ms,
+            ),
+            message=message,
+        )
+
+    # 6. Enregistrement en base de données
     nouvelle_assurance = AssuranceAuto(
         utilisateur_id=utilisateur.id,
         nom_famille=donnees.nom_assure,
         prenoms=donnees.prenoms_assure,
+        date_naissance=_parser_date(donnees.date_naissance),
+        lieu_naissance=donnees.lieu_naissance,
         compagnie_assurance=donnees.compagnie_assurance or "Inconnue",
         numero_contrat=donnees.numero_contrat,
         immatriculation=donnees.immatriculation_vehicule.upper(),
         marque_vehicule=donnees.marque_vehicule,
         modele_vehicule=donnees.modele_vehicule,
-        date_effet=_parser_date(donnees.date_effet),
-        date_expiration=_parser_date(donnees.date_expiration, est_expiration=True),
+        date_effet=date_effet_parsee,
+        date_expiration=date_expiration_parsee,
         est_active=succes_ocr,
     )
     
@@ -195,7 +231,7 @@ async def traiter_upload_assurance(
         f"succes={succes_ocr} | contrat={donnees.numero_contrat or 'N/A'} | temps={temps_ms}ms"
     )
     
-    # 6. Construction de la réponse
+    # 7. Construction de la réponse
     return ReponseUploadAssurance(
         id=str(nouvelle_assurance.id),  # Converti en string pour le frontend TypeScript
         statut="approuve" if succes_ocr else "rejete",
@@ -231,6 +267,8 @@ async def obtenir_historique_assurance(
             nom_fichier=f"assurance_{assurance.immatriculation}.jpg",
             nom_famille=assurance.nom_famille,
             prenoms=assurance.prenoms,
+            date_naissance=assurance.date_naissance.isoformat() if assurance.date_naissance else None,
+            lieu_naissance=assurance.lieu_naissance,
             compagnie_assurance=assurance.compagnie_assurance,
             numero_contrat=assurance.numero_contrat,
             immatriculation_vehicule=assurance.immatriculation,

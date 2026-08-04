@@ -20,6 +20,8 @@ class PermisConduire(Base):
     # Identité du titulaire (extrait par OCR)
     nom_famille = Column(String(255), nullable=True)
     prenoms = Column(String(255), nullable=True)
+    date_naissance = Column(Date, nullable=True)
+    lieu_naissance = Column(String(255), nullable=True)
     
     # Dates clés
     date_premiere_delivrance = Column(Date, nullable=True)
