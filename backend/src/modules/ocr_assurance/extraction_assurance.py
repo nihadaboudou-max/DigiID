@@ -23,7 +23,20 @@ LABELS_A_EXCLURE = {
     'MODÈLE', 'MODELE', 'IMMATRICULATION', 'PLAQUE', 'DATE', 'ADRESSE',
     'TÉLÉPHONE', 'EMAIL', 'CONTRAT', 'POLICE', 'GARANTIE', 'PRIME',
     'COTISATION', 'FRANCHISE', 'PLAFOND', 'COUVERTURE', 'ASSISTANCE',
-    'INFORMATIONS', 'DURÉE', 'FORMULE', 'USAGE', 'PUISANCE', 'ANNÉE'
+    'INFORMATIONS', 'DURÉE', 'FORMULE', 'USAGE', 'PUISANCE', 'ANNÉE',
+    # Formes collées par l'OCR (en-têtes / sections d'attestations)
+    'INFORMATIONSDUCONTRAT', 'INFORMATIONSDUPOLICE', 'DONNEESDUCONTRAT',
+    'CONTRATDASSURANCE', 'ATTESTATIONDASSURANCE', 'CERTIFICATDASSURANCE',
+    'GARANTIESSOUSCRITES', 'INFORMATIONSGENERALES',
+}
+
+# Mots-clés d'en-têtes / sections des attestations d'assurance.
+# Si un mot "valeur" en contient un en SOUS-CHAÎNE, c'est du bruit typographique
+# (ex: "INFORMATIONSDUCONTRAT" = "INFORMATIONS DU CONTRAT" collé par l'OCR).
+MOTS_CLES_ENTETES = {
+    'CONTRAT', 'POLICE', 'INFORMATIONS', 'GARANTIE', 'COUVERTURE',
+    'DOCUMENT', 'ATTESTATION', 'CERTIFICAT', 'COTISATION', 'FRANCHISE',
+    'PLAFOND', 'FORMULE', 'SOUSCRIPTION', 'SIGNATURE', 'ECHEANCE', 'ÉCHÉANCE',
 }
 
 def _separer_mots_colles(texte: str) -> str:
@@ -43,6 +56,16 @@ def _nettoyer_texte_assurance(texte: str) -> str:
     texte = re.sub(r'\s+', ' ', texte)
     return texte.strip()
 
+def _est_mot_entete(mot: str) -> bool:
+    """Détecte un mot-clé d'en-tête de document d'assurance.
+
+    L'OCR colle souvent les en-têtes ("INFORMATIONS DU CONTRAT" →
+    "INFORMATIONSDUCONTRAT") : ces mots uniques ne sont pas dans
+    LABELS_A_EXCLURE, on vérifie donc la présence des mots-clés en SOUS-CHAÎNE.
+    """
+    return any(mc in mot for mc in MOTS_CLES_ENTETES)
+
+
 def _est_valeur_valide(texte: str, type_attendu: str) -> bool:
     """Vérifie si le texte extrait est une vraie valeur et non un label."""
     if not texte or len(texte) < 2:
@@ -51,7 +74,7 @@ def _est_valeur_valide(texte: str, type_attendu: str) -> bool:
     mots = texte_pur.split()
     
     for mot in mots:
-        if mot in LABELS_A_EXCLURE:
+        if mot in LABELS_A_EXCLURE or _est_mot_entete(mot):
             return False
     
     if type_attendu == "nom":
@@ -71,7 +94,7 @@ def _extraire_valeur_apres_label(
     """Extrait une valeur après un ou plusieurs labels possibles."""
     for label in labels_possibles:
         if arreter_au_prochain_label:
-            pattern = rf'{label}\s*[:\-]?\s*([^\n§]{{1,100}}?)(?=\s+(?:NOM|PRÉNOM|PRENOM|ASSUR[ÉE]|TITULAIRE|SOUSCRIPTEUR|VÉHICULE|VEHICULE|MARQUE|MODÈLE|IMMATRICULATION|PLAQUE|DATE|ADRESSE|CONTRAT|POLICE|GARANTIE|PRIME|COTISATION)\b|$)'
+            pattern = rf'{label}\s*[:\-]?\s*([^\n§]{{1,100}}?)(?=\s+(?:NOM|PRÉNOM|PRENOM|ASSUR[ÉE]|TITULAIRE|SOUSCRIPTEUR|VÉHICULE|VEHICULE|MARQUE|MODÈLE|IMMATRICULATION|PLAQUE|DATE|ADRESSE|CONTRAT|POLICE|GARANTIE|PRIME|COTISATION|INFORMATIONS|DOCUMENT|ATTESTATION|CERTIFICAT|COUVERTURE|FRANCHISE|PLAFOND|FORMULE|SOUSCRIPTION|ÉCHÉANCE|ECHEANCE)\b|$)'
         else:
             pattern = rf'{label}\s*[:\-]?\s*([^\n§]{{1,100}})'
         
