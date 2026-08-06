@@ -23,6 +23,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Any, Optional
 
+from src.modeles.recherche_faciale import RechercheFaciale
 from src.modeles.consentement import Consentement
 from src.modeles.session_authentification import SessionAuthentification
 from src.base_donnees.base import Base, MelangeTracabilite
