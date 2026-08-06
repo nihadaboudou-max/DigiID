@@ -76,8 +76,13 @@ function Contenu() {
 
   function onScanSuccess(decodedText: string) {
     // Extraire le token de l'URL QR code
-    // Format attendu: https://api.digiid.africa/v1/verify/TOKEN_ICI
-    const match = decodedText.match(/\/verify\/(.+)$/);
+    // Formats possibles :
+    //   - https://api.digiid.africa/v1/police/qr/verifier/TOKEN
+    //   - https://.../v1/verify/TOKEN (ancien format)
+    //   - TOKEN brut (si le QR contient directement le token)
+    const match =
+      decodedText.match(/\/qr\/verifier\/([A-Za-z0-9_-]+)$/) ||
+      decodedText.match(/\/verify\/([A-Za-z0-9_-]+)$/);
     const tokenExtrait = match ? match[1] : decodedText;
     
     setToken(tokenExtrait);

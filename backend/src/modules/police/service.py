@@ -349,7 +349,7 @@ async def obtenir_profil_personne(
             "numero": d.numero_document,
             "nom_complet": d.nom_complet,
             "date_expiration": d.date_expiration.isoformat() if d.date_expiration else None,
-            "est_valide": d.date_expiration is None or (d.date_expiration if isinstance(d.date_expiration, datetime) else datetime.combine(d.date_expiration, datetime.min.time())) >= datetime.now(UTC),
+            "est_valide": d.date_expiration is None or d.date_expiration >= datetime.now(UTC).date(),
             "photo_url": None,
         })
 
@@ -814,7 +814,7 @@ async def scanner_qr(session: AsyncSession, digiid: str, utilisateur: Utilisateu
             "numero": d.numero_document,
             "nom_complet": d.nom_complet,
             "date_expiration": d.date_expiration.isoformat() if d.date_expiration else None,
-            "est_valide": d.date_expiration is None or (d.date_expiration if isinstance(d.date_expiration, datetime) else datetime.combine(d.date_expiration, datetime.min.time())) >= datetime.now(UTC)
+            "est_valide": d.date_expiration is None or d.date_expiration >= datetime.now(UTC).date()
         })
     
     return {

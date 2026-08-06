@@ -7,6 +7,8 @@ via Redis pour des performances optimales.
 """
 import secrets
 import hashlib
+import time
+import threading
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from uuid import UUID
@@ -27,14 +29,74 @@ DUREE_VIE_TOKEN = 30  # secondes
 DUREE_VIE_APRES_SCAN = 5  # secondes (garde le token marqué "utilisé" 5s)
 
 
+class _StockageMemoire:
+    """
+    Stockage de secours en mémoire (dictionnaire) quand Redis n'est pas disponible.
+
+    Implémente le sous-ensemble de l'interface Redis utilisé par ce module :
+    setex / get / keys / delete (version asynchrone, compatible avec `await`).
+
+    ⚠️ Attention : le stockage mémoire est local au processus (non partagé entre
+    plusieurs instances backend). Pour un déploiement multi-instances, Redis
+    (module `src.noyau.redis_client`) est requis.
+    """
+
+    def __init__(self) -> None:
+        self._donnees: dict[str, str] = {}
+        self._expirations: dict[str, float] = {}
+        self._verrou = threading.Lock()
+
+    async def setex(self, cle: str, secondes: int, valeur: str) -> None:
+        with self._verrou:
+            self._donnees[cle] = valeur
+            self._expirations[cle] = time.time() + secondes
+
+    async def get(self, cle: str) -> Optional[str]:
+        with self._verrou:
+            expiration = self._expirations.get(cle)
+            if expiration is None:
+                return None
+            if time.time() > expiration:
+                self._donnees.pop(cle, None)
+                self._expirations.pop(cle, None)
+                return None
+            return self._donnees.get(cle)
+
+    async def keys(self, motif: str) -> list[str]:
+        import fnmatch
+
+        maintenant = time.time()
+        with self._verrou:
+            return [
+                cle
+                for cle in list(self._donnees.keys())
+                if self._expirations.get(cle, 0) > maintenant
+                and fnmatch.fnmatch(cle, motif)
+            ]
+
+    async def delete(self, *cles: str) -> None:
+        with self._verrou:
+            for cle in cles:
+                self._donnees.pop(cle, None)
+                self._expirations.pop(cle, None)
+
+
+_stockage_memoire = _StockageMemoire()
+
+
 def _obtenir_client_redis():
-    """Obtient le client Redis depuis le pool global."""
+    """Obtient le client Redis depuis le pool global, avec fallback mémoire.
+
+    Le module `src.noyau.redis_client` peut ne pas exister selon l'environnement
+    de déploiement ; dans ce cas on bascule sur un stockage en mémoire
+    (comme annoncé dans le docstring initial).
+    """
     try:
         from src.noyau.redis_client import redis_client
         return redis_client
     except ImportError:
         journal.warning("Redis non disponible — fallback sur dictionnaire mémoire")
-        return None
+        return _stockage_memoire
 
 
 def _generer_token_securise(utilisateur_id: UUID) -> str:
@@ -157,9 +219,15 @@ async def verifier_qr_code(
     2. Le token ne doit pas avoir déjà été utilisé
     3. Le token ne doit pas être expiré
     4. Après validation, le token est marqué comme "utilisé"
-    5. Retourne les infos du citoyen (nom, prénom, DigiID, photo)
+        5. Retourne les infos du citoyen (nom, prénom, DigiID, photo)
     """
     import json
+    
+    # Normaliser le token : si un agent a scanné une URL complète
+    # (ex: https://api.digiid.africa/v1/police/qr/verifier/TOKEN),
+    # on extrait le dernier segment qui est le token réel.
+    if token.startswith("http://") or token.startswith("https://"):
+        token = token.rstrip("/").rsplit("/", 1)[-1]
     
     redis = _obtenir_client_redis()
     if not redis:

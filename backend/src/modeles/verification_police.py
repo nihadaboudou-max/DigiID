@@ -4,7 +4,7 @@ Modèle Vérification Police — Tracé des vérifications d'identité.
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean, Float
 from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship
 from src.base_donnees.base import Base
@@ -149,6 +149,15 @@ class VerificationPolice(Base):
     officier_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id"), nullable=False, index=True)
     personne_digiid = Column(String(50), nullable=False, index=True)
     personne_nom = Column(String(255), nullable=True)
+    # --- Champs complémentaires (migrations 20260626_1200) ---
+    personne_email = Column(String(255), nullable=True)
+    personne_telephone = Column(String(50), nullable=True)
+    motif_verification = Column(String(500), nullable=True)
+    localisation_lat = Column(Float, nullable=True)
+    localisation_lng = Column(Float, nullable=True)
+    localisation_adresse = Column(String(500), nullable=True)
+    officier_nom = Column(String(255), nullable=True)
+    # -------------------------------------------------------
     type_verification = Column(String(50), default="identite")
     resultat = Column(String(20), nullable=True)
     notes = Column(Text, nullable=True)
@@ -183,6 +192,16 @@ class SignalementFraude(Base):
     motif = Column(String(500), nullable=False)
     description = Column(Text, nullable=True)
     statut = Column(String(20), default="en_cours")
+    # --- Champs complémentaires (migrations 003 / 20260626_1200 / 20260714_2250) ---
+    priorite = Column(String(20), default="moyenne")
+    notes_traitement = Column(Text, nullable=True)
+    traite_par_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("utilisateur.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # -----------------------------------------------------------------------------
     date_signalement = Column(DateTime, default=datetime.utcnow, nullable=False)
     date_traitement = Column(DateTime, nullable=True)
     
@@ -202,4 +221,4 @@ class SignalementFraude(Base):
         comment="Département de rattachement"
     )
     
-    officier = relationship("Utilisateur", backref="signalements_fraude")
+    officier = relationship("Utilisateur", backref="signalements_fraude", foreign_keys=[officier_id])

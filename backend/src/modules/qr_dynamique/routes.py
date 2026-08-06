@@ -67,7 +67,7 @@ async def generer_qr(
 
 
 @routeur_qr_dynamique.post(
-    "/api/v1/police/qr/verifier/{token}",
+    "/api/v1/police/qr/verifier/{token:path}",
     response_model=QRCodeVerification,
     summary="Vérifier un QR Code scanné",
     description=(
