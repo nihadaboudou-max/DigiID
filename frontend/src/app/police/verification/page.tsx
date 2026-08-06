@@ -1,4 +1,5 @@
 "use client";
+
 import { useState } from "react";
 import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
@@ -22,7 +23,8 @@ export default function VerificationPage() {
 function Contenu() {
   const { can } = useRoleUI();
   const [digiid, setDigiid] = useState("");
-  const [personne, setPersonne] = useState<PersonneRecherchee | null>(null);
+  const [personnes, setPersonnes] = useState<PersonneRecherchee[]>([]);
+  const [personneSelectionnee, setPersonneSelectionnee] = useState<PersonneRecherchee | null>(null);
   const [resultat, setResultat] = useState<string | null>(null);
   const [erreur, setErreur] = useState("");
   const [enRecherche, setEnRecherche] = useState(false);
@@ -30,34 +32,35 @@ function Contenu() {
   async function handleRecherche() {
     if (!digiid) return;
     setEnRecherche(true);
-    setErreur(" ");
-    setPersonne(null);
+    setErreur("");
+    setPersonnes([]);
+    setPersonneSelectionnee(null);
     setResultat(null);
     try {
-      // FIX: Cast resultats to 'any' to avoid 'never[]' inference issues
-      const resultats: any = await rechercherPersonne(digiid);
-      
-      // FIX: Explicitly type 'p' to ensure it's treated as a PersonneRecherchee object
-      const p: PersonneRecherchee | null = resultats && resultats.length > 0 ? resultats[0] : null;
-
-      if (p) {
-        setPersonne(p);
-        setResultat("confirme");
-        // Now p.digiid and p.nom are recognized
-        await verifierIdentite({ 
-          personne_digiid: p.digiid || digiid, 
-          personne_nom: p.nom 
-        });
+      const resultats = await rechercherPersonne(digiid);
+      if (resultats && resultats.length > 0) {
+        setPersonnes(resultats);
       } else {
-        setErreur("Personne non trouvee dans le systeme DigiID");
+        setErreur("Personne non trouvée dans le système DigiID");
         setResultat("infirme");
-        await verifierIdentite({ personne_digiid: digiid, notes: "Non trouve" });
+        await verifierIdentite({ personne_digiid: digiid, notes: "Non trouvé" });
       }
     } catch {
-      setErreur("Erreur lors de la verification");
+      setErreur("Erreur lors de la recherche");
       setResultat("infirme");
     } finally {
       setEnRecherche(false);
+    }
+  }
+
+  async function handleVerification(p: PersonneRecherchee) {
+    setPersonneSelectionnee(p);
+    try {
+      await verifierIdentite({ personne_digiid: p.digiid || digiid, personne_nom: p.nom });
+      setResultat("confirme");
+    } catch {
+      setErreur("Erreur lors de la vérification");
+      setResultat("infirme");
     }
   }
 
@@ -68,7 +71,7 @@ function Contenu() {
         <span>/</span>
         <span className="text-ardoise font-semibold">Verification identite</span>
       </nav>
-      
+
       <div>
         <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Forces de l ordre</p>
         <h1 className="mt-1">Verification d identite</h1>
@@ -101,36 +104,101 @@ function Contenu() {
       {/* ========== ERREURS ========== */}
       {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
 
+      {/* ========== LISTE DES RESULTATS ========== */}
+      {personnes.length > 0 && !personneSelectionnee && (
+        <Carte titre={`🔍 ${personnes.length} personne${personnes.length > 1 ? 's' : ''} trouvée${personnes.length > 1 ? 's' : ''}`}>
+          <div className="space-y-3">
+            <p className="text-sm text-ardoise-clair">
+              Clique sur <strong>Vérifier</strong> pour confirmer l'identité de la personne.
+            </p>
+            {personnes.map((p, index) => (
+              <div
+                key={index}
+                className="flex items-center gap-4 p-4 bg-sable/50 rounded-lg border border-ardoise-clair/10 hover:border-ocre/30 transition-all"
+              >
+                <div className="w-14 h-14 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold text-lg shrink-0">
+                  {(p.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-ardoise truncate">{p.nom || "Nom inconnu"}</p>
+                  <p className="text-sm text-ardoise-clair font-mono">DigiID: {p.digiid}</p>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {p.numero_cni && (
+                      <span className="text-xs text-ardoise-clair">CNI: {p.numero_cni}</span>
+                    )}
+                    {p.telephone && (
+                      <span className="text-xs text-ardoise-clair">📞 {p.telephone}</span>
+                    )}
+                    {p.email && (
+                      <span className="text-xs text-ardoise-clair">✉️ {p.email}</span>
+                    )}
+                  </div>
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    <Badge variante={p.est_actif ? "succes" : "terre"} taille="petit">
+                      {p.est_actif ? "Actif" : "Inactif"}
+                    </Badge>
+                    <span className="text-xs text-ardoise-clair">Score: {p.score}</span>
+                    {p.est_verifie && (
+                      <Badge variante="lagune" taille="petit">✓ Vérifié</Badge>
+                    )}
+                  </div>
+                </div>
+                <Bouton
+                  variante="primaire"
+                  taille="petit"
+                  onClick={() => handleVerification(p)}
+                >
+                  ✅ Vérifier
+                </Bouton>
+              </div>
+            ))}
+          </div>
+        </Carte>
+      )}
+
       {/* ========== RESULTAT CONFIRME ========== */}
-      {resultat === "confirme" && personne && (
+      {resultat === "confirme" && personneSelectionnee && (
         <Carte titre="✅ Identite confirmee">
           <div className="flex items-center gap-4 p-3 bg-succes/5 rounded-lg">
             <div className="w-16 h-16 rounded-full bg-succes/10 flex items-center justify-center text-succes font-bold text-xl">
-              {(personne.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
+              {(personneSelectionnee.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
             </div>
             <div className="flex-1">
-              <p className="font-bold text-lg text-ardoise">{personne.nom || "Nom inconnu"}</p>
-              <p className="text-sm text-ardoise-clair">DigiID: {personne.digiid || "N/A"}</p>
-              {personne.numero_cni && (
-                <p className="text-sm text-ardoise-clair">N° CNI: {personne.numero_cni}</p>
+              <p className="font-bold text-lg text-ardoise">{personneSelectionnee.nom || "Nom inconnu"}</p>
+              <p className="text-sm text-ardoise-clair">DigiID: {personneSelectionnee.digiid || "N/A"}</p>
+              {personneSelectionnee.numero_cni && (
+                <p className="text-sm text-ardoise-clair">N° CNI: {personneSelectionnee.numero_cni}</p>
               )}
-              <p className="text-sm text-ardoise-clair">Email: {personne.email || "N/A"}</p>
-              <div className="flex gap-2 mt-2">
-                <Badge variante={personne.est_actif ? "succes" : "terre"}>
-                  {personne.est_actif ? "Actif" : "Inactif"}
+              {personneSelectionnee.telephone && (
+                <p className="text-sm text-ardoise-clair"> {personneSelectionnee.telephone}</p>
+              )}
+              {personneSelectionnee.email && (
+                <p className="text-sm text-ardoise-clair">✉️ {personneSelectionnee.email}</p>
+              )}
+              <div className="flex gap-2 mt-2 flex-wrap">
+                <Badge variante={personneSelectionnee.est_actif ? "succes" : "terre"}>
+                  {personneSelectionnee.est_actif ? "Actif" : "Inactif"}
                 </Badge>
-                <span className="text-xs text-ardoise-clair">Score: {personne.score}</span>
+                <span className="text-xs text-ardoise-clair">Score: {personneSelectionnee.score}</span>
               </div>
             </div>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <Bouton variante="secondaire" onClick={() => {
+              setPersonneSelectionnee(null);
+              setResultat(null);
+            }}>
+              ← Voir les autres résultats
+            </Bouton>
           </div>
         </Carte>
       )}
 
       {/* ========== RESULTAT INFIRME ========== */}
-      {resultat === "infirme" && !personne && (
+      {resultat === "infirme" && !personneSelectionnee && personnes.length === 0 && (
         <div className="bg-terre/10 border-l-4 border-terre p-4 rounded">
           <p className="text-sm text-terre font-semibold">Identite non confirmee</p>
-          <p className="text-xs text-ardoise-clair mt-1">{erreur || "Aucune correspondance trouvee"}</p>
+          <p className="text-xs text-ardoise-clair mt-1">{erreur || "Aucune correspondance trouvée"}</p>
         </div>
       )}
 
