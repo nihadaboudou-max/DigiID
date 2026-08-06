@@ -1,5 +1,4 @@
 "use client";
-
 import { useState } from "react";
 import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
@@ -31,16 +30,24 @@ function Contenu() {
   async function handleRecherche() {
     if (!digiid) return;
     setEnRecherche(true);
-    setErreur("");
+    setErreur(" ");
     setPersonne(null);
     setResultat(null);
     try {
-      const resultats = await rechercherPersonne(digiid);
-      const p = resultats && resultats.length > 0 ? resultats[0] : null;
+      // FIX: Cast resultats to 'any' to avoid 'never[]' inference issues
+      const resultats: any = await rechercherPersonne(digiid);
+      
+      // FIX: Explicitly type 'p' to ensure it's treated as a PersonneRecherchee object
+      const p: PersonneRecherchee | null = resultats && resultats.length > 0 ? resultats[0] : null;
+
       if (p) {
         setPersonne(p);
         setResultat("confirme");
-        await verifierIdentite({ personne_digiid: p.digiid || digiid, personne_nom: p.nom });
+        // Now p.digiid and p.nom are recognized
+        await verifierIdentite({ 
+          personne_digiid: p.digiid || digiid, 
+          personne_nom: p.nom 
+        });
       } else {
         setErreur("Personne non trouvee dans le systeme DigiID");
         setResultat("infirme");
@@ -61,7 +68,7 @@ function Contenu() {
         <span>/</span>
         <span className="text-ardoise font-semibold">Verification identite</span>
       </nav>
-
+      
       <div>
         <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Forces de l ordre</p>
         <h1 className="mt-1">Verification d identite</h1>
