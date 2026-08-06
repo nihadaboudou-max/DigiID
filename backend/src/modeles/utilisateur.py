@@ -70,6 +70,7 @@ class Utilisateur(Base, MelangeTracabilite):
     prenom_chiffre: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     nom_chiffre: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     telephone_chiffre: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    photo_profil_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True, doc="URL de la photo de profil (stockée sur S3/MinIO)")
     ville: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     pays: Mapped[Optional[str]] = mapped_column(String(50), default="Sénégal")
 

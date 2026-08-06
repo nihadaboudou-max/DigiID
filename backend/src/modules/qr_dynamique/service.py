@@ -321,7 +321,7 @@ async def verifier_qr_code(
             "nom": nom,
             "prenom": prenom,
             "email": dechiffrer_donnee(citoyen.email_chiffre) if citoyen.email_chiffre else None,
-            "photo_profil_url": citoyen.photo_profil_url,
+            "photo_profil_url": getattr(citoyen, "photo_profil_url", None),
             "est_cni_verifiee": citoyen.est_cni_verifiee,
             "est_visage_verifie": citoyen.est_visage_verifie,
             "est_email_verifie": citoyen.est_email_verifie,
