@@ -5,8 +5,8 @@
  * Redirige vers l'interface appropriée selon le rôle.
  */
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
 
 import { Bouton } from "@/composants/commun/Bouton";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
@@ -48,8 +48,26 @@ const DELAI_RENVOI_CODE_SECONDES = 30;
 type EtapeConnexion = "identifiants" | "verification_email" | "2fa";
 
 export default function PageConnexion() {
+  return (
+    <Suspense fallback={null}>
+      <ContenuConnexion />
+    </Suspense>
+  );
+}
+
+function ContenuConnexion() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { seConnecter, utilisateur } = useAuthentification();
+
+  // Page à retrouver après connexion (ex: /police/scan-qr?token=...)
+  // — uniquement des chemins internes (pas de redirection ouverte vers l'extérieur).
+  const retour = searchParams.get("retour");
+  const retourValide =
+    !!retour &&
+    retour.startsWith("/") &&
+    !retour.startsWith("//") &&
+    !retour.toLowerCase().startsWith("http");
 
   const [email, setEmail] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
@@ -63,14 +81,20 @@ export default function PageConnexion() {
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
   const [compteARebours, setCompteARebours] = useState(0);
 
-  // ✅ CORRECTION : Redirection automatique après connexion réussie selon le rôle
+  // ✅ CORRECTION : Redirection automatique après connexion réussie
   useEffect(() => {
     if (utilisateur) {
-      // Déterminer la page de redirection selon le rôle
+      // 1. Si l'utilisateur venait d'une page protégée (ex: scan QR),
+      //    on l'y ramène automatiquement.
+      if (retourValide && retour) {
+        router.push(retour);
+        return;
+      }
+      // 2. Sinon, redirection classique selon le rôle
       const pageRedirection = REDIRECTIONS_PAR_ROLE[utilisateur.role] || "/tableau-de-bord";
       router.push(pageRedirection);
     }
-  }, [utilisateur, router]);
+  }, [utilisateur, router, retour, retourValide]);
 
   // ⏱️ Compte à rebours avant de pouvoir renvoyer un code
   useEffect(() => {

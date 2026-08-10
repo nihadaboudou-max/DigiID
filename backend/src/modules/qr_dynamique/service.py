@@ -85,19 +85,57 @@ class _StockageMemoire:
 _stockage_memoire = _StockageMemoire()
 
 
-def _obtenir_client_redis():
-    """Obtient le client Redis depuis le pool global, avec fallback mémoire.
+# État de disponibilité Redis (None = pas encore testé)
+_redis_disponible: Optional[bool] = None
 
-    Le module `src.noyau.redis_client` peut ne pas exister selon l'environnement
-    de déploiement ; dans ce cas on bascule sur un stockage en mémoire
-    (comme annoncé dans le docstring initial).
+
+async def _obtenir_client_redis():
+    """Obtient le client Redis (testé) ou le stockage mémoire en secours.
+
+    La disponibilité de Redis est vérifiée une seule fois (PING) puis mise
+    en cache, pour que toutes les opérations utilisent le MÊME backend de
+    stockage et éviter toute incohérence entre Redis et la mémoire.
     """
+    global _redis_disponible
+
     try:
         from src.noyau.redis_client import redis_client
-        return redis_client
     except ImportError:
-        journal.warning("Redis non disponible — fallback sur dictionnaire mémoire")
+        redis_client = None
+
+    if redis_client is None:
         return _stockage_memoire
+
+    if _redis_disponible is None:
+        try:
+            await redis_client.ping()
+            _redis_disponible = True
+            journal.info("Redis connecté et opérationnel.")
+        except Exception as exc:
+            _redis_disponible = False
+            journal.warning(
+                f"Redis injoignable ({exc}) — fallback sur dictionnaire mémoire"
+            )
+
+    return redis_client if _redis_disponible else _stockage_memoire
+
+
+async def _executer_sur_redis(redis, operation: str, *args):
+    """Exécute une opération Redis avec repli automatique sur la mémoire.
+
+    Si Redis échoue en cours de route (panne, timeout), on bascule
+    définitivement sur le stockage mémoire pour garder la cohérence
+    des tokens au sein du processus.
+    """
+    try:
+        methode = getattr(redis, operation)
+        return await methode(*args)
+    except Exception as exc:
+        global _redis_disponible
+        _redis_disponible = False
+        journal.warning(f"Redis {operation} indisponible ({exc}) — repli mémoire")
+        methode = getattr(_stockage_memoire, operation)
+        return await methode(*args)
 
 
 def _generer_token_securise(utilisateur_id: UUID) -> str:
@@ -108,7 +146,7 @@ def _generer_token_securise(utilisateur_id: UUID) -> str:
     timestamp = datetime.now(timezone.utc).isoformat()
     aleatoire = secrets.token_urlsafe(32)
     donnees_brutes = f"{utilisateur_id}:{timestamp}:{aleatoire}"
-    
+
     # Hash SHA-256 pour un token compact et sécurisé
     token_hash = hashlib.sha256(donnees_brutes.encode()).hexdigest()
     return token_hash[:48]  # 48 caractères (suffisant pour l'unicité)
@@ -136,23 +174,23 @@ async def generer_qr_code(
 ) -> dict:
     """
     Génère un nouveau QR Code temporaire pour un citoyen.
-    
+
     Règles :
     1. Invalide l'ancien token (si existant)
     2. Génère un nouveau token unique
     3. Stocke dans Redis avec TTL de 30s
     4. Retourne le token et l'URL du QR Code
     """
-    redis = _obtenir_client_redis()
-    
+    redis = await _obtenir_client_redis()
+
     # 1. Générer le token
     token = _generer_token_securise(utilisateur.id)
     cle_redis = f"{PREFIXE_CLE}{utilisateur.id}:{token}"
-    
+
     # 2. Préparer les données à stocker
     maintenant = datetime.now(timezone.utc)
     expire_a = maintenant + timedelta(seconds=DUREE_VIE_TOKEN)
-    
+
     donnees_token = {
         "user_id": str(utilisateur.id),
         "token": token,
@@ -161,27 +199,25 @@ async def generer_qr_code(
         "utilise": False,
         "nb_scans": 0,
     }
-    
+
     # 3. Stocker dans Redis avec TTL
     if redis:
-        try:
-            import json
-            await redis.setex(
-                cle_redis,
-                DUREE_VIE_TOKEN,
-                json.dumps(donnees_token)
-            )
-            journal.info(
-                f"QR Code généré | user={utilisateur.id} | "
-                f"token={token[:12]}... | expire={expire_a.isoformat()}"
-            )
-        except Exception as e:
-            journal.error(f"Erreur Redis lors de la génération du QR : {e}")
-            raise
-    
+        import json
+        await _executer_sur_redis(
+            redis,
+            "setex",
+            cle_redis,
+            DUREE_VIE_TOKEN,
+            json.dumps(donnees_token)
+        )
+        journal.info(
+            f"QR Code généré | user={utilisateur.id} | "
+            f"token={token[:12]}... | expire={expire_a.isoformat()}"
+        )
+
     # 4. Construire l'URL du QR Code
     qr_code_url = _construire_url_qr(token)
-    
+
     return {
         "token": token,
         "qr_code_url": qr_code_url,
@@ -198,17 +234,17 @@ async def invalider_ancien_token(
     Invalide tous les anciens tokens d'un utilisateur.
     Appelé avant de générer un nouveau QR Code.
     """
-    redis = _obtenir_client_redis()
+    redis = await _obtenir_client_redis()
     if not redis:
         return
-    
+
     try:
         # Chercher toutes les clés correspondant à cet utilisateur
         pattern = f"{PREFIXE_CLE}{utilisateur_id}:*"
-        cles = await redis.keys(pattern)
-        
+        cles = await _executer_sur_redis(redis, "keys", pattern)
+
         if cles:
-            await redis.delete(*cles)
+            await _executer_sur_redis(redis, "delete", *cles)
             journal.info(f"Anciens tokens invalidés | user={utilisateur_id} | nb={len(cles)}")
     except Exception as e:
         journal.warning(f"Erreur lors de l'invalidation des anciens tokens : {e}")
@@ -221,17 +257,17 @@ async def verifier_qr_code(
 ) -> dict:
     """
     Vérifie un QR Code scanné par un agent de police.
-    
+
     Règles de sécurité :
     1. Le token doit exister dans Redis
     2. Le token ne doit pas avoir déjà été utilisé
     3. Le token ne doit pas être expiré
     4. Après validation, le token est marqué comme "utilisé"
-        5. Retourne les infos du citoyen (nom, prénom, DigiID, photo)
+    5. Retourne les infos du citoyen (nom, prénom, DigiID, photo)
     """
     import json
-    
-        # Normaliser le token : si un agent a scanné une URL complète
+
+    # Normaliser le token : si un agent a scanné une URL complète
     # (ex: https://digiid.africa/police/scan-qr?token=TOKEN),
     # on extrait le paramètre ?token= (nouveau format frontend).
     # Pour l'ancien format API (https://.../qr/verifier/TOKEN),
@@ -246,20 +282,20 @@ async def verifier_qr_code(
                 token = ""
         else:
             token = token.rstrip("/").rsplit("/", 1)[-1]
-    
-    redis = _obtenir_client_redis()
+
+    redis = await _obtenir_client_redis()
     if not redis:
         return {
             "succes": False,
             "citoyen": None,
             "message": "Service Redis indisponible. Réessayez plus tard.",
         }
-    
+
     # 1. Chercher le token dans Redis
     # On ne connaît pas le user_id, donc on cherche par pattern
     pattern = f"{PREFIXE_CLE}*:{token}"
-    cles = await redis.keys(pattern)
-    
+    cles = await _executer_sur_redis(redis, "keys", pattern)
+
     if not cles:
         journal.warning(f"QR Code invalide (non trouvé) | token={token[:12]}...")
         return {
@@ -267,20 +303,20 @@ async def verifier_qr_code(
             "citoyen": None,
             "message": "QR Code invalide ou expiré. Demandez à la personne de rafraîchir son code.",
         }
-    
+
     cle_redis = cles[0]
-    
+
     # 2. Récupérer les données
-    donnees_brutes = await redis.get(cle_redis)
+    donnees_brutes = await _executer_sur_redis(redis, "get", cle_redis)
     if not donnees_brutes:
         return {
             "succes": False,
             "citoyen": None,
             "message": "QR Code expiré.",
         }
-    
+
     donnees = json.loads(donnees_brutes)
-    
+
     # 3. Vérifier si déjà utilisé
     if donnees.get("utilise"):
         journal.warning(
@@ -292,7 +328,7 @@ async def verifier_qr_code(
             "citoyen": None,
             "message": "Ce QR Code a déjà été utilisé. Demandez un nouveau code.",
         }
-    
+
     # 4. Vérifier l'expiration
     expire_a = datetime.fromisoformat(donnees["expire_a"])
     if datetime.now(timezone.utc) > expire_a:
@@ -301,37 +337,37 @@ async def verifier_qr_code(
             "citoyen": None,
             "message": "QR Code expiré. Demandez à la personne de rafraîchir.",
         }
-    
+
     # 5. Marquer comme utilisé
     donnees["utilise"] = True
     donnees["nb_scans"] = donnees.get("nb_scans", 0) + 1
     donnees["scanne_par"] = str(agent_police.id)
     donnees["scanne_a"] = datetime.now(timezone.utc).isoformat()
-    
+
     # Garder le token 5s après utilisation (pour éviter les scans multiples)
-    await redis.setex(cle_redis, DUREE_VIE_APRES_SCAN, json.dumps(donnees))
-    
+    await _executer_sur_redis(redis, "setex", cle_redis, DUREE_VIE_APRES_SCAN, json.dumps(donnees))
+
     # 6. Récupérer les infos du citoyen
     user_id = UUID(donnees["user_id"])
     citoyen = await session.get(Utilisateur, user_id)
-    
+
     if not citoyen:
         return {
             "succes": False,
             "citoyen": None,
             "message": "Citoyen introuvable dans la base.",
         }
-    
+
     # 7. Journaliser la vérification
     journal.info(
         f"QR Code vérifié avec succès | citoyen={citoyen.digiid_public} | "
         f"agent={agent_police.id} | token={token[:12]}..."
     )
-    
+
     # 8. Construire la réponse avec les infos du citoyen
     nom = dechiffrer_donnee(citoyen.nom_chiffre) if citoyen.nom_chiffre else None
     prenom = dechiffrer_donnee(citoyen.prenom_chiffre) if citoyen.prenom_chiffre else None
-    
+
     return {
         "succes": True,
         "citoyen": {
@@ -356,25 +392,25 @@ async def marquer_token_utilise(
     Marque un token comme utilisé (appelé après un scan réussi).
     """
     import json
-    
-    redis = _obtenir_client_redis()
+
+    redis = await _obtenir_client_redis()
     if not redis:
         return
-    
+
     pattern = f"{PREFIXE_CLE}*:{token}"
-    cles = await redis.keys(pattern)
-    
+    cles = await _executer_sur_redis(redis, "keys", pattern)
+
     if not cles:
         return
-    
+
     cle_redis = cles[0]
-    donnees_brutes = await redis.get(cle_redis)
-    
+    donnees_brutes = await _executer_sur_redis(redis, "get", cle_redis)
+
     if donnees_brutes:
         donnees = json.loads(donnees_brutes)
         donnees["utilise"] = True
         donnees["scanne_par"] = str(agent_id)
         donnees["scanne_a"] = datetime.now(timezone.utc).isoformat()
-        
+
         # Garder 5s après utilisation
-        await redis.setex(cle_redis, DUREE_VIE_APRES_SCAN, json.dumps(donnees))
+        await _executer_sur_redis(redis, "setex", cle_redis, DUREE_VIE_APRES_SCAN, json.dumps(donnees))

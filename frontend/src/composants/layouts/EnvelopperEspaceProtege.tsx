@@ -19,7 +19,10 @@ export function EnvelopperEspaceProtege({ rolesAutorises, children }: Proprietes
 
   useEffect(() => {
     if (!chargement && !estConnecte) {
-      router.push("/connexion");
+      // Conserve la page d'origine (ex: /police/scan-qr?token=...) pour
+      // y revenir automatiquement après connexion.
+      const cheminActuel = `${window.location.pathname}${window.location.search}`;
+      router.push(`/connexion?retour=${encodeURIComponent(cheminActuel)}`);
     }
   }, [chargement, estConnecte, router]);
 

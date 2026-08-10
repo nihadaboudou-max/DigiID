@@ -91,8 +91,8 @@ async def verifier_qr(
     - Invalide le token après vérification (usage unique)
     - Retourne les infos du citoyen si valide
     """
-    # Vérifier que l'utilisateur est un agent de police
-    if agent.role not in ["police", "agent_police", "admin", "super_admin"]:
+        # Vérifier que l'utilisateur est un agent de police
+    if agent.role not in ["police", "agent_police", "chef_police", "admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Seuls les agents de police peuvent vérifier les QR Codes.",
