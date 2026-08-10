@@ -163,6 +163,15 @@ function Contenu() {
         setErreur(resultat.message || "QR Code invalide.");
       }
     } catch (err: any) {
+      // Session expirée / non authentifié → on renvoie à la connexion
+      // en conservant le token pour revenir automatiquement après login.
+      if (err?.code_http === 401 || err?.code_erreur === "AUTH_TOKEN_EXPIRE") {
+        const retour = tokenValue
+          ? `/police/scan-qr?token=${encodeURIComponent(tokenValue)}`
+          : "/police/scan-qr";
+        router.push(`/connexion?retour=${encodeURIComponent(retour)}`);
+        return;
+      }
       setErreur(err.message || "Erreur lors de la vérification.");
     } finally {
       setChargement(false);

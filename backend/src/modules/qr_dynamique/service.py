@@ -315,7 +315,16 @@ async def verifier_qr_code(
             "message": "QR Code expiré.",
         }
 
-    donnees = json.loads(donnees_brutes)
+    # Décodage JSON — ne doit JAMAIS faire planter la vérification
+    try:
+        donnees = json.loads(donnees_brutes)
+    except (ValueError, TypeError):
+        journal.warning(f"QR Code corrompu (JSON invalide) | token={token[:12]}...")
+        return {
+            "succes": False,
+            "citoyen": None,
+            "message": "QR Code invalide. Demandez à la personne de rafraîchir son code.",
+        }
 
     # 3. Vérifier si déjà utilisé
     if donnees.get("utilise"):
@@ -330,8 +339,11 @@ async def verifier_qr_code(
         }
 
     # 4. Vérifier l'expiration
-    expire_a = datetime.fromisoformat(donnees["expire_a"])
-    if datetime.now(timezone.utc) > expire_a:
+    try:
+        expire_a = datetime.fromisoformat(donnees["expire_a"])
+    except (KeyError, ValueError, TypeError):
+        expire_a = None
+    if expire_a is None or datetime.now(timezone.utc) > expire_a:
         return {
             "succes": False,
             "citoyen": None,
@@ -348,8 +360,18 @@ async def verifier_qr_code(
     await _executer_sur_redis(redis, "setex", cle_redis, DUREE_VIE_APRES_SCAN, json.dumps(donnees))
 
     # 6. Récupérer les infos du citoyen
-    user_id = UUID(donnees["user_id"])
-    citoyen = await session.get(Utilisateur, user_id)
+    try:
+        user_id = UUID(donnees["user_id"])
+    except (KeyError, ValueError, TypeError):
+        user_id = None
+
+    citoyen = None
+    if user_id is not None:
+        try:
+            citoyen = await session.get(Utilisateur, user_id)
+        except Exception as exc:
+            journal.warning(f"Échec récupération citoyen {user_id} : {exc}")
+            citoyen = None
 
     if not citoyen:
         return {
@@ -365,8 +387,20 @@ async def verifier_qr_code(
     )
 
     # 8. Construire la réponse avec les infos du citoyen
-    nom = dechiffrer_donnee(citoyen.nom_chiffre) if citoyen.nom_chiffre else None
-    prenom = dechiffrer_donnee(citoyen.prenom_chiffre) if citoyen.prenom_chiffre else None
+    # Le déchiffrement ne doit JAMAIS faire planter la vérification :
+    # en cas d'échec (clé différente, donnée altérée), on affiche « — ».
+    try:
+        nom = dechiffrer_donnee(citoyen.nom_chiffre) if citoyen.nom_chiffre else None
+    except Exception:
+        nom = None
+    try:
+        prenom = dechiffrer_donnee(citoyen.prenom_chiffre) if citoyen.prenom_chiffre else None
+    except Exception:
+        prenom = None
+    try:
+        email = dechiffrer_donnee(citoyen.email_chiffre) if citoyen.email_chiffre else None
+    except Exception:
+        email = None
 
     return {
         "succes": True,
@@ -374,7 +408,7 @@ async def verifier_qr_code(
             "digiid": citoyen.digiid_public,
             "nom": nom,
             "prenom": prenom,
-            "email": dechiffrer_donnee(citoyen.email_chiffre) if citoyen.email_chiffre else None,
+            "email": email,
             "photo_profil_url": getattr(citoyen, "photo_profil_url", None),
             "est_cni_verifiee": citoyen.est_cni_verifiee,
             "est_visage_verifie": citoyen.est_visage_verifie,
@@ -407,7 +441,10 @@ async def marquer_token_utilise(
     donnees_brutes = await _executer_sur_redis(redis, "get", cle_redis)
 
     if donnees_brutes:
-        donnees = json.loads(donnees_brutes)
+        try:
+            donnees = json.loads(donnees_brutes)
+        except (ValueError, TypeError):
+            return
         donnees["utilise"] = True
         donnees["scanne_par"] = str(agent_id)
         donnees["scanne_a"] = datetime.now(timezone.utc).isoformat()

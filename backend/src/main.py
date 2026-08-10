@@ -150,6 +150,7 @@ application = FastAPI(
         "Authentification : `/api/v1/auth/*`"
     ),
     version=parametres.version_api,
+    debug=parametres.activer_debug,  # Jamais de page de traceback en production
     docs_url="/docs" if not parametres.est_production else None,
     redoc_url="/redoc" if not parametres.est_production else None,
     openapi_url="/openapi.json" if not parametres.est_production else None,

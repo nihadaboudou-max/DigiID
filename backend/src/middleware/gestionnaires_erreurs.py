@@ -29,12 +29,15 @@ def enregistrer_gestionnaires_erreurs(application: FastAPI) -> None:
         """Toutes les exceptions métier DigiID passent par ici."""
         request_id = getattr(requete.state, "request_id", None)
 
-        journal.warning(
-            f"ErreurDigiID : {type(erreur).__name__} -- {erreur.message_technique}",
-            code_erreur=erreur.code_erreur,
-            code_http=erreur.code_http,
-            request_id=request_id,
-        )
+        try:
+            journal.warning(
+                f"ErreurDigiID : {type(erreur).__name__} -- {erreur.message_technique}",
+                code_erreur=erreur.code_erreur,
+                code_http=erreur.code_http,
+                request_id=request_id,
+            )
+        except Exception:
+            pass  # Ne jamais laisser le journal faire planter le handler
 
         return JSONResponse(
             status_code=erreur.code_http,
@@ -95,10 +98,13 @@ def enregistrer_gestionnaires_erreurs(application: FastAPI) -> None:
 
         message_complet = " · ".join(morceaux) if morceaux else "Données invalides."
 
-        journal.warning(
-            f"Erreur validation : {len(erreurs_brutes)} erreur(s) — {message_complet}",
-            request_id=request_id,
-        )
+        try:
+            journal.warning(
+                f"Erreur validation : {len(erreurs_brutes)} erreur(s) — {message_complet}",
+                request_id=request_id,
+            )
+        except Exception:
+            pass  # Ne jamais laisser le journal faire planter le handler
 
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -126,10 +132,14 @@ def enregistrer_gestionnaires_erreurs(application: FastAPI) -> None:
         # contenus dans le message d'erreur (ex: SQL avec paramètres)
         message_erreur = str(erreur)
         type_erreur = type(erreur).__name__
-        journal.exception(
-            f"Exception non gérée : {type_erreur} -- {message_erreur}",
-            request_id=request_id,
-        )
+
+        try:
+            journal.exception(
+                f"Exception non gérée : {type_erreur} -- {message_erreur}",
+                request_id=request_id,
+            )
+        except Exception:
+            pass  # Ne jamais laisser le journal faire planter le handler
 
         # Tracer l'erreur dans le journal d'audit pour le super admin
         try:
@@ -164,12 +174,15 @@ def enregistrer_gestionnaires_erreurs(application: FastAPI) -> None:
                 )
                 session_audit.add(entree_audit)
                 await session_audit.commit()
-        except Exception as e_audit:
+        except Exception:
             # En cas d'échec de l'audit, on ne fait que logger (pas de boucle infinie)
-            journal.warning(
-                f"Impossible d'enregistrer l'erreur dans l'audit : {e_audit}",
-                request_id=request_id,
-            )
+            try:
+                journal.warning(
+                    f"Impossible d'enregistrer l'erreur dans l'audit : {message_erreur[:200]}",
+                    request_id=request_id,
+                )
+            except Exception:
+                pass
 
         return JSONResponse(
             status_code=500,
