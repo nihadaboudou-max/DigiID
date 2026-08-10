@@ -156,7 +156,7 @@ class VerificationPolice(Base):
     localisation_lat = Column(Float, nullable=True)
     localisation_lng = Column(Float, nullable=True)
     localisation_adresse = Column(String(500), nullable=True)
-    officier_nom = Column(String(255), nullable=True)
+    #officier_nom = Column(String(255), nullable=True)
     # -------------------------------------------------------
     type_verification = Column(String(50), default="identite")
     resultat = Column(String(20), nullable=True)
