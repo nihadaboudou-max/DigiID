@@ -5,6 +5,7 @@ Service métier pour le module QR Code Dynamique.
 Gère la génération, la validation et l'invalidation des tokens QR
 via Redis pour des performances optimales.
 """
+import os
 import secrets
 import hashlib
 import time
@@ -116,10 +117,17 @@ def _generer_token_securise(utilisateur_id: UUID) -> str:
 def _construire_url_qr(token: str) -> str:
     """
     Construit l'URL à encoder dans le QR Code.
-    Cette URL sera scannée par l'application policier.
+
+    IMPORTANT : l'URL doit pointer vers une PAGE FRONTEND navigable (GET),
+    et non vers un endpoint API en POST. Un agent qui scanne le QR avec la
+    caméra native de son téléphone ouvrira cette URL dans son navigateur.
+    La page frontend (/police/scan-qr?token=...) se chargera ensuite
+    d'appeler l'API de vérification avec le JWT de l'agent.
     """
-    # URL publique de vérification (à adapter selon ton domaine)
-    return f"https://api.digiid.africa/v1/police/qr/verifier/{token}"
+    # Domaine public du frontend — variable d'environnement (ex: URL_FRONTEND)
+    # Valeur par défaut si non définie.
+    frontend = os.getenv("URL_FRONTEND", "https://digiid.africa").rstrip("/")
+    return f"{frontend}/police/scan-qr?token={token}"
 
 
 async def generer_qr_code(
@@ -223,11 +231,21 @@ async def verifier_qr_code(
     """
     import json
     
-    # Normaliser le token : si un agent a scanné une URL complète
-    # (ex: https://api.digiid.africa/v1/police/qr/verifier/TOKEN),
+        # Normaliser le token : si un agent a scanné une URL complète
+    # (ex: https://digiid.africa/police/scan-qr?token=TOKEN),
+    # on extrait le paramètre ?token= (nouveau format frontend).
+    # Pour l'ancien format API (https://.../qr/verifier/TOKEN),
     # on extrait le dernier segment qui est le token réel.
     if token.startswith("http://") or token.startswith("https://"):
-        token = token.rstrip("/").rsplit("/", 1)[-1]
+        if "?" in token:
+            try:
+                from urllib.parse import urlparse, parse_qs
+                params = parse_qs(urlparse(token).query)
+                token = params.get("token", [""])[0]
+            except Exception:
+                token = ""
+        else:
+            token = token.rstrip("/").rsplit("/", 1)[-1]
     
     redis = _obtenir_client_redis()
     if not redis:

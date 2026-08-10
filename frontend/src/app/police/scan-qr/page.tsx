@@ -1,6 +1,7 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
@@ -10,7 +11,10 @@ import { Html5Qrcode, Html5QrcodeScanType } from "html5-qrcode";
 export default function ScanQRPage() {
   return (
     <EnvelopperEspaceProtege rolesAutorises={["agent_police", "chef_police","admin", "super_admin"]}>
-      <Contenu />
+      {/* Suspense requis par useSearchParams pour éviter une erreur de build Next.js */}
+      <Suspense fallback={<div className="text-center py-8 text-ardoise-clair">Chargement...</div>}>
+        <Contenu />
+      </Suspense>
     </EnvelopperEspaceProtege>
   );
 }
@@ -27,6 +31,25 @@ function Contenu() {
   const [permissionCamera, setPermissionCamera] = useState<boolean | null>(null);
   const scannerRef = useRef<HTMLDivElement>(null);
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+
+  // --- Vérification automatique depuis l'URL (scan caméra native) ---
+  // Le QR code encode maintenant : https://<frontend>/police/scan-qr?token=TOKEN
+  // La caméra native du téléphone ouvre cette URL → on vérifie automatiquement.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const aAutoVerifie = useRef(false);
+
+  useEffect(() => {
+    const tokenURL = searchParams.get("token");
+    if (tokenURL && !aAutoVerifie.current) {
+      aAutoVerifie.current = true;
+      setToken(tokenURL);
+      // Nettoie l'URL pour éviter de re-vérifier un token déjà consommé au refresh
+      router.replace("/police/scan-qr", { scroll: false });
+      verifierAutomatiquement(tokenURL);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Initialiser le scanner QR code
   useEffect(() => {
@@ -77,13 +100,24 @@ function Contenu() {
   function onScanSuccess(decodedText: string) {
     // Extraire le token de l'URL QR code
     // Formats possibles :
-    //   - https://api.digiid.africa/v1/police/qr/verifier/TOKEN
+    //   - https://digiid.africa/police/scan-qr?token=TOKEN (format actuel)
+    //   - https://api.digiid.africa/v1/police/qr/verifier/TOKEN (ancien format API)
     //   - https://.../v1/verify/TOKEN (ancien format)
     //   - TOKEN brut (si le QR contient directement le token)
-    const match =
-      decodedText.match(/\/qr\/verifier\/([A-Za-z0-9_-]+)$/) ||
-      decodedText.match(/\/verify\/([A-Za-z0-9_-]+)$/);
-    const tokenExtrait = match ? match[1] : decodedText;
+    let tokenExtrait = "";
+    try {
+      const url = new URL(decodedText);
+      const tokenQuery = url.searchParams.get("token");
+      if (tokenQuery) tokenExtrait = tokenQuery;
+    } catch {
+      // Pas une URL valide → on continue avec les formats ci-dessous
+    }
+    if (!tokenExtrait) {
+      const match =
+        decodedText.match(/\/qr\/verifier\/([A-Za-z0-9_-]+)$/) ||
+        decodedText.match(/\/verify\/([A-Za-z0-9_-]+)$/);
+      tokenExtrait = match ? match[1] : decodedText;
+    }
     
     setToken(tokenExtrait);
     arreterScanner();

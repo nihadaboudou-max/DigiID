@@ -2,7 +2,7 @@
  * Service API pour le module QR Code Dynamique.
  * Gère la génération et la vérification des QR codes temporaires.
  */
-import { clientAPI, obtenirTokenAcces, ErreurAPI } from "./client_api";
+import { clientAPI } from "./client_api";
 
 export interface QRCodeGenere {
   token: string;
@@ -34,56 +34,22 @@ export interface QRCodeVerification {
  * L'ancien QR est automatiquement invalidé.
  */
 export async function genererQRCode(): Promise<QRCodeGenere> {
-  const token = obtenirTokenAcces();
-
-  try {
-    const reponse = await fetch(`/api/v1/utilisateur/qr/generer`, {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : { "Content-Type": "application/json" },
-    });
-
-    if (!reponse.ok) {
-      let erreur: any = {};
-      try { erreur = await reponse.json(); } catch {}
-      throw new ErreurAPI(
-        erreur.detail || "GENERATION_QR",
-        erreur.detail || "Impossible de générer le QR Code.",
-        reponse.status,
-      );
-    }
-
-    return reponse.json();
-  } catch (erreur: unknown) {
-    if (erreur instanceof ErreurAPI) throw erreur;
-    throw new ErreurAPI("RESEAU", "Erreur réseau lors de la génération du QR Code.", 0);
-  }
+  return clientAPI.post<QRCodeGenere>(
+    "/api/v1/utilisateur/qr/generer",
+    undefined,
+    { authentifie: true }
+  );
 }
 
 /**
  * Vérifie un QR Code scanné par un agent de police.
+ * Utilise clientAPI pour bénéficier du rafraîchissement automatique
+ * du JWT et de la gestion d'erreurs uniforme.
  */
 export async function verifierQRCode(token: string): Promise<QRCodeVerification> {
-  const tokenAuth = obtenirTokenAcces();
-
-  try {
-    const reponse = await fetch(`/api/v1/police/qr/verifier/${token}`, {
-      method: "POST",
-      headers: tokenAuth ? { Authorization: `Bearer ${tokenAuth}` } : { "Content-Type": "application/json" },
-    });
-
-    if (!reponse.ok) {
-      let erreur: any = {};
-      try { erreur = await reponse.json(); } catch {}
-      throw new ErreurAPI(
-        erreur.detail || "VERIFICATION_QR",
-        erreur.detail || "QR Code invalide ou expiré.",
-        reponse.status,
-      );
-    }
-
-    return reponse.json();
-  } catch (erreur: unknown) {
-    if (erreur instanceof ErreurAPI) throw erreur;
-    throw new ErreurAPI("RESEAU", "Erreur réseau lors de la vérification.", 0);
-  }
+  return clientAPI.post<QRCodeVerification>(
+    `/api/v1/police/qr/verifier/${encodeURIComponent(token)}`,
+    undefined,
+    { authentifie: true }
+  );
 }
