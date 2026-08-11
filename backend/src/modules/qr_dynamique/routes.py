@@ -6,8 +6,9 @@ Endpoints :
 - POST /api/v1/utilisateur/qr/generer     → Génère un nouveau QR (citoyen)
 - POST /api/v1/police/qr/verifier/{token} → Vérifie un QR scanné (police)
 """
-from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+from typing import Annotated, Optional
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
@@ -18,6 +19,32 @@ from src.modules.qr_dynamique import service
 from src.noyau.journal import journal
 
 routeur_qr_dynamique = APIRouter(tags=["QR Code Dynamique"])
+
+
+def _extraire_base_url_frontend(requete: Request) -> Optional[str]:
+    """
+    Détermine l'URL de base du frontend à encoder dans le QR Code.
+
+    Priorité :
+    1. En-tête Origin — l'URL réellement vue par le navigateur du citoyen
+       (ex: https://xxx.ngrok-free.app via ngrok, ou http://152.228.141.69:3000)
+    2. Variable d'environnement URL_FRONTEND (fallback configurable)
+    3. Hôte de la requête (dernier recours derrière un reverse proxy)
+    """
+    origine = requete.headers.get("origin")
+    if origine and origine.startswith(("http://", "https://")):
+        return origine.rstrip("/")
+
+    env_frontend = os.getenv("URL_FRONTEND")
+    if env_frontend:
+        return env_frontend.rstrip("/")
+
+    scheme = requete.headers.get("x-forwarded-proto") or requete.url.scheme
+    hote = requete.headers.get("host")
+    if hote:
+        return f"{scheme}://{hote}".rstrip("/")
+
+    return None
 
 
 @routeur_qr_dynamique.post(
@@ -31,6 +58,7 @@ routeur_qr_dynamique = APIRouter(tags=["QR Code Dynamique"])
     ),
 )
 async def generer_qr(
+    requete: Request,
     citoyen: Annotated[Utilisateur, Depends(utilisateur_courant)],
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
@@ -53,8 +81,11 @@ async def generer_qr(
         # 1. Invalider l'ancien token (si existant)
         await service.invalider_ancien_token(citoyen.id)
         
-        # 2. Générer un nouveau QR Code
-        resultat = await service.generer_qr_code(session, citoyen)
+        # 2. Générer un nouveau QR Code — l'URL encodée suit l'origine
+        #    réellement utilisée par le citoyen (ngrok/HTTPS ou IP HTTP).
+        resultat = await service.generer_qr_code(
+            session, citoyen, base_url=_extraire_base_url_frontend(requete)
+        )
         
         return QRCodeGenere(**resultat)
         

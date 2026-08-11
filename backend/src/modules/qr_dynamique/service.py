@@ -152,7 +152,7 @@ def _generer_token_securise(utilisateur_id: UUID) -> str:
     return token_hash[:48]  # 48 caractères (suffisant pour l'unicité)
 
 
-def _construire_url_qr(token: str) -> str:
+def _construire_url_qr(token: str, base_url: Optional[str] = None) -> str:
     """
     Construit l'URL à encoder dans le QR Code.
 
@@ -164,13 +164,14 @@ def _construire_url_qr(token: str) -> str:
     """
     # Domaine public du frontend — variable d'environnement (ex: URL_FRONTEND)
     # Valeur par défaut si non définie.
-    frontend = os.getenv("URL_FRONTEND", "http://152.228.141.69:3000").rstrip("/")
+    frontend = (base_url or os.getenv("URL_FRONTEND", "http://152.228.141.69:3000")).rstrip("/")
     return f"{frontend}/police/scan-qr?token={token}"
 
 
 async def generer_qr_code(
     session: AsyncSession,
     utilisateur: Utilisateur,
+    base_url: Optional[str] = None,
 ) -> dict:
     """
     Génère un nouveau QR Code temporaire pour un citoyen.
@@ -216,7 +217,7 @@ async def generer_qr_code(
         )
 
     # 4. Construire l'URL du QR Code
-    qr_code_url = _construire_url_qr(token)
+    qr_code_url = _construire_url_qr(token, base_url)
 
     return {
         "token": token,

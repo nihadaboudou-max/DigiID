@@ -93,6 +93,18 @@ async def principal():
     genere = await service.generer_qr_code(session, citoyen)
     print(f"   OK token={genere['token'][:12]}... url={genere['qr_code_url']}")
 
+    print("=== 1bis. Génération avec base_url (ngrok/HTTPS) ===")
+    genere_ngrok = await service.generer_qr_code(
+        session, citoyen, base_url="https://abcd-12-34.ngrok-free.app"
+    )
+    print(f"   OK url={genere_ngrok['qr_code_url']}")
+
+    print("=== 1ter. Génération avec base_url IP HTTP ===")
+    genere_ip = await service.generer_qr_code(
+        session, citoyen, base_url="http://152.228.141.69:3000"
+    )
+    print(f"   OK url={genere_ip['qr_code_url']}")
+
     print("=== 2. Vérification avec le token brut ===")
     resultat = await service.verifier_qr_code(session, genere["token"], agent)
     print(f"   succes={resultat.get('succes')} message={resultat.get('message')}")
