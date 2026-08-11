@@ -164,7 +164,7 @@ def _construire_url_qr(token: str) -> str:
     """
     # Domaine public du frontend — variable d'environnement (ex: URL_FRONTEND)
     # Valeur par défaut si non définie.
-    frontend = os.getenv("URL_FRONTEND", "https://digiid.africa").rstrip("/")
+    frontend = os.getenv("URL_FRONTEND", "http://152.228.141.69:3000").rstrip("/")
     return f"{frontend}/police/scan-qr?token={token}"
 
 
