@@ -38,6 +38,8 @@ def upgrade() -> None:
                existing_type=sa.TEXT(),
                type_=sa.String(length=500),
                existing_nullable=True)
+    op.add_column('verifications_police', sa.Column('officier_nom', sa.String(length=255), nullable=True))
+
     # ### end Alembic commands ###
 
 
