@@ -12,6 +12,16 @@ export interface QRCodeGenere {
   message: string;
 }
 
+export interface DocumentVerifie {
+  type_document: string;
+  numero: string | null;
+  date_expiration: string | null;
+  est_valide: boolean;
+  expire_bientot: boolean;
+  est_expire: boolean;
+  jours_restants: number | null;
+}
+
 export interface CitoyenVerifie {
   digiid: string;
   nom: string | null;
@@ -21,6 +31,7 @@ export interface CitoyenVerifie {
   est_cni_verifiee: boolean;
   est_visage_verifie: boolean;
   est_email_verifie: boolean;
+  documents?: DocumentVerifie[];
 }
 
 export interface QRCodeVerification {

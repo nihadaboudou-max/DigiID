@@ -116,12 +116,15 @@ function Contenu() {
                 key={index}
                 className="flex items-center gap-4 p-4 bg-sable/50 rounded-lg border border-ardoise-clair/10 hover:border-ocre/30 transition-all"
               >
-                <div className="w-14 h-14 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold text-lg shrink-0">
-                  {(p.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
-                </div>
+                {p.photo_url ? (
+                  <img src={p.photo_url} alt="Photo" className="w-14 h-14 rounded-full object-cover border-2 border-lagune/30 shrink-0" />
+                ) : (
+                  <div className="w-14 h-14 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold text-lg shrink-0">
+                    {(p.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-ardoise truncate">{p.nom || "Nom inconnu"}</p>
-                  <p className="text-sm text-ardoise-clair font-mono">DigiID: {p.digiid}</p>
                   <div className="flex flex-wrap gap-2 mt-1">
                     {p.numero_cni && (
                       <span className="text-xs text-ardoise-clair">CNI: {p.numero_cni}</span>
@@ -160,12 +163,15 @@ function Contenu() {
       {resultat === "confirme" && personneSelectionnee && (
         <Carte titre="✅ Identite confirmee">
           <div className="flex items-center gap-4 p-3 bg-succes/5 rounded-lg">
-            <div className="w-16 h-16 rounded-full bg-succes/10 flex items-center justify-center text-succes font-bold text-xl">
-              {(personneSelectionnee.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
-            </div>
+            {personneSelectionnee.photo_url ? (
+              <img src={personneSelectionnee.photo_url} alt="Photo" className="w-16 h-16 rounded-full object-cover border-2 border-lagune/30" />
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-succes/10 flex items-center justify-center text-succes font-bold text-xl">
+                {(personneSelectionnee.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
+              </div>
+            )}
             <div className="flex-1">
               <p className="font-bold text-lg text-ardoise">{personneSelectionnee.nom || "Nom inconnu"}</p>
-              <p className="text-sm text-ardoise-clair">DigiID: {personneSelectionnee.digiid || "N/A"}</p>
               {personneSelectionnee.numero_cni && (
                 <p className="text-sm text-ardoise-clair">N° CNI: {personneSelectionnee.numero_cni}</p>
               )}

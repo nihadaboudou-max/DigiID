@@ -61,12 +61,15 @@ function Contenu() {
         resultats.map((p, i) => (
           <Link key={i} href={`/police/profil/${p.digiid}`} className="block group">
             <div className="carte flex items-center gap-4 group-hover:shadow-md transition-all">
-              <div className="w-12 h-12 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold">
-                {(p.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
-              </div>
+              {p.photo_url ? (
+                <img src={p.photo_url} alt="Photo" className="w-12 h-12 rounded-full object-cover border-2 border-lagune/30" />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold">
+                  {(p.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-ardoise group-hover:text-ocre transition-colors">{p.nom}</p>
-                <p className="text-sm text-ardoise-clair font-mono">{p.digiid}</p>
                 <div className="flex gap-2 mt-1 flex-wrap">
                   <Badge variante={p.est_actif ? "succes" : "terre"} taille="petit">{p.est_actif ? "Actif" : "Inactif"}</Badge>
                   <span className="text-xs text-ardoise-clair">Score: {p.score}</span>

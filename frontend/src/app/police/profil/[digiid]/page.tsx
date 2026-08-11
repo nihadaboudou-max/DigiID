@@ -6,6 +6,7 @@ import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspacePr
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
+import BadgeExpiration, { labelDocument, formaterDateExpiration } from "@/composants/police/BadgeExpiration";
 import { obtenirProfilPersonne } from "@/services/police";
 import type { ProfilPersonne } from "@/services/police";
 
@@ -58,16 +59,19 @@ function Contenu() {
 
       <div className="carte">
         <div className="flex gap-4 items-start">
-          <div className="w-14 h-14 rounded-full bg-lagune/10 flex items-center justify-center text-lagune text-xl font-bold">
-            {profil.nom?.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase()||"?"}
-          </div>
+          {profil.photo_url ? (
+            <img src={profil.photo_url} alt="Photo de profil" className="w-20 h-20 rounded-full object-cover border-2 border-lagune/40" />
+          ) : (
+            <div className="w-14 h-14 rounded-full bg-lagune/10 flex items-center justify-center text-lagune text-xl font-bold">
+              {profil.nom?.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase()||"?"}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-lg font-bold text-ardoise">{profil.nom||digiid}</h2>
               <Badge variante={profil.est_actif?"succes":"terre"} taille="petit">{profil.est_actif?"Actif":"Inactif"}</Badge>
               <Badge variante="lagune" taille="petit">{profil.role}</Badge>
             </div>
-            <p className="text-xs text-ardoise-clair font-mono">{profil.digiid}</p>
             <div className="flex gap-3 mt-1 text-xs">
               {profil.email&&<span>✉️ {profil.email}</span>}
               {profil.telephone&&<span>📞 {profil.telephone}</span>}
@@ -89,9 +93,17 @@ function Contenu() {
       <div className="grid md:grid-cols-3 gap-6">
         <Carte titre="Documents">
           {profil.documents?.length>0?<ul className="space-y-1">{profil.documents.map((d:any,i:number)=>(
-            <li key={i} className="flex items-center gap-2 text-xs p-1.5 bg-sable rounded">
-              <span>📄</span><span className="text-ardoise">{d.type||d.nom||"Doc"}</span>
-              <Badge variante={d.est_valide?"succes":"terre"} taille="petit">{d.est_valide?"✓":"✗"}</Badge>
+            <li key={i} className="flex items-center justify-between gap-2 text-xs p-2 bg-sable rounded">
+              <div className="min-w-0">
+                <p className="text-ardoise font-semibold">{labelDocument(d.type_document)}</p>
+                <p className="text-[10px] text-ardoise-clair">{formaterDateExpiration(d.date_expiration)}</p>
+              </div>
+              <BadgeExpiration
+                est_expire={d.est_expire}
+                expire_bientot={d.expire_bientot}
+                est_valide={d.est_valide}
+                jours_restants={d.jours_restants}
+              />
             </li>
           ))}</ul>:<p className="text-xs text-ardoise-clair italic">Aucun.</p>}
         </Carte>

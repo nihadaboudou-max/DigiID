@@ -129,13 +129,15 @@ async def verifier_qr(
             detail="Seuls les agents de police peuvent vérifier les QR Codes.",
         )
     
-    # Vérifier le token
+        # Vérifier le token
     resultat = await service.verifier_qr_code(session, token, agent)
     
     if not resultat["succes"]:
-        # Retourner 401 pour un QR invalide/expiré/utilisé
+        # IMPORTANT : retourner 400 (et non 401) pour un QR invalide/expiré/utilisé.
+        # Un 401 serait interprété par le client comme une session expirée →
+        # rafraîchissement du JWT + déconnexion de l'agent (renvoi à la page de connexion).
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=resultat["message"],
         )
     

@@ -24,6 +24,33 @@ from src.noyau import dechiffrer_donnee, journal
 from src.noyau.exceptions import ErreurRessourceIntrouvable
 
 
+# ─── Utilitaires d'expiration des documents ──────────────────────────
+
+def _enrichir_expiration(date_expiration):
+    """Calcule l'état d'expiration d'une pièce d'identité.
+
+    Retourne :
+        - est_valide     : la pièce n'est pas encore expirée
+        - expire_bientot : expiration dans <= 30 jours (et pas encore expirée)
+        - est_expire     : la date d'expiration est dépassée
+        - jours_restants : nombre de jours avant expiration (négatif si expiré, None si inconnu)
+    """
+    if not date_expiration:
+        return {
+            "est_valide": True,
+            "expire_bientot": False,
+            "est_expire": False,
+            "jours_restants": None,
+        }
+    delta = (date_expiration - datetime.now(UTC).date()).days
+    return {
+        "est_valide": delta >= 0,
+        "expire_bientot": 0 <= delta <= 30,
+        "est_expire": delta < 0,
+        "jours_restants": delta,
+    }
+
+
 # ─── Fonctions utilitaires de cloisonnement ──────────────────────────
 
 def _est_super_admin(utilisateur: Utilisateur) -> bool:
@@ -248,7 +275,7 @@ async def rechercher_personne(
             "est_verifie": utilisateur_cible.est_cni_verifiee or utilisateur_cible.est_visage_verifie,
             "ville": utilisateur_cible.ville or "",
             "pays": utilisateur_cible.pays or "",
-            "photo_url": None,
+            "photo_url": utilisateur_cible.photo_profil_url,
             "numero_cni": verif_cni.numero_cni if verif_cni else None,
             "a_permis": a_permis,
             "a_assurance": a_assurance,
@@ -349,8 +376,8 @@ async def obtenir_profil_personne(
             "numero": d.numero_document,
             "nom_complet": d.nom_complet,
             "date_expiration": d.date_expiration.isoformat() if d.date_expiration else None,
-            "est_valide": d.date_expiration is None or d.date_expiration >= datetime.now(UTC).date(),
             "photo_url": None,
+            **_enrichir_expiration(d.date_expiration),
         })
 
     signalements = await session.execute(
@@ -389,7 +416,7 @@ async def obtenir_profil_personne(
         "telephone": telephone,
         "ville": utilisateur_cible.ville or "",
         "pays": utilisateur_cible.pays or "",
-        "photo_url": None,
+        "photo_url": utilisateur_cible.photo_profil_url,
         "role": utilisateur_cible.role,
         "score": utilisateur_cible.score_actuel or 0,
         "est_actif": utilisateur_cible.est_actif,
@@ -814,14 +841,14 @@ async def scanner_qr(session: AsyncSession, digiid: str, utilisateur: Utilisateu
             "numero": d.numero_document,
             "nom_complet": d.nom_complet,
             "date_expiration": d.date_expiration.isoformat() if d.date_expiration else None,
-            "est_valide": d.date_expiration is None or d.date_expiration >= datetime.now(UTC).date()
+            **_enrichir_expiration(d.date_expiration),
         })
     
     return {
         "digiid": utilisateur_cible.digiid_public or "",
         "nom": f"{prenom} {nom}".strip(),
         "email": dechiffrer_donnee(utilisateur_cible.email_chiffre) if utilisateur_cible.email_chiffre else "",
-        "photo_url": None,
+        "photo_url": utilisateur_cible.photo_profil_url,
         "est_actif": utilisateur_cible.est_actif,
         "est_verifie": utilisateur_cible.est_cni_verifiee or utilisateur_cible.est_visage_verifie,
         "documents": documents

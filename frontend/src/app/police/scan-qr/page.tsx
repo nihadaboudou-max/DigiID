@@ -6,7 +6,8 @@ import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspacePr
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { verifierQRCode, type CitoyenVerifie } from "@/services/qr_dynamique";
-import { Html5Qrcode, Html5QrcodeScanType } from "html5-qrcode";
+import BadgeExpiration, { labelDocument, formaterDateExpiration } from "@/composants/police/BadgeExpiration";
+import { Html5Qrcode } from "html5-qrcode";
 
 export default function ScanQRPage() {
   return (
@@ -65,6 +66,8 @@ function Contenu() {
   }, [scanActif]);
 
   async function initialiserScanner() {
+    // Évite une double initialisation (ex: re-render en mode dev StrictMode)
+    if (html5QrCodeRef.current) return;
     try {
       // Vérifier la permission de la caméra
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
@@ -92,6 +95,11 @@ function Contenu() {
       );
     } catch (err) {
       console.error("Erreur caméra:", err);
+      // Libère l'instance pour permettre une nouvelle tentative sans recharger la page
+      if (html5QrCodeRef.current) {
+        try { html5QrCodeRef.current.stop().catch(() => {}); } catch { /* ignoré */ }
+        html5QrCodeRef.current = null;
+      }
       setPermissionCamera(false);
       setErreur("Impossible d'accéder à la caméra. Vérifiez les permissions.");
     }
@@ -134,11 +142,16 @@ function Contenu() {
     // console.warn(`Code scan error = ${error}`);
   }
 
-  function arreterScanner() {
-    if (html5QrCodeRef.current) {
-      html5QrCodeRef.current.stop().catch((err) => {
-        console.error("Erreur arrêt scanner:", err);
-      });
+  async function arreterScanner() {
+    const scanner = html5QrCodeRef.current;
+    if (!scanner) return;
+    // Libère la référence immédiatement (idempotent) pour permettre une
+    // réactivation ultérieure et éviter un double stop.
+    html5QrCodeRef.current = null;
+    try {
+      await scanner.stop();
+    } catch (err) {
+      console.error("Erreur arrêt scanner:", err);
     }
   }
 
@@ -163,9 +176,10 @@ function Contenu() {
         setErreur(resultat.message || "QR Code invalide.");
       }
     } catch (err: any) {
-      // Session expirée / non authentifié → on renvoie à la connexion
-      // en conservant le token pour revenir automatiquement après login.
-      if (err?.code_http === 401 || err?.code_erreur === "AUTH_TOKEN_EXPIRE") {
+      // On ne redirige vers la connexion QUE si la session a réellement expiré
+      // (code AUTH_TOKEN_EXPIRE). Un QR invalide/expiré renvoie 400 (et non 401) :
+      // il ne doit donc jamais déconnecter l'agent ni l'envoyer à la page de connexion.
+      if (err?.code_erreur === "AUTH_TOKEN_EXPIRE") {
         const retour = tokenValue
           ? `/police/scan-qr?token=${encodeURIComponent(tokenValue)}`
           : "/police/scan-qr";
@@ -252,7 +266,6 @@ function Contenu() {
 
           {/* Informations */}
           <div className="space-y-3">
-            <InfoLigne label="DigiID" valeur={citoyen.digiid} monospace />
             <InfoLigne
               label="Nom complet"
               valeur={`${citoyen.prenom || ""} ${citoyen.nom || ""}`.trim() || "—"}
@@ -279,6 +292,38 @@ function Contenu() {
                 />
               </div>
             </div>
+
+            {/* Pièces d'identité et état d'expiration */}
+            {Array.isArray(citoyen.documents) && citoyen.documents.length > 0 && (
+              <div className="pt-3 border-t border-ardoise-clair/20">
+                <p className="text-xs uppercase text-ardoise-clair font-semibold mb-2">
+                  Pièces d'identité
+                </p>
+                <ul className="space-y-2">
+                  {citoyen.documents.map((d, i) => (
+                    <li
+                      key={i}
+                      className="flex items-center justify-between gap-2 text-xs p-2 bg-sable rounded"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-ardoise font-semibold">
+                          {labelDocument(d.type_document)}
+                        </p>
+                        <p className="text-[10px] text-ardoise-clair">
+                          {formaterDateExpiration(d.date_expiration)}
+                        </p>
+                      </div>
+                      <BadgeExpiration
+                        est_expire={d.est_expire}
+                        expire_bientot={d.expire_bientot}
+                        est_valide={d.est_valide}
+                        jours_restants={d.jours_restants}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </Carte>
       )}

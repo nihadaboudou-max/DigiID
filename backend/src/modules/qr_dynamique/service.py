@@ -17,7 +17,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from src.modeles import Utilisateur
+from src.modeles import Utilisateur, DocumentIdentite
 from src.noyau import dechiffrer_donnee
 from src.noyau.journal import journal
 
@@ -387,6 +387,28 @@ async def verifier_qr_code(
         f"agent={agent_police.id} | token={token[:12]}..."
     )
 
+    # 7bis. Récupérer les documents actifs (CNI, permis, assurance) pour
+    #       signaler l'expiration des pièces lors du contrôle d'identité.
+    docs_result = await session.execute(
+        select(DocumentIdentite).where(
+            DocumentIdentite.utilisateur_id == citoyen.id,
+            DocumentIdentite.est_actif == True
+        )
+    )
+    aujourdhui = datetime.now(timezone.utc).date()
+    documents = []
+    for d in docs_result.scalars().all():
+        delta = (d.date_expiration - aujourdhui).days if d.date_expiration else None
+        documents.append({
+            "type_document": d.type_document,
+            "numero": d.numero_document,
+            "date_expiration": d.date_expiration.isoformat() if d.date_expiration else None,
+            "est_valide": delta is None or delta >= 0,
+            "expire_bientot": delta is not None and 0 <= delta <= 30,
+            "est_expire": delta is not None and delta < 0,
+            "jours_restants": delta,
+        })
+
     # 8. Construire la réponse avec les infos du citoyen
     # Le déchiffrement ne doit JAMAIS faire planter la vérification :
     # en cas d'échec (clé différente, donnée altérée), on affiche « — ».
@@ -414,6 +436,7 @@ async def verifier_qr_code(
             "est_cni_verifiee": citoyen.est_cni_verifiee,
             "est_visage_verifie": citoyen.est_visage_verifie,
             "est_email_verifie": citoyen.est_email_verifie,
+            "documents": documents,
         },
         "message": "Identité vérifiée avec succès",
     }
