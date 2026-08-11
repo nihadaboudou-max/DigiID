@@ -30,7 +30,6 @@ def upgrade() -> None:
                server_default=None,
                existing_nullable=True)
     op.create_index(op.f('ix_signalements_fraude_traite_par_id'), 'signalements_fraude', ['traite_par_id'], unique=False)
-    op.add_column('verifications_police', sa.Column('officier_nom', sa.String(length=255), nullable=True))
     op.alter_column('verifications_police', 'motif_verification',
                existing_type=sa.TEXT(),
                type_=sa.String(length=500),
@@ -53,7 +52,6 @@ def downgrade() -> None:
                existing_type=sa.String(length=500),
                type_=sa.TEXT(),
                existing_nullable=True)
-    op.drop_column('verifications_police', 'officier_nom')
     op.drop_index(op.f('ix_signalements_fraude_traite_par_id'), table_name='signalements_fraude')
     op.alter_column('signalements_fraude', 'priorite',
                existing_type=sa.VARCHAR(length=20),

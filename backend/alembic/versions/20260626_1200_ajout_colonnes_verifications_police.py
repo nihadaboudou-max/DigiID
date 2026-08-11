@@ -52,11 +52,6 @@ def upgrade() -> None:
         sa.Column("localisation_adresse", sa.String(500), nullable=True,
                   comment="Adresse textuelle du lieu de verification"),
     )
-    op.add_column(
-        "verifications_police",
-        sa.Column("officier_nom", sa.String(255), nullable=True,
-                  comment="Cache du nom de l'officier pour l'audit"),
-    )
 
     # Index B-tree simples pour les recherches geo (plus performants que GiST pour Float)
     op.create_index("ix_verifications_police_lat", "verifications_police", ["localisation_lat"])
@@ -126,7 +121,6 @@ def downgrade() -> None:
     op.drop_table("alertes_police")
     op.drop_index("ix_verifications_police_lng", table_name="verifications_police")
     op.drop_index("ix_verifications_police_lat", table_name="verifications_police")
-    op.drop_column("verifications_police", "officier_nom")
     op.drop_column("verifications_police", "localisation_adresse")
     op.drop_column("verifications_police", "localisation_lng")
     op.drop_column("verifications_police", "localisation_lat")

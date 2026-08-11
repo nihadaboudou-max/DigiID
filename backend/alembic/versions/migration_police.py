@@ -49,8 +49,7 @@ def upgrade() -> None:
         ADD COLUMN IF NOT EXISTS motif_verification VARCHAR(500),
         ADD COLUMN IF NOT EXISTS localisation_lat DOUBLE PRECISION,
         ADD COLUMN IF NOT EXISTS localisation_lng DOUBLE PRECISION,
-        ADD COLUMN IF NOT EXISTS localisation_adresse VARCHAR(500),
-        ADD COLUMN IF NOT EXISTS officier_nom VARCHAR(255)
+        ADD COLUMN IF NOT EXISTS localisation_adresse VARCHAR(500)
     """)
 
     # Migration 2 : table alertes_police
@@ -136,7 +135,6 @@ def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS ix_alertes_police_non_lues")
     op.execute("DROP INDEX IF EXISTS ix_alertes_police_officier")
     op.execute("DROP TABLE IF EXISTS alertes_police")
-    op.execute("ALTER TABLE verifications_police DROP COLUMN IF EXISTS officier_nom")
     op.execute("ALTER TABLE verifications_police DROP COLUMN IF EXISTS localisation_adresse")
     op.execute("ALTER TABLE verifications_police DROP COLUMN IF EXISTS localisation_lng")
     op.execute("ALTER TABLE verifications_police DROP COLUMN IF EXISTS localisation_lat")
@@ -200,8 +198,7 @@ MIGRATIONS = [
             ADD COLUMN IF NOT EXISTS motif_verification VARCHAR(500),
             ADD COLUMN IF NOT EXISTS localisation_lat DOUBLE PRECISION,
             ADD COLUMN IF NOT EXISTS localisation_lng DOUBLE PRECISION,
-            ADD COLUMN IF NOT EXISTS localisation_adresse VARCHAR(500),
-            ADD COLUMN IF NOT EXISTS officier_nom VARCHAR(255)
+            ADD COLUMN IF NOT EXISTS localisation_adresse VARCHAR(500)
             """,
         ],
     },
