@@ -200,6 +200,25 @@ async def traiter_upload_photo(
     await session.commit()
     await session.refresh(verification)
 
+    # 6.5 ✅ STOCKAGE DE LA PHOTO DU SELFIE (uniquement si approuvée)
+    #   → elle sera servie à la police pour le contrôle visuel de l'identité.
+    if statut == "approuve":
+        try:
+            from src.noyau.stockage_photos import stocker_photo
+            verification.photo_chemin = stocker_photo(
+                contenu,
+                prefixe="visage",
+                type_mime=fichier.content_type,
+            )
+            await session.commit()
+            await session.refresh(verification)
+            journal.info(
+                f"Photo selfie stockée | user={utilisateur.id} "
+                f"chemin={verification.photo_chemin}"
+            )
+        except Exception as e:
+            journal.warning(f"Échec stockage photo selfie : {e}")
+
     # 7. Mise à jour du profil utilisateur si la vérification est approuvée
     if statut == "approuve":
         utilisateur.est_visage_verifie = True

@@ -11,6 +11,7 @@ import { Alerte } from "@/composants/commun/Alerte";
 import { useRoleUI } from "@/crochets/useRoleUI";
 import { verifierIdentite, rechercherPersonne } from "@/services/police";
 import type { PersonneRecherchee } from "@/services/police";
+import PhotoProtegee from "@/composants/police/PhotoProtegee";
 
 export default function VerificationPage() {
   return (
@@ -117,7 +118,16 @@ function Contenu() {
                 className="flex items-center gap-4 p-4 bg-sable/50 rounded-lg border border-ardoise-clair/10 hover:border-ocre/30 transition-all"
               >
                 {p.photo_url ? (
-                  <img src={p.photo_url} alt="Photo" className="w-14 h-14 rounded-full object-cover border-2 border-lagune/30 shrink-0" />
+                  <PhotoProtegee
+                    src={p.photo_url}
+                    alt="Photo"
+                    className="w-14 h-14 rounded-full object-cover border-2 border-lagune/30 shrink-0"
+                    fallback={
+                      <div className="w-14 h-14 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold text-lg shrink-0">
+                        {(p.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
+                      </div>
+                    }
+                  />
                 ) : (
                   <div className="w-14 h-14 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold text-lg shrink-0">
                     {(p.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
@@ -164,7 +174,16 @@ function Contenu() {
         <Carte titre="✅ Identite confirmee">
           <div className="flex items-center gap-4 p-3 bg-succes/5 rounded-lg">
             {personneSelectionnee.photo_url ? (
-              <img src={personneSelectionnee.photo_url} alt="Photo" className="w-16 h-16 rounded-full object-cover border-2 border-lagune/30" />
+              <PhotoProtegee
+                src={personneSelectionnee.photo_url}
+                alt="Photo"
+                className="w-16 h-16 rounded-full object-cover border-2 border-lagune/30"
+                fallback={
+                  <div className="w-16 h-16 rounded-full bg-succes/10 flex items-center justify-center text-succes font-bold text-xl">
+                    {(personneSelectionnee.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
+                  </div>
+                }
+              />
             ) : (
               <div className="w-16 h-16 rounded-full bg-succes/10 flex items-center justify-center text-succes font-bold text-xl">
                 {(personneSelectionnee.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}

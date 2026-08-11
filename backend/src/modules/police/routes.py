@@ -3,6 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.base_donnees.session import obtenir_session
 from src.modeles import Utilisateur
@@ -281,6 +282,49 @@ async def scanner_qr(
 ):
     """Traite un scan de QR code avec cloisonnement."""
     return await service.scanner_qr(session, digiid, officier)
+
+
+# =============================================================================
+# PHOTO D'IDENTITÉ (contrôle visuel par l'agent)
+# =============================================================================
+
+@routeur_police.get("/photo/{utilisateur_id}", response_class=FileResponse)
+async def obtenir_photo_personne(
+    utilisateur_id: UUID,
+    officier: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """
+    Retourne la photo de contrôle visuel d'une personne (selfie approuvé
+    ou photo du recto de la CNI). Réservé aux agents de police.
+    """
+    ROLES_AUTORISES = {
+        "agent_police", "chef_police", "admin", "super_admin",
+        "super_administrateur", "admin_domaine", "chef_agent", "agent_terrain",
+    }
+    if officier.role not in ROLES_AUTORISES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Rôle non autorisé pour consulter la photo d'identité.",
+        )
+
+    from src.noyau.stockage_photos import trouver_photo_utilisateur
+    chemin = await trouver_photo_utilisateur(session, utilisateur_id)
+    if chemin is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aucune photo disponible pour cette personne.",
+        )
+
+    media_type = "image/jpeg"
+    suffixe = chemin.suffix.lower()
+    if suffixe == ".png":
+        media_type = "image/png"
+    elif suffixe == ".webp":
+        media_type = "image/webp"
+    elif suffixe == ".tiff":
+        media_type = "image/tiff"
+    return FileResponse(path=str(chemin), media_type=media_type)
 
 
 # =============================================================================

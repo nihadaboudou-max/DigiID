@@ -20,6 +20,7 @@ from sqlalchemy import select
 from src.modeles import Utilisateur, DocumentIdentite
 from src.noyau import dechiffrer_donnee
 from src.noyau.journal import journal
+from src.noyau.stockage_photos import photo_url_utilisateur
 
 # =============================================================================
 # Configuration Redis
@@ -425,6 +426,12 @@ async def verifier_qr_code(
     except Exception:
         email = None
 
+    # ✅ Photo réelle de la personne (selfie approuvé ou CNI) pour contrôle visuel
+    try:
+        photo_profil_url = await photo_url_utilisateur(session, citoyen.id)
+    except Exception:
+        photo_profil_url = None
+
     return {
         "succes": True,
         "citoyen": {
@@ -432,7 +439,7 @@ async def verifier_qr_code(
             "nom": nom,
             "prenom": prenom,
             "email": email,
-            "photo_profil_url": getattr(citoyen, "photo_profil_url", None),
+            "photo_profil_url": photo_profil_url,
             "est_cni_verifiee": citoyen.est_cni_verifiee,
             "est_visage_verifie": citoyen.est_visage_verifie,
             "est_email_verifie": citoyen.est_email_verifie,

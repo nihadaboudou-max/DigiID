@@ -233,6 +233,9 @@ async def _creer_ou_mettre_a_jour_document_identite(
                 pays_emetteur_code = donnees.mrz_ligne_1[2:5] if donnees.mrz_ligne_1 and len(donnees.mrz_ligne_1) >= 5 else ""
                 doc_existant.pays_emetteur = CODES_PAYS_ICAO.get(pays_emetteur_code)
             await session.commit()
+        # ✅ Rappel : la CNI expire bientôt ?
+        from src.noyau.rappels_expiration import notifier_expiration_proche
+        await notifier_expiration_proche(session, utilisateur, "cni", doc_existant.date_expiration)
         return
 
     def _parser_date(d: Optional[str]) -> Optional[date_type]:
@@ -245,8 +248,6 @@ async def _creer_ou_mettre_a_jour_document_identite(
     # ✅ DÉTERMINER LE PAYS ÉMETTEUR DEPUIS LE MRZ
     pays_emetteur_code = donnees.mrz_ligne_1[2:5] if donnees.mrz_ligne_1 and len(donnees.mrz_ligne_1) >= 5 else ""
     pays_emetteur_nom = CODES_PAYS_ICAO.get(pays_emetteur_code)
-    
-    # ✅ NATIONALITÉ : extraite du MRZ OU déduite du pays émetteur
     nationalite_finale = donnees.nationalite or _deduire_nationalite_depuis_pays(pays_emetteur_nom)
 
     doc = DocumentIdentite(
@@ -270,6 +271,9 @@ async def _creer_ou_mettre_a_jour_document_identite(
     )
     session.add(doc)
     await session.commit()
+    # ✅ Rappel : la CNI expire bientôt ?
+    from src.noyau.rappels_expiration import notifier_expiration_proche
+    await notifier_expiration_proche(session, utilisateur, "cni", doc.date_expiration)
 
 async def _enregistrer_verification(
     session: AsyncSession,
@@ -365,6 +369,31 @@ async def traiter_upload_cni(
     nb_champs = _compter_champs_extraits(donnees)
     validation = valider_donnees_cni(donnees) if succes_ocr else None
 
+    # 🔴 REJET IMMÉDIAT : carte EXPIRÉE (message clair, upload bloqué)
+    if (
+        succes_ocr
+        and donnees.date_expiration
+        and validation
+        and not validation.scores_validation.get("date_expiration", True)
+    ):
+        try:
+            dexp = datetime.strptime(donnees.date_expiration, "%d/%m/%Y").date()
+            libelle_date = f" depuis le {dexp.strftime('%d/%m/%Y')}"
+        except (ValueError, TypeError):
+            libelle_date = ""
+        message_erreur = (
+            f"❌ Carte expirée{libelle_date}. Ce document est refusé : "
+            "vous devez renouveler votre carte avant de pouvoir l'utiliser avec DigiID."
+        )
+        journal.warning(
+            f"REJET CNI | Carte expirée | utilisateur={utilisateur.id} | "
+            f"date_expiration={donnees.date_expiration}"
+        )
+        raise ErreurValidation(
+            message_erreur,
+            message_utilisateur=message_erreur,
+        )
+
     # 3. ✅ VÉRIFICATION STRICTE DE COHÉRENCE (Uniquement pour le recto)
     if succes_ocr and face == "recto" and donnees.nom_famille:
         # Déchiffrement des données du profil
@@ -440,6 +469,24 @@ async def traiter_upload_cni(
         except Exception as e:
             journal.warning(f"Échec extraction embedding photo CNI : {e}")
             # On ne bloque pas pour autant - l'embedding est optionnel
+
+        # ✅ Stocker l'image recto (contient la photo du citoyen) sur disque
+        #   → elle sera servie à la police pour le contrôle visuel.
+        try:
+            from src.noyau.stockage_photos import stocker_photo
+            verification.photo_chemin = stocker_photo(
+                contenu,
+                prefixe="cni_recto",
+                type_mime=fichier.content_type,
+            )
+            await session.commit()
+            await session.refresh(verification)
+            journal.info(
+                f"Photo recto CNI stockée | user={utilisateur.id} "
+                f"chemin={verification.photo_chemin}"
+            )
+        except Exception as e:
+            journal.warning(f"Échec stockage photo recto CNI : {e}")
 
     return {
         "id": verification.id,

@@ -168,6 +168,12 @@ class VerificationCNI(Base, MelangeTracabilite):
         doc="Embedding facial (512D) extrait de la photo du recto de la CNI"
     )
 
+    # ✅ Photo brute du recto de la CNI (chemin relatif au dossier media) — servie à la police
+    photo_chemin: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True,
+        doc="Chemin relatif de l'image recto de la CNI stockée sur disque",
+    )
+
     # =========================================================================
     # Gestion de la corbeille (soft-delete)
     # =========================================================================

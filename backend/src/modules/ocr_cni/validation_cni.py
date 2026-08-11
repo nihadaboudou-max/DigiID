@@ -423,8 +423,12 @@ def valider_donnees_cni(donnees: DonneesCNIExtraites) -> ValidationCNIResultat:
     scores["identite"] = bool(donnees.nom_famille) or bool(donnees.prenoms)
     
     # --- Résultat global ---
+    # 🔴 RÈGLE MÉTIER : une carte EXPIRÉE est REJETÉE, même si le numéro est valide.
+    # Une date d'expiration non fournie n'est pas bloquante (anciens formats).
     est_valide = scores.get("numero_cni", False)
-    
+    if est_valide and donnees.date_expiration and not dexp_valide:
+        est_valide = False
+
     # Construire le message
     if est_valide:
         nb_valides = sum(1 for v in scores.values() if v)
@@ -433,8 +437,12 @@ def valider_donnees_cni(donnees: DonneesCNIExtraites) -> ValidationCNIResultat:
         if mrz_valide:
             message += " MRZ vérifiée avec succès."
     else:
-        echecs = [k for k, v in scores.items() if not v]
-        message = "Document partiellement valide. Champs manquants : " + ", ".join(echecs[:3]) + "."
+        if donnees.date_expiration and not dexp_valide:
+            # Message clair : la carte est expirée
+            message = f"❌ Carte expirée ({msg_dexp}). Le document est refusé : vous devez renouveler votre carte."
+        else:
+            echecs = [k for k, v in scores.items() if not v]
+            message = "Document partiellement valide. Champs manquants : " + ", ".join(echecs[:3]) + "."
     
     # CORRECTION : utiliser str(scores) pour éviter le conflit avec loguru
     # scores_str = str(scores)

@@ -9,6 +9,7 @@ import { ChampRecherche } from "@/composants/commun/ChampRecherche";
 import { Badge } from "@/composants/commun/Badge";
 import { rechercherPersonnes } from "@/services/police";
 import type { PersonneRecherchee } from "@/services/police";
+import PhotoProtegee from "@/composants/police/PhotoProtegee";
 
 export default function RecherchePage() {
   return (
@@ -62,7 +63,16 @@ function Contenu() {
           <Link key={i} href={`/police/profil/${p.digiid}`} className="block group">
             <div className="carte flex items-center gap-4 group-hover:shadow-md transition-all">
               {p.photo_url ? (
-                <img src={p.photo_url} alt="Photo" className="w-12 h-12 rounded-full object-cover border-2 border-lagune/30" />
+                <PhotoProtegee
+                  src={p.photo_url}
+                  alt="Photo"
+                  className="w-12 h-12 rounded-full object-cover border-2 border-lagune/30"
+                  fallback={
+                    <div className="w-12 h-12 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold">
+                      {(p.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}
+                    </div>
+                  }
+                />
               ) : (
                 <div className="w-12 h-12 rounded-full bg-lagune/10 flex items-center justify-center text-lagune font-bold">
                   {(p.nom || "?").split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase()}

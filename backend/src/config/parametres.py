@@ -50,6 +50,9 @@ class ParametresApplication(BaseSettings):
     postgres_mot_de_passe: str
     postgres_nom_base: str = "digiid"
 
+    # --- Stockage local des photos (visage / documents) ---
+    dossier_medias: str = "media"
+
     # --- Redis (cache + sessions + Celery) ---
     redis_host: str = "cache"
     redis_port: int = 6379

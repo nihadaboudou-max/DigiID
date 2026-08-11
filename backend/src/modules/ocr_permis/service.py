@@ -182,6 +182,23 @@ async def traiter_upload_permis(
                 message_utilisateur="Ce numéro de permis existe déjà dans la base de données."
             )
 
+    # 5.5 🔴 REJET : permis EXPIRÉ (message clair, upload bloqué)
+    date_expiration_permis = _parser_date(donnees.date_expiration, est_expiration=True)
+    if date_expiration_permis and date_expiration_permis < date.today():
+        message_erreur = (
+            f"❌ Ce permis est expiré depuis le {date_expiration_permis.strftime('%d/%m/%Y')}. "
+            "Ce document est refusé : vous devez renouveler votre permis avant de pouvoir "
+            "l'utiliser avec DigiID."
+        )
+        journal.warning(
+            f"REJET PERMIS | Expiré | utilisateur={utilisateur.id} | "
+            f"date_expiration={date_expiration_permis}"
+        )
+        raise ErreurValidation(
+            message_erreur,
+            message_utilisateur=message_erreur,
+        )
+
     # 6. ✅ SAUVEGARDE EN BASE DE DONNÉES (avec PARSING DES DATES pour éviter l'erreur 'toordinal')
     nouveau_permis = PermisConduire(
         utilisateur_id=utilisateur.id,
@@ -193,13 +210,17 @@ async def traiter_upload_permis(
         categories=donnees.categories or [],
         date_premiere_delivrance=_parser_date(donnees.date_premiere_delivrance),
         date_delivrance=_parser_date(donnees.date_delivrance),          # ✅ Converti en datetime.date
-        date_expiration=_parser_date(donnees.date_expiration, est_expiration=True), # ✅ Converti en datetime.date
+        date_expiration=date_expiration_permis, # ✅ Converti en datetime.date
         autorite_delivrance=donnees.autorite_delivrance,
         est_valide=succes_ocr,
     )
     session.add(nouveau_permis)
     await session.commit()
     await session.refresh(nouveau_permis)
+
+    # ✅ Rappel : le permis expire bientôt ?
+    from src.noyau.rappels_expiration import notifier_expiration_proche
+    await notifier_expiration_proche(session, utilisateur, "permis", nouveau_permis.date_expiration)
 
     journal.info(
         f"Permis scanné et enregistré | user={utilisateur.id} | "

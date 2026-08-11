@@ -7,6 +7,7 @@ import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import BadgeExpiration, { labelDocument, formaterDateExpiration } from "@/composants/police/BadgeExpiration";
+import PhotoProtegee from "@/composants/police/PhotoProtegee";
 import { obtenirProfilPersonne } from "@/services/police";
 import type { ProfilPersonne } from "@/services/police";
 
@@ -60,7 +61,16 @@ function Contenu() {
       <div className="carte">
         <div className="flex gap-4 items-start">
           {profil.photo_url ? (
-            <img src={profil.photo_url} alt="Photo de profil" className="w-20 h-20 rounded-full object-cover border-2 border-lagune/40" />
+            <PhotoProtegee
+              src={profil.photo_url}
+              alt="Photo de profil"
+              className="w-20 h-20 rounded-full object-cover border-2 border-lagune/40"
+              fallback={
+                <div className="w-14 h-14 rounded-full bg-lagune/10 flex items-center justify-center text-lagune text-xl font-bold">
+                  {profil.nom?.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase()||"?"}
+                </div>
+              }
+            />
           ) : (
             <div className="w-14 h-14 rounded-full bg-lagune/10 flex items-center justify-center text-lagune text-xl font-bold">
               {profil.nom?.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase()||"?"}

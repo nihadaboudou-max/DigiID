@@ -22,6 +22,7 @@ from src.modeles.verification_cni import VerificationCNI
 from src.modeles.document_identite import DocumentIdentite
 from src.noyau import dechiffrer_donnee, journal
 from src.noyau.exceptions import ErreurRessourceIntrouvable
+from src.noyau.stockage_photos import photo_url_utilisateur
 
 
 # ─── Utilitaires d'expiration des documents ──────────────────────────
@@ -265,6 +266,9 @@ async def rechercher_personne(
         )
         verif_cni = result_cni.scalar_one_or_none()
         
+        # ✅ Photo réelle de la personne (selfie approuvé ou CNI) pour contrôle visuel
+        photo_url = await photo_url_utilisateur(session, utilisateur_cible.id)
+
         resultats.append({
             "digiid": digiid,
             "nom": nom_complet.title(),
@@ -275,7 +279,7 @@ async def rechercher_personne(
             "est_verifie": utilisateur_cible.est_cni_verifiee or utilisateur_cible.est_visage_verifie,
             "ville": utilisateur_cible.ville or "",
             "pays": utilisateur_cible.pays or "",
-            "photo_url": utilisateur_cible.photo_profil_url,
+            "photo_url": photo_url,
             "numero_cni": verif_cni.numero_cni if verif_cni else None,
             "a_permis": a_permis,
             "a_assurance": a_assurance,
@@ -409,6 +413,9 @@ async def obtenir_profil_personne(
         select(NoteInternePolice).where(NoteInternePolice.personne_digiid == digiid).order_by(NoteInternePolice.date_creation.desc()).limit(20)
     )
 
+    # ✅ Photo réelle de la personne (selfie approuvé ou CNI) pour contrôle visuel
+    photo_url = await photo_url_utilisateur(session, utilisateur_cible.id)
+
     return {
         "digiid": utilisateur_cible.digiid_public or "",
         "nom": f"{prenom} {nom}".strip(),
@@ -416,7 +423,7 @@ async def obtenir_profil_personne(
         "telephone": telephone,
         "ville": utilisateur_cible.ville or "",
         "pays": utilisateur_cible.pays or "",
-        "photo_url": utilisateur_cible.photo_profil_url,
+        "photo_url": photo_url,
         "role": utilisateur_cible.role,
         "score": utilisateur_cible.score_actuel or 0,
         "est_actif": utilisateur_cible.est_actif,
@@ -844,11 +851,14 @@ async def scanner_qr(session: AsyncSession, digiid: str, utilisateur: Utilisateu
             **_enrichir_expiration(d.date_expiration),
         })
     
+    # ✅ Photo réelle de la personne (selfie approuvé ou CNI) pour contrôle visuel
+    photo_url = await photo_url_utilisateur(session, utilisateur_cible.id)
+
     return {
         "digiid": utilisateur_cible.digiid_public or "",
         "nom": f"{prenom} {nom}".strip(),
         "email": dechiffrer_donnee(utilisateur_cible.email_chiffre) if utilisateur_cible.email_chiffre else "",
-        "photo_url": utilisateur_cible.photo_profil_url,
+        "photo_url": photo_url,
         "est_actif": utilisateur_cible.est_actif,
         "est_verifie": utilisateur_cible.est_cni_verifiee or utilisateur_cible.est_visage_verifie,
         "documents": documents

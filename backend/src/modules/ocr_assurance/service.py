@@ -125,6 +125,30 @@ async def traiter_upload_assurance(
     date_effet_parsee = _parser_date(donnees.date_effet)
     date_expiration_parsee = _parser_date(donnees.date_expiration, est_expiration=True)
 
+    # 🔴 REJET : assurance EXPIRÉE (message clair)
+    if date_expiration_parsee and date_expiration_parsee < date.today():
+        message_erreur = (
+            f"❌ Votre attestation est expirée depuis le {date_expiration_parsee.strftime('%d/%m/%Y')}. "
+            "Ce document est refusé : vous devez renouveler votre assurance avant de pouvoir "
+            "l'utiliser avec DigiID."
+        )
+        journal.warning(
+            f"REJET ASSURANCE | Expirée | utilisateur={utilisateur.id} | "
+            f"date_expiration={date_expiration_parsee} | contrat={donnees.numero_contrat or 'N/A'}"
+        )
+        return ReponseUploadAssurance(
+            id=UUID("00000000-0000-0000-0000-000000000000"),
+            statut="expiree",
+            resultat_ocr=ResultatOCRAssurance(
+                succes=False,
+                donnees=donnees,
+                erreurs=[message_erreur],
+                champs_extraits=nb_champs,
+                temps_analyse_ms=temps_ms,
+            ),
+            message=message_erreur,
+        )
+
     # 3. ✅ VÉRIFICATION STRICTE DE COHÉRENCE (Inspirée exactement de la CNI)
     if succes_ocr and (donnees.nom_assure or donnees.prenoms_assure):
         # Déchiffrement des données du profil
@@ -266,6 +290,10 @@ async def traiter_upload_assurance(
     session.add(nouvelle_assurance)
     await session.commit()
     await session.refresh(nouvelle_assurance)
+
+    # ✅ Rappel : l'assurance expire bientôt ?
+    from src.noyau.rappels_expiration import notifier_expiration_proche
+    await notifier_expiration_proche(session, utilisateur, "assurance", nouvelle_assurance.date_expiration)
     
     journal.info(
         f"Assurance scannée et enregistrée | user={utilisateur.id} | "

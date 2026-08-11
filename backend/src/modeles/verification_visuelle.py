@@ -56,6 +56,12 @@ class VerificationVisuelle(Base, MelangeTracabilite):
         JSON,
         nullable=True,
     )
+    # ✅ Photo brute du selfie (chemin relatif au dossier media) — servie à la police
+    photo_chemin: Mapped[Optional[str]] = mapped_column(
+        String(500),
+        nullable=True,
+        doc="Chemin relatif de la photo du selfie stockée sur disque",
+    )
     doublons: Mapped[Optional[list[dict]]] = mapped_column(
         JSON,
         nullable=True,

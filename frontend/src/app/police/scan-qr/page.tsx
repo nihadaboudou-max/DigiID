@@ -7,6 +7,7 @@ import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { verifierQRCode, type CitoyenVerifie } from "@/services/qr_dynamique";
 import BadgeExpiration, { labelDocument, formaterDateExpiration } from "@/composants/police/BadgeExpiration";
+import PhotoProtegee from "@/composants/police/PhotoProtegee";
 import { Html5Qrcode } from "html5-qrcode";
 
 export default function ScanQRPage() {
@@ -253,13 +254,18 @@ function Contenu() {
             </Bouton>
           </div>
 
-          {/* Photo de profil */}
+          {/* Photo de profil (servie par un endpoint protégé JWT) */}
           {citoyen.photo_profil_url && (
             <div className="mb-4 flex justify-center">
-              <img
+              <PhotoProtegee
                 src={citoyen.photo_profil_url}
                 alt="Photo du citoyen"
                 className="w-32 h-32 rounded-full object-cover border-4 border-lagune/30"
+                fallback={
+                  <div className="w-32 h-32 rounded-full bg-lagune/10 flex items-center justify-center text-lagune text-3xl font-bold border-4 border-lagune/30">
+                    {`${citoyen.prenom || ""} ${citoyen.nom || ""}`.trim().split(" ").map((n) => n[0] || "").join("").slice(0, 2).toUpperCase() || "?"}
+                  </div>
+                }
               />
             </div>
           )}
