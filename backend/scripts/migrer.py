@@ -108,6 +108,13 @@ COLONNES_A_VERIFIER = [
     ("ordonnances", "statut", "VARCHAR(20) NOT NULL DEFAULT 'active'"),
     ("verification_visuelle", "est_supprime", "BOOLEAN NOT NULL DEFAULT false"),
     ("verification_visuelle", "date_suppression", "TIMESTAMP WITH TIME ZONE"),
+
+    # ─── Module Identité : photos CNI / selfie ────────────────────────
+    # ⚠️ CRITIQUE : migrer.py ne lance PAS `alembic upgrade head` sur une base
+    # existante (simple stamp) → ces colonnes doivent être ajoutées ici.
+    ("verification_cni", "photo_chemin", "VARCHAR(500)"),
+    ("verification_cni", "embedding_photo_cni", "JSON"),
+    ("verification_visuelle", "photo_chemin", "VARCHAR(500)"),
     
     # ─── Module Identité : Permis & Assurance (date/lieu de naissance) ──
     # ⚠️ CRITIQUE : migrer.py ne lance PAS `alembic upgrade head` sur une base

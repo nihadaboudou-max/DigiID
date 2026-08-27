@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 /**
  * Scan CNI — agent terrain.
@@ -174,6 +174,8 @@ function Contenu() {
           description="Face avant avec photo et identité"
           onSucces={handleSuccesRecto}
           onErreur={setErreur}
+          contexte="agent"
+          enrolementId={enrolementId || undefined}
         />
         <UploadCNI
           face="verso"
@@ -181,6 +183,8 @@ function Contenu() {
           description="Face arrière (informations complémentaires)"
           onSucces={handleSuccesVerso}
           onErreur={setErreur}
+          contexte="agent"
+          enrolementId={enrolementId || undefined}
         />
       </div>
 

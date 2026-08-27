@@ -100,6 +100,13 @@ export interface ListeVerificationsCNI {
   total: number;
 }
 
+export interface OptionsUploadCNI {
+  /** Contexte de l'upload : "citoyen" (auto-service) ou "agent" (enrôlement terrain). */
+  contexte?: "citoyen" | "agent";
+  /** Enrôlement cible en contexte agent — la cohérence d'identité est comparée au bénéficiaire. */
+  enrolementId?: string;
+}
+
 /**
  * Upload une photo de CNI (recto ou verso) pour analyse OCR.
  * Utilise fetch directement car le clientAPI ne gère pas le multipart/form-data.
@@ -111,11 +118,14 @@ export interface ListeVerificationsCNI {
  */
 export async function uploaderCNI(
   fichier: File,
-  face: "recto" | "verso" = "recto"
+  face: "recto" | "verso" = "recto",
+  options: OptionsUploadCNI = {}
 ): Promise<ReponseUploadCNI> {
   const formData = new FormData();
   formData.append("fichier", fichier);
   formData.append("face", face);
+  if (options.contexte) formData.append("contexte", options.contexte);
+  if (options.enrolementId) formData.append("enrolement_id", options.enrolementId);
 
   const token = obtenirTokenAcces();
   const urlUpload = "/api/v1/utilisateur/verification-cni/upload";

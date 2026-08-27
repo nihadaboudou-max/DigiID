@@ -22,6 +22,10 @@ interface UploadCNIProps {
   onSucces: (resultat: ReponseUploadCNI, imageUrl?: string) => void;
   onErreur: (erreur: string) => void;
   desactive?: boolean;
+  /** Contexte d'upload : "citoyen" (auto-service, défaut) ou "agent" (enrôlement terrain). */
+  contexte?: "citoyen" | "agent";
+  /** Enrôlement cible en contexte agent. */
+  enrolementId?: string;
 }
 
 export default function UploadCNI({
@@ -31,6 +35,8 @@ export default function UploadCNI({
   onSucces,
   onErreur,
   desactive = false,
+  contexte = "citoyen",
+  enrolementId,
 }: UploadCNIProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [fichier, setFichier] = useState<File | null>(null);
@@ -113,7 +119,10 @@ export default function UploadCNI({
 
     setChargement(true);
     try {
-      const resultat = await uploaderCNI(fichier, face);
+      const resultat = await uploaderCNI(fichier, face, {
+        contexte,
+        enrolementId,
+      });
       onSucces(resultat, previsualisation || undefined);
     } catch (erreur: unknown) {
       const message =

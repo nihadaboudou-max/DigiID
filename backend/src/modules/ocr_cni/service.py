@@ -11,7 +11,7 @@ from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import date as date_type
 
-from src.modeles import Utilisateur
+from src.modeles import Utilisateur, Enrolement
 from src.modules.ocr_cni.extraction_cni import extraire_donnees_cni
 from src.modules.ocr_cni.ocr_engine import analyser_image_cni
 from src.modules.ocr_cni.mrz_parser import parser_mrz_complet, CODES_PAYS_ICAO
@@ -285,6 +285,7 @@ async def _enregistrer_verification(
     donnees: DonneesCNIExtraites,
     validation: Optional[ValidationCNIResultat] = None,
     resultat_ocr: Optional[ResultatOCRCNI] = None,
+    est_verification_personnelle: bool = True,
 ):
     """Enregistre une vérification CNI en base de données."""
     # ✅ Import local pour éviter le circular import
@@ -324,7 +325,10 @@ async def _enregistrer_verification(
     session.add(verification)
     await session.commit()
     await session.refresh(verification)
-    if validation and validation.est_valide:
+    # ⚠️ En contexte agent, la CNI appartient au bénéficiaire : on ne marque
+    # PAS le compte de l'agent connecté comme vérifié, et on ne crée pas de
+    # DocumentIdentite rattaché à l'agent.
+    if validation and validation.est_valide and est_verification_personnelle:
         utilisateur.est_cni_verifiee = True
         utilisateur.date_verification_cni = datetime.now(timezone.utc)
         utilisateur.date_derniere_mise_a_jour_verifications = datetime.now(timezone.utc)
@@ -340,11 +344,17 @@ async def traiter_upload_cni(
     utilisateur: Utilisateur,
     fichier: UploadFile,
     face: str = "recto",
+    contexte: str = "citoyen",
+    enrolement_id: Optional[UUID] = None,
 ) -> dict:
     """
     Traite l'upload d'une image de CNI (recto ou verso).
     ⚠️ BLOQUE l'enregistrement si les données extraites ne correspondent
-    pas strictement au nom et au premier prénom du profil utilisateur.
+    pas strictement au nom et au premier prénom de l'identité de référence :
+      - contexte "citoyen" → profil du compte connecté (auto-service)
+      - contexte "agent" + enrolement_id → identité du bénéficiaire cible
+      - contexte "agent" sans enrôlement → aucune référence, la CNI est la
+        source de vérité pour un nouveau bénéficiaire (vérification ignorée)
     ✅ Extrait et sauvegarde l'embedding facial de la photo CNI (recto).
     """
     contenu = await _lire_image(fichier)
@@ -396,42 +406,69 @@ async def traiter_upload_cni(
 
     # 3. ✅ VÉRIFICATION STRICTE DE COHÉRENCE (Uniquement pour le recto)
     if succes_ocr and face == "recto" and donnees.nom_famille:
-        # Déchiffrement des données du profil
-        nom_profil = dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else ""
-        prenom_profil = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else ""
-
-        # Normalisation : majuscules, suppression des espaces, et extraction du PREMIER prénom
-        nom_cni_pur = donnees.nom_famille.strip().upper()
-        prenom_cni_pur = donnees.prenoms.strip().split()[0].upper() if donnees.prenoms else ""
-        nom_profil_pur = nom_profil.strip().upper()
-        prenom_profil_pur = prenom_profil.strip().split()[0].upper() if prenom_profil else ""
-
-        incoherences = []
-
-        # Comparaison stricte du nom
-        if nom_profil_pur and nom_cni_pur and nom_profil_pur != nom_cni_pur:
-            incoherences.append(
-                f"Le nom sur la CNI ({nom_cni_pur}) ne correspond pas à votre profil ({nom_profil_pur})."
+        # Déterminer l'identité de référence à comparer avec la CNI :
+        #  - contexte citoyen (auto-service)    → profil du compte connecté
+        #  - contexte agent avec enrôlement     → identité du bénéficiaire cible
+        #  - contexte agent sans enrôlement     → aucune référence (la CNI est
+        #    la source de vérité pour un nouveau bénéficiaire) → ignorée
+        identite_reference: Optional[tuple[str, str]] = None
+        if contexte == "agent":
+            if enrolement_id is not None:
+                enrolement = await session.get(Enrolement, enrolement_id)
+                if enrolement is None or enrolement.agent_id != utilisateur.id:
+                    raise ErreurRessourceIntrouvable(
+                        f"Enrôlement {enrolement_id} introuvable pour l'agent {utilisateur.id}.",
+                        message_utilisateur="L'enrôlement associé n'existe pas ou ne t'appartient pas.",
+                    )
+                identite_reference = (enrolement.citoyen_nom, enrolement.citoyen_prenom)
+        else:
+            identite_reference = (
+                dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else "",
+                dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else "",
             )
 
-        # Comparaison stricte du premier prénom
-        if prenom_profil_pur and prenom_cni_pur and prenom_profil_pur != prenom_cni_pur:
-            incoherences.append(
-                f"Le prénom sur la CNI ({prenom_cni_pur}) ne correspond pas à votre profil ({prenom_profil_pur})."
-            )
+        if identite_reference is not None:
+            nom_profil, prenom_profil = identite_reference
+            libelle_reference = "votre profil" if contexte == "citoyen" else "le bénéficiaire"
 
-        #  BLOCAGE : Si incohérence détectée, on rejette l'upload immédiatement
-        if incoherences:
-            message_erreur = "Incohérence d'identité détectée : " + " ".join(incoherences) + " Veuillez corriger votre nom/prénom dans vos paramètres avant de scanner votre CNI."
-            journal.warning(
-                f"REJET CNI | Incohérence identité | utilisateur={utilisateur.id} | "
-                f"CNI(nom={nom_cni_pur}, prenom={prenom_cni_pur}) vs Profil(nom={nom_profil_pur}, prenom={prenom_profil_pur})"
-            )
-            # Lève une erreur 400 qui sera affichée clairement au frontend
-            raise ErreurValidation(
-                message_erreur,
-                message_utilisateur=message_erreur
-            )
+            # Normalisation : majuscules, suppression des espaces, et extraction du PREMIER prénom
+            nom_cni_pur = donnees.nom_famille.strip().upper()
+            prenom_cni_pur = donnees.prenoms.strip().split()[0].upper() if donnees.prenoms else ""
+            nom_profil_pur = nom_profil.strip().upper()
+            prenom_profil_pur = prenom_profil.strip().split()[0].upper() if prenom_profil else ""
+
+            incoherences = []
+
+            # Comparaison stricte du nom
+            if nom_profil_pur and nom_cni_pur and nom_profil_pur != nom_cni_pur:
+                incoherences.append(
+                    f"Le nom sur la CNI ({nom_cni_pur}) ne correspond pas à {libelle_reference} ({nom_profil_pur})."
+                )
+
+            # Comparaison stricte du premier prénom
+            if prenom_profil_pur and prenom_cni_pur and prenom_profil_pur != prenom_cni_pur:
+                incoherences.append(
+                    f"Le prénom sur la CNI ({prenom_cni_pur}) ne correspond pas à {libelle_reference} ({prenom_profil_pur})."
+                )
+
+            #  BLOCAGE : Si incohérence détectée, on rejette l'upload immédiatement
+            if incoherences:
+                message_erreur = (
+                    "Incohérence d'identité détectée : " + " ".join(incoherences)
+                    + (" Veuillez corriger votre nom/prénom dans vos paramètres avant de scanner votre CNI."
+                       if contexte == "citoyen"
+                       else " Vérifiez que la CNI scannée correspond bien au citoyen en cours d'enrôlement.")
+                )
+                journal.warning(
+                    f"REJET CNI | Incohérence identité | utilisateur={utilisateur.id} | "
+                    f"contexte={contexte} | "
+                    f"CNI(nom={nom_cni_pur}, prenom={prenom_cni_pur}) vs Référence(nom={nom_profil_pur}, prenom={prenom_profil_pur})"
+                )
+                # Lève une erreur métier (422) affichée clairement au frontend
+                raise ErreurValidation(
+                    message_erreur,
+                    message_utilisateur=message_erreur
+                )
 
     # 4. Enregistrement en base
     verification = await _enregistrer_verification(
@@ -450,6 +487,7 @@ async def traiter_upload_cni(
             champs_extraits=nb_champs,
             temps_analyse_ms=temps_ms,
         ),
+        est_verification_personnelle=(contexte == "citoyen"),
     )
 
     # 5. ✅ EXTRACTION EMBEDDING FACIAL (Uniquement pour le recto validé)

@@ -4,7 +4,7 @@ Routes API pour l'OCR CNI — upload, vérification, synthèse.
 """
 from typing import Annotated
 from uuid import UUID
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
@@ -30,50 +30,59 @@ routeur_ocr_cni = APIRouter(
 )
 async def upload_cni(
     fichier: UploadFile = File(...),
-    face: str = "recto",
+    face: str = Form("recto"),
+    contexte: str = Form("citoyen"),
+    enrolement_id: UUID | None = Form(None),
     utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)] = None,
     session: Annotated[AsyncSession, Depends(obtenir_session)] = None,
 ):
     """
     Upload une image de CNI (recto ou verso) et lance l'analyse OCR.
     Retourne les données extraites et le résultat de validation.
+
+    `contexte` : "citoyen" (auto-service, défaut) ou "agent" (enrôlement terrain).
+    `enrolement_id` : enrôlement cible en contexte agent — la cohérence d'identité
+    est alors comparée au bénéficiaire de l'enrôlement, pas à l'agent connecté.
+
+    Les erreurs métier (ErreurValidation, ErreurRessourceIntrouvable) sont laissées
+    remonter au handler global ErreurDigiID (HTTP 4xx + message clair) au lieu
+    d'être masquées par un 500 générique.
     """
     if face not in ("recto", "verso"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Le paramètre 'face' doit être 'recto' ou 'verso'.",
         )
-    
-    try:
-        resultat = await service.traiter_upload_cni(
-            session=session,
-            utilisateur=utilisateur,
-            fichier=fichier,
-            face=face,
-        )
-        
-        # Déclencher un recalcul du score après upload CNI validé
-        if resultat.get("validation") and resultat["validation"].est_valide:
-            try:
-                # ✅ CORRECTION : Import tardif ici pour éviter le cycle d'import au démarrage
-                from src.modules.scoring.service import declencher_recalcul_score
-                
-                await declencher_recalcul_score(
-                    session=session,
-                    utilisateur=utilisateur,
-                    raison="upload_cni_valide",
-                )
-            except Exception as e:
-                journal.warning(f"Échec recalcul score après upload CNI : {e}")
-                
-        return resultat
-        
-    except Exception as e:
-        journal.exception(f"Erreur upload CNI : {e}")
+    if contexte not in ("citoyen", "agent"):
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Erreur lors du traitement : {str(e)}",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le paramètre 'contexte' doit être 'citoyen' ou 'agent'.",
         )
+
+    resultat = await service.traiter_upload_cni(
+        session=session,
+        utilisateur=utilisateur,
+        fichier=fichier,
+        face=face,
+        contexte=contexte,
+        enrolement_id=enrolement_id,
+    )
+
+    # Déclencher un recalcul du score après upload CNI validé (auto-service uniquement)
+    if contexte == "citoyen" and resultat.get("validation") and resultat["validation"].est_valide:
+        try:
+            # ✅ CORRECTION : Import tardif ici pour éviter le cycle d'import au démarrage
+            from src.modules.scoring.service import declencher_recalcul_score
+
+            await declencher_recalcul_score(
+                session=session,
+                utilisateur=utilisateur,
+                raison="upload_cni_valide",
+            )
+        except Exception as e:
+            journal.warning(f"Échec recalcul score après upload CNI : {e}")
+
+    return resultat
 
 @routeur_ocr_cni.get(
     "/synthese",

@@ -278,6 +278,7 @@ function Contenu() {
               description="Photo de la face avant pour extraction OCR"
               onSucces={handleSuccesOcr}
               onErreur={setErreurOcr}
+              contexte="agent"
             />
           </div>
           {resultatOcr && (
