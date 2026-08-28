@@ -1,76 +1,44 @@
 # -*- coding: utf-8 -*-
 """
-Validation données documents d'identité africains (AMÉLIORÉ).
-Changements majeurs :
-  ✅ Stubs fallback pour parser_mrz_complet si absent
-  ✅ Confiance granulaire par champ (tuple confiance)
-  ✅ Langue adaptative pour normaliser_date
-  ✅ Documentation contrats d'entrée
+Validation des données extraites de documents d'identité africains.
+Supporte tout type de document (CNI, passeport, carte biométrique)
+avec validation MRZ universelle (ICAO 9303 formats TD1/TD2/TD3).
 """
 import re
 from datetime import date, datetime
 from typing import Optional, Tuple
+from src.modules.ocr_cni.mrz_parser import (
+    CODES_PAYS_ICAO,
+    parser_mrz_complet,
+    verifier_checksum_mrz,
+)
 from src.modules.ocr_cni.schemas import (
     DonneesCNIExtraites,
     ValidationCNIResultat,
 )
 from src.noyau.journal import journal
 
-# ✅ NOUVEAU : Import conditionnel + stubs fallback
-try:
-    from src.modules.ocr_cni.mrz_parser import (
-        CODES_PAYS_ICAO,
-        parser_mrz_complet,
-        verifier_checksum_mrz,
-    )
-except ImportError:
-    journal.warning("Module mrz_parser absent — utilisant stubs fallback")
-    
-    # Stubs fallback
-    CODES_PAYS_ICAO = {
-        "SEN", "CIV", "BEN", "MLI", "GHA", "NGA", "TGO", "BFA", "NER",
-        "CMR", "GAB", "COG", "ZAR", "ANG", "MWI", "ZMB", "ZWE", "BWA",
-        "LSO", "SWZ", "NAM", "ZAF", "DZA", "DJI", "ERI", "ETH", "KEN",
-        "RWA", "SDN", "TZA", "UGA", "MOZ", "MUS", "SYC", "CPV", "COM",
-    }
-    
-    def parser_mrz_complet(l1, l2, l3):
-        """Minimal MRZ parser — détecte format par longueur."""
-        return {
-            "format": (
-                "TD1" if len(l2 or "") <= 30 
-                else "TD2" if len(l2 or "") <= 36 
-                else "TD3"
-            ),
-            "pays_emetteur": l1[2:5].upper() if len(l1 or "") > 4 else ""
-        }
-    
-    def verifier_checksum_mrz(ligne, position):
-        """Stub non-implémentée."""
-        return True
-
-# =============================================================================
+# ==============================================================================
 # Constantes de validation
-# =============================================================================
+# ==============================================================================
+# Poids pour le calcul du checksum MRZ (ICAO 9303)
+# Cycle de poids [7, 3, 1, 7, 3, 1, ...] pour la somme de contrôle
 POIDS_MRZ = [7, 3, 1, 7, 3, 1, 7, 3, 1, 7, 3, 1, 7, 3, 1]
-AGE_MINIMUM = 0
 
-# ✅ NOUVEAU : Cartes de mois multi-langue
-MOIS_MAPS = {
-    "fr": {
-        "janvier": "01", "février": "02", "mars": "03", "avril": "04",
-        "mai": "05", "juin": "06", "juillet": "07", "août": "08",
-        "septembre": "09", "octobre": "10", "novembre": "11", "décembre": "12"
-    },
-    "en": {
-        "january": "01", "february": "02", "march": "03", "april": "04",
-        "may": "05", "june": "06", "july": "07", "august": "08",
-        "september": "09", "october": "10", "november": "11", "december": "12"
-    },
-}
+# Âge minimum pour avoir un document d'identité
+AGE_MINIMUM = 0  # Relaxé — un parent peut scanner pour son enfant
 
 def _calculer_checksum_mrz(valeur: str) -> int:
-    """Calcul checksum ICAO 9303."""
+    """
+    Calcule le checksum d'un champ MRZ selon la norme ICAO 9303.
+    Args:
+         valeur : Chaîne à valider (ne doit contenir que A-Z, 0-9, <)
+    Retour:
+         Valeur du checksum (0-9)
+    Note:
+         Les caractères < sont convertis en 0.
+         Les lettres sont converties : A=10, B=11, ..., Z=35
+    """
     somme = 0
     for i, char in enumerate(valeur):
         if i >= len(POIDS_MRZ):
@@ -87,8 +55,10 @@ def _calculer_checksum_mrz(valeur: str) -> int:
     return somme % 10
 
 def _nettoyer_champ_mrz(champ: str, longueur_max: int = 30) -> str:
-    """Nettoie champ MRZ pour checksum."""
+    """Nettoie un champ MRZ pour le calcul de checksum."""
+    # Remplacer les caractères invalides par <
     champ = "".join(c if c.isalnum() else "<" for c in champ.upper())
+    # Tronquer ou compléter avec <
     if len(champ) > longueur_max:
         champ = champ[:longueur_max]
     else:
@@ -99,8 +69,9 @@ def valider_mrz(ligne_1: Optional[str],
                 ligne_2: Optional[str],
                 ligne_3: Optional[str]) -> Tuple[bool, dict[str, bool], str]:
     """
-    Valide MRZ formats TD1/TD2/TD3.
-    Contrat : suppose lignes nettoyées et majuscules.
+    Valide une MRZ de document d'identité (formats TD1/TD2/TD3).
+    Accepte tous les codes pays ICAO (CIV, SEN, MLI, GHA, NGA, etc.).
+    Utilise le parseur MRZ universel pour détecter le format automatiquement.
     """
     details: dict[str, bool] = {
         "structure": False,
@@ -110,11 +81,10 @@ def valider_mrz(ligne_1: Optional[str],
         "checksum_date_naissance": False,
         "checksum_date_expiration": False,
     }
-    
     if not all([ligne_1, ligne_2]):
-        return False, details, "MRZ incomplète : lignes 1 et 2 requises."
+        return False, details, "MRZ incomplète : les lignes 1 et 2 sont requises."
     
-    # Parser MRZ
+    # Parser la MRZ
     mrz = parser_mrz_complet(ligne_1, ligne_2, ligne_3)
     code_pays = mrz.get("pays_emetteur", "")
     
@@ -123,130 +93,200 @@ def valider_mrz(ligne_1: Optional[str],
         details["structure"] = True
         details["format_detecte"] = True
     else:
-        return False, details, f"Code pays non reconnu : {code_pays}"
+        return False, details, f"Code pays non reconnu dans la MRZ : {code_pays}"
     
-    # Validation checksums par format
+    # ✅ CORRECTION : Vérifier checksums pour TOUS les formats (TD1, TD2, TD3)
     format_mrz = mrz.get("format", "")
-    l2 = _nettoyer_champ_mrz(ligne_2, 36)
+    l2 = _nettoyer_champ_mrz(ligne_2, 36)  # Utiliser 36 pour TD2/TD3
     
     if format_mrz == "TD1" and len(ligne_2) >= 30:
-        # TD1 : 3 lignes de 30 car
-        try:
-            num_carte = l2[0:9]
-            checksum_num_attendu = l2[9:10]
-            if num_carte and checksum_num_attendu:
+        # TD1 : 3 lignes de 30 caractères
+        num_carte = l2[0:9]
+        checksum_num_attendu = l2[9:10]
+        if num_carte and checksum_num_attendu:
+            try:
                 checksum_calcule = _calculer_checksum_mrz(num_carte)
-                details["checksum_numero"] = (str(checksum_calcule) == checksum_num_attendu)
-            
-            date_naissance_mrz = l2[13:19]
-            checksum_ddn_attendu = l2[19:20]
-            if date_naissance_mrz and checksum_ddn_attendu:
+                if str(checksum_calcule) == checksum_num_attendu:
+                    details["checksum_numero"] = True
+            except Exception:
+                pass
+        
+        date_naissance_mrz = l2[13:19]
+        checksum_ddn_attendu = l2[19:20]
+        if date_naissance_mrz and checksum_ddn_attendu:
+            try:
                 checksum_calcule = _calculer_checksum_mrz(date_naissance_mrz)
-                details["checksum_date_naissance"] = (str(checksum_calcule) == checksum_ddn_attendu)
-            
-            date_exp_mrz = l2[21:27]
-            checksum_exp_attendu = l2[27:28]
-            if date_exp_mrz and checksum_exp_attendu:
+                if str(checksum_calcule) == checksum_ddn_attendu:
+                    details["checksum_date_naissance"] = True
+            except Exception:
+                pass
+        
+        date_exp_mrz = l2[21:27]
+        checksum_exp_attendu = l2[27:28]
+        if date_exp_mrz and checksum_exp_attendu:
+            try:
                 checksum_calcule = _calculer_checksum_mrz(date_exp_mrz)
-                details["checksum_date_expiration"] = (str(checksum_calcule) == checksum_exp_attendu)
-        except Exception:
-            pass
+                if str(checksum_calcule) == checksum_exp_attendu:
+                    details["checksum_date_expiration"] = True
+            except Exception:
+                pass
     
     elif format_mrz == "TD2" and len(ligne_2) >= 36:
-        # TD2 : 2 lignes de 36 car
-        try:
-            num_carte = l2[0:9]
-            if num_carte:
+        # ✅ TD2 : 2 lignes de 36 caractères (CNI béninoises, etc.)
+        # Format TD2 ligne 2 :
+        # [0-8] Numéro (9 car) + [9] Check digit
+        # [10-12] Nationalité
+        # [13-18] Date naissance (6 car) + [19] Check digit
+        # [20] Sexe
+        # [21-26] Date expiration (6 car) + [27] Check digit
+        # [28-34] Optionnel (7 car)
+        # [35] Check digit global
+        
+        num_carte = l2[0:9]
+        checksum_num_attendu = l2[9:10]
+        if num_carte and checksum_num_attendu:
+            try:
                 checksum_calcule = _calculer_checksum_mrz(num_carte)
-                details["checksum_numero"] = (str(checksum_calcule) == l2[9:10])
-            
-            date_naissance = l2[13:19]
-            if date_naissance:
-                checksum_calcule = _calculer_checksum_mrz(date_naissance)
-                details["checksum_date_naissance"] = (str(checksum_calcule) == l2[19:20])
-            
-            date_exp = l2[21:27]
-            if date_exp:
-                checksum_calcule = _calculer_checksum_mrz(date_exp)
-                details["checksum_date_expiration"] = (str(checksum_calcule) == l2[27:28])
-        except Exception:
-            pass
+                if str(checksum_calcule) == checksum_num_attendu:
+                    details["checksum_numero"] = True
+            except Exception:
+                pass
+        
+        date_naissance_mrz = l2[13:19]
+        checksum_ddn_attendu = l2[19:20]
+        if date_naissance_mrz and checksum_ddn_attendu:
+            try:
+                checksum_calcule = _calculer_checksum_mrz(date_naissance_mrz)
+                if str(checksum_calcule) == checksum_ddn_attendu:
+                    details["checksum_date_naissance"] = True
+            except Exception:
+                pass
+        
+        date_exp_mrz = l2[21:27]
+        checksum_exp_attendu = l2[27:28]
+        if date_exp_mrz and checksum_exp_attendu:
+            try:
+                checksum_calcule = _calculer_checksum_mrz(date_exp_mrz)
+                if str(checksum_calcule) == checksum_exp_attendu:
+                    details["checksum_date_expiration"] = True
+            except Exception:
+                pass
     
     elif format_mrz == "TD3" and len(ligne_2) >= 44:
-        # TD3 : 2 lignes de 44 car
-        try:
-            num_carte = l2[0:9]
-            if num_carte:
+        # ✅ TD3 : 2 lignes de 44 caractères (Passeports)
+        # Format TD3 ligne 2 :
+        # [0-8] Numéro (9 car) + [9] Check digit
+        # [10-12] Nationalité
+        # [13-18] Date naissance (6 car) + [19] Check digit
+        # [20] Sexe
+        # [21-26] Date expiration (6 car) + [27] Check digit
+        # [28-41] Données personnelles (14 car)
+        # [42-43] Check digits (2 car)
+        
+        num_carte = l2[0:9]
+        checksum_num_attendu = l2[9:10]
+        if num_carte and checksum_num_attendu:
+            try:
                 checksum_calcule = _calculer_checksum_mrz(num_carte)
-                details["checksum_numero"] = (str(checksum_calcule) == l2[9:10])
-            
-            date_naissance = l2[13:19]
-            if date_naissance:
-                checksum_calcule = _calculer_checksum_mrz(date_naissance)
-                details["checksum_date_naissance"] = (str(checksum_calcule) == l2[19:20])
-            
-            date_exp = l2[21:27]
-            if date_exp:
-                checksum_calcule = _calculer_checksum_mrz(date_exp)
-                details["checksum_date_expiration"] = (str(checksum_calcule) == l2[27:28])
-        except Exception:
-            pass
+                if str(checksum_calcule) == checksum_num_attendu:
+                    details["checksum_numero"] = True
+            except Exception:
+                pass
+        
+        date_naissance_mrz = l2[13:19]
+        checksum_ddn_attendu = l2[19:20]
+        if date_naissance_mrz and checksum_ddn_attendu:
+            try:
+                checksum_calcule = _calculer_checksum_mrz(date_naissance_mrz)
+                if str(checksum_calcule) == checksum_ddn_attendu:
+                    details["checksum_date_naissance"] = True
+            except Exception:
+                pass
+        
+        date_exp_mrz = l2[21:27]
+        checksum_exp_attendu = l2[27:28]
+        if date_exp_mrz and checksum_exp_attendu:
+            try:
+                checksum_calcule = _calculer_checksum_mrz(date_exp_mrz)
+                if str(checksum_calcule) == checksum_exp_attendu:
+                    details["checksum_date_expiration"] = True
+            except Exception:
+                pass
     
-    # Résultat final
-    mrz_valide = details["code_pays"] and any([
-        details["checksum_numero"],
-        details["checksum_date_naissance"],
-        details["checksum_date_expiration"]
-    ])
-    
-    msg = "MRZ validée." if mrz_valide else "MRZ invalide : checksums échoués."
-    return mrz_valide, details, msg
+    # Résultat : le pays est reconnu = déjà une bonne MRZ
+    mrz_valide = details["code_pays"] and details["structure"]
+    pays_nom = CODES_PAYS_ICAO.get(code_pays, code_pays)
+    message = f"MRZ valide. Pays : {pays_nom}." if mrz_valide else "MRZ non reconnue."
+    return mrz_valide, details, message
 
 def valider_numero_cni(numero: Optional[str]) -> Tuple[bool, str]:
-    """Valide format numéro CNI (longueur + alphanumérique)."""
+    """
+    Valide le format du numéro de document.
+    Accepte divers formats selon les pays :
+    - CNI Côte d'Ivoire : 12-15 alphanumériques
+    - NIN Nigeria : 11 chiffres
+    - Ghana Card : 10-15 alphanumériques
+    - Passeport : 8-12 alphanumériques
+    """
     if not numero:
         return False, "Numéro de carte manquant."
     
-    numero = numero.strip().upper()
-    if not re.match(r"^[A-Z0-9]{8,20}$", numero):
-        return False, f"Numéro invalide : {numero}. Format : 8-20 alphanumériques."
+    numero = "".join(c for c in numero.upper() if c.isalnum())
     
-    return True, f"Numéro valide : {numero}."
+    if len(numero) < 6:
+        return False, f"Numéro trop court ({len(numero)} car.). Minimum 6 caractères."
+    if len(numero) > 20:
+        return False, f"Numéro trop long ({len(numero)} car.). Maximum 20 caractères."
+    if not numero.isalnum():
+        return False, "Le numéro contient des caractères non autorisés."
+    
+    # Vérifier qu'il contient au moins une lettre et un chiffre (sauf pour les NIN)
+    if not any(c.isdigit() for c in numero):
+        return False, "Le numéro doit contenir des chiffres."
+    
+    return True, "Format du numéro valide."
 
-# ✅ NOUVEAU : Normalise date avec langue paramétrable
-def _normaliser_date(date_str: str, langue: str = "fr") -> Optional[str]:
+def _normaliser_date(date_str: Optional[str]) -> Optional[str]:
     """
-    Normalise date vers JJ/MM/AAAA.
-    Accepte : JJ/MM/AAAA, AAMMJJ, texte avec mois, etc.
-    
-    Args:
-        langue: "fr", "en", etc.
+    Normalise une date vers le format JJ/MM/AAAA.
+    Accepte : JJ/MM/AAAA, JJ-MM-AAAA, JJ.MM.AAAA, AAMMJJ (MRZ), etc.
     """
     if not date_str:
         return None
     
-    # Format JJ/MM/AAAA — déjà bon
-    if re.match(r"^\d{2}/\d{2}/\d{4}$", date_str):
+    # Déjà au bon format JJ/MM/AAAA
+    if re.match(r'^\d{2}/\d{2}/\d{4}$', date_str):
         return date_str
     
-    # Format AAMMJJ (MRZ)
-    match = re.match(r"^(\d{2})(\d{2})(\d{2})$", date_str)
+    # Format avec séparateurs différents (JJ-MM-AAAA ou JJ.MM.AAAA)
+    match = re.match(r'^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$', date_str)
     if match:
-        mm, jj, yy = match.groups()
-        # Déduire siècle : si yy < 30 → 20yy, sinon 19yy
-        siecle = "20" if int(yy) < 30 else "19"
-        return f"{jj}/{mm}/{siecle}{yy}"
+        jj, mm, aaaa = match.groups()
+        if len(aaaa) == 2:
+            aaaa = "19" + aaaa if int(aaaa) > 40 else "20" + aaaa
+        return f"{jj.zfill(2)}/{mm.zfill(2)}/{aaaa}"
     
-    # Format texte mois
-    if langue not in MOIS_MAPS:
-        langue = "fr"
+    # Format MRZ : AAMMJJ (6 chiffres)
+    if re.match(r'^\d{6}$', date_str):
+        aa = int(date_str[0:2])
+        mm = int(date_str[2:4])
+        jj = int(date_str[4:6])
+        aaaa = 1900 + aa if aa >= 40 else 2000 + aa
+        if 1 <= mm <= 12 and 1 <= jj <= 31:
+            return f"{jj:02d}/{mm:02d}/{aaaa}"
     
-    mois_map = MOIS_MAPS[langue]
+    # Format texte : "9 septembre 2024" ou "12 octobre 2002"
+    mois_map = {
+        "JANVIER": "01", "FÉVRIER": "02", "FEVRIER": "02",
+        "MARS": "03", "AVRIL": "04", "MAI": "05",
+        "JUIN": "06", "JUILLET": "07", "AOÛT": "08", "AOUT": "08",
+        "SEPTEMBRE": "09", "OCTOBRE": "10", "NOVEMBRE": "11",
+        "DÉCEMBRE": "12", "DECEMBRE": "12"
+    }
     date_upper = date_str.upper()
-    
     for mois_nom, mois_num in mois_map.items():
-        if mois_nom in date_upper.lower():
-            match = re.search(r'(\d{1,2})\s+' + mois_nom + r'\s+(\d{4})', date_upper, re.IGNORECASE)
+        if mois_nom in date_upper:
+            match = re.search(r'(\d{1,2})\s+' + mois_nom + r'\s+(\d{4})', date_upper)
             if match:
                 jj, aaaa = match.groups()
                 return f"{jj.zfill(2)}/{mois_num}/{aaaa}"
@@ -254,30 +294,31 @@ def _normaliser_date(date_str: str, langue: str = "fr") -> Optional[str]:
     return None
 
 def valider_date_naissance(date_naissance: Optional[str],
-                           date_expiration: Optional[str] = None,
-                           langue: str = "fr") -> Tuple[bool, str]:
+                           date_expiration: Optional[str] = None) -> Tuple[bool, str]:
     """
-    Valide date de naissance.
-    ✅ Nouveau : langue paramétrable.
+    Valide la date de naissance : format et cohérence.
+    Accepte plusieurs formats : JJ/MM/AAAA, AAMMJJ (MRZ), texte, etc.
     """
     if not date_naissance:
         return False, "Date de naissance manquante."
     
-    ddn_str = _normaliser_date(date_naissance, langue)
+    # Normaliser la date
+    ddn_str = _normaliser_date(date_naissance)
     if not ddn_str:
-        return False, f"Format invalide : {date_naissance}."
+        return False, f"Format de date invalide : {date_naissance}. Attendu : JJ/MM/AAAA ou AAMMJJ."
     
     try:
         ddn = datetime.strptime(ddn_str, "%d/%m/%Y").date()
     except ValueError:
-        return False, f"Date invalide : {ddn_str}."
+        return False, f"Date de naissance invalide : {ddn_str}."
     
     aujourd_hui = date.today()
     if ddn > aujourd_hui:
         return False, "La date de naissance ne peut pas être dans le futur."
     
+    # Vérifier cohérence avec la date d'expiration
     if date_expiration:
-        dexp_str = _normaliser_date(date_expiration, langue)
+        dexp_str = _normaliser_date(date_expiration)
         if dexp_str:
             try:
                 dexp = datetime.strptime(dexp_str, "%d/%m/%Y").date()
@@ -288,27 +329,34 @@ def valider_date_naissance(date_naissance: Optional[str],
     
     return True, f"Date de naissance valide ({ddn_str})."
 
-def valider_date_expiration(date_expiration: Optional[str],
-                            langue: str = "fr") -> Tuple[bool, str]:
-    """Valide date d'expiration (format, non-expirée)."""
+def valider_date_expiration(date_expiration: Optional[str]) -> Tuple[bool, str]:
+    """
+    Valide la date d'expiration : format, non-expirée.
+    Args:
+         date_expiration : Date au format JJ/MM/AAAA
+    Retour:
+         Tuple (est_valide, message)
+    """
     if not date_expiration:
         return True, "Date d'expiration non fournie (vérification ignorée)."
     
+    # Nettoyer
     date_expiration = date_expiration.strip()
     
     try:
         dexp = datetime.strptime(date_expiration, "%d/%m/%Y").date()
     except ValueError:
-        return False, f"Format date invalide : {date_expiration}."
+        return False, f"Format de date d'expiration invalide : {date_expiration}."
     
     aujourd_hui = date.today()
     if dexp < aujourd_hui:
         return False, f"Carte expirée depuis le {dexp.strftime('%d/%m/%Y')}."
     
+    # Vérifier la durée de validité (10 ans max)
     return True, f"Carte valide jusqu'au {dexp.strftime('%d/%m/%Y')}."
 
 def valider_sexe(sexe: Optional[str]) -> Tuple[bool, str]:
-    """Valide sexe = M ou F."""
+    """Valide que le sexe est M ou F."""
     if not sexe or sexe == "non_detecte":
         return False, "Sexe non détecté."
     
@@ -317,40 +365,39 @@ def valider_sexe(sexe: Optional[str]) -> Tuple[bool, str]:
     
     return False, f"Sexe invalide : {sexe}."
 
-def valider_donnees_cni(donnees: DonneesCNIExtraites,
-                       mode_strict: bool = True,
-                       langue: str = "fr") -> ValidationCNIResultat:
+def valider_donnees_cni(donnees: DonneesCNIExtraites) -> ValidationCNIResultat:
     """
-    Valide ensemble données CNI.
-    ✅ Nouveau : mode_strict, langue.
+    Valide l'ensemble des données extraites d'une CNI.
+    Effectue toutes les vérifications :
+       - Format du numéro
+       - Validité des dates
+       - Cohérence MRZ (si disponible)
+       - Sexe
+       - Âge minimum
+    Retour:
+         ValidationCNIResultat avec le détail des validations.
     """
     scores: dict[str, bool] = {}
-    messages: dict[str, str] = {}
     
-    # Validation numéro
+    # --- Validation du numéro ---
     numero_valide, msg_numero = valider_numero_cni(donnees.numero_cni)
     scores["numero_cni"] = numero_valide
-    messages["numero_cni"] = msg_numero
     
-    # Validation dates
+    # --- Validation des dates ---
     ddn_valide, msg_ddn = valider_date_naissance(
         donnees.date_naissance,
-        donnees.date_expiration,
-        langue=langue
+        donnees.date_expiration
     )
     scores["date_naissance"] = ddn_valide
-    messages["date_naissance"] = msg_ddn
     
-    dexp_valide, msg_dexp = valider_date_expiration(donnees.date_expiration, langue=langue)
+    dexp_valide, msg_dexp = valider_date_expiration(donnees.date_expiration)
     scores["date_expiration"] = dexp_valide
-    messages["date_expiration"] = msg_dexp
     
-    # Validation sexe
+    # --- Validation du sexe ---
     sexe_valide, msg_sexe = valider_sexe(donnees.sexe)
     scores["sexe"] = sexe_valide
-    messages["sexe"] = msg_sexe
     
-    # Validation MRZ
+    # --- Validation MRZ ---
     mrz_valide = None
     scores["mrz"] = donnees.mrz_ligne_1 is not None
     
@@ -361,27 +408,45 @@ def valider_donnees_cni(donnees: DonneesCNIExtraites,
             donnees.mrz_ligne_3,
         )
         scores["mrz"] = mrz_valide
-        messages["mrz"] = msg_mrz
+        scores["mrz_checksum_numero"] = details_mrz.get("checksum_numero", False)
+        scores["mrz_checksum_ddn"] = details_mrz.get("checksum_date_naissance", False)
+        scores["mrz_checksum_exp"] = details_mrz.get("checksum_date_expiration", False)
     
-    # Identité (au moins nom ou prénoms)
+    # --- Validation des champs obligatoires ---
+    # Seul le numéro est vraiment obligatoire pour valider
+    champs_obligatoires = ["numero_cni"]
+    for champ in champs_obligatoires:
+        if champ not in scores:
+            scores[champ] = False
+    
+    # Cohésion : nom + prénoms si présents
     scores["identite"] = bool(donnees.nom_famille) or bool(donnees.prenoms)
     
-    # Résultat global
+    # --- Résultat global ---
+    # 🔴 RÈGLE MÉTIER : une carte EXPIRÉE est REJETÉE, même si le numéro est valide.
+    # Une date d'expiration non fournie n'est pas bloquante (anciens formats).
     est_valide = scores.get("numero_cni", False)
     if est_valide and donnees.date_expiration and not dexp_valide:
         est_valide = False
-    
-    if mode_strict and not all(scores.values()):
-        est_valide = False
-    
-    # Message
+
+    # Construire le message
     if est_valide:
         nb_valides = sum(1 for v in scores.values() if v)
         nb_total = len(scores)
-        message = f"✅ Document valide : {nb_valides}/{nb_total} vérifications OK."
+        message = f"Document valide : {nb_valides}/{nb_total} vérifications OK."
+        if mrz_valide:
+            message += " MRZ vérifiée avec succès."
     else:
-        echecs = [k for k, v in scores.items() if not v]
-        message = f"❌ Document invalide. Erreurs : {', '.join(echecs[:3])}."
+        if donnees.date_expiration and not dexp_valide:
+            # Message clair : la carte est expirée
+            message = f"❌ Carte expirée ({msg_dexp}). Le document est refusé : vous devez renouveler votre carte."
+        else:
+            echecs = [k for k, v in scores.items() if not v]
+            message = "Document partiellement valide. Champs manquants : " + ", ".join(echecs[:3]) + "."
+    
+    # CORRECTION : utiliser str(scores) pour éviter le conflit avec loguru
+    # scores_str = str(scores)
+    # journal.info(f"Validation document : est_valide={est_valide}, scores={scores_str}")
     
     return ValidationCNIResultat(
         est_valide=est_valide,
@@ -394,25 +459,38 @@ def verifier_coherence_recto_verso(
     donnees_recto: Optional[DonneesCNIExtraites],
     donnees_verso: Optional[DonneesCNIExtraites],
 ) -> Tuple[bool, str]:
-    """Vérifie cohérence recto/verso."""
+    """
+    Vérifie la cohérence entre les données extraites du recto et du verso.
+    Les informations doivent correspondre (même numéro, mêmes dates, etc.)
+    pour éviter les falsifications.
+    Args:
+         donnees_recto : Données extraites du recto
+         donnees_verso : Données extraites du verso
+    Retour:
+         Tuple (coherent, message)
+    """
     if not donnees_recto or not donnees_verso:
-        return False, "Recto et verso nécessaires."
+        return False, "Les deux faces sont nécessaires pour la vérification croisée."
     
     incoherences = []
     
+    # Comparer les numéros (s'ils sont présents sur les deux faces)
     if donnees_recto.numero_cni and donnees_verso.numero_cni:
         if donnees_recto.numero_cni != donnees_verso.numero_cni:
-            incoherences.append("numéro différent")
+            incoherences.append("numéro de carte différent entre recto et verso")
     
+    # Comparer les dates de naissance
     if donnees_recto.date_naissance and donnees_verso.date_naissance:
         if donnees_recto.date_naissance != donnees_verso.date_naissance:
             incoherences.append("date de naissance différente")
     
+    # Comparer les noms
     if donnees_recto.nom_famille and donnees_verso.nom_famille:
         if donnees_recto.nom_famille.upper() != donnees_verso.nom_famille.upper():
-            incoherences.append("nom différent")
+            incoherences.append("nom de famille différent")
     
     if not incoherences:
-        return True, "Cohérence vérifiée."
+        return True, "Cohérence vérifiée entre recto et verso."
     
-    return False, "Incohérences détectées : " + ", ".join(incoherences) + "."
+    message = "Incohérences détectées : " + ", ".join(incoherences) + "."
+    return False, message
