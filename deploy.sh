@@ -64,6 +64,19 @@ export COMPOSE_BAKE=false
 # --no-cache force une reconstruction propre sans utiliser le cache Docker
 docker compose build --progress plain --no-cache backend frontend
 
+# Vérifier que les ports 80/443 sont libres AVANT de démarrer nginx Docker
+# (sinon : "failed to bind host port 0.0.0.0:80/tcp: address already in use")
+for PORT in 80 443; do
+    if ss -ltn 2>/dev/null | grep -q ":$PORT "; then
+        echo "❌ Le port $PORT est déjà occupé sur l'hôte."
+        echo "   → Identifier le processus : sudo ss -ltnp | grep :$PORT"
+        echo "   → Si c'est l'ancien nginx système, l'arrêter définitivement :"
+        echo "       sudo systemctl stop nginx && sudo systemctl disable nginx"
+        echo "   → Puis relancer : ./deploy.sh"
+        exit 1
+    fi
+ done
+
 echo "🚀 Démarrage des services (db, redis, backend, frontend, nginx)..."
 docker compose up -d
 
