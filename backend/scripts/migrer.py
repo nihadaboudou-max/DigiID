@@ -24,6 +24,13 @@ from alembic.config import Config as AlembicConfig
 from alembic import command as alembic_command
 from src.config import parametres
 
+# ⚠️ CRITIQUE : enregistre TOUS les modèles dans Base.metadata.
+# Sans cet import, Base.metadata.tables est VIDE → create_all ne crée
+# aucune table → _corriger_colonnes_manquantes échoue sur les FK
+# (REFERENCES domaines(id)) → migrer.py sort en erreur → uvicorn ne
+# démarre pas → crash-loop du conteneur (restart: always).
+import src.modeles  # noqa: F401
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(levelname)-5s [%(name)s] %(message)s",
@@ -326,7 +333,14 @@ def _creer_table_code_verification(engine):
 # Synchronisation automatique des tables manquantes
 # ===========================================================================
 def _synchroniser_tables_manquantes(engine):
-    """Crée automatiquement toutes les tables manquantes à partir des modèles SQLAlchemy."""
+    """Crée automatiquement toutes les tables manquantes à partir des modèles SQLAlchemy.
+
+    Utilise Base.metadata.create_all (checkfirst=True par défaut) :
+      - idempotent : ne crée QUE les tables manquantes, ne touche pas aux existantes
+      - gère l'ordre des dépendances FK entre tables manquantes
+        (ex: departements référence domaines) contrairement à table.create()
+        un par un qui échouerait si la table référencée n'existe pas encore.
+    """
     from src.base_donnees.base import Base
     from sqlalchemy import inspect
     
@@ -339,17 +353,13 @@ def _synchroniser_tables_manquantes(engine):
     if not tables_manquantes:
         logger.info("✓ Toutes les tables sont synchronisées")
         return
-    
-    logger.warning("⚠️  Tables manquantes détectées : %s", tables_manquantes)
-    
-    # Créer les tables manquantes une par une
-    for table_name in tables_manquantes:
-        table = Base.metadata.tables[table_name]
-        try:
-            table.create(engine)
-            logger.info("✅ Table créée : %s", table_name)
-        except Exception as e:
-            logger.error("❌ Erreur lors de la création de %s : %s", table_name, str(e)[:200])
+
+    logger.warning("⚠️  Tables manquantes détectées : %s", sorted(tables_manquantes))
+
+    # create_all est idempotent et respecte l'ordre des FK
+    Base.metadata.create_all(engine)
+    for table_name in sorted(tables_manquantes):
+        logger.info("✅ Table créée : %s", table_name)
 
 def _recreer_alembic_version_texte(url_sync: str) -> str | None:
     engine = create_engine(url_sync)
@@ -436,17 +446,21 @@ def executer_migrations():
             _stamp_sync(url_sync, revision)
             logger.info("✅ Base créée et stampée avec %s", revision)
         else:
-            # 3a. Colonnes manquantes
-            moteur = create_engine(url_sync)
-            try:
-                _corriger_colonnes_manquantes(moteur)
-            finally:
-                moteur.dispose()
-
-            # 3b. Synchronisation automatique des tables
+            # 3a. Synchronisation automatique des tables D'ABORD
+            # ⚠️ CRITIQUE : _corriger_colonnes_manquantes ajoute des colonnes avec
+            # REFERENCES domaines(id) / departements(id). Si ces tables n'existent
+            # pas encore, PostgreSQL rejette la FK → migrer.py échoue → uvicorn
+            # ne démarre pas → crash-loop du conteneur (restart: always).
             moteur = create_engine(url_sync)
             try:
                 _synchroniser_tables_manquantes(moteur)
+            finally:
+                moteur.dispose()
+
+            # 3b. Colonnes manquantes (ensuite, les tables de référence existent)
+            moteur = create_engine(url_sync)
+            try:
+                _corriger_colonnes_manquantes(moteur)
             finally:
                 moteur.dispose()
 

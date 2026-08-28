@@ -64,11 +64,34 @@ export COMPOSE_BAKE=false
 # --no-cache force une reconstruction propre sans utiliser le cache Docker
 docker compose build --progress plain --no-cache backend frontend
 
+# 🛑 Arrêter les anciens conteneurs DigiID AVANT le check des ports.
+# Sans cela, l'ancien conteneur nginx Docker occupe déjà les ports 80/443
+# et le check ci-dessous bloque à tort le redéploiement (exit 1 → rien ne se lance).
+echo "🛑 Arrêt des anciens conteneurs DigiID (libération des ports 80/443)..."
+docker compose down --remove-orphans 2>/dev/null || true
+
+# Vérifier que les certificats SSL existent sur l'hôte (sinon nginx crash-loop :
+# le conteneur redémarre en boucle car il ne peut pas charger les .pem).
+CHEMIN_FULLCHAIN=$(grep -E '^CHEMIN_CERTIFICAT_FULLCHAIN=' .env | head -1 | cut -d= -f2-)
+CHEMIN_FULLCHAIN=${CHEMIN_FULLCHAIN:-/etc/letsencrypt/live/dynamiqueid.digital/fullchain.pem}
+CHEMIN_CLE=$(grep -E '^CHEMIN_CERTIFICAT_CLE=' .env | head -1 | cut -d= -f2-)
+CHEMIN_CLE=${CHEMIN_CLE:-/etc/letsencrypt/live/dynamiqueid.digital/privkey.pem}
+if [ ! -f "$CHEMIN_FULLCHAIN" ] || [ ! -f "$CHEMIN_CLE" ]; then
+    echo "❌ Certificats SSL introuvables sur l'hôte :"
+    echo "   fullchain : $CHEMIN_FULLCHAIN"
+    echo "   clé privée : $CHEMIN_CLE"
+    echo "   → Générer le certificat avec certbot :"
+    echo "       sudo certbot certonly --webroot -w ~/DigiID/nginx/certbot -d ${DOMAINE_VAR:-dynamiqueid.digital}"
+    echo "   → Ou corriger CHEMIN_CERTIFICAT_* dans .env"
+    exit 1
+fi
+echo "   ✅ Certificats SSL présents"
+
 # Vérifier que les ports 80/443 sont libres AVANT de démarrer nginx Docker
-# (sinon : "failed to bind host port 0.0.0.0:80/tcp: address already in use")
+# (après le down, un port encore occupé = processus système, pas Docker)
 for PORT in 80 443; do
     if ss -ltn 2>/dev/null | grep -q ":$PORT "; then
-        echo "❌ Le port $PORT est déjà occupé sur l'hôte."
+        echo "❌ Le port $PORT est déjà occupé sur l'hôte (processus système)."
         echo "   → Identifier le processus : sudo ss -ltnp | grep :$PORT"
         echo "   → Si c'est l'ancien nginx système, l'arrêter définitivement :"
         echo "       sudo systemctl stop nginx && sudo systemctl disable nginx"

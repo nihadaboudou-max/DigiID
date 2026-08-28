@@ -89,15 +89,20 @@ cd ~/DigiID && ./deploy.sh
 2. `git fetch` + `git reset --hard origin/main`
 3. Nettoie le cache Next.js
 4. `docker compose build --progress plain --no-cache backend frontend`
-5. `docker compose up -d`
-6. Teste la config nginx (`nginx -t`) et affiche les logs
-7. Affiche l'URL finale : `https://dynamiqueid.digital`
+5. **`docker compose down`** — arrête les anciens conteneurs AVANT de vérifier les ports
+   (sans cela, l'ancien nginx Docker occupe déjà 80/443 et bloque le redéploiement)
+6. Vérifie que les certificats SSL existent sur l'hôte (sinon nginx crash-loop)
+7. Vérifie que les ports 80/443 sont libres (après le down : seul un processus système bloque)
+8. `docker compose up -d`
+9. Teste la config nginx (`nginx -t`) et affiche les logs
+10. Affiche l'URL finale : `https://dynamiqueid.digital`
 
 ### Déploiement à la main (optionnel)
 ```bash
 cd ~/DigiID
 git fetch origin && git reset --hard origin/main
 docker compose build --progress plain --no-cache backend frontend
+docker compose down   # ← obligatoire : libère les ports 80/443 occupés par l'ancien nginx
 docker compose up -d
 docker exec digiid_nginx nginx -t
 ```
@@ -136,6 +141,30 @@ certificat automatiquement (fichiers relus au reload).
   1. Relancer dans `tmux` (voir plus haut).
   2. Garder la connexion vivante : `ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=4 root@IP`.
   3. Libérer de la place : `docker system prune -af` ; vérifier `df -h` et `free -h`.
+
+### Les conteneurs « bouclent » (redémarrent en boucle : `restart: always`)
+
+Symptôme : `docker ps` montre `Restarting` sur `digiid_backend` ou `digiid_nginx`.
+Causes corrigées dans le dépôt (penser à `git pull` avant de diagnostiquer) :
+
+1. **Backend crash-loop** : `migrer.py` exécutait `ALTER TABLE ... REFERENCES domaines(id)`
+   AVANT de créer les tables `domaines`/`departements` → échec FK → uvicorn ne démarre pas.
+   Corrigé : les tables manquantes sont créées AVANT les colonnes (ordre inversé),
+   et `import src.modeles` charge les 44 tables dans `Base.metadata` (sinon `create_all`
+   ne crée rien).
+2. **nginx crash-loop** : le certificat SSL n'existe pas sur l'hôte → nginx ne peut pas
+   charger les `.pem`. Corrigé : `deploy.sh` vérifie les certificats avant `up -d`.
+3. **ACME bloqué** : le `return 301` HTTP→HTTPS était au niveau du `server` (port 80),
+   donc le challenge `/.well-known/acme-challenge/` était redirigé avant d'être servi
+   → certbot ne pouvait jamais valider le domaine → aucun certificat généré.
+   Corrigé : `return 301` déplacé dans `location /` (la zone ACME reste accessible).
+
+Diagnostic rapide :
+```bash
+docker logs digiid_backend --tail 50   # erreur FK ? base de données ?
+docker logs digiid_nginx --tail 50     # cannot load certificate ?
+ls -l /etc/letsencrypt/live/dynamiqueid.digital/   # certificats présents ?
+```
 
 ### `502 Bad Gateway` sur le domaine
 - `docker ps` : les conteneurs `digiid_backend` / `digiid_frontend` sont-ils `Up` ?

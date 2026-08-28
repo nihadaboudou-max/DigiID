@@ -21,11 +21,17 @@ server {
     server_name ${DOMAINE};
 
     # Zone ACME (renouvellement Let's Encrypt / certbot côté hôte)
+    # ⚠️ DOIT rester en dehors de `location /` : sinon le `return 301`
+    # ci-dessous redirige le challenge HTTP-01 en HTTPS et certbot
+    # ne peut JAMAIS valider le domaine → pas de certificat → crash-loop.
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
     }
 
-    return 301 https://$host$request_uri;
+    # Toutes les AUTRES requêtes HTTP → HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
 }
 
 # -----------------------------------------------------------------------------
