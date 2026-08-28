@@ -1,0 +1,80 @@
+# =============================================================================
+# DigiID — Reverse proxy nginx (HTTPS + domaine)
+# -----------------------------------------------------------------------------
+# Ce fichier est un TEMPLATE nginx officiel : l'entrée du conteneur
+# remplace ${DOMAINE} (et autres ${VARIABLES}) par les variables
+# d'environnement passées dans docker-compose.yml (issues du .env).
+#
+# Rôles :
+#   * :80    → redirection permanente vers HTTPS
+#   * :443   → TLS (certificat monté depuis l'hôte) + proxy
+#        /api/*   → backend:8000  (FastAPI)
+#        /*       → frontend:3000 (Next.js)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# HTTP → HTTPS
+# -----------------------------------------------------------------------------
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAINE};
+
+    # Zone ACME (renouvellement Let's Encrypt / certbot côté hôte)
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    return 301 https://$host$request_uri;
+}
+
+# -----------------------------------------------------------------------------
+# HTTPS — proxy principal
+# -----------------------------------------------------------------------------
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ${DOMAINE};
+
+    # Certificats montés depuis l'hôte (chemins définis dans .env :
+    # CHEMIN_CERTIFICAT_FULLCHAIN / CHEMIN_CERTIFICAT_CLE).
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    # Uploads CNI / photos (le backend accepte jusqu'à 15 Mo)
+    client_max_body_size 20m;
+
+    # ---------------------------------------------------------------
+    # API backend FastAPI
+    # ---------------------------------------------------------------
+    location /api/ {
+        proxy_pass http://backend:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    # ---------------------------------------------------------------
+    # Frontend Next.js
+    # ---------------------------------------------------------------
+    location / {
+        proxy_pass http://frontend:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}

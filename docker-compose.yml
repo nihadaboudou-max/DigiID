@@ -31,8 +31,10 @@ services:
       dockerfile: backend/Dockerfile
     container_name: digiid_backend
     restart: always
-    ports:
-      - "${PORT_BACKEND:-8000}:8000"
+    # Port exposé sur l'hôte UNIQUEMENT en debug. En production, le trafic
+    # passe par nginx (ports 80/443) — décommenter pour accès direct :
+    # ports:
+    #   - "${PORT_BACKEND:-8000}:8000"
     env_file:
       - .env
     volumes:
@@ -109,18 +111,44 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
       args:
-        # IP du serveur lue depuis .env
-        NEXT_PUBLIC_URL_BACKEND: ${NEXT_PUBLIC_URL_BACKEND:-http://152.228.141.69:8000}
+        # URL publique (domaine) définie dans .env — plus d'IP en dur
+        NEXT_PUBLIC_URL_BACKEND: ${NEXT_PUBLIC_URL_BACKEND:-http://backend:8000}
         URL_BACKEND: ${URL_BACKEND_INTERNE:-http://backend:8000}
     container_name: digiid_frontend
     restart: always
-    ports:
-      - "${PORT_FRONTEND:-3000}:3000"
+    # Port exposé sur l'hôte UNIQUEMENT en debug. En production, nginx sert
+    # le frontend — décommenter pour accès direct :
+    # ports:
+    #   - "${PORT_FRONTEND:-3000}:3000"
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_URL_BACKEND=${NEXT_PUBLIC_URL_BACKEND:-http://152.228.141.69:8000}
+      - NEXT_PUBLIC_URL_BACKEND=${NEXT_PUBLIC_URL_BACKEND:-http://backend:8000}
       - URL_BACKEND=${URL_BACKEND_INTERNE:-http://backend:8000}
     depends_on:
+      - backend
+
+  # ---------------------------------------------------------------------------
+  # Reverse proxy nginx — entrée publique HTTPS (domaine + certificat)
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: digiid_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # ${DOMAINE} est substitué par le template nginx (envsubst)
+      - DOMAINE=${DOMAINE:-dynamiqueid.digital}
+    volumes:
+      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      # Dossier partagé pour le renouvellement du certificat (certbot --webroot)
+      - ./nginx/certbot:/var/www/certbot
+      # Certificats montés depuis l'hôte (chemins définis dans .env)
+      - ${CHEMIN_CERTIFICAT_FULLCHAIN:-/etc/letsencrypt/live/dynamiqueid.digital/fullchain.pem}:/etc/nginx/certs/fullchain.pem:ro
+      - ${CHEMIN_CERTIFICAT_CLE:-/etc/letsencrypt/live/dynamiqueid.digital/privkey.pem}:/etc/nginx/certs/privkey.pem:ro
+    depends_on:
+      - frontend
       - backend
 
 volumes:
