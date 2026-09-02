@@ -19,7 +19,7 @@ class InspectionDocument(Base):
 
     # --- Clé primaire et relations ---
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4, index=True)
-    utilisateur_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("utilisateurs.id", ondelete="CASCADE"), index=True, nullable=False)
+    utilisateur_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("utilisateur.id", ondelete="CASCADE"), index=True, nullable=False)
     
     # --- Métadonnées du fichier ---
     type_document: Mapped[str] = mapped_column(String(50), nullable=False, default="inconnu", index=True)
