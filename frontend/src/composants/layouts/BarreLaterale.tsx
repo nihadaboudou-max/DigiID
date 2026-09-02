@@ -581,6 +581,7 @@ export function BarreLaterale() {
                   Vérifications & Sécurité du compte
                 </p>
                 {cbLienSousMenu("/identite", "Vérifications")}
+                {cbLienSousMenu("/inspection", "Inspection")}
                 {cbLienSousMenu("/identite/email", "Vérification de l'email")}
                 {cbLienSousMenu("/identite/verification-cni", "Vérification CNIL")}
                 {cbLienSousMenu("/identite/verification-visuelle", "Vérification visuelle")}
