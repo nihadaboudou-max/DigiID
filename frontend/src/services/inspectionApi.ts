@@ -1,36 +1,38 @@
-// Service API pour le module d'inspection de documents
+// frontend/src/services/inspectionApi.ts
 import {
   ReponseUploadDocument,
   ListeVerifications,
   SyntheseVerification,
-  TypeDocument,
 } from "@/types/inspection";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_URL_BACKEND || "http://localhost:8000";
 
-// Helper pour gérer les erreurs API
-async function handleResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Erreur inconnue" }));
-    throw new Error(error.detail || `Erreur HTTP ${response.status}`);
-  }
-  return response.json();
-}
-
-// Helper pour obtenir le token JWT
+// Helper pour obtenir le token JWT (essaie les clés les plus courantes)
 function getAuthToken(): string | null {
   if (typeof window !== "undefined") {
-    return localStorage.getItem("token");
+    return (
+      localStorage.getItem("token") ||
+      localStorage.getItem("access_token") ||
+      localStorage.getItem("auth_token") ||
+      localStorage.getItem("jwt")
+    );
   }
   return null;
 }
 
 // Headers communs
-function getHeaders(): HeadersInit {
+function getHeaders(isFormData: boolean = false): HeadersInit {
   const token = getAuthToken();
-  return {
-    ...(token && { Authorization: `Bearer ${token}` }),
-  };
+  const headers: HeadersInit = {};
+  
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  
+  // ⚠️ IMPORTANT : Ne JAMAIS définir manuellement "Content-Type" pour un FormData.
+  // Le navigateur doit le faire lui-même pour inclure la "boundary" correcte.
+  
+  return headers;
 }
 
 /**
@@ -38,7 +40,7 @@ function getHeaders(): HeadersInit {
  */
 export async function uploadDocument(
   fichier: File,
-  typeDocument?: TypeDocument,
+  typeDocument?: string,
   face: "recto" | "verso" | "unique" = "recto",
   utilisateurCibleId?: string
 ): Promise<ReponseUploadDocument> {
@@ -56,11 +58,17 @@ export async function uploadDocument(
 
   const response = await fetch(`${API_BASE_URL}/api/v1/inspection-documents/upload`, {
     method: "POST",
-    headers: getHeaders(),
+    headers: getHeaders(true),
     body: formData,
+    credentials: "include", // Indispensable si l'auth utilise des cookies HttpOnly
   });
 
-  return handleResponse<ReponseUploadDocument>(response);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Erreur inconnue" }));
+    throw new Error(error.detail || `Erreur HTTP ${response.status}`);
+  }
+
+  return response.json();
 }
 
 /**
@@ -70,9 +78,15 @@ export async function obtenirSynthese(): Promise<SyntheseVerification> {
   const response = await fetch(`${API_BASE_URL}/api/v1/inspection-documents/synthese`, {
     method: "GET",
     headers: getHeaders(),
+    credentials: "include",
   });
 
-  return handleResponse<SyntheseVerification>(response);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Erreur inconnue" }));
+    throw new Error(error.detail || `Erreur HTTP ${response.status}`);
+  }
+
+  return response.json();
 }
 
 /**
@@ -84,10 +98,16 @@ export async function obtenirHistorique(limite: number = 20): Promise<ListeVerif
     {
       method: "GET",
       headers: getHeaders(),
+      credentials: "include",
     }
   );
 
-  return handleResponse<ListeVerifications>(response);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Erreur inconnue" }));
+    throw new Error(error.detail || `Erreur HTTP ${response.status}`);
+  }
+
+  return response.json();
 }
 
 /**
@@ -99,10 +119,14 @@ export async function supprimerVerification(verificationId: string): Promise<voi
     {
       method: "DELETE",
       headers: getHeaders(),
+      credentials: "include",
     }
   );
 
-  await handleResponse(response);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Erreur inconnue" }));
+    throw new Error(error.detail || `Erreur HTTP ${response.status}`);
+  }
 }
 
 /**
@@ -114,8 +138,12 @@ export async function restaurerVerification(verificationId: string): Promise<voi
     {
       method: "POST",
       headers: getHeaders(),
+      credentials: "include",
     }
   );
 
-  await handleResponse(response);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Erreur inconnue" }));
+    throw new Error(error.detail || `Erreur HTTP ${response.status}`);
+  }
 }
