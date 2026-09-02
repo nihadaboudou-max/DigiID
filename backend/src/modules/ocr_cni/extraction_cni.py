@@ -255,8 +255,20 @@ def _detecter_pays(texte: str) -> Optional[str]:
     return None
 
 def _extraire_valeur_label(texte: str, patterns_label: list[str], contexte: str = "nom") -> Optional[str]:
-    """Extrait la valeur après un label sur la même ligne ou ligne suivante."""
+    """
+    Extrait la valeur après un label sur la même ligne ou ligne suivante.
+    
+    Stratégies (dans l'ordre) :
+      1. Label + valeur sur même ligne (avec ou sans séparateur)
+      2. Label sur ligne N, valeur sur ligne N+1
+      3. Fallback : recherche dans tout le texte
+    """
+    if not texte or not patterns_label:
+        return None
+    
     lignes = texte.split("\n")
+    
+    # ── STRATÉGIE 1 : Label et valeur sur la MÊME ligne ──
     for i, ligne in enumerate(lignes):
         ligne_propre = ligne.strip()
         for pattern in patterns_label:
@@ -264,49 +276,126 @@ def _extraire_valeur_label(texte: str, patterns_label: list[str], contexte: str 
             if match:
                 # Valeur sur la même ligne après le label
                 valeur = ligne_propre[match.end():].strip()
-                valeur = re.sub(r"^[:.\s-]+", "", valeur)
-                valeur = re.sub(r"[:.\s-]+$", "", valeur)
-                if valeur and not re.match(r"^\s*$", valeur):
+                valeur = re.sub(r"^[:.\s\-/]+", "", valeur)  # Séparateurs optionnels
+                valeur = re.sub(r"[:.\s\-/]+$", "", valeur)
+                
+                if valeur and len(valeur) >= 2:
                     return _nettoyer_valeur(valeur, contexte)
-                # Valeur sur la ligne suivante
+                
+                # ── STRATÉGIE 2 : Valeur sur la ligne suivante ──
                 if i + 1 < len(lignes):
                     suivante = lignes[i + 1].strip()
-                    # Ne pas prendre si c'est un autre label
+                    
+                    # Vérifier que ce n'est pas un autre label
+                    labels_connus = [
+                        r"NOM", r"PR[EÉ]NOM", r"SEXE", r"DATE", r"NUM[EÉ]RO", 
+                        r"N[°o]", r"LIEU", r"AUTORIT[EÉ]", r"TAILLE", r"EXPIR",
+                        r"SURNAME", r"FIRST\s*NAME", r"OTHER\s*NAMES",
+                        r"SEX", r"GENDER", r"NIN", r"ID\s*NUMBER"
+                    ]
                     est_label = any(
-                        re.search(p, suivante, re.IGNORECASE)
-                        for cfg in PATTERNS_DOCUMENTS.values()
-                        for chpats in cfg["champs"].values()
-                        for p in chpats
+                        re.search(label, suivante, re.IGNORECASE)
+                        for label in labels_connus
                     )
-                    if suivante and len(suivante) > 3 and not est_label:
+                    
+                    if suivante and len(suivante) > 2 and not est_label:
                         return _nettoyer_valeur(suivante, contexte)
+                
                 return None
+    
+    # ── STRATÉGIE 3 : Fallback — recherche dans tout le texte ──
+    # Utile quand le label et la valeur sont séparés par plusieurs lignes
+    for pattern in patterns_label:
+        # Chercher le pattern suivi de n'importe quel caractère (y compris \n)
+        regex_fallback = rf"{pattern}\s*[:\-/]?\s*([A-Za-zÀ-ÿ0-9\-'.,\s<>()]{{2,60}})"
+        match = re.search(regex_fallback, texte, re.IGNORECASE | re.MULTILINE)
+        if match:
+            valeur = match.group(1).strip()
+            if valeur and len(valeur) >= 2:
+                return _nettoyer_valeur(valeur, contexte)
+    
     return None
 
 def _nettoyer_valeur(valeur: str, contexte: str) -> str:
-    valeur = valeur.strip().strip(":;,.- ")
-    if contexte == "numero":
+    """
+    Nettoie et valide une valeur extraite par l'OCR selon son contexte.
+    
+    Règles critiques :
+    - Rejette les valeurs purement numériques pour les noms/prénoms (anti-hallucination)
+    - Normalise les dates au format JJ/MM/AAAA
+    - Corrige les erreurs OCR classiques dans les numéros (O→0, I→1)
+    - Retourne "non_detecte" pour le sexe quand incertain (conforme au schéma Pydantic)
+    """
+    if not valeur:
+        return ""
+    
+    valeur = valeur.strip().strip(":;,.-\"' ")
+    
+    # ── CONTEXTE : NOM / PRÉNOMS / LIEU / AUTORITÉ ──
+    # 🛡️ RÈGLE CRITIQUE : Rejeter les valeurs purement numériques
+    if contexte in ("nom", "prenoms", "lieu_naissance", "autorite"):
+        # Rejeter si c'est uniquement des chiffres (artefact OCR)
+        if re.match(r"^\d+$", valeur):
+            return ""
+        # Ne garder que lettres, espaces, tirets, apostrophes et accents
+        valeur = re.sub(r"[^a-zA-ZÀ-ÿ\s\-']", "", valeur)
+        # Rejeter si trop court après nettoyage
+        return valeur.strip() if len(valeur.strip()) >= 2 else ""
+    
+    # ── CONTEXTE : NUMÉRO DE DOCUMENT ──
+    elif contexte == "numero":
+        # Ne garder que les caractères alphanumériques
         valeur = "".join(c for c in valeur.upper() if c.isalnum())
+        # Correction des erreurs OCR classiques
+        valeur = valeur.replace("O", "0").replace("I", "1").replace("L", "1")
+        # Limiter la longueur
         if len(valeur) > 20:
             valeur = valeur[:20]
+        # Rejeter si trop court (minimum 5 caractères pour un numéro valide)
+        return valeur if len(valeur) >= 5 else ""
+    
+    # ─ CONTEXTE : SEXE ──
     elif contexte == "sexe":
-        valeur = valeur.upper()[:1]
-        if valeur in ("M", "F"):
-            return valeur
-        if valeur.upper().startswith("MASC"):
+        valeur = valeur.upper().strip()
+        # Cas directs
+        if valeur in ("M", "H", "MASCULIN", "MALE"):
             return "M"
-        if valeur.upper().startswith("FEM"):
+        if valeur in ("F", "FEMININ", "FEMALE"):
             return "F"
-        return "N/A"
+        # Cas partiel (première lettre)
+        if valeur.startswith("MASC") or valeur.startswith("MAL"):
+            return "M"
+        if valeur.startswith("FEM"):
+            return "F"
+        # Incertain → valeur par défaut du schéma
+        return "non_detecte"
+    
+    # ── CONTEXTE : DATE DE NAISSANCE ──
     elif contexte == "date_naissance":
+        # Normaliser les séparateurs
         valeur = re.sub(r"[.\-]", "/", valeur)
+        # Chercher le format JJ/MM/AAAA
         match = re.search(PATTERN_DATE, valeur)
         if match:
-            valeur = f"{match.group(1)}/{match.group(2)}/{match.group(3)}"
+            jour = match.group(1).zfill(2)
+            mois = match.group(2).zfill(2)
+            annee = match.group(3)
+            # Gérer les années à 2 chiffres
+            if len(annee) == 2:
+                annee = f"19{annee}" if int(annee) > 40 else f"20{annee}"
+            return f"{jour}/{mois}/{annee}"
+        return ""
+    
+    # ── CONTEXTE : TAILLE ──
     elif contexte == "taille":
         match = re.search(r"(\d{3})", valeur)
         if match:
-            valeur = match.group(1)
+            taille = int(match.group(1))
+            # Validation : une taille humaine est entre 50 et 250 cm
+            return match.group(1) if 50 <= taille <= 250 else ""
+        return ""
+    
+    # ── CONTEXTE INCONNU : retour brut ──
     return valeur
 
 def _extraire_generique(texte: str) -> dict:

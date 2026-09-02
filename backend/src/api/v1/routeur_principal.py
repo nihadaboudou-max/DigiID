@@ -97,6 +97,10 @@ from src.modules.ocr_permis.routes import routeur_permis
 # Module OCR Assurance Automobile
 from src.modules.ocr_assurance.routes import routeur_assurance
 
+## Module Inspection de Documents — routeur pour l'upload et l'analyse OCR des documents d'identité
+from src.modules.inspection_documents import routeur_inspection
+
+
 # Routeur racine — préfixe et tag globaux gérés au montage
 routeur_v1 = APIRouter()
 
@@ -187,3 +191,6 @@ routeur_v1.include_router(routeur_permis)  # Module OCR Permis de Conduire
 
 # Module OCR Assurance Automobile — routeur pour l'upload et l'analyse OCR des assurances automobiles
 routeur_v1.include_router(routeur_assurance)  # Module OCR Assurance Automobile
+
+## Module Inspection de Documents — routeur pour l'upload et l'analyse OCR des documents d'identité
+routeur_v1.include_router(routeur_inspection)
