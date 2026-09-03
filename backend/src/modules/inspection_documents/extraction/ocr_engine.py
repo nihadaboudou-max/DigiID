@@ -8,6 +8,7 @@ import time
 from typing import Optional, Tuple
 import numpy as np
 from PIL import Image
+
 try:
     import cv2
     CV2_DISPONIBLE = True
@@ -22,7 +23,8 @@ CONFIG_TESSERACT_MRZ = "--oem 1 --psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLM
 
 def _charger_image(donnees_image: bytes) -> Optional[np.ndarray]:
     try:
-        if not CV2_DISPONIBLE: return None
+        if not CV2_DISPONIBLE: 
+            return None
         pil_image = Image.open(io.BytesIO(donnees_image)).convert("RGB")
         return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
     except Exception as e:
@@ -30,7 +32,8 @@ def _charger_image(donnees_image: bytes) -> Optional[np.ndarray]:
         return None
 
 def _pretraiter_image(image: np.ndarray) -> np.ndarray:
-    if not CV2_DISPONIBLE: return image
+    if not CV2_DISPONIBLE: 
+        return image
     gris = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     debruite = cv2.fastNlMeansDenoising(gris, h=10)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
@@ -38,7 +41,8 @@ def _pretraiter_image(image: np.ndarray) -> np.ndarray:
 
 def _extraire_zone_mrz_intelligente(image: np.ndarray) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """Détecte la MRZ dans plusieurs zones (pas seulement en bas)."""
-    if not CV2_DISPONIBLE: return None, None, None
+    if not CV2_DISPONIBLE: 
+        return None, None, None
     
     hauteur, largeur = image.shape[:2]
     # Zones à tester : Bas (75-100%), Milieu (40-60%), Image entière (fallback)
@@ -66,8 +70,15 @@ def analyser_document(donnees_image: bytes) -> dict:
     """Pipeline principal d'analyse OCR."""
     debut = time.time()
     image = _charger_image(donnees_image)
-    if not image:
-        return {"texte_brut": "", "confiance_moyenne": 0.0, "mrz_lignes": (None, None, None), "succes": False}
+    
+    # ✅ CORRECTION ICI : Utiliser 'is None' au lieu de 'not image' pour les tableaux NumPy
+    if image is None:
+        return {
+            "texte_brut": "", 
+            "confiance_moyenne": 0.0, 
+            "mrz_lignes": (None, None, None), 
+            "succes": False
+        }
     
     image_pretraitee = _pretraiter_image(image)
     
