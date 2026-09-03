@@ -33,7 +33,7 @@ class InspectionDocument(Base):
     nom_famille: Mapped[str] = mapped_column(String(255), nullable=True, index=True)
     prenoms: Mapped[str] = mapped_column(String(255), nullable=True)
     date_naissance: Mapped[str] = mapped_column(String(50), nullable=True)
-    sexe: Mapped[str] = mapped_column(String(10), nullable=True, default="non_detecte")
+    sexe: Mapped[str] = mapped_column(String(20), nullable=True, default="non_detecte")
     numero_document: Mapped[str] = mapped_column(String(100), nullable=True, index=True)
     date_expiration: Mapped[str] = mapped_column(String(50), nullable=True)
     lieu_naissance: Mapped[str] = mapped_column(String(255), nullable=True)
