@@ -1,44 +1,15 @@
-// frontend/src/services/inspectionApi.ts
+import { clientAPI, obtenirTokenAcces } from "@/services/client_api";
 import {
   ReponseUploadDocument,
   ListeVerifications,
   SyntheseVerification,
 } from "@/types/inspection";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_URL_BACKEND || "http://localhost:8000";
-
-// Helper pour obtenir le token JWT (essaie plusieurs clés courantes)
-function getAuthToken(): string | null {
-  if (typeof window !== "undefined") {
-    // Essaie les clés les plus courantes
-    return (
-      localStorage.getItem("token") ||
-      localStorage.getItem("access_token") ||
-      localStorage.getItem("auth_token") ||
-      localStorage.getItem("jwt") ||
-      localStorage.getItem("authorization")
-    );
-  }
-  return null;
-}
-
-// Headers communs
-function getHeaders(isFormData: boolean = false): HeadersInit {
-  const token = getAuthToken();
-  const headers: HeadersInit = {};
-  
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-  
-  // IMPORTANT : Ne JAMAIS définir manuellement "Content-Type" pour FormData
-  // Le navigateur doit le faire pour inclure la boundary correcte
-  
-  return headers;
-}
+const PREFIXE = "/api/v1/inspection-documents";
 
 /**
- * Upload un document d'identité
+ * Uploader un document d'identité pour extraction OCR.
+ * Utilisation de XMLHttpRequest pour gérer correctement le FormData avec le token.
  */
 export async function uploadDocument(
   fichier: File,
@@ -53,119 +24,71 @@ export async function uploadDocument(
   if (typeDocument) {
     formData.append("type_document", typeDocument);
   }
-  
   if (utilisateurCibleId) {
     formData.append("utilisateur_cible_id", utilisateurCibleId);
   }
 
-  const token = getAuthToken();
-  
-  const response = await fetch(`${API_BASE_URL}/api/v1/inspection-documents/upload`, {
-    method: "POST",
-    headers: {
-      ...(token && { "Authorization": `Bearer ${token}` }),
-    },
-    body: formData,
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Erreur inconnue" }));
-    throw new Error(error.detail || `Erreur HTTP ${response.status}`);
+  // Récupération du token via la fonction centralisée du projet
+  const token = await obtenirTokenAcces();
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
   }
 
-  return response.json();
+  const xhr = new XMLHttpRequest();
+
+  return new Promise((resolve, reject) => {
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText));
+      } else {
+        try {
+          const err = JSON.parse(xhr.responseText);
+          reject(new Error(err.detail || err.message || "Erreur lors de l'upload du document"));
+        } catch {
+          reject(new Error("Erreur lors de l'upload du document"));
+        }
+      }
+    });
+
+    xhr.addEventListener("error", () => reject(new Error("Erreur réseau")));
+
+    xhr.open("POST", `${PREFIXE}/upload`);
+    Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+    xhr.send(formData);
+  });
 }
 
 /**
- * Obtient la synthèse des vérifications
+ * Récupérer l'historique des documents scannés.
+ */
+export async function obtenirHistorique(limite: number = 10): Promise<ListeVerifications> {
+  return clientAPI.get<ListeVerifications>(
+    `${PREFIXE}/historique?limite=${limite}`,
+    { authentifie: true }
+  );
+}
+
+/**
+ * Récupérer la synthèse des vérifications.
  */
 export async function obtenirSynthese(): Promise<SyntheseVerification> {
-  const token = getAuthToken();
-  
-  const response = await fetch(`${API_BASE_URL}/api/v1/inspection-documents/synthese`, {
-    method: "GET",
-    headers: {
-      ...(token && { "Authorization": `Bearer ${token}` }),
-    },
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Erreur inconnue" }));
-    throw new Error(error.detail || `Erreur HTTP ${response.status}`);
-  }
-
-  return response.json();
+  return clientAPI.get<SyntheseVerification>(
+    `${PREFIXE}/synthese`,
+    { authentifie: true }
+  );
 }
 
 /**
- * Obtient l'historique des vérifications
+ * Supprimer une vérification (soft-delete).
  */
-export async function obtenirHistorique(limite: number = 20): Promise<ListeVerifications> {
-  const token = getAuthToken();
-  
-  const response = await fetch(
-    `${API_BASE_URL}/api/v1/inspection-documents/historique?limite=${limite}`,
-    {
-      method: "GET",
-      headers: {
-        ...(token && { "Authorization": `Bearer ${token}` }),
-      },
-      credentials: "include",
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Erreur inconnue" }));
-    throw new Error(error.detail || `Erreur HTTP ${response.status}`);
-  }
-
-  return response.json();
+export async function supprimerVerification(id: string): Promise<void> {
+  await clientAPI.delete(`${PREFIXE}/${id}`, { authentifie: true });
 }
 
 /**
- * Supprime une vérification (soft-delete)
+ * Restaurer une vérification depuis la corbeille.
  */
-export async function supprimerVerification(verificationId: string): Promise<void> {
-  const token = getAuthToken();
-  
-  const response = await fetch(
-    `${API_BASE_URL}/api/v1/inspection-documents/${verificationId}`,
-    {
-      method: "DELETE",
-      headers: {
-        ...(token && { "Authorization": `Bearer ${token}` }),
-      },
-      credentials: "include",
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Erreur inconnue" }));
-    throw new Error(error.detail || `Erreur HTTP ${response.status}`);
-  }
-}
-
-/**
- * Restaure une vérification
- */
-export async function restaurerVerification(verificationId: string): Promise<void> {
-  const token = getAuthToken();
-  
-  const response = await fetch(
-    `${API_BASE_URL}/api/v1/inspection-documents/${verificationId}/restaurer`,
-    {
-      method: "POST",
-      headers: {
-        ...(token && { "Authorization": `Bearer ${token}` }),
-      },
-      credentials: "include",
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Erreur inconnue" }));
-    throw new Error(error.detail || `Erreur HTTP ${response.status}`);
-  }
+export async function restaurerVerification(id: string): Promise<void> {
+  await clientAPI.post(`${PREFIXE}/${id}/restaurer`, {}, { authentifie: true });
 }
