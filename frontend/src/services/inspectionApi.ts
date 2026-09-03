@@ -7,14 +7,16 @@ import {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_URL_BACKEND || "http://localhost:8000";
 
-// Helper pour obtenir le token JWT (essaie les clés les plus courantes)
+// Helper pour obtenir le token JWT (essaie plusieurs clés courantes)
 function getAuthToken(): string | null {
   if (typeof window !== "undefined") {
+    // Essaie les clés les plus courantes
     return (
       localStorage.getItem("token") ||
       localStorage.getItem("access_token") ||
       localStorage.getItem("auth_token") ||
-      localStorage.getItem("jwt")
+      localStorage.getItem("jwt") ||
+      localStorage.getItem("authorization")
     );
   }
   return null;
@@ -29,8 +31,8 @@ function getHeaders(isFormData: boolean = false): HeadersInit {
     headers["Authorization"] = `Bearer ${token}`;
   }
   
-  // ⚠️ IMPORTANT : Ne JAMAIS définir manuellement "Content-Type" pour un FormData.
-  // Le navigateur doit le faire lui-même pour inclure la "boundary" correcte.
+  // IMPORTANT : Ne JAMAIS définir manuellement "Content-Type" pour FormData
+  // Le navigateur doit le faire pour inclure la boundary correcte
   
   return headers;
 }
@@ -56,11 +58,15 @@ export async function uploadDocument(
     formData.append("utilisateur_cible_id", utilisateurCibleId);
   }
 
+  const token = getAuthToken();
+  
   const response = await fetch(`${API_BASE_URL}/api/v1/inspection-documents/upload`, {
     method: "POST",
-    headers: getHeaders(true),
+    headers: {
+      ...(token && { "Authorization": `Bearer ${token}` }),
+    },
     body: formData,
-    credentials: "include", // Indispensable si l'auth utilise des cookies HttpOnly
+    credentials: "include",
   });
 
   if (!response.ok) {
@@ -75,9 +81,13 @@ export async function uploadDocument(
  * Obtient la synthèse des vérifications
  */
 export async function obtenirSynthese(): Promise<SyntheseVerification> {
+  const token = getAuthToken();
+  
   const response = await fetch(`${API_BASE_URL}/api/v1/inspection-documents/synthese`, {
     method: "GET",
-    headers: getHeaders(),
+    headers: {
+      ...(token && { "Authorization": `Bearer ${token}` }),
+    },
     credentials: "include",
   });
 
@@ -93,11 +103,15 @@ export async function obtenirSynthese(): Promise<SyntheseVerification> {
  * Obtient l'historique des vérifications
  */
 export async function obtenirHistorique(limite: number = 20): Promise<ListeVerifications> {
+  const token = getAuthToken();
+  
   const response = await fetch(
     `${API_BASE_URL}/api/v1/inspection-documents/historique?limite=${limite}`,
     {
       method: "GET",
-      headers: getHeaders(),
+      headers: {
+        ...(token && { "Authorization": `Bearer ${token}` }),
+      },
       credentials: "include",
     }
   );
@@ -114,11 +128,15 @@ export async function obtenirHistorique(limite: number = 20): Promise<ListeVerif
  * Supprime une vérification (soft-delete)
  */
 export async function supprimerVerification(verificationId: string): Promise<void> {
+  const token = getAuthToken();
+  
   const response = await fetch(
     `${API_BASE_URL}/api/v1/inspection-documents/${verificationId}`,
     {
       method: "DELETE",
-      headers: getHeaders(),
+      headers: {
+        ...(token && { "Authorization": `Bearer ${token}` }),
+      },
       credentials: "include",
     }
   );
@@ -133,11 +151,15 @@ export async function supprimerVerification(verificationId: string): Promise<voi
  * Restaure une vérification
  */
 export async function restaurerVerification(verificationId: string): Promise<void> {
+  const token = getAuthToken();
+  
   const response = await fetch(
     `${API_BASE_URL}/api/v1/inspection-documents/${verificationId}/restaurer`,
     {
       method: "POST",
-      headers: getHeaders(),
+      headers: {
+        ...(token && { "Authorization": `Bearer ${token}` }),
+      },
       credentials: "include",
     }
   );
