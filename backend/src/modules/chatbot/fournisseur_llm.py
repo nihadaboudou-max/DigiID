@@ -155,43 +155,40 @@ async def _appeler_groq(
 
     return donnees["choices"][0]["message"]["content"].strip()
 
-# Dans src/modules/chatbot/fournisseur_llm.py
 async def appeler_llm_vision(
     image_base64: str,
     prompt: str,
-    modele: str = "qwen2-vl:7b",  # Modèle de vision
 ) -> str:
-    """
-    Appelle un VLM (Vision Language Model) via Ollama pour analyser une image.
-    Retourne la réponse textuelle (idéalement du JSON).
-    """
-    url = f"{parametres.ollama_url}/api/chat"
+    """Appelle Groq avec une image pour extraction de document."""
+    if not parametres.groq_api_key:
+        raise ErreurServiceIndisponible("GROQ_API_KEY non configurée")
     
     messages = [
         {
             "role": "user",
-            "content": prompt,
-            "images": [image_base64]  # Ollama supporte les images en base64
+            "content": [
+                {"type": "text", "text": prompt},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{image_base64}"
+                    }
+                }
+            ]
         }
     ]
     
-    try:
-        async with httpx.AsyncClient(timeout=120.0) as client:  # Plus long pour les images
-            reponse = await client.post(
-                url,
-                json={
-                    "model": modele,
-                    "messages": messages,
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.1,  # Très bas pour l'extraction précise
-                        "num_predict": 1000,
-                    },
-                },
-            )
-            reponse.raise_for_status()
-            donnees = reponse.json()
-            return donnees.get("message", {}).get("content", "").strip()
-    except Exception as e:
-        journal.error(f"Erreur VLM Ollama : {e}")
-        raise ErreurServiceIndisponible(f"Erreur VLM : {e}")
+    async with httpx.AsyncClient(timeout=TIMEOUT_SECONDES) as client:
+        reponse = await client.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {parametres.groq_api_key}"},
+            json={
+                "model": parametres.groq_modele,  # llama-3.2-90b-vision-preview
+                "messages": messages,
+                "temperature": 0.1,
+                "max_tokens": 1000,
+            },
+        )
+        reponse.raise_for_status()
+        donnees = reponse.json()
+        return donnees["choices"][0]["message"]["content"].strip()
