@@ -166,3 +166,4 @@ services:
 
 volumes:
   postgres_data:
+  ollama_data: 
