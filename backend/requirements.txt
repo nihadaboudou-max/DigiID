@@ -57,8 +57,8 @@ faker==23.2.1
 # --- Deep Learning (vérification visuelle + recherche faciale) ---
 opencv-python-headless==4.10.0.84  # ✅ Mis à jour
 deepface==0.0.93  # ✅ Mis à jour (corrige l'erreur 'tuple')
-#tensorflow==2.16.2  # ✅ Mis à jour
-tensorflow-cpu==2.16.2
+tensorflow==2.16.2  # ✅ Mis à jour
+#tensorflow-cpu==2.16.2
 tf-keras==2.16.0  # ✅ Ajouté (requis par TF 2.16+)
 pillow==10.4.0  # ✅ Mis à jour
 
@@ -77,6 +77,6 @@ pytest-asyncio==0.23.5
 pytest-cov==4.1.0
 factory-boy==3.3.0
 
-easyocr>=1.7.0
-paddlepaddle>=2.5.0
-paddleocr>=2.7.0
+~#easyocr>=1.7.0
+#paddlepaddle>=2.5.0
+#paddleocr>=2.7.0
