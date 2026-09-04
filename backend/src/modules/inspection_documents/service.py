@@ -1,13 +1,23 @@
 # -*- coding: utf-8 -*-
 """
 Service d'orchestration pour le module d'inspection de documents.
-Gère l'upload, l'analyse, la validation et la persistance.
-Pipeline complet : Qualité → Prétraitement → Extraction → Validation → Cohérence → Stockage
+Architecture VLM (Vision Language Model) via Ollama.
+
+Pipeline complet :
+1. Validation du fichier uploadé
+2. Extraction par VLM (qwen2-vl:7b) — remplace Tesseract + Regex
+3. Validation métier (dates, MRZ, format)
+4. Vérification de cohérence avec le profil utilisateur
+5. Persistance en base de données
+6. Recalcul du score de confiance
 """
+import base64
+import json
 import time
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
+
 from fastapi import UploadFile
 from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,19 +38,11 @@ from src.modules.inspection_documents.schemas import (
     SyntheseVerification,
     TypeDocument,
 )
-from src.modules.inspection_documents.extraction import extraire_donnees_universelles
-from src.modules.inspection_documents.validation import (
-    valider_document,
-    verifier_coherence_identite,
-)
-from src.modules.inspection_documents.preprocessing import (
-    evaluer_qualite_image,
-    pretraiter_image,
-)
-from src.modules.inspection_documents.storage import (
-    stocker_document,
-    generer_embedding_facial,
-)
+from src.modules.chatbot.fournisseur_llm import appeler_llm_vision
+from src.modules.inspection_documents.validation.validation_engine import valider_document
+from src.modules.inspection_documents.validation.coherence_engine import verifier_coherence_identite
+from src.modules.inspection_documents.storage.document_storage import stocker_document
+from src.modules.inspection_documents.preprocessing.quality_checker import evaluer_qualite_image
 from src.noyau import journal, dechiffrer_donnee
 from src.noyau.exceptions import ErreurRessourceIntrouvable, ErreurValidation
 
@@ -55,12 +57,43 @@ TYPES_MIME_AUTORISES = {
     "image/webp": "webp",
     "image/tiff": "tiff",
 }
-SEUIL_QUALITE_MINIMUM = 40.0  # En dessous, on rejette l'image
+
+# Prompt VLM pour extraction structurée de documents d'identité
+PROMPT_EXTRACTION_VLM = """
+Tu es un expert en extraction de données de documents d'identité africains et internationaux.
+
+Analyse cette image et extrais les informations suivantes au format JSON STRICT :
+{
+  "est_document_identite": true ou false,
+  "type_document": "cni_biometrique" | "cni_papier" | "passeport" | "permis_conduire" | "carte_assurance" | "carte_sejour" | "autre",
+  "pays": "code pays à 3 lettres (ex: SEN, CIV, MLI) ou null",
+  "nom_famille": "..." ou null,
+  "prenoms": "..." ou null,
+  "date_naissance": "JJ/MM/AAAA" ou null,
+  "sexe": "M" ou "F" ou null,
+  "numero_document": "..." ou null,
+  "date_expiration": "JJ/MM/AAAA" ou null,
+  "date_delivrance": "JJ/MM/AAAA" ou null,
+  "nationalite": "..." ou null,
+  "lieu_naissance": "..." ou null,
+  "mrz_ligne_1": "..." ou null,
+  "mrz_ligne_2": "..." ou null,
+  "mrz_ligne_3": "..." ou null,
+  "confiance_extraction": 0.0 à 1.0
+}
+
+RÈGLES STRICTES :
+- Si ce n'est PAS un document d'identité officiel (ex: facture, photo personnelle, document non-officiel), mets "est_document_identite": false et tous les autres champs à null.
+- Ne JAMAIS inventer de données. Si un champ n'est pas visible ou illisible, mets null.
+- Pour la MRZ (zone en bas avec des <<<), extrais les 3 lignes exactes si présentes.
+- Réponds UNIQUEMENT le JSON valide, rien d'autre. Pas de markdown, pas de commentaire, pas de ```json.
+"""
 
 
 # =============================================================================
-# FONCTIONS UTILITAIRES
+# FONCTIONS UTILITAIRES INTERNES
 # =============================================================================
+
 async def _lire_image(fichier: UploadFile) -> bytes:
     """Lit et valide le fichier image uploadé."""
     if fichier.content_type not in TYPES_MIME_AUTORISES:
@@ -113,6 +146,109 @@ def _compter_champs_extraits(donnees: DonneesDocumentExtraites) -> int:
     )
 
 
+def _parser_reponse_vlm(reponse_brute: str) -> Optional[dict]:
+    """
+    Parse la réponse JSON du VLM en gérant les formats variés.
+    Retourne le dict extrait ou None si invalide.
+    """
+    if not reponse_brute:
+        return None
+    
+    # Nettoyer la réponse (le VLM peut ajouter ```json ... ```)
+    reponse_propre = reponse_brute.strip()
+    
+    # Retirer les balises markdown si présentes
+    if reponse_propre.startswith("```"):
+        lignes = reponse_propre.split("\n")
+        # Retirer la première ligne (```json) et la dernière (```)
+        if lignes[0].startswith("```"):
+            lignes = lignes[1:]
+        if lignes and lignes[-1].strip() == "```":
+            lignes = lignes[:-1]
+        reponse_propre = "\n".join(lignes).strip()
+    
+    try:
+        donnees = json.loads(reponse_propre)
+        return donnees
+    except json.JSONDecodeError as e:
+        journal.error(f"VLM : JSON invalide - {e}")
+        journal.debug(f"Réponse brute VLM : {reponse_brute[:500]}")
+        return None
+
+
+async def _extraire_par_vlm(image_bytes: bytes) -> Optional[DonneesDocumentExtraites]:
+    """
+    Extrait les données d'un document via le VLM (Ollama qwen2-vl).
+    Retourne un objet DonneesDocumentExtraites ou None si rejeté.
+    """
+    # Convertir l'image en base64
+    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    
+    try:
+        # Appeler le VLM
+        reponse_brute = await appeler_llm_vision(
+            image_base64=image_base64,
+            prompt=PROMPT_EXTRACTION_VLM,
+            modele="qwen2-vl:7b",
+        )
+        
+        # Parser la réponse JSON
+        donnees_vlm = _parser_reponse_vlm(reponse_brute)
+        
+        if not donnees_vlm:
+            journal.warning("VLM : Réponse invalide ou vide")
+            return None
+        
+        # Vérifier si c'est un document d'identité
+        if not donnees_vlm.get("est_document_identite", False):
+            journal.info("VLM : Document rejeté (non-identité)")
+            return None
+        
+        # Mapper le type de document
+        type_doc_str = donnees_vlm.get("type_document", "inconnu")
+        try:
+            type_document = TypeDocument(type_doc_str)
+        except ValueError:
+            type_document = TypeDocument.INCONNU
+        
+        # Mapper le sexe
+        sexe_val = donnees_vlm.get("sexe")
+        if sexe_val not in ("M", "F"):
+            sexe_val = "non_detecte"
+        
+        # Construire l'objet DonneesDocumentExtraites
+        donnees = DonneesDocumentExtraites(
+            type_document=type_document,
+            pays_emetteur=donnees_vlm.get("pays"),
+            nom_famille=donnees_vlm.get("nom_famille"),
+            prenoms=donnees_vlm.get("prenoms"),
+            date_naissance=donnees_vlm.get("date_naissance"),
+            sexe=sexe_val,
+            numero_document=donnees_vlm.get("numero_document"),
+            date_expiration=donnees_vlm.get("date_expiration"),
+            date_delivrance=donnees_vlm.get("date_delivrance"),
+            nationalite=donnees_vlm.get("nationalite"),
+            lieu_naissance=donnees_vlm.get("lieu_naissance"),
+            mrz_ligne_1=donnees_vlm.get("mrz_ligne_1"),
+            mrz_ligne_2=donnees_vlm.get("mrz_ligne_2"),
+            mrz_ligne_3=donnees_vlm.get("mrz_ligne_3"),
+            mrz_valide=bool(donnees_vlm.get("mrz_ligne_1")),
+            taux_confiance_ocr=float(donnees_vlm.get("confiance_extraction", 0.0) * 100),
+            texte_brut=reponse_brute[:5000] if reponse_brute else "",
+        )
+        
+        journal.info(
+            f"VLM : Document extrait - type={type_document.value}, "
+            f"pays={donnees.pays_emetteur}, confiance={donnees.taux_confiance_ocr:.1f}%"
+        )
+        
+        return donnees
+        
+    except Exception as e:
+        journal.error(f"VLM : Erreur extraction - {e}")
+        return None
+
+
 async def _enregistrer_document(
     session: AsyncSession,
     utilisateur: Utilisateur,
@@ -148,11 +284,11 @@ async def _enregistrer_document(
         mrz_ligne_2=donnees.mrz_ligne_2,
         mrz_ligne_3=donnees.mrz_ligne_3,
         mrz_valide=donnees.mrz_valide,
-        donnees_specifiques=donnees.donnees_specifiques,
+        donnees_specifiques=donnees.donnees_specifiques or {},
         texte_brut=donnees.texte_brut[:5000] if donnees.texte_brut else None,
         statut=validation.statut.value,
         est_valide=validation.est_valide,
-        scores_validation=validation.scores,
+        scores_validation=validation.scores or {},
         taux_confiance_ocr=donnees.taux_confiance_ocr,
     )
     session.add(doc)
@@ -164,6 +300,7 @@ async def _enregistrer_document(
 # =============================================================================
 # SERVICES PUBLICS
 # =============================================================================
+
 async def traiter_upload_document(
     session: AsyncSession,
     utilisateur: Utilisateur,
@@ -173,17 +310,17 @@ async def traiter_upload_document(
     utilisateur_cible_id: Optional[UUID] = None,
 ) -> ReponseUploadDocument:
     """
-    Traite l'upload d'un document d'identité.
+    Traite l'upload d'un document d'identité via VLM.
     
     Pipeline complet :
     1. Validation du fichier (format, taille)
     2. Évaluation de la qualité d'image
-    3. Prétraitement de l'image
-    4. Extraction universelle (OCR + MRZ + NLP)
-    5. Validation métier dynamique
-    6. Vérification de cohérence (agent vs citoyen)
-    7. Stockage physique et embedding facial
-    8. Persistance en base de données
+    3. Extraction par VLM (Ollama qwen2-vl:7b)
+    4. Validation métier dynamique
+    5. Vérification de cohérence (agent vs citoyen)
+    6. Stockage physique
+    7. Persistance en base de données
+    8. Recalcul du score de confiance
     """
     debut = time.time()
     
@@ -202,23 +339,26 @@ async def traiter_upload_document(
     
     journal.info(f"Qualité image : score={qualite.score_global:.1f}/100")
     
-    # ── ÉTAPE 3 : Prétraiter l'image pour l'OCR ─
-    contenu_optimise = pretraiter_image(contenu) or contenu
+    # ── ÉTAPE 3 : Extraction par VLM ──
+    donnees = await _extraire_par_vlm(contenu)
     
-    # ── ÉTAPE 4 : Extraction universelle ──
-    donnees = extraire_donnees_universelles(contenu_optimise)
+    if donnees is None:
+        raise ErreurValidation(
+            "Document non reconnu comme pièce d'identité officielle.",
+            message_utilisateur="Ce document ne semble pas être une pièce d'identité officielle (CNI, passeport, permis, etc.)."
+        )
     
-    # Si type_document forcé, l'utiliser
+    # Si type_document forcé par l'utilisateur, l'utiliser
     if type_document:
         donnees.type_document = type_document
     
     journal.info(
-        f"Extraction terminée : type={donnees.type_document.value}, "
+        f"Extraction VLM terminée : type={donnees.type_document.value}, "
         f"confiance={donnees.taux_confiance_ocr:.1f}%, "
         f"nom={donnees.nom_famille}, prenom={donnees.prenoms}"
     )
     
-    # ── ÉTAPE 5 : Validation métier dynamique ──
+    # ── ÉTAPE 4 : Validation métier dynamique ──
     validation = valider_document(donnees)
     
     if not validation.est_valide:
@@ -227,7 +367,7 @@ async def traiter_upload_document(
             f"erreurs={validation.erreurs}"
         )
     
-    # ── ÉTAPE 6 : Vérification de cohérence ──
+    # ── ÉTAPE 5 : Vérification de cohérence ──
     coherence = await verifier_coherence_identite(
         session=session,
         utilisateur=utilisateur,
@@ -242,10 +382,8 @@ async def traiter_upload_document(
             message_utilisateur=coherence.message,
         )
     
-    # ─ ÉTAPE 7 : Stockage physique et embedding facial ──
+    # ── ÉTAPE 6 : Stockage physique ──
     chemin_stockage = None
-    embedding = None
-    
     try:
         chemin_stockage = stocker_document(
             contenu,
@@ -256,16 +394,7 @@ async def traiter_upload_document(
     except Exception as e:
         journal.warning(f"Échec stockage document : {e}")
     
-    # Embedding facial (uniquement pour recto/unique et si validation réussie)
-    if face in ("recto", "unique") and validation.est_valide:
-        try:
-            embedding = generer_embedding_facial(contenu)
-            if embedding:
-                journal.info(f"Embedding facial généré (dim: {len(embedding)})")
-        except Exception as e:
-            journal.warning(f"Échec extraction embedding facial : {e}")
-    
-    # ── ÉTAPE 8 : Persistance en base de données ─
+    # ── ÉTAPE 7 : Persistance en base de données ──
     doc = await _enregistrer_document(
         session=session,
         utilisateur=utilisateur,
@@ -278,7 +407,7 @@ async def traiter_upload_document(
         document_chemin=chemin_stockage,
     )
     
-    # ── ÉTAPE 9 : Mettre à jour le profil utilisateur si validation réussie ──
+    # ── ÉTAPE 8 : Mettre à jour le profil utilisateur si validation réussie ──
     if validation.est_valide:
         utilisateur.est_cni_verifiee = True
         utilisateur.date_verification_cni = datetime.now(timezone.utc)
