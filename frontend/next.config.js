@@ -1,12 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // ⚠️ CRUCIAL POUR DOCKER : Génère une version "standalone" ultra-légère
+  // Cela réduit drastiquement la taille de l'image Docker (de ~1.5 Go à ~300 Mo)
+  // et résout l'erreur "no space left on device" lors de l'exportation.
+  output: 'standalone',
+
   reactStrictMode: true,
 
   // Configuration des images externes
   images: {
     remotePatterns: [
       // Décommente et adapte ces lignes si ton frontend affiche des images 
-      // provenant de ton backend ou d'un CDN (ex: photos de profil, documents)
+      // provenant de. ton backend ou d'un CDN (ex: photos de profil, documents)
       // {
       //   protocol: 'https',
       //   hostname: 'dynamiqueid.digital',

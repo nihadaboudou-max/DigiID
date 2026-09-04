@@ -1,63 +1,57 @@
 # =============================================================================
-# DigiID — Frontend Dockerfile (depuis la racine pour Render)
+# DigiID — Frontend Dockerfile (Optimisé pour espace disque minimal)
 # =============================================================================
-# Stratégie :
-#   1. npm install (pas npm ci) — évite le crash SWC lockfile patch
-#   2. Patch du bug Next.js 14.2.x "Cannot read properties of undefined (reading 'os')"
-#      en remplaçant le script patch-incorrect-lockfile par un noop
-#   3. Préinstallation du binaire SWC Alpine (musl)
-
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# ✅ CORRECTION : Suppression de npm@latest (incompatible avec Node 20)
-# npm 10.8.2 fourni avec node:20-alpine est suffisant
-# RUN npm install -g npm@latest && npm cache clean --force  ← SUPPRIMÉ
+# 1. Copier les fichiers de dépendances en premier (optimisation du cache Docker)
+COPY frontend/package.json frontend/package-lock.json* ./
 
-# 🔧 Installer explicitement le binaire SWC Alpine
-RUN npm install @next/swc-linux-x64-musl --no-save 2>/dev/null || true
-
-# 📦 Copie des sources
-COPY frontend/ .
-
-# 🔴 Installer TOUTES les dépendances (prod + dev)
+# 2. Installer TOUTES les dépendances (prod + dev) nécessaires au build
 RUN npm install
 
-# 🔧 CORRECTION: Supprimer le script buggé de Next.js qui patche le lockfile
-# Bug: TypeError: Cannot read properties of undefined (reading 'os')
-# dans node_modules/next/dist/lib/patch-incorrect-lockfile.js
+# 3. Copier le reste du code source
+COPY frontend/ .
+
+# 4. Patch du bug Next.js 14.2.x "Cannot read properties of undefined (reading 'os')"
 RUN if [ -f node_modules/next/dist/lib/patch-incorrect-lockfile.js ]; then \
       printf 'async function patchIncorrectLockfile(){}\nmodule.exports={patchIncorrectLockfile}\n' > node_modules/next/dist/lib/patch-incorrect-lockfile.js; \
     fi
 
-# ✅ URL du backend pour le rewrite Next.js
+# 5. Variables d'environnement de build
+ENV NEXT_TELEMETRY_DISABLED=1
 ARG NEXT_PUBLIC_URL_BACKEND
 ENV NEXT_PUBLIC_URL_BACKEND=${NEXT_PUBLIC_URL_BACKEND}
 
-# 🔴 Désactiver télémétrie Next
-ENV NEXT_TELEMETRY_DISABLED=1
-
-# 🔴 Build production (avec le patch corrigé, le crash ne se produit plus)
+# 6. Build production (génère le dossier .next/standalone)
 RUN npm run build
 
 # =============================================================================
-# Étape finale — image légère de production
+# Étape finale — image ultra-légère de production
 # =============================================================================
 FROM node:20-alpine AS coureur
 WORKDIR /app
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
+# Créer un utilisateur non-root pour la sécurité
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 digiid
 
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=digiid:nodejs /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+# ⚠️ CORRECTION MAJEURE : Ne PAS copier le node_modules du builder.
+# On installe UNIQUEMENT les dépendances de production (beaucoup plus léger)
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install --omit=dev --no-save
+
+# Copier UNIQUEMENT les fichiers générés par le build en mode standalone
+COPY --from=builder --chown=digiid:nodejs /app/public ./public
+COPY --from=builder --chown=digiid:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=digiid:nodejs /app/.next/static ./.next/static
 
 USER digiid
 EXPOSE 3000
 ENV PORT=3000
-ENV HOSTNAME=0.0.0.0
+ENV HOSTNAME="0.0.0.0"
 
-CMD ["npm", "start"]
+# Lancer le serveur Node.js natif de Next.js standalone
+CMD ["node", "server.js"]
