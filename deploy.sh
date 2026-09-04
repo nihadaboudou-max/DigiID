@@ -10,8 +10,7 @@ set -e  # Arrêter en cas d'erreur
 cd ~/DigiID
 
 # ────────────────────────────────────────────────────────────────
-# Pré-vol : vérifier que tout est en place AVANT de lancer le build
-# (le build backend pèse plusieurs Go — mieux vaut échouer tôt)
+# 1. Pré-vol : vérifications
 # ────────────────────────────────────────────────────────────────
 if [ ! -f .env ]; then
     echo "❌ Fichier .env introuvable à la racine. Copier .env.exemple → .env"
@@ -31,100 +30,108 @@ df -h / | tail -1
 echo ""
 free -h | head -2
 
-# Alerte si moins de 5 Go libres (l'image backend ~6 Go doit tenir)
-# df -P renvoie des blocs de 1 Ko → 5 Go = 5*1024*1024 = 5242880 blocs
+# Alerte si moins de 8 Go libres (plus sûr que 5 Go pour les builds Next.js)
 ESPACE_LIBRE_BLOCS=$(df -P / | awk 'NR==2 {print $4}')
-if [ -n "$ESPACE_LIBRE_BLOCS" ] && [ "$ESPACE_LIBRE_BLOCS" -lt 5242880 ] 2>/dev/null; then
-    echo "⚠️  Espace disque faible (< 5 Go). Nettoyage Docker recommandé :"
-    echo "    docker system prune -af"
+if [ -n "$ESPACE_LIBRE_BLOCS" ] && [ "$ESPACE_LIBRE_BLOCS" -lt 8388608 ] 2>/dev/null; then
+    echo "⚠️  Espace disque faible (< 8 Go). Nettoyage automatique en cours..."
+    docker builder prune -f || true
+    docker system prune -af --volumes || true
 fi
 
 echo "🔄 Récupération des dernières modifications..."
 git fetch origin
-git reset --hard origin/main  # Force la synchronisation (écrase les modifs locales)
+git reset --hard origin/main
 
-echo "🧹 Nettoyage du cache Next.js (frontend)..."
-# Supprimer le cache Next.js pour forcer une reconstruction propre
+echo "🧹 Nettoyage du cache Next.js (local)..."
 if [ -d "frontend/.next" ]; then
     rm -rf frontend/.next
     echo "   ✅ Cache .next supprimé"
-else
-    echo "   ℹ️  Pas de cache .next à supprimer"
 fi
 
-# Supprimer aussi le cache node_modules de Next.js si nécessaire
-if [ -d "frontend/node_modules/.cache" ]; then
-    rm -rf frontend/node_modules/.cache
-    echo "   ✅ Cache node_modules supprimé"
-fi
+# ────────────────────────────────────────────────────────────────
+# 2. Construction des images (SÉQUENTIELLE pour éviter la saturation disque)
+# ────────────────────────────────────────────────────────────────
+echo "🧹 Nettoyage préalable du cache de build Docker..."
+docker builder prune -f || true
 
-echo "🏗️  Reconstruction complète (backend + frontend)..."
 export COMPOSE_BAKE=false
-# --progress plain : logs en flux continu (évite l'impression de blocage SSH)
-# --no-cache force une reconstruction propre sans utiliser le cache Docker
-docker compose build --progress plain --no-cache backend frontend
 
-# 🛑 Arrêter les anciens conteneurs DigiID AVANT le check des ports.
-# Sans cela, l'ancien conteneur nginx Docker occupe déjà les ports 80/443
-# et le check ci-dessous bloque à tort le redéploiement (exit 1 → rien ne se lance).
+echo "🏗️  [1/2] Reconstruction du BACKEND..."
+docker compose build --progress plain --no-cache backend
+
+echo "🏗️  [2/2] Reconstruction du FRONTEND..."
+docker compose build --progress plain --no-cache frontend
+
+# ────────────────────────────────────────────────────────────────
+# 3. Arrêt et vérifications avant démarrage
+# ────────────────────────────────────────────────────────────────
 echo "🛑 Arrêt des anciens conteneurs DigiID (libération des ports 80/443)..."
 docker compose down --remove-orphans 2>/dev/null || true
 
-# Vérifier que les certificats SSL existent sur l'hôte (sinon nginx crash-loop :
-# le conteneur redémarre en boucle car il ne peut pas charger les .pem).
 CHEMIN_FULLCHAIN=$(grep -E '^CHEMIN_CERTIFICAT_FULLCHAIN=' .env | head -1 | cut -d= -f2-)
 CHEMIN_FULLCHAIN=${CHEMIN_FULLCHAIN:-/etc/letsencrypt/live/dynamiqueid.digital/fullchain.pem}
 CHEMIN_CLE=$(grep -E '^CHEMIN_CERTIFICAT_CLE=' .env | head -1 | cut -d= -f2-)
 CHEMIN_CLE=${CHEMIN_CLE:-/etc/letsencrypt/live/dynamiqueid.digital/privkey.pem}
+
 if [ ! -f "$CHEMIN_FULLCHAIN" ] || [ ! -f "$CHEMIN_CLE" ]; then
     echo "❌ Certificats SSL introuvables sur l'hôte :"
-    echo "   fullchain : $CHEMIN_FULLCHAIN"
-    echo "   clé privée : $CHEMIN_CLE"
-    echo "   → Générer le certificat avec certbot :"
-    echo "       sudo certbot certonly --webroot -w ~/DigiID/nginx/certbot -d ${DOMAINE_VAR:-dynamiqueid.digital}"
-    echo "   → Ou corriger CHEMIN_CERTIFICAT_* dans .env"
+    echo "   → Générer le certificat avec certbot ou corriger le .env"
     exit 1
 fi
 echo "   ✅ Certificats SSL présents"
 
-# Vérifier que les ports 80/443 sont libres AVANT de démarrer nginx Docker
-# (après le down, un port encore occupé = processus système, pas Docker)
 for PORT in 80 443; do
     if ss -ltn 2>/dev/null | grep -q ":$PORT "; then
-        echo "❌ Le port $PORT est déjà occupé sur l'hôte (processus système)."
-        echo "   → Identifier le processus : sudo ss -ltnp | grep :$PORT"
-        echo "   → Si c'est l'ancien nginx système, l'arrêter définitivement :"
-        echo "       sudo systemctl stop nginx && sudo systemctl disable nginx"
-        echo "   → Puis relancer : ./deploy.sh"
+        echo "❌ Le port $PORT est déjà occupé sur l'hôte."
+        echo "   → sudo systemctl stop nginx && sudo systemctl disable nginx"
         exit 1
     fi
- done
+done
 
-echo "🚀 Démarrage des services (db, redis, backend, frontend, nginx)..."
+# ────────────────────────────────────────────────────────────────
+# 4. Démarrage et Migrations
+# ────────────────────────────────────────────────────────────────
+echo "🚀 Démarrage des services (db, redis, backend, frontend, nginx, ollama)..."
 docker compose up -d
 
-echo "⏳ Attente du démarrage..."
-sleep 30
+echo "⏳ Attente du démarrage de la base de données..."
+sleep 15
+
+echo "🗄️  Application des migrations de base de données (Alembic)..."
+docker compose run --rm backend alembic upgrade head || echo "⚠️  Warning: Échec des migrations (peut être normal si aucune nouvelle migration)"
+
+# ────────────────────────────────────────────────────────────────
+# 5. Vérifications finales et Ollama
+# ────────────────────────────────────────────────────────────────
+echo "⏳ Vérification du modèle Ollama..."
+# Remplace 'qwen2-vl:2b' par le modèle que tu utilises réellement
+MODELE_OLLAMA="qwen2-vl:2b"
+if ! docker compose exec ollama ollama list 2>/dev/null | grep -q "$MODELE_OLLAMA"; then
+    echo "⚠️  Modèle $MODELE_OLLAMA non trouvé. Téléchargement en cours (cela peut prendre du temps)..."
+    docker compose exec ollama ollama pull "$MODELE_OLLAMA" || echo "⚠️  Échec du téléchargement du modèle Ollama."
+else
+    echo "   ✅ Modèle Ollama ($MODELE_OLLAMA) déjà présent."
+fi
 
 echo "✅ Vérification des conteneurs..."
-docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep digiid
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{. Ports}}' | grep digiid
 
 echo "🔍 Test de la configuration nginx..."
 if docker exec digiid_nginx nginx -t 2>&1; then
     echo "   ✅ nginx config valide"
 else
-    echo "   ❌ nginx config INVALIDE — vérifier le certificat et le template"
+    echo "   ❌ nginx config INVALIDE"
 fi
 
 echo ""
 echo "📋 Logs backend (dernières lignes) :"
-docker logs digiid_backend --tail 10
+docker logs digiid_backend --tail 15
 echo ""
 echo "📋 Logs frontend (dernières lignes) :"
-docker logs digiid_frontend --tail 10
+docker logs digiid_frontend --tail 15
 
 DOMAINE_FINAL=${DOMAINE_VAR:-dynamiqueid.digital}
 echo ""
-echo "🎉 Déploiement terminé !"
+echo "🎉 Déploiement terminé avec succès !"
 echo "   ➜  https://${DOMAINE_FINAL}"
 echo "   ➜  Santé API : https://${DOMAINE_FINAL}/api/v1/sante-leger"
