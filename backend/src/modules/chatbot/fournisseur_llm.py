@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Couche d'abstraction pour appeler le LLM.
-Gère à la fois le Chatbot (texte) et l'Extraction de documents (vision).
+Gère le Chatbot (texte) et l'Extraction de documents (vision) via Groq (léger pour le VPS).
 """
 import httpx
 from typing import Optional
@@ -10,8 +10,7 @@ from src.config import parametres
 from src.noyau import journal
 from src.noyau.exceptions import ErreurServiceIndisponible
 
-TIMEOUT_SECONDES = 120.0
-
+TIMEOUT_SECONDES = 120.0  # Plus long pour la vision
 
 # =============================================================================
 # 1. FONCTIONS POUR LE CHATBOT (TEXTE)
@@ -50,7 +49,7 @@ async def _appeler_ollama(
             reponse = await client.post(
                 url,
                 json={
-                    "model": parametres.ollama_modele,
+                    "model": parametres.ollama_modele or "mistral:7b-instruct",
                     "messages": messages,
                     "stream": False,
                     "options": {"temperature": 0.7, "num_predict": 800},
@@ -81,7 +80,7 @@ async def _appeler_groq(
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {parametres.groq_api_key}"},
                 json={
-                    "model": parametres.groq_modele,
+                    "model": parametres.groq_modele or "llama-3.1-8b-instant",
                     "messages": messages,
                     "temperature": 0.7,
                     "max_tokens": 800,
@@ -103,17 +102,11 @@ async def appeler_llm_vision(
     prompt: str,
     modele: Optional[str] = None,
 ) -> str:
-    fournisseur = parametres.fournisseur_llm
-
-    if fournisseur == "groq":
-        return await _appeler_groq_vision(image_base64, prompt, modele)
-    elif fournisseur == "ollama":
-        return await _appeler_ollama_vision(image_base64, prompt, modele)
-    else:
-        raise ErreurServiceIndisponible(
-            f"Fournisseur LLM non supporté pour la vision : {fournisseur}",
-            message_utilisateur="Configuration du VLM invalide.",
-        )
+    """
+    Appelle Groq pour analyser une image (extraction de CNI/Document).
+    Utilise le modèle de vision le plus stable actuellement disponible.
+    """
+    return await _appeler_groq_vision(image_base64, prompt, modele)
 
 
 async def _appeler_groq_vision(
@@ -121,12 +114,16 @@ async def _appeler_groq_vision(
     prompt: str,
     modele: Optional[str] = None,
 ) -> str:
-    """Appelle Groq avec une image (modèle de vision)."""
+    """Appelle l'API Groq avec une image."""
     if not parametres.groq_api_key:
-        raise ErreurServiceIndisponible("GROQ_API_KEY non configurée")
+        raise ErreurServiceIndisponible(
+            "GROQ_API_KEY non configurée",
+            message_utilisateur="La clé API pour l'analyse des documents est manquante."
+        )
     
-    # ⚠️ MODIFICATION : Utilisation du modèle 11B qui est le plus stable pour la vision sur Groq
-    modele_vision = "llama-3.2-90b-vision-preview"
+    # ✅ MODÈLE ACTUELLEMENT STABLE CHEZ GROQ POUR LA VISION
+    # Si ce modèle change à l'avenir, il suffit de modifier cette seule ligne.
+    modele_vision = modele or "llama-3.2-11b-vision-preview"
     
     messages = [
         {
@@ -154,12 +151,12 @@ async def _appeler_groq_vision(
                 json={
                     "model": modele_vision,
                     "messages": messages,
-                    "temperature": 0.1,
+                    "temperature": 0.1,  # Très bas pour une extraction de données précise
                     "max_tokens": 1000,
                 },
             )
             
-            # 🕵️ LOG CRUCIAL : Si ça échoue, on affiche la réponse exacte de Groq pour savoir pourquoi (ex: "Model not found")
+            # Journalisation détaillée en cas d'échec pour débogage facile
             if not reponse.is_success:
                 journal.error(f"Groq API a rejeté la requête ({reponse.status_code}) : {reponse.text}")
             
@@ -170,7 +167,7 @@ async def _appeler_groq_vision(
     except httpx.HTTPStatusError as erreur:
         journal.error(f"Erreur HTTP Groq Vision : {erreur.response.text}")
         raise ErreurServiceIndisponible(
-            f"Erreur lors de l'analyse du document. Vérifiez votre clé API Groq et le modèle.",
+            f"Erreur lors de l'analyse du document (Modèle: {modele_vision}). Vérifiez la clé API.",
             message_utilisateur="Le service d'analyse des documents a rencontré une erreur de configuration."
         )
     except httpx.HTTPError as erreur:
@@ -178,41 +175,3 @@ async def _appeler_groq_vision(
         raise ErreurServiceIndisponible(
             "Erreur de connexion au service d'analyse des documents."
         )
-
-
-async def _appeler_ollama_vision(
-    image_base64: str,
-    prompt: str,
-    modele: Optional[str] = None,
-) -> str:
-    modele_vision = modele or "qwen2-vl:2b"
-    url = f"{parametres.ollama_url}/api/chat"
-    
-    messages = [
-        {
-            "role": "user",
-            "content": prompt,
-            "images": [image_base64]
-        }
-    ]
-    
-    try:
-        async with httpx.AsyncClient(timeout=TIMEOUT_SECONDES) as client:
-            reponse = await client.post(
-                url,
-                json={
-                    "model": modele_vision,
-                    "messages": messages,
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.1,
-                        "num_predict": 1000,
-                    },
-                },
-            )
-            reponse.raise_for_status()
-            donnees = reponse.json()
-            return donnees.get("message", {}).get("content", "").strip()
-    except httpx.HTTPError as erreur:
-        journal.error(f"Erreur Ollama Vision : {erreur}")
-        raise ErreurServiceIndisponible(f"Erreur Ollama Vision : {erreur}")
