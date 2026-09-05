@@ -126,7 +126,7 @@ async def _appeler_groq_vision(
         raise ErreurServiceIndisponible("GROQ_API_KEY non configurée")
     
     # ⚠️ MODIFICATION : Utilisation du modèle 11B qui est le plus stable pour la vision sur Groq
-    modele_vision = "llama-3.2-11b-vision-preview"
+    modele_vision = "llama-3.2-90b-vision-preview"
     
     messages = [
         {
@@ -163,7 +163,7 @@ async def _appeler_groq_vision(
             if not reponse.is_success:
                 journal.error(f"Groq API a rejeté la requête ({reponse.status_code}) : {reponse.text}")
             
-            reponse.raise_for_status9()
+            reponse.raise_for_status()
             donnees = reponse.json()
             return donnees["choices"][0]["message"]["content"].strip()
             
