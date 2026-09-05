@@ -91,49 +91,79 @@ async def _extraire_donnees_classique(
     type_suggere: Optional[TypeDocument]
 ) -> DonneesDocumentExtraites:
     """
-    Tente une extraction via OCR classique (Tesseract).
-    Si l'OCR échoue ou ne trouve rien, retourne un objet minimal pour permettre 
-    l'upload et la validation manuelle ultérieure (conformité bancaire).
+    Tente une extraction via OCR classique (Tesseract) avec des Regex robustes
+    pour les documents d'identité africains et internationaux.
     """
     texte_brut = ""
     confiance = 0.0
     numero_document = None
     nom_famille = None
     prenoms = None
+    date_naissance = None
+    date_expiration = None
+    type_document = type_suggere or TypeDocument.INCONNU
 
     try:
-        # Importation différée pour éviter le crash si pytesseract n'est pas installé
         from PIL import Image
         import pytesseract
         import io
 
         image = Image.open(io.BytesIO(image_bytes))
-        # Extraction du texte (français + anglais pour les codes MRZ)
+        # Extraction du texte (français + anglais)
         texte_brut = pytesseract.image_to_string(image, lang='fra+eng')
         
         if texte_brut.strip():
-            confiance = 60.0  # Confiance de base pour un OCR classique réussi
+            confiance = 50.0  # Confiance de base pour un OCR classique
             
-            # Exemples de règles simples (Regex) pour pré-remplir
-            # À adapter selon les formats de CNI de votre pays cible
-            # Exemple : recherche d'un motif de type numéro de série (à personnaliser)
+            # 1. Détection du type de document par mots-clés
+            texte_upper = texte_brut.upper()
+            if "CARTE NATIONALE" in texte_upper or "CNI" in texte_upper or "NATIONAL ID" in texte_upper:
+                type_document = TypeDocument.CNI_BIOMETRIQUE
+            elif "PASSEPORT" in texte_upper or "PASSPORT" in texte_upper:
+                type_document = TypeDocument.PASSEPORT
+            elif "PERMIS" in texte_upper or "DRIVING LICENSE" in texte_upper:
+                type_document = TypeDocument.PERMIS_CONDUIRE
+            
+            # 2. Extraction du numéro de document (motif alphanumérique de 6 à 15 caractères)
             match_numero = re.search(r'\b[A-Z0-9]{6,15}\b', texte_brut)
             if match_numero:
                 numero_document = match_numero.group(0)
+            
+            # 3. Extraction des dates (format JJ/MM/AAAA ou JJ-MM-AAAA)
+            dates_trouvees = re.findall(r'\b(\d{2}[/-]\d{2}[/-]\d{4})\b', texte_brut)
+            if len(dates_trouvees) >= 1:
+                date_naissance = dates_trouvees[0].replace('-', '/')
+            if len(dates_trouvees) >= 2:
+                date_expiration = dates_trouvees[1].replace('-', '/')
+            
+            # 4. Extraction du nom et prénom (souvent en majuscules en haut du document)
+            # On cherche des mots en majuscules de plus de 3 lettres
+            mots_majuscules = re.findall(r'\b[A-Z]{3,}\b', texte_brut)
+            # On filtre les mots-clés connus pour ne pas les prendre pour des noms
+            mots_a_exclure = {'CARTE', 'NATIONALE', 'PASSEPORT', 'PERMIS', 'REPUBLIQUE', 
+                             'SENEGAL', 'COTE', 'IVOIRE', 'MALI', 'BURKINA', 'FASO',
+                             'DATE', 'NAISSANCE', 'EXPIRATION', 'DELIVRANCE', 'LIEU'}
+            noms_potentiels = [m for m in mots_majuscules if m not in mots_a_exclure]
+            
+            if len(noms_potentiels) >= 2:
+                nom_famille = noms_potentiels[0]
+                prenoms = ' '.join(noms_potentiels[1:3])  # Prendre les 2 suivants comme prénoms
                 
     except Exception as e:
-        journal.warning(f"Échec de l'OCR classique (Tesseract), passage en mode manuel : {e}")
-        texte_brut = "OCR indisponible. Nécessite une saisie ou vérification manuelle."
+        journal.warning(f"Échec de l'OCR classique (Tesseract) : {e}")
+        texte_brut = "OCR indisponible. Nécessite une saisie manuelle."
         confiance = 0.0
 
     return DonneesDocumentExtraites(
-        type_document=type_suggere or TypeDocument.INCONNU,
+        type_document=type_document,
         nom_famille=nom_famille,
         prenoms=prenoms,
+        date_naissance=date_naissance,
         numero_document=numero_document,
+        date_expiration=date_expiration,
         texte_brut=texte_brut[:5000],
         taux_confiance_ocr=confiance,
-        mrz_valide=False, # La validation MRZ stricte peut être faite plus tard si le texte brut la contient
+        mrz_valide=False,
     )
 
 
