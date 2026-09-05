@@ -100,19 +100,6 @@ sleep 15
 echo "🗄️  Application des migrations de base de données (Alembic)..."
 docker compose run --rm backend alembic upgrade head || echo "⚠️  Warning: Échec des migrations (peut être normal si aucune nouvelle migration)"
 
-# ────────────────────────────────────────────────────────────────
-# 5. Vérifications finales et Ollama
-# ────────────────────────────────────────────────────────────────
-echo "⏳ Vérification du modèle Ollama..."
-# Remplace 'qwen2-vl:2b' par le modèle que tu utilises réellement
-MODELE_OLLAMA="qwen2-vl:2b"
-if ! docker compose exec ollama ollama list 2>/dev/null | grep -q "$MODELE_OLLAMA"; then
-    echo "⚠️  Modèle $MODELE_OLLAMA non trouvé. Téléchargement en cours (cela peut prendre du temps)..."
-    docker compose exec ollama ollama pull "$MODELE_OLLAMA" || echo "⚠️  Échec du téléchargement du modèle Ollama."
-else
-    echo "   ✅ Modèle Ollama ($MODELE_OLLAMA) déjà présent."
-fi
-
 echo "✅ Vérification des conteneurs..."
 docker ps --format 'table {{.Names}}\t{{.Status}}\t{{. Ports}}' | grep digiid
 

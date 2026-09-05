@@ -14,7 +14,7 @@ import httpx
 from src.config import parametres
 from src.noyau import journal
 from src.noyau.exceptions import ErreurServiceIndisponible
-
+from typing import Optional
 
 # Délai max d'attente d'une réponse LLM (en secondes).
 # Ollama en local peut être lent au premier appel (chargement du modèle).
@@ -159,9 +159,19 @@ async def appeler_llm_vision(
     image_base64: str,
     prompt: str,
 ) -> str:
-    """Appelle Groq avec une image pour extraction de document."""
+    """
+    Appelle Groq avec une image pour l'extraction de document.
+    Utilise un modèle de VISION dédié, indépendamment du modèle de chat.
+    """
     if not parametres.groq_api_key:
-        raise ErreurServiceIndisponible("GROQ_API_KEY non configurée")
+        raise ErreurServiceIndisponible(
+            "GROQ_API_KEY non configurée",
+            message_utilisateur="La clé API pour l'analyse des documents est manquante."
+        )
+    
+    # ⚠️ IMPORTANT : On force le modèle de vision de Groq.
+    # Ne pas utiliser parametres.groq_modele ici, car il est peut-être configuré pour le chat (texte seul).
+    modele_vision = "llama-3.2-90b-vision-preview"
     
     messages = [
         {
@@ -178,17 +188,25 @@ async def appeler_llm_vision(
         }
     ]
     
-    async with httpx.AsyncClient(timeout=TIMEOUT_SECONDES) as client:
-        reponse = await client.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {parametres.groq_api_key}"},
-            json={
-                "model": parametres.groq_modele,  # llama-3.2-90b-vision-preview
-                "messages": messages,
-                "temperature": 0.1,
-                "max_tokens": 1000,
-            },
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT_SECONDES) as client:
+            reponse = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {parametres.groq_api_key}"},
+                json={
+                    "model": modele_vision, # <-- Modèle de vision garanti
+                    "messages": messages,
+                    "temperature": 0.1,     # Très précis pour l'extraction de données
+                    "max_tokens": 1000,
+                },
+            )
+            reponse.raise_for_status()
+            donnees = reponse.json()
+            return donnees["choices"][0]["message"]["content"].strip()
+            
+    except httpx.HTTPError as erreur:
+        journal.error(f"Erreur Groq Vision : {erreur}")
+        raise ErreurServiceIndisponible(
+            f"Erreur lors de l'analyse du document : {erreur}",
+            message_utilisateur="Le service d'analyse des documents est temporairement indisponible."
         )
-        reponse.raise_for_status()
-        donnees = reponse.json()
-        return donnees["choices"][0]["message"]["content"].strip()
