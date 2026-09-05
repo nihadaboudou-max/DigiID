@@ -91,8 +91,7 @@ async def _extraire_donnees_classique(
     type_suggere: Optional[TypeDocument]
 ) -> DonneesDocumentExtraites:
     """
-    Tente une extraction via OCR classique (Tesseract) avec des Regex robustes
-    pour les documents d'identité africains et internationaux.
+    Extraction OCR avec des Regex robustes pour les CNI africaines.
     """
     texte_brut = ""
     confiance = 0.0
@@ -101,6 +100,7 @@ async def _extraire_donnees_classique(
     prenoms = None
     date_naissance = None
     date_expiration = None
+    pays_emetteur = None
     type_document = type_suggere or TypeDocument.INCONNU
 
     try:
@@ -109,14 +109,20 @@ async def _extraire_donnees_classique(
         import io
 
         image = Image.open(io.BytesIO(image_bytes))
-        # Extraction du texte (français + anglais)
         texte_brut = pytesseract.image_to_string(image, lang='fra+eng')
         
         if texte_brut.strip():
-            confiance = 50.0  # Confiance de base pour un OCR classique
-            
-            # 1. Détection du type de document par mots-clés
+            confiance = 50.0
             texte_upper = texte_brut.upper()
+            
+            # 1. Détection du pays par codes à 3 lettres (COUNTRY CODES)
+            codes_pays = ['SEN', 'CIV', 'MLI', 'BEN', 'BFA', 'TOG', 'GHA', 'NGA', 'GIN', 'COD', 'COG', 'CMR']
+            for code in codes_pays:
+                if code in texte_upper:
+                    pays_emetteur = code
+                    break
+            
+            # 2. Détection du type de document
             if "CARTE NATIONALE" in texte_upper or "CNI" in texte_upper or "NATIONAL ID" in texte_upper:
                 type_document = TypeDocument.CNI_BIOMETRIQUE
             elif "PASSEPORT" in texte_upper or "PASSPORT" in texte_upper:
@@ -124,30 +130,53 @@ async def _extraire_donnees_classique(
             elif "PERMIS" in texte_upper or "DRIVING LICENSE" in texte_upper:
                 type_document = TypeDocument.PERMIS_CONDUIRE
             
-            # 2. Extraction du numéro de document (motif alphanumérique de 6 à 15 caractères)
+            # 3. Extraction du numéro de document (motif alphanumérique de 6 à 15 caractères)
             match_numero = re.search(r'\b[A-Z0-9]{6,15}\b', texte_brut)
             if match_numero:
                 numero_document = match_numero.group(0)
             
-            # 3. Extraction des dates (format JJ/MM/AAAA ou JJ-MM-AAAA)
-            dates_trouvees = re.findall(r'\b(\d{2}[/-]\d{2}[/-]\d{4})\b', texte_brut)
-            if len(dates_trouvees) >= 1:
-                date_naissance = dates_trouvees[0].replace('-', '/')
-            if len(dates_trouvees) >= 2:
-                date_expiration = dates_trouvees[1].replace('-', '/')
+            # 4. Extraction des dates (format JJ/MM/AAAA ou JJ-MM-AAAA ou JJ.MM.AAAA)
+            # On cherche toutes les dates possibles
+            dates_trouvees = re.findall(r'\b(\d{2}[\/\-.]\d{2}[\/\-.]\d{4})\b', texte_brut)
             
-            # 4. Extraction du nom et prénom (souvent en majuscules en haut du document)
-            # On cherche des mots en majuscules de plus de 3 lettres
+            # Filtrer les dates valides (année entre 1900 et 2100)
+            dates_valides = []
+            for date_str in dates_trouvees:
+                # Normaliser le format
+                date_norm = date_str.replace('-', '/').replace('.', '/')
+                parties = date_norm.split('/')
+                if len(parties) == 3:
+                    jour, mois, annee = int(parties[0]), int(parties[1]), int(parties[2])
+                    if 1900 <= annee <= 2100 and 1 <= mois <= 12 and 1 <= jour <= 31:
+                        dates_valides.append(date_norm)
+            
+            # La première date est généralement la date de naissance
+            # La deuxième date est généralement la date d'expiration ou de délivrance
+            if len(dates_valides) >= 1:
+                date_naissance = dates_valides[0]
+            if len(dates_valides) >= 2:
+                date_expiration = dates_valides[1]
+            
+            # 5. Extraction du nom et prénom (PLUS INTELLIGENT)
+            # On cherche des mots en majuscules, mais on exclut les codes pays et mots-clés
+            mots_a_exclure = set(codes_pays + [
+                'CARTE', 'NATIONALE', 'IDENTITE', 'PASSEPORT', 'PERMIS', 'CONDUIRE',
+                'REPUBLIQUE', 'SENEGAL', 'COTE', 'IVOIRE', 'MALI', 'BURKINA', 'FASO',
+                'BENIN', 'TOGO', 'GHANA', 'NIGERIA', 'GUINEE', 'CAMEROUN',
+                'DATE', 'NAISSANCE', 'EXPIRATION', 'DELIVRANCE', 'LIEU', 'NOM',
+                'PRENOMS', 'SEXE', 'TAILLE', 'GROUPE', 'SANGUIN', 'MRZ', 'P',
+                'M', 'F', 'MASCULIN', 'FEMININ', 'OFFICIEL', 'IDENTIFICATION'
+            ])
+            
+            # Chercher les mots en majuscules de 3 lettres ou plus
             mots_majuscules = re.findall(r'\b[A-Z]{3,}\b', texte_brut)
-            # On filtre les mots-clés connus pour ne pas les prendre pour des noms
-            mots_a_exclure = {'CARTE', 'NATIONALE', 'PASSEPORT', 'PERMIS', 'REPUBLIQUE', 
-                             'SENEGAL', 'COTE', 'IVOIRE', 'MALI', 'BURKINA', 'FASO',
-                             'DATE', 'NAISSANCE', 'EXPIRATION', 'DELIVRANCE', 'LIEU'}
             noms_potentiels = [m for m in mots_majuscules if m not in mots_a_exclure]
             
+            # Le premier mot en majuscules après "NOM" ou en début de document est le nom de famille
+            # Les suivants sont les prénoms
             if len(noms_potentiels) >= 2:
                 nom_famille = noms_potentiels[0]
-                prenoms = ' '.join(noms_potentiels[1:3])  # Prendre les 2 suivants comme prénoms
+                prenoms = ' '.join(noms_potentiels[1:3])
                 
     except Exception as e:
         journal.warning(f"Échec de l'OCR classique (Tesseract) : {e}")
@@ -156,6 +185,7 @@ async def _extraire_donnees_classique(
 
     return DonneesDocumentExtraites(
         type_document=type_document,
+        pays_emetteur=pays_emetteur,
         nom_famille=nom_famille,
         prenoms=prenoms,
         date_naissance=date_naissance,
