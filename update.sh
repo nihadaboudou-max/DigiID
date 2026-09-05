@@ -60,15 +60,27 @@ else
 fi
 
 # ────────────────────────────────────────────────────────────────
-# 5. Vérification de santé (Health Check)
+# 5. Vérification de santé (Health Check robuste)
 # ────────────────────────────────────────────────────────────────
 echo "⏳ Vérification de la santé du système..."
-sleep 4  # Laisser quelques secondes au backend pour bien démarrer
 
-# On teste le endpoint de santé via le réseau interne Docker ou localhost
-if curl -s -f http://localhost:8000/api/v1/sante-leger > /dev/null 2>&1; then
-    echo "✅ Système DigiID mis à jour avec succès et opérationnel !"
-else
-    echo "❌ Attention : Le backend ne répond pas correctement."
-    echo "   Consultez les logs avec : docker compose logs --tail=20 backend"
-fi
+# On vérifie depuis l'intérieur du conteneur pour éviter les problèmes de ports exposés
+# On tente jusqu'à 5 fois (10 secondes max) pour laisser le temps au backend de démarrer
+for i in {1..5}; do
+    if docker compose exec -T backend curl -s -f http://localhost:8000/api/v1/sante-leger > /dev/null 2>&1; then
+        echo "✅ Système DigiID mis à jour avec succès et opérationnel !"
+        break
+    else
+        if [ $i -eq 5 ]; then
+            echo "❌ Attention : Le backend ne répond pas après 10 secondes."
+            echo "   Consultez les logs avec : docker compose logs --tail=30 backend"
+        else
+            echo "⏳ Attente du démarrage du backend... (essai $i/5)"
+            sleep 2
+        fi
+    fi
+done
+
+echo ""
+echo "📋 Résumé de l'état des services :"
+docker compose ps --format "table {{.Names}}\t{{.Status}}"
