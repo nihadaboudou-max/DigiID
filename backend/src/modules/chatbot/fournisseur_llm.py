@@ -2,7 +2,7 @@
 """
 Couche d'abstraction pour appeler le LLM.
 Gère le Chatbot (texte) et l'Extraction de documents (vision) :
-- Groq (production) pour la vision via llama-3.2-11b-vision-preview
+- Groq (production) pour la vision via qwen-3.6-27b
 - Ollama (développement) pour la vision via qwen2-vl:2b
 Le fournisseur est choisi par la variable d'environnement FOURNISSEUR_LLM.
 """
@@ -108,7 +108,7 @@ async def appeler_llm_vision(
 ) -> str:
     """
     Analyse une image via le fournisseur LLM configuré.
-    - Groq (prod) : llama-3.2-11b-vision-preview par défaut
+    - Groq (prod) : qwen-3.6-27b par défaut
     - Ollama (dev) : qwen2-vl:2b par défaut (à tirer : ollama pull qwen2-vl:2b)
     """
     if parametres.fournisseur_llm == "ollama":
