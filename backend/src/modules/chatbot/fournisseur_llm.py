@@ -107,17 +107,17 @@ async def appeler_llm_vision(
     mime_type: str = "image/jpeg",
 ) -> str:
     """
-    Analyse une image via le fournisseur LLM configuré.
-    - Groq (prod) : qwen-3.6-27b par défaut
-    - Ollama (dev) : qwen2-vl:2b par défaut (à tirer : ollama pull qwen2-vl:2b)
+    Analyse une image via Ollama en local (extraction de documents).
+    Groq est désactivé pour la vision afin d'éviter les erreurs de modèles décommissionnés.
     """
-    if parametres.fournisseur_llm == "ollama":
-        return await _appeler_ollama_vision(
-            image_base64,
-            prompt,
-            modele or parametres.ollama_modele_vision,
-        )
-    return await _appeler_groq_vision(image_base64, prompt, modele, mime_type)
+    # Force l'utilisation du modèle de vision Ollama défini dans le .env
+    modele_vision = modele or parametres.ollama_modele_vision or "qwen2.5vl:3b"
+    
+    return await _appeler_ollama_vision(
+        image_base64=image_base64,
+        prompt=prompt,
+        modele=modele_vision,
+    )
 
 
 async def _appeler_ollama_vision(
