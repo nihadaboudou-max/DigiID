@@ -3,7 +3,7 @@
 Extracteur VLM (Vision Language Model) pour les documents d'identité.
 
 Le fournisseur et le modèle sont gérés par `src.modules.chatbot.fournisseur_llm` :
-- Groq (production)  : llama-3.2-11b-vision-preview (variable GROQ_MODELE_VISION)
+- Groq (production)  : qwen-3.6-27b (variable GROQ_MODELE_VISION)
 - Ollama (développement) : qwen2-vl:2b (variable OLLAMA_MODELE_VISION)
 
 L'image est normalisée en JPEG (RGB) avant l'envoi pour être compatible
