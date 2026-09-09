@@ -67,6 +67,13 @@ class ParametresApplication(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_modele: str = "meta-llama/llama-3.3-70b-instruct:free"
 
+    # --- Vision / Extraction de documents (VLM) ---
+    # Modèle stabilisé chez Groq (prod) ; Ollama (dev) utilise un petit modèle local.
+    groq_modele_vision: str = "llama-3.2-11b-vision-preview"
+    ollama_modele_vision: str = "qwen2-vl:2b"
+    # False = reprise en OCR classique seul (mode « conformité stable »)
+    activer_extraction_vlm: bool = True
+
     # --- Vector store (RAG chatbot) ---
     chromadb_host: str = "base_vectorielle"
     chromadb_port: int = 8000

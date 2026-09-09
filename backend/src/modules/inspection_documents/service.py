@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 Service d'orchestration pour le module d'inspection de documents.
-Architecture stable : OCR Classique + Validation Règles + Flux de validation manuelle (EN_ATTENTE).
-Suppression de la dépendance au VLM pour garantir la stabilité et la conformité bancaire.
+Pipeline hybride : VLM (classification + extraction dates/MRZ) + OCR classique (texte, MRZ exacte),
+puis Validation par règles + Flux de validation manuelle (EN_ATTENTE).
+Un fallback OCR seul reste garanti si le VLM est indisponible (stabilité bancaire).
 
 Pipeline complet :
 1. Validation du fichier uploadé (format, taille)
 2. Évaluation de la qualité d'image
-3. Extraction via OCR classique (Tesseract) avec fallback gracieux
+3. Extraction hybride : VLM (si configuré) + OCR classique Tesseract, fusionnées
 4. Validation métier (si les données sont présentes)
 5. Persistance en base de données (même en cas d'extraction partielle)
 6. Statut EN_ATTENTE pour revue manuelle si nécessaire
@@ -59,6 +60,8 @@ from src.modules.inspection_documents.storage.document_storage import stocker_do
 from src.modules.inspection_documents.preprocessing.quality_checker import evaluer_qualite_image
 from src.noyau import journal
 from src.noyau.exceptions import ErreurRessourceIntrouvable, ErreurValidation
+from src.config import parametres
+from src.modules.inspection_documents.extraction.vlm_extractor import extraire_donnees_vlm
 
 
 # =============================================================================
@@ -103,8 +106,18 @@ CODES_PAYS_TEXTES = ["SEN", "CIV", "MLI", "BEN", "BFA", "TOG", "GHA", "NGA", "GI
 
 
 def _normaliser_date(chaine: Optional[str]) -> Optional[str]:
-    """Normalise JJ/MM/AAAA ou JJ-MM-AAAA vers JJ/MM/AAAA (valide)."""
-    m = re.search(r"(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})", chaine or "")
+    """Normalise JJ/MM/AAAA, JJ-MM-AA ou AAAA-MM-JJ vers JJ/MM/AAAA (valide)."""
+    s = chaine or ""
+
+    # Format ISO AAAA-MM-JJ (le VLM peut le renvoyer malgré le prompt)
+    m_iso = re.search(r"(\d{4})[/.\-](\d{1,2})[/.\-](\d{1,2})", s)
+    if m_iso:
+        annee, mois, jour = int(m_iso.group(1)), int(m_iso.group(2)), int(m_iso.group(3))
+        if 1 <= mois <= 12 and 1 <= jour <= 31 and 1900 <= annee <= 2100:
+            return f"{jour:02d}/{mois:02d}/{annee:04d}"
+
+    # Format JJ/MM/AAAA, JJ-MM-AA, JJ.MM.AAAA
+    m = re.search(r"(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})", s)
     if not m:
         return None
     jour, mois, annee = int(m.group(1)), int(m.group(2)), m.group(3)
@@ -117,34 +130,196 @@ def _normaliser_date(chaine: Optional[str]) -> Optional[str]:
     return None
 
 
+# =============================================================================
+# Utilitaires VLM (classification hybride + complétion MRZ / dates)
+# =============================================================================
+
+_TYPES_VLM = {
+    "cni_biometrique": TypeDocument.CNI_BIOMETRIQUE,
+    "cni_papier": TypeDocument.CNI_PAPIER,
+    "passeport": TypeDocument.PASSEPORT,
+    "permis_conduire": TypeDocument.PERMIS_CONDUIRE,
+    "carte_assurance": TypeDocument.CARTE_ASSURANCE,
+    "carte_sejour": TypeDocument.CARTE_SEJOUR,
+    "carte_vote": TypeDocument.CARTE_VOTE,
+    "carte_etudiant": TypeDocument.CARTE_ETUDIANT,
+}
+
+
+def _pad3(lignes) -> tuple:
+    """Force un tuple de 3 lignes MRZ (None si absent)."""
+    valeurs = list(lignes or ())[:3]
+    while len(valeurs) < 3:
+        valeurs.append(None)
+    return tuple(valeurs)
+
+
+def _type_depuis_code_mrz(l1: Optional[str]) -> Optional[TypeDocument]:
+    """Type du document déduit du code de la 1re ligne MRZ (P<, I<, A<…)."""
+    if not l1:
+        return None
+    debut = str(l1).upper().ljust(2)
+    if debut.startswith(("P<", "P ")):
+        return TypeDocument.PASSEPORT
+    if debut.startswith(("I<", "ID")):
+        return TypeDocument.CNI_BIOMETRIQUE
+    if debut.startswith(("A<", "AC")):
+        return TypeDocument.CARTE_SEJOUR
+    return None
+
+
+def _mapper_type_vlm(donnees_vlm: Optional[dict]) -> Optional[TypeDocument]:
+    """Convertit le type renvoyé par le VLM en enum du schéma."""
+    if not donnees_vlm:
+        return None
+    type_str = str(donnees_vlm.get("type_document") or "").strip().lower()
+    if not type_str or type_str == "autre":
+        return None
+    return _TYPES_VLM.get(type_str)
+
+
+def _choisir_type_document(
+    texte_brut: str,
+    mrz_lignes: tuple,
+    donnees_vlm: Optional[dict],
+    type_suggere: Optional[TypeDocument],
+) -> TypeDocument:
+    """Classification : code MRZ > VLM > regex OCR > hint client."""
+    ocr_type = classifier_document(texte_brut or "", mrz_lignes or (None, None, None))
+    code_mrz = _type_depuis_code_mrz((mrz_lignes or (None,))[0])
+    type_vlm = _mapper_type_vlm(donnees_vlm)
+
+    if code_mrz is not None:
+        type_document = code_mrz
+    elif type_vlm is not None:
+        type_document = type_vlm
+    elif ocr_type != TypeDocument.INCONNU:
+        type_document = ocr_type
+    else:
+        type_document = TypeDocument.INCONNU
+
+    # Le type choisi côté client tranche les ambiguïtés (ex : CNI papier vs biométrique sans MRZ)
+    if type_suggere and type_suggere != TypeDocument.INCONNU:
+        if type_document == TypeDocument.INCONNU or (
+            type_suggere == TypeDocument.CNI_PAPIER
+            and type_document == TypeDocument.CNI_BIOMETRIQUE
+            and not (mrz_lignes and mrz_lignes[0])
+        ):
+            type_document = type_suggere
+    return type_document
+
+
+def _fusionner_lignes_mrz(lignes_ocr: tuple, donnees_vlm: Optional[dict]) -> tuple:
+    """MRZ de l'OCR en priorité (exacte), sinon celle renvoyée par le VLM."""
+    ocr = _pad3(lignes_ocr)
+    if ocr[0] and ocr[1]:
+        return ocr
+
+    lignes_vlm = []
+    if donnees_vlm:
+        for cle in ("mrz_ligne_1", "mrz_ligne_2", "mrz_ligne_3"):
+            valeur = donnees_vlm.get(cle)
+            if valeur:
+                lignes_vlm.append(re.sub(r"[^A-Z0-9<]", "", str(valeur).upper().strip()))
+
+    if len(lignes_vlm) >= 2 and 28 <= len(lignes_vlm[0]) <= 45 and len(lignes_vlm[1]) >= 25 and (lignes_vlm[0].count("<") + lignes_vlm[1].count("<")) >= 6:
+        return _pad3(lignes_vlm)
+    return ocr
+
+
+def _completer_depuis_vlm(
+    donnees_nlp: dict,
+    donnees_vlm: Optional[dict],
+    donnees_mrz: dict,
+) -> None:
+    """Comble les trous de l'OCR/NLP avec les champs fiables du VLM."""
+    if not donnees_vlm:
+        return
+
+    correspondances = {
+        "nom_famille": "nom_famille",
+        "prenoms": "prenoms",
+        "date_naissance": "date_naissance",
+        "date_expiration": "date_expiration",
+        "date_delivrance": "date_delivrance",
+        "lieu_naissance": "lieu_naissance",
+        "nationalite": "nationalite",
+        "numero_document": "numero_document",
+    }
+    for cle_vlm, cle_cible in correspondances.items():
+        if donnees_nlp.get(cle_cible):
+            continue
+        valeur = donnees_vlm.get(cle_vlm)
+        if not valeur:
+            continue
+        valeur = str(valeur).strip()
+
+        if cle_cible in ("date_naissance", "date_expiration", "date_delivrance"):
+            d = _normaliser_date(valeur)
+            if d:
+                donnees_nlp[cle_cible] = d
+        elif cle_cible == "numero_document":
+            propre = re.sub(r"[^A-Z0-9]", "", valeur.upper())
+            if 5 <= len(propre) <= 20:
+                donnees_nlp[cle_cible] = propre
+        elif cle_cible in ("nom_famille", "prenoms", "lieu_naissance", "nationalite"):
+            if valeur:
+                donnees_nlp[cle_cible] = valeur[:100]
+
+    if not donnees_nlp.get("sexe"):
+        sexe_vlm = str(donnees_vlm.get("sexe") or "").upper()
+        if sexe_vlm in ("M", "F"):
+            donnees_nlp["sexe"] = sexe_vlm
+
+    if not donnees_nlp.get("pays_emetteur"):
+        pays = str(donnees_vlm.get("pays") or "").upper()
+        if re.fullmatch(r"[A-Z]{3}", pays):
+            donnees_nlp["pays_emetteur"] = pays
+
+
 async def _extraire_donnees_classique(
     image_bytes: bytes,
     type_suggere: Optional[TypeDocument],
 ) -> DonneesDocumentExtraites:
     """
-    Extraction universelle et performante, quel que soit le type de document :
-    Prétraitement OpenCV → OCR + détection MRZ multi-zones → Classification robuste
-    → Parsing MRZ (source de vérité) → Extraction NLP générique + spécifique au type → Fusion.
+    Extraction hybride performante et stable :
+    VLM (classification + complétion dates/MRZ) + OCR classique (texte + MRZ exacte)
+    -> Parsing MRZ (source de vérité) -> Extraction NLP -> Fusion.
+    En cas d'indisponibilité du VLM, on retombe sur l'OCR seul.
     """
     try:
+        # ── 0. VLM (si activé) : classification + complétion des champs ──
+        donnees_vlm = None
+        confiance_vlm: Optional[float] = None
+        if parametres.activer_extraction_vlm:
+            try:
+                donnees_vlm = await extraire_donnees_vlm(image_bytes)
+                if donnees_vlm and donnees_vlm.get("est_document_identite") is False:
+                    journal.info("VLM : image jugée non-document d'identité → OCR seule.")
+                    donnees_vlm = None
+                if donnees_vlm:
+                    try:
+                        confiance_vlm = float(donnees_vlm.get("confiance_extraction") or 0.0)
+                    except (TypeError, ValueError):
+                        confiance_vlm = None
+            except Exception as e:
+                journal.warning(f"VLM indisponible, bascule OCR seule : {e}")
+                donnees_vlm = None
+
         # ── 1. OCR prétraité (CLAHE/adaptatif) + MRZ + confiance réelle ──
         resultat_ocr = analyser_document(image_bytes)
         texte = resultat_ocr.get("texte_brut") or ""
         confiance = float(resultat_ocr.get("confiance_moyenne", 0.0) or 0.0)
-        mrz_lignes = resultat_ocr.get("mrz_lignes") or (None, None, None)
         texte_upper = texte.upper()
 
-        # ── 2. Classification automatique (MRZ > regex > heuristique) ──
-        type_document = classifier_document(texte, mrz_lignes)
+        # MRZ combinée : l'OCR (exact) est prioritaire, le VLM comble si absente
+        mrz_lignes = _fusionner_lignes_mrz(
+            resultat_ocr.get("mrz_lignes") or (None, None, None),
+            donnees_vlm,
+        )
 
-        # Le type choisi côté client tranche les ambiguïtés (ex : CNI papier vs biométrique sans MRZ)
-        if type_suggere and type_suggere != TypeDocument.INCONNU:
-            if type_document == TypeDocument.INCONNU or (
-                type_suggere == TypeDocument.CNI_PAPIER
-                and type_document == TypeDocument.CNI_BIOMETRIQUE
-                and not mrz_lignes[0]
-            ):
-                type_document = type_suggere
+        # ── 2. Classification hybride : code MRZ > VLM > regex > client ──
+        type_document = _choisir_type_document(texte, mrz_lignes, donnees_vlm, type_suggere)
 
         # ── 3. Parsing MRZ (prioritaire si présente) ──
         donnees_mrz = {}
@@ -208,6 +383,11 @@ async def _extraire_donnees_classique(
             else:
                 donnees_specifiques[cle] = valeur
 
+        # ── 7bis. Complétion VLM : dates / MRZ / identité si l'OCR a des trous ──
+        _completer_depuis_vlm(donnees_nlp, donnees_vlm, donnees_mrz)
+        if confiance_vlm is not None:
+            confiance = round(max(confiance, confiance_vlm * 100.0), 2)
+
         # ── 8. Pays émetteur (MRZ d'abord, puis codes pays dans le texte) ──
         code_pays = detecter_pays(texte, mrz_lignes)
         if not code_pays:
@@ -217,7 +397,8 @@ async def _extraire_donnees_classique(
                     break
 
         # ── 9. Assemblage + fusion (MRZ prioritaire) ──
-        donnees_nlp["pays_emetteur"] = code_pays
+        if code_pays:
+            donnees_nlp["pays_emetteur"] = code_pays
         donnees_nlp["donnees_specifiques"] = donnees_specifiques
         donnees_nlp["texte_brut"] = texte[:5000]
         donnees_nlp["confiance"] = confiance
@@ -318,7 +499,7 @@ async def traiter_upload_document(
         )
     journal.info(f"Qualité image : score={qualite.score_global:.1f}/100")
     
-    # 3. Extraction des données (OCR Classique, sans VLM)
+    # 3. Extraction des données (VLM + OCR classique, fusion des deux sources)
     donnees = await _extraire_donnees_classique(contenu, type_document)
     
     # 4. Validation métier dynamique

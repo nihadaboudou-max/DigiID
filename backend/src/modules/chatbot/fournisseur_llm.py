@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 Couche d'abstraction pour appeler le LLM.
-Gère le Chatbot (texte) et l'Extraction de documents (vision) via Groq (léger pour le VPS).
+Gère le Chatbot (texte) et l'Extraction de documents (vision) :
+- Groq (production) pour la vision via llama-3.2-11b-vision-preview
+- Ollama (développement) pour la vision via qwen2-vl:2b
+Le fournisseur est choisi par la variable d'environnement FOURNISSEUR_LLM.
 """
 import httpx
 from typing import Optional
@@ -101,18 +104,60 @@ async def appeler_llm_vision(
     image_base64: str,
     prompt: str,
     modele: Optional[str] = None,
+    mime_type: str = "image/jpeg",
 ) -> str:
     """
-    Appelle Groq pour analyser une image (extraction de CNI/Document).
-    Utilise le modèle de vision le plus stable actuellement disponible.
+    Analyse une image via le fournisseur LLM configuré.
+    - Groq (prod) : llama-3.2-11b-vision-preview par défaut
+    - Ollama (dev) : qwen2-vl:2b par défaut (à tirer : ollama pull qwen2-vl:2b)
     """
-    return await _appeler_groq_vision(image_base64, prompt, modele)
+    if parametres.fournisseur_llm == "ollama":
+        return await _appeler_ollama_vision(
+            image_base64,
+            prompt,
+            modele or parametres.ollama_modele_vision,
+        )
+    return await _appeler_groq_vision(image_base64, prompt, modele, mime_type)
+
+
+async def _appeler_ollama_vision(
+    image_base64: str,
+    prompt: str,
+    modele: str,
+) -> str:
+    """Appelle le modèle vision local via l'API /api/chat d'Ollama."""
+    url = f"{parametres.ollama_url}/api/chat"
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT_SECONDES) as client:
+            reponse = await client.post(
+                url,
+                json={
+                    "model": modele,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": prompt,
+                            "images": [image_base64],
+                        }
+                    ],
+                    "stream": False,
+                    "options": {"temperature": 0.1},
+                },
+            )
+            reponse.raise_for_status()
+            return reponse.json().get("message", {}).get("content", "").strip()
+    except httpx.HTTPError as erreur:
+        journal.error(f"Erreur HTTP Ollama Vision : {erreur}")
+        raise ErreurServiceIndisponible(
+            "Erreur de connexion au modèle vision local."
+        )
 
 
 async def _appeler_groq_vision(
     image_base64: str,
     prompt: str,
     modele: Optional[str] = None,
+    mime_type: str = "image/jpeg",
 ) -> str:
     """Appelle l'API Groq avec une image."""
     if not parametres.groq_api_key:
@@ -121,10 +166,9 @@ async def _appeler_groq_vision(
             message_utilisateur="La clé API pour l'analyse des documents est manquante."
         )
     
-    # ✅ MODÈLE ACTUELLEMENT STABLE CHEZ GROQ POUR LA VISION
-    # Si ce modèle change à l'avenir, il suffit de modifier cette seule ligne.
-    modele_vision = modele or "llama-3.2-11b-vision-preview"
-    
+    # Modèle stable chez Groq pour la vision ; surchargeable via GROQ_MODELE_VISION
+    modele_vision = modele or parametres.groq_modele_vision or "llama-3.2-11b-vision-preview"
+
     messages = [
         {
             "role": "user",
@@ -133,7 +177,7 @@ async def _appeler_groq_vision(
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": f"data:image/jpeg;base64,{image_base64}"
+                        "url": f"data:{mime_type};base64,{image_base64}"
                     }
                 }
             ]
