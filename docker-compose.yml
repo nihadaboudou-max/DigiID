@@ -25,6 +25,17 @@ services:
     ports:
       - "6379:6379"
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: digiid_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+
   backend:
     build:
       context: .
@@ -153,3 +164,4 @@ services:
 
 volumes:
   postgres_data:
+  ollama_data:
