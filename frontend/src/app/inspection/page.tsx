@@ -1,17 +1,69 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { ChangeEvent } from "react";
 import {
   TypeDocument,
-  ReponseUploadDocument,
-  DetailVerification,
+  FaceDocument,
   StatutVerification,
+  DetailVerification,
+  ReponseUploadDocument,
 } from "@/types/inspection";
 import {
   uploadDocument,
   obtenirHistorique,
   supprimerVerification,
 } from "@/services/inspectionApi";
+
+// ── Libellés / styles partagés ─────────────────────────────────────────────
+const LIBELLES_TYPE_DOCUMENT: Record<TypeDocument, string> = {
+  [TypeDocument.CNI_BIOMETRIQUE]: "CNI Biométrique",
+  [TypeDocument.CNI_PAPIER]: "CNI Papier",
+  [TypeDocument.PASSEPORT]: "Passeport",
+  [TypeDocument.PERMIS_CONDUIRE]: "Permis de conduire",
+  [TypeDocument.CARTE_ASSURANCE]: "Carte d'assurance",
+  [TypeDocument.CARTE_SEJOUR]: "Carte de séjour",
+  [TypeDocument.CARTE_VOTE]: "Carte de vote",
+  [TypeDocument.CARTE_ETUDIANT]: "Carte étudiant",
+  [TypeDocument.INCONNU]: "Inconnu",
+};
+
+const LIBELLES_FACE: Record<FaceDocument, string> = {
+  [FaceDocument.RECTO]: "Recto",
+  [FaceDocument.VERSO]: "Verso",
+  [FaceDocument.UNIQUE]: "Unique",
+};
+
+const LIBELLES_STATUT: Record<StatutVerification, string> = {
+  [StatutVerification.EN_ATTENTE]: "En attente",
+  [StatutVerification.APPROUVE]: "Approuvé",
+  [StatutVerification.REJETE]: "Rejeté",
+  [StatutVerification.PARTIEL]: "Partiel",
+};
+
+const CLASSES_STATUT: Record<StatutVerification, string> = {
+  [StatutVerification.EN_ATTENTE]: "bg-yellow-100 text-yellow-800",
+  [StatutVerification.APPROUVE]: "bg-green-100 text-green-800",
+  [StatutVerification.REJETE]: "bg-red-100 text-red-800",
+  [StatutVerification.PARTIEL]: "bg-orange-100 text-orange-800",
+};
+
+const LIBELLES_SEXE: Record<string, string> = {
+  M: "Masculin",
+  F: "Féminin",
+  non_detecte: "Non détecté",
+};
+
+const OPTIONS_TYPE_DOCUMENT: { valeur: TypeDocument; libelle: string }[] = [
+  { valeur: TypeDocument.CNI_BIOMETRIQUE, libelle: "CNI Biométrique" },
+  { valeur: TypeDocument.CNI_PAPIER, libelle: "CNI Papier" },
+  { valeur: TypeDocument.PASSEPORT, libelle: "Passeport" },
+  { valeur: TypeDocument.PERMIS_CONDUIRE, libelle: "Permis de conduire" },
+  { valeur: TypeDocument.CARTE_ASSURANCE, libelle: "Carte d'assurance" },
+  { valeur: TypeDocument.CARTE_SEJOUR, libelle: "Carte de séjour" },
+  { valeur: TypeDocument.CARTE_VOTE, libelle: "Carte de vote" },
+  { valeur: TypeDocument.CARTE_ETUDIANT, libelle: "Carte étudiant" },
+];
 
 export default function TestInspectionPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -26,6 +78,7 @@ export default function TestInspectionPage() {
   // Charger l'historique au démarrage
   useEffect(() => {
     chargerHistorique();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const chargerHistorique = async () => {
@@ -40,18 +93,19 @@ export default function TestInspectionPage() {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-      setResult(null);
-      setError(null);
-    }
+    if (!file) return;
+
+    setSelectedFile(file);
+    setResult(null);
+    setError(null);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleUpload = async () => {
@@ -116,9 +170,7 @@ export default function TestInspectionPage() {
           <div className="space-y-6">
             {/* Upload d'image */}
             <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold mb-4">
-                📷 Upload d'image
-              </h2>
+              <h2 className="text-xl font-semibold mb-4">📷 Upload d'image</h2>
 
               <div className="space-y-4">
                 {/* Sélection de fichier */}
@@ -142,7 +194,7 @@ export default function TestInspectionPage() {
                     </label>
                     <img
                       src={preview}
-                      alt="Aperçu"
+                      alt="Aperçu du document"
                       className="max-h-64 rounded-lg border border-gray-200"
                     />
                   </div>
@@ -151,29 +203,26 @@ export default function TestInspectionPage() {
                 {/* Sélection du type de document */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Type de document (optionnel - auto-détecté si non sélectionné)
+                    Type de document (optionnel - auto-détecté si non
+                    sélectionné)
                   </label>
                   <select
                     value={typeDocument || ""}
                     onChange={(e) =>
                       setTypeDocument(
-                        e.target.value ? (e.target.value as TypeDocument) : null
+                        e.target.value
+                          ? (e.target.value as TypeDocument)
+                          : null
                       )
                     }
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="">Auto-détection</option>
-                    <option value={TypeDocument.CNI_BIOMETRIQUE}>
-                      CNI Biométrique
-                    </option>
-                    <option value={TypeDocument.CNI_PAPIER}>CNI Papier</option>
-                    <option value={TypeDocument.PASSEPORT}>Passeport</option>
-                    <option value={TypeDocument.PERMIS_CONDUIRE}>
-                      Permis de Conduire
-                    </option>
-                    <option value={TypeDocument.CARTE_ASSURANCE}>
-                      Carte d'Assurance
-                    </option>
+                    {OPTIONS_TYPE_DOCUMENT.map((option) => (
+                      <option key={option.valeur} value={option.valeur}>
+                        {option.libelle}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -198,130 +247,12 @@ export default function TestInspectionPage() {
 
             {/* Résultats */}
             {result && (
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-xl font-semibold mb-4">
-                  ✅ Résultats de l'analyse
-                </h2>
-
-                {/* Statut */}
-                <div
-                  className={`p-4 rounded-lg mb-4 ${
-                    result.validation.est_valide
-                      ? "bg-green-50 border border-green-200"
-                      : "bg-red-50 border border-red-200"
-                  }`}
-                >
-                  <div className="flex items-center">
-                    <span className="text-2xl mr-3">
-                      {result.validation.est_valide ? "✅" : "❌"}
-                    </span>
-                    <div>
-                      <p className="font-semibold">
-                        {result.validation.est_valide
-                          ? "Document validé"
-                          : "Document rejeté"}
-                      </p>
-                      <p className="text-sm text-gray-600 mt-1">
-                        {result.validation.message}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Données extraites */}
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-gray-800">
-                    Données extraites
-                  </h3>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <InfoField
-                      label="Type"
-                      value={result.donnees.type_document}
-                    />
-                    <InfoField
-                      label="Pays"
-                      value={result.donnees.pays_emetteur}
-                    />
-                    <InfoField
-                      label="Nom"
-                      value={result.donnees.nom_famille}
-                    />
-                    <InfoField
-                      label="Prénoms"
-                      value={result.donnees.prenoms}
-                    />
-                    <InfoField
-                      label="Date naissance"
-                      value={result.donnees.date_naissance}
-                    />
-                    <InfoField label="Sexe" value={result.donnees.sexe} />
-                    <InfoField
-                      label="N° Document"
-                      value={result.donnees.numero_document}
-                    />
-                    <InfoField
-                      label="Expiration"
-                      value={result.donnees.date_expiration}
-                    />
-                    <InfoField
-                      label="Confiance OCR"
-                      value={`${result.donnees.taux_confiance_ocr.toFixed(1)}%`}
-                    />
-                    <InfoField
-                      label="MRZ Valide"
-                      value={result.donnees.mrz_valide ? "Oui" : "Non"}
-                    />
-                  </div>
-                </div>
-
-                {/* Cohérence */}
-                {result.coherence && (
-                  <div className="mt-4">
-                    <h3 className="font-semibold text-gray-800 mb-2">
-                      Vérification d'identité
-                    </h3>
-                    <div
-                      className={`p-3 rounded-lg text-sm ${
-                        result.coherence.est_coherent
-                          ? "bg-blue-50 text-blue-800"
-                          : "bg-yellow-50 text-yellow-800"
-                      }`}
-                    >
-                      {result.coherence.message}
-                    </div>
-                  </div>
-                )}
-
-                {/* Scores */}
-                {Object.keys(result.validation.scores).length > 0 && (
-                  <div className="mt-4">
-                    <h3 className="font-semibold text-gray-800 mb-2">
-                      Scores de validation
-                    </h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {Object.entries(result.validation.scores).map(
-                        ([key, value]) => (
-                          <div
-                            key={key}
-                            className={`text-xs px-3 py-2 rounded ${
-                              value
-                                ? "bg-green-100 text-green-800"
-                                : "bg-red-100 text-red-800"
-                            }`}
-                          >
-                            {value ? "✓" : "✗"} {key}
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Temps de traitement */}
-                <div className="mt-4 text-xs text-gray-500">
-                  Temps de traitement : {result.temps_traitement_ms}ms
-                </div>
-              </div>
+              <ResultatsAnalyse
+                resultat={result}
+                libellesType={LIBELLES_TYPE_DOCUMENT}
+                libellesSexe={LIBELLES_SEXE}
+                libellesFace={LIBELLES_FACE}
+              />
             )}
 
             {/* Erreur */}
@@ -352,9 +283,7 @@ export default function TestInspectionPage() {
             </div>
 
             {loadingHistorique ? (
-              <div className="text-center py-8 text-gray-500">
-                Chargement...
-              </div>
+              <div className="text-center py-8 text-gray-500">Chargement...</div>
             ) : historique.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 Aucune vérification dans l'historique
@@ -371,22 +300,24 @@ export default function TestInspectionPage() {
                         <div className="flex items-center gap-2 mb-2">
                           <span
                             className={`text-xs px-2 py-1 rounded ${
-                              verif.statut === StatutVerification.APPROUVE
-                                ? "bg-green-100 text-green-800"
-                                : verif.statut === StatutVerification.REJETE
-                                ? "bg-red-100 text-red-800"
-                                : "bg-yellow-100 text-yellow-800"
+                              CLASSES_STATUT[verif.statut] ??
+                              "bg-yellow-100 text-yellow-800"
                             }`}
                           >
-                            {verif.statut}
+                            {LIBELLES_STATUT[verif.statut] ?? verif.statut}
                           </span>
                           <span className="text-xs text-gray-600">
-                            {verif.type_document}
+                            {LIBELLES_TYPE_DOCUMENT[verif.type_document] ??
+                              verif.type_document}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {LIBELLES_FACE[verif.face] ?? verif.face}
                           </span>
                         </div>
                         {verif.nom_famille && (
                           <p className="text-sm font-medium text-gray-900">
-                            {verif.nom_famille} {verif.prenoms}
+                            {verif.nom_famille}{" "}
+                            {verif.prenoms ? verif.prenoms : ""}
                           </p>
                         )}
                         {verif.numero_document && (
@@ -396,6 +327,12 @@ export default function TestInspectionPage() {
                         )}
                         <p className="text-xs text-gray-500 mt-1">
                           {new Date(verif.cree_le).toLocaleString("fr-FR")}
+                          {verif.taux_confiance_ocr > 0 && (
+                            <span className="ml-2">
+                              Confiance :{" "}
+                              {verif.taux_confiance_ocr.toFixed(1)}%
+                            </span>
+                          )}
                         </p>
                       </div>
                       <button
@@ -413,6 +350,185 @@ export default function TestInspectionPage() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Bloc résultats ──────────────────────────────────────────────────────────
+interface ResultatsAnalyseProps {
+  resultat: ReponseUploadDocument;
+  libellesType: Record<TypeDocument, string>;
+  libellesSexe: Record<string, string>;
+  libellesFace: Record<FaceDocument, string>;
+}
+
+function ResultatsAnalyse({
+  resultat,
+  libellesType,
+  libellesSexe,
+  libellesFace,
+}: ResultatsAnalyseProps) {
+  const { donnees, validation, coherence, statut } = resultat;
+
+  // Bandeau : visuel adapté au statut réel (pas seulement est_valide)
+  const statutOk = validation.est_valide;
+  const enAttente = statut === StatutVerification.EN_ATTENTE;
+  const partiel = statut === StatutVerification.PARTIEL;
+
+  const classesBandeau = statutOk
+    ? "bg-green-50 border-green-200"
+    : enAttente || partiel
+    ? "bg-yellow-50 border-yellow-200"
+    : "bg-red-50 border-red-200";
+  const iconeBandeau = statutOk
+    ? "✅"
+    : enAttente
+    ? "⏳"
+    : partiel
+    ? "⚠️"
+    : "❌";
+  const titreBandeau = statutOk
+    ? "Document validé"
+    : enAttente
+    ? "Vérification en attente"
+    : partiel
+    ? "Vérification partielle"
+    : "Document rejeté";
+
+  return (
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <h2 className="text-xl font-semibold mb-4">✅ Résultats de l'analyse</h2>
+
+      {/* Statut */}
+      <div className={`p-4 rounded-lg border mb-4 ${classesBandeau}`}>
+        <div className="flex items-center">
+          <span className="text-2xl mr-3">{iconeBandeau}</span>
+          <div>
+            <p className="font-semibold">{titreBandeau}</p>
+            <p className="text-sm text-gray-600 mt-1">{validation.message}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Informations générales */}
+      <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600 mb-4">
+        <span className="font-medium text-gray-800">
+          {libellesType[donnees.type_document] ?? donnees.type_document}
+        </span>
+        {donnees.pays_emetteur && <span>• {donnees.pays_emetteur}</span>}
+        {donnees.face && (
+          <span>• {libellesFace[donnees.face] ?? donnees.face}</span>
+        )}
+        <span className="text-xs text-gray-400">
+          {resultat.temps_traitement_ms} ms
+        </span>
+      </div>
+
+      {/* Données extraites */}
+      <div className="space-y-3">
+        <h3 className="font-semibold text-gray-800">Données extraites</h3>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <InfoField label="Nom" value={donnees.nom_famille} />
+          <InfoField label="Prénoms" value={donnees.prenoms} />
+          <InfoField label="Date de naissance" value={donnees.date_naissance} />
+          <InfoField label="Sexe" value={libellesSexe[donnees.sexe]} />
+          <InfoField label="N° Document" value={donnees.numero_document} />
+          <InfoField label="Date d'expiration" value={donnees.date_expiration} />
+          <InfoField label="Lieu de naissance" value={donnees.lieu_naissance} />
+          <InfoField
+            label="Date de délivrance"
+            value={donnees.date_delivrance}
+          />
+          <InfoField label="Nationalité" value={donnees.nationalite} />
+          <InfoField
+            label="Autorité de délivrance"
+            value={donnees.autorite_delivrance}
+          />
+          <InfoField
+            label="Confiance OCR"
+            value={`${donnees.taux_confiance_ocr.toFixed(1)}%`}
+          />
+          <InfoField
+            label="MRZ valide"
+            value={donnees.mrz_valide ? "Oui" : "Non"}
+          />
+        </div>
+      </div>
+
+      {/* Cohérence */}
+      {coherence && (
+        <div className="mt-4">
+          <h3 className="font-semibold text-gray-800 mb-2">
+            Vérification d'identité
+          </h3>
+          <div
+            className={`p-3 rounded-lg text-sm ${
+              coherence.est_coherent
+                ? "bg-blue-50 text-blue-800"
+                : "bg-yellow-50 text-yellow-800"
+            }`}
+          >
+            {coherence.message}
+          </div>
+        </div>
+      )}
+
+      {/* Erreurs de validation */}
+      {validation.erreurs.length > 0 && (
+        <div className="mt-4">
+          <h3 className="font-semibold text-gray-800 mb-2">
+            Points bloquants
+          </h3>
+          <ul className="space-y-1">
+            {validation.erreurs.map((erreur, idx) => (
+              <li
+                key={idx}
+                className="text-xs px-3 py-1.5 rounded bg-red-50 text-red-700"
+              >
+                ✗ {erreur}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Scores */}
+      {Object.keys(validation.scores).length > 0 && (
+        <div className="mt-4">
+          <h3 className="font-semibold text-gray-800 mb-2">
+            Scores de validation
+          </h3>
+          <div className="grid grid-cols-2 gap-2">
+            {Object.entries(validation.scores).map(([key, value]) => (
+              <div
+                key={key}
+                className={`text-xs px-3 py-2 rounded ${
+                  value
+                    ? "bg-green-100 text-green-800"
+                    : "bg-red-100 text-red-800"
+                }`}
+              >
+                {value ? "✓" : "✗"} {key}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Détails techniques (MRZ / OCR) */}
+      {(donnees.mrz_ligne_1 || donnees.mrz_ligne_2) && (
+        <details className="mt-4 bg-gray-50 rounded-lg p-3">
+          <summary className="text-sm font-medium text-gray-700 cursor-pointer">
+            Lignes MRZ détectées
+          </summary>
+          <pre className="mt-2 text-xs font-mono text-gray-600 whitespace-pre-wrap break-all">
+            {donnees.mrz_ligne_1}
+            {"\n"}
+            {donnees.mrz_ligne_2}
+            {donnees.mrz_ligne_3 ? `\n${donnees.mrz_ligne_3}` : ""}
+          </pre>
+        </details>
+      )}
     </div>
   );
 }
