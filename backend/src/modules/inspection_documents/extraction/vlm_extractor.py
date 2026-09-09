@@ -93,7 +93,7 @@ async def extraire_donnees_vlm(image_bytes: bytes) -> Optional[Dict[str, Any]]:
         reponse_brute = await appeler_llm_vision(
             image_base64=image_base64,
             prompt=PROMPT_EXTRACTION_VLM,
-            modele="qwen2.5vl:3b",
+            modele="moondream",
             mime_type=mime_type,
         )
 
