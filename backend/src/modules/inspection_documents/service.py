@@ -42,6 +42,19 @@ from src.modules.inspection_documents.schemas import (
 )
 from src.modules.inspection_documents.validation.validation_engine import valider_document
 from src.modules.inspection_documents.validation.coherence_engine import verifier_coherence_identite
+from src.modules.inspection_documents.extraction.ocr_engine import analyser_document
+from src.modules.inspection_documents.extraction.mrz_parser import parser_mrz_complet
+from src.modules.inspection_documents.extraction.fusion_engine import fusionner_donnees
+from src.modules.inspection_documents.extraction.nlp_extractor import (
+    extraire_permis_conduire,
+    extraire_carte_assurance,
+    extraire_par_labels,
+)
+from src.modules.inspection_documents.classification.document_classifier import (
+    classifier_document,
+    detecter_pays,
+)
+from src.modules.inspection_documents.classification.patterns_documents import PATTERNS_GENERIQUES
 from src.modules.inspection_documents.storage.document_storage import stocker_document
 from src.modules.inspection_documents.preprocessing.quality_checker import evaluer_qualite_image
 from src.noyau import journal
@@ -86,115 +99,142 @@ async def _lire_image(fichier: UploadFile) -> bytes:
     return contenu
 
 
+CODES_PAYS_TEXTES = ["SEN", "CIV", "MLI", "BEN", "BFA", "TOG", "GHA", "NGA", "GIN", "NER", "CMR", "COD", "COG"]
+
+
+def _normaliser_date(chaine: Optional[str]) -> Optional[str]:
+    """Normalise JJ/MM/AAAA ou JJ-MM-AAAA vers JJ/MM/AAAA (valide)."""
+    m = re.search(r"(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})", chaine or "")
+    if not m:
+        return None
+    jour, mois, annee = int(m.group(1)), int(m.group(2)), m.group(3)
+    if len(annee) == 2:
+        annee = 1900 + int(annee) if int(annee) >= 40 else 2000 + int(annee)
+    else:
+        annee = int(annee)
+    if 1 <= mois <= 12 and 1 <= jour <= 31 and 1900 <= annee <= 2100:
+        return f"{jour:02d}/{mois:02d}/{annee:04d}"
+    return None
+
+
 async def _extraire_donnees_classique(
-    image_bytes: bytes, 
-    type_suggere: Optional[TypeDocument]
+    image_bytes: bytes,
+    type_suggere: Optional[TypeDocument],
 ) -> DonneesDocumentExtraites:
     """
-    Extraction OCR avec des Regex robustes pour les CNI africaines.
+    Extraction universelle et performante, quel que soit le type de document :
+    Prétraitement OpenCV → OCR + détection MRZ multi-zones → Classification robuste
+    → Parsing MRZ (source de vérité) → Extraction NLP générique + spécifique au type → Fusion.
     """
-    texte_brut = ""
-    confiance = 0.0
-    numero_document = None
-    nom_famille = None
-    prenoms = None
-    date_naissance = None
-    date_expiration = None
-    pays_emetteur = None
-    type_document = type_suggere or TypeDocument.INCONNU
-
     try:
-        from PIL import Image
-        import pytesseract
-        import io
+        # ── 1. OCR prétraité (CLAHE/adaptatif) + MRZ + confiance réelle ──
+        resultat_ocr = analyser_document(image_bytes)
+        texte = resultat_ocr.get("texte_brut") or ""
+        confiance = float(resultat_ocr.get("confiance_moyenne", 0.0) or 0.0)
+        mrz_lignes = resultat_ocr.get("mrz_lignes") or (None, None, None)
+        texte_upper = texte.upper()
 
-        image = Image.open(io.BytesIO(image_bytes))
-        texte_brut = pytesseract.image_to_string(image, lang='fra+eng')
-        
-        if texte_brut.strip():
-            confiance = 50.0
-            texte_upper = texte_brut.upper()
-            
-            # 1. Détection du pays par codes à 3 lettres (COUNTRY CODES)
-            codes_pays = ['SEN', 'CIV', 'MLI', 'BEN', 'BFA', 'TOG', 'GHA', 'NGA', 'GIN', 'COD', 'COG', 'CMR']
-            for code in codes_pays:
-                if code in texte_upper:
-                    pays_emetteur = code
+        # ── 2. Classification automatique (MRZ > regex > heuristique) ──
+        type_document = classifier_document(texte, mrz_lignes)
+
+        # Le type choisi côté client tranche les ambiguïtés (ex : CNI papier vs biométrique sans MRZ)
+        if type_suggere and type_suggere != TypeDocument.INCONNU:
+            if type_document == TypeDocument.INCONNU or (
+                type_suggere == TypeDocument.CNI_PAPIER
+                and type_document == TypeDocument.CNI_BIOMETRIQUE
+                and not mrz_lignes[0]
+            ):
+                type_document = type_suggere
+
+        # ── 3. Parsing MRZ (prioritaire si présente) ──
+        donnees_mrz = {}
+        if mrz_lignes[0] and mrz_lignes[1]:
+            donnees_mrz = parser_mrz_complet(mrz_lignes[0], mrz_lignes[1], mrz_lignes[2])
+
+        # ── 4. Identité commune (NOM, PRÉNOMS, naissance, sexe, lieu) ──
+        donnees_nlp = extraire_par_labels(texte, PATTERNS_GENERIQUES)
+
+        # ── 5. Numéro de document (si absent du MRZ) ──
+        if not donnees_nlp.get("numero_document") and not donnees_mrz.get("numero_document"):
+            m_num = re.search(
+                r"(?:N[°O]|NUM[ÉE]RO)\s*(?:D['`]?IDENTIT[ÉE]|CNI|PASSEPORT|PERMIS)?\s*[:\-]?\s*([A-Z0-9][A-Z0-9\s\-]{5,19})",
+                texte,
+                re.IGNORECASE,
+            )
+            if m_num:
+                numero = re.sub(r"[^A-Z0-9]", "", m_num.group(1).upper())
+                if 5 <= len(numero) <= 20:
+                    donnees_nlp["numero_document"] = numero
+
+        # ── 6. Dates expiration/délivrance étiquetées (si absentes du MRZ) ──
+        if not donnees_nlp.get("date_expiration") and not donnees_mrz.get("date_expiration_date"):
+            m_exp = re.search(
+                r"(?:EXPIR[EÉ]|EXPIRATION|VALABLE\s*(?:JUSQU|AU)|VALIDIT[ÉE]\s*JUSQU|FIN\s*DE\s*VALIDIT[ÉE])\s*[:\-]?\s*(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})",
+                texte,
+                re.IGNORECASE,
+            )
+            if m_exp:
+                d = _normaliser_date(m_exp.group(1))
+                if d:
+                    donnees_nlp["date_expiration"] = d
+
+        if not donnees_nlp.get("date_delivrance"):
+            m_del = re.search(
+                r"(?:D[ÉE]LIVR[ÉE]|DATE\s*DE\s*D[ÉE]LIVRANCE)\s*[:\-]?\s*(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})",
+                texte,
+                re.IGNORECASE,
+            )
+            if m_del:
+                d = _normaliser_date(m_del.group(1))
+                if d:
+                    donnees_nlp["date_delivrance"] = d
+
+        # ── 7. Données spécifiques au type (permis, assurance, …) ──
+        if type_document == TypeDocument.PERMIS_CONDUIRE:
+            extraits = extraire_permis_conduire(texte)
+        elif type_document == TypeDocument.CARTE_ASSURANCE:
+            extraits = extraire_carte_assurance(texte)
+        else:
+            extraits = {}
+
+        champs_communs = {"numero_document", "date_expiration", "date_delivrance",
+                          "nom_famille", "prenoms", "date_naissance", "sexe"}
+        donnees_specifiques = {}
+        for cle, valeur in (extraits or {}).items():
+            if not valeur:
+                continue
+            if cle in champs_communs:
+                donnees_nlp.setdefault(cle, valeur)
+            else:
+                donnees_specifiques[cle] = valeur
+
+        # ── 8. Pays émetteur (MRZ d'abord, puis codes pays dans le texte) ──
+        code_pays = detecter_pays(texte, mrz_lignes)
+        if not code_pays:
+            for code in CODES_PAYS_TEXTES:
+                if re.search(rf"\b{code}\b", texte_upper):
+                    code_pays = code
                     break
-            
-            # 2. Détection du type de document
-            if "CARTE NATIONALE" in texte_upper or "CNI" in texte_upper or "NATIONAL ID" in texte_upper:
-                type_document = TypeDocument.CNI_BIOMETRIQUE
-            elif "PASSEPORT" in texte_upper or "PASSPORT" in texte_upper:
-                type_document = TypeDocument.PASSEPORT
-            elif "PERMIS" in texte_upper or "DRIVING LICENSE" in texte_upper:
-                type_document = TypeDocument.PERMIS_CONDUIRE
-            
-            # 3. Extraction du numéro de document (motif alphanumérique de 6 à 15 caractères)
-            match_numero = re.search(r'\b[A-Z0-9]{6,15}\b', texte_brut)
-            if match_numero:
-                numero_document = match_numero.group(0)
-            
-            # 4. Extraction des dates (format JJ/MM/AAAA ou JJ-MM-AAAA ou JJ.MM.AAAA)
-            # On cherche toutes les dates possibles
-            dates_trouvees = re.findall(r'\b(\d{2}[\/\-.]\d{2}[\/\-.]\d{4})\b', texte_brut)
-            
-            # Filtrer les dates valides (année entre 1900 et 2100)
-            dates_valides = []
-            for date_str in dates_trouvees:
-                # Normaliser le format
-                date_norm = date_str.replace('-', '/').replace('.', '/')
-                parties = date_norm.split('/')
-                if len(parties) == 3:
-                    jour, mois, annee = int(parties[0]), int(parties[1]), int(parties[2])
-                    if 1900 <= annee <= 2100 and 1 <= mois <= 12 and 1 <= jour <= 31:
-                        dates_valides.append(date_norm)
-            
-            # La première date est généralement la date de naissance
-            # La deuxième date est généralement la date d'expiration ou de délivrance
-            if len(dates_valides) >= 1:
-                date_naissance = dates_valides[0]
-            if len(dates_valides) >= 2:
-                date_expiration = dates_valides[1]
-            
-            # 5. Extraction du nom et prénom (PLUS INTELLIGENT)
-            # On cherche des mots en majuscules, mais on exclut les codes pays et mots-clés
-            mots_a_exclure = set(codes_pays + [
-                'CARTE', 'NATIONALE', 'IDENTITE', 'PASSEPORT', 'PERMIS', 'CONDUIRE',
-                'REPUBLIQUE', 'SENEGAL', 'COTE', 'IVOIRE', 'MALI', 'BURKINA', 'FASO',
-                'BENIN', 'TOGO', 'GHANA', 'NIGERIA', 'GUINEE', 'CAMEROUN',
-                'DATE', 'NAISSANCE', 'EXPIRATION', 'DELIVRANCE', 'LIEU', 'NOM',
-                'PRENOMS', 'SEXE', 'TAILLE', 'GROUPE', 'SANGUIN', 'MRZ', 'P',
-                'M', 'F', 'MASCULIN', 'FEMININ', 'OFFICIEL', 'IDENTIFICATION'
-            ])
-            
-            # Chercher les mots en majuscules de 3 lettres ou plus
-            mots_majuscules = re.findall(r'\b[A-Z]{3,}\b', texte_brut)
-            noms_potentiels = [m for m in mots_majuscules if m not in mots_a_exclure]
-            
-            # Le premier mot en majuscules après "NOM" ou en début de document est le nom de famille
-            # Les suivants sont les prénoms
-            if len(noms_potentiels) >= 2:
-                nom_famille = noms_potentiels[0]
-                prenoms = ' '.join(noms_potentiels[1:3])
-                
-    except Exception as e:
-        journal.warning(f"Échec de l'OCR classique (Tesseract) : {e}")
-        texte_brut = "OCR indisponible. Nécessite une saisie manuelle."
-        confiance = 0.0
 
-    return DonneesDocumentExtraites(
-        type_document=type_document,
-        pays_emetteur=pays_emetteur,
-        nom_famille=nom_famille,
-        prenoms=prenoms,
-        date_naissance=date_naissance,
-        numero_document=numero_document,
-        date_expiration=date_expiration,
-        texte_brut=texte_brut[:5000],
-        taux_confiance_ocr=confiance,
-        mrz_valide=False,
-    )
+        # ── 9. Assemblage + fusion (MRZ prioritaire) ──
+        donnees_nlp["pays_emetteur"] = code_pays
+        donnees_nlp["donnees_specifiques"] = donnees_specifiques
+        donnees_nlp["texte_brut"] = texte[:5000]
+        donnees_nlp["confiance"] = confiance
+        donnees_nlp["mrz_ligne_1"] = mrz_lignes[0]
+        donnees_nlp["mrz_ligne_2"] = mrz_lignes[1]
+        donnees_nlp["mrz_ligne_3"] = mrz_lignes[2]
+
+        return fusionner_donnees(donnees_nlp, donnees_mrz, type_document)
+
+    except Exception as e:
+        journal.warning(f"Échec de l'extraction OCR : {e}")
+        return DonneesDocumentExtraites(
+            type_document=type_suggere or TypeDocument.INCONNU,
+            texte_brut="OCR indisponible. Nécessite une saisie manuelle.",
+            taux_confiance_ocr=0.0,
+            mrz_valide=False,
+        )
 
 
 async def _enregistrer_document(
