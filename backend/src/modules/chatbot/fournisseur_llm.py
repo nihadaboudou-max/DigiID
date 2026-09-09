@@ -167,7 +167,7 @@ async def _appeler_groq_vision(
         )
     
     # Modèle stable chez Groq pour la vision ; surchargeable via GROQ_MODELE_VISION
-    modele_vision = modele or parametres.groq_modele_vision or "llama-3.2-11b-vision-preview"
+    modele_vision = modele or parametres.groq_modele_vision or "qwen-3.6-27b"
 
     messages = [
         {
