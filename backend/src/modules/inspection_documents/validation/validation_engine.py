@@ -126,27 +126,101 @@ def _valider_format_numero(numero: str) -> bool:
         return False
     # Nettoyage
     numero_propre = "".join(c for c in numero.upper() if c.isalnum())
-    # Longueur : 6 à 20 caractères
-    return 6 <= len(numero_propre) <= 20
+    # Longueur : 5 à 20 caractères (tolérance OCR)
+    return 5 <= len(numero_propre) <= 20
+
+
+_MOIS = {
+    "JANVIER": 1, "JANV": 1, "JAN": 1, "JANUARY": 1,
+    "FEVRIER": 2, "FEVR": 2, "FEV": 2, "FEBRUARY": 2, "FEB": 2,
+    "MARS": 3, "MAR": 3, "MARCH": 3,
+    "AVRIL": 4, "AVR": 4, "APRIL": 4, "APR": 4,
+    "MAI": 5, "MAY": 5,
+    "JUIN": 6, "JUN": 6, "JUNE": 6,
+    "JUILLET": 7, "JUIL": 7, "JUL": 7, "JULY": 7,
+    "AOUT": 8, "AOU": 8, "AUGUST": 8, "AUG": 8,
+    "SEPTEMBRE": 9, "SEPT": 9, "SEP": 9, "SEPTEMBER": 9,
+    "OCTOBRE": 10, "OCT": 10, "OCTOBER": 10,
+    "NOVEMBRE": 11, "NOV": 11, "NOVEMBER": 11,
+    "DECEMBRE": 12, "DEC": 12, "DECEMBER": 12,
+}
+
+
+def _sans_accents(texte: str) -> str:
+    for a, b in [("É", "E"), ("È", "E"), ("Ê", "E"), ("Ë", "E"),
+                 ("À", "A"), ("Â", "A"), ("Ä", "A"),
+                 ("Î", "I"), ("Ï", "I"),
+                 ("Ô", "O"), ("Ö", "O"),
+                 ("Ù", "U"), ("Û", "U"), ("Ü", "U"),
+                 ("Ç", "C")]:
+        texte = texte.replace(a, b)
+    return texte
+
+
+def _parser_date_tolerant(date_str: str) -> Optional[date]:
+    """Parse une date de façon tolérante → date Python, ou None."""
+    if not date_str:
+        return None
+    v = date_str.strip().strip(".:;,")
+
+    def _construire(jour: int, mois: int, annee: int) -> Optional[date]:
+        try:
+            return date(annee, mois, jour)
+        except ValueError:
+            return None  # essayer le format suivant
+
+    def _resoudre_annee(annee_txt: str) -> int:
+        a = int(annee_txt)
+        if len(annee_txt) == 2:
+            return 1900 + a if a >= 40 else 2000 + a
+        return a
+
+    # 1) JJ/MM/AAAA | JJ-MM-AAAA | JJ.MM.AAAA (séparateurs variés)
+    m = re.search(r"(\d{1,2})\s*[/.\- ]\s*(\d{1,2})\s*[/.\- ]\s*(\d{2,4})", v)
+    if m:
+        d = _construire(int(m.group(1)), int(m.group(2)), _resoudre_annee(m.group(3)))
+        if d:
+            return d
+
+    # 2) JJ Mois AAAA (mois en lettres)
+    m = re.search(r"(\d{1,2})\s*[/.\- ]\s*([A-Za-zÀ-ÿ]{3,})\s*[/.\- ]\s*(\d{2,4})", v)
+    if m:
+        mois = _MOIS.get(_sans_accents(m.group(2)).upper().rstrip("."))
+        if mois:
+            d = _construire(int(m.group(1)), mois, _resoudre_annee(m.group(3)))
+            if d:
+                return d
+
+    # 3) AAAA-MM-JJ (ISO)
+    m = re.search(r"^(\d{4})\s*[/.\- ]\s*(\d{1,2})\s*[/.\- ]\s*(\d{1,2})$", v)
+    if m:
+        d = _construire(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        if d:
+            return d
+
+    # 4) Compact JJMMAAAA ou JJMMAA
+    m = re.search(r"^(\d{2})(\d{2})(\d{4}|\d{2})$", v)
+    if m:
+        d = _construire(int(m.group(1)), int(m.group(2)), _resoudre_annee(m.group(3)))
+        if d:
+            return d
+
+    return None
 
 
 def _valider_format_date(date_str: str) -> bool:
-    """Valide le format JJ/MM/AAAA."""
+    """Valide une date de naissance (formats tolérants)."""
     if not date_str:
         return False
-    try:
-        datetime.strptime(date_str, "%d/%m/%Y")
-        return True
-    except ValueError:
-        return False
+    d = _parser_date_tolerant(date_str)
+    return d is not None and d <= date.today()
 
 
 def _valider_date_expiration(date_str: str) -> bool:
     """Vérifie que la date d'expiration n'est pas passée."""
     if not date_str:
         return True  # Pas d'erreur si absente
-    try:
-        dexp = datetime.strptime(date_str, "%d/%m/%Y").date()
-        return dexp >= date.today()
-    except ValueError:
+    dexp = _parser_date_tolerant(date_str)
+    if dexp is None:
         return False
+    return dexp >= date.today()
