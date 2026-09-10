@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Couche d'abstraction pour appeler le LLM.
-Gère le Chatbot (texte) et l'Extraction de documents (vision) :
-- Groq (production) pour la vision via qwen-3.6-27b
-- Ollama (développement) pour la vision via qwen2-vl:2b
+Gère le Chatbot (texte) et l'Extraction de documents (vision).
 Le fournisseur est choisi par la variable d'environnement FOURNISSEUR_LLM.
 """
 import httpx
@@ -107,12 +105,12 @@ async def appeler_llm_vision(
     mime_type: str = "image/jpeg",
 ) -> str:
     """
-    Analyse une image via Ollama en local (extraction de documents).
-    Groq est désactivé pour la vision afin d'éviter les erreurs de modèles décommissionnés.
+    Analyse une image via le VLM local Ollama (extraction de documents).
+    Utilise le modèle défini dans le .env (parametres.ollama_modele_vision).
     """
-    # Force l'utilisation du modèle de vision Ollama défini dans le .env
-    modele_vision = modele or parametres.ollama_modele_vision or "qwen2.5vl:3b"
-    
+    # ✅ CORRECTION : Priorité au paramètre .env, fallback sur qwen2-vl:2b
+    modele_vision = modele or parametres.ollama_modele_vision or "moondream"
+
     return await _appeler_ollama_vision(
         image_base64=image_base64,
         prompt=prompt,
@@ -141,7 +139,9 @@ async def _appeler_ollama_vision(
                         }
                     ],
                     "stream": False,
-                    "options": {"temperature": 0.1},
+                    # ✅ CORRECTION CRUCIALE : num_predict=1500 empêche Ollama 
+                    # de couper le JSON à 128 tokens par défaut.
+                    "options": {"temperature": 0.1, "num_predict": 1500},
                 },
             )
             reponse.raise_for_status()
@@ -166,8 +166,7 @@ async def _appeler_groq_vision(
             message_utilisateur="La clé API pour l'analyse des documents est manquante."
         )
     
-    # Modèle stable chez Groq pour la vision ; surchargeable via GROQ_MODELE_VISION
-    modele_vision = modele or parametres.groq_modele_vision or "qwen-3.6-27b"
+    modele_vision = modele or parametres.groq_modele_vision or "llama-3.2-90b-vision-preview"
 
     messages = [
         {
@@ -195,12 +194,11 @@ async def _appeler_groq_vision(
                 json={
                     "model": modele_vision,
                     "messages": messages,
-                    "temperature": 0.1,  # Très bas pour une extraction de données précise
+                    "temperature": 0.1,
                     "max_tokens": 1000,
                 },
             )
             
-            # Journalisation détaillée en cas d'échec pour débogage facile
             if not reponse.is_success:
                 journal.error(f"Groq API a rejeté la requête ({reponse.status_code}) : {reponse.text}")
             

@@ -1,13 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Extracteur VLM (Vision Language Model) pour les documents d'identité.
-
-Le fournisseur et le modèle sont gérés par `src.modules.chatbot.fournisseur_llm` :
-- Groq (production)  : qwen-3.6-27b (variable GROQ_MODELE_VISION)
-- Ollama (développement) : qwen2-vl:2b (variable OLLAMA_MODELE_VISION)
-
-L'image est normalisée en JPEG (RGB) avant l'envoi pour être compatible
-avec tous les fournisseurs et limiter la taille du payload.
+Le modèle est désormais géré dynamiquement via la variable d'environnement 
+OLLAMA_MODELE_VISION (dans .env), et non plus codé en dur.
 """
 import base64
 import io
@@ -59,14 +54,12 @@ AUTRES REGLES STRICTES :
 """
 
 
-# Type MIME réel de l'image → le modèle vision l'accepte mieux en JPEG/PNG.
 def _normaliser_image_jpeg(image_bytes: bytes) -> tuple[str, str]:
     """Convertit l'image en JPEG RGB et renvoie (mime_type, base64)."""
     try:
         from PIL import Image
         pil_image = Image.open(io.BytesIO(image_bytes))
         if pil_image.format and pil_image.format.upper() in ("JPEG", "JPG"):
-            # Déjà du JPEG : on l'envoie tel quel (rapide, sans perte).
             return "image/jpeg", base64.b64encode(image_bytes).decode("utf-8")
         rgb = pil_image.convert("RGB")
         tampon = io.BytesIO()
@@ -79,22 +72,18 @@ def _normaliser_image_jpeg(image_bytes: bytes) -> tuple[str, str]:
 
 async def extraire_donnees_vlm(image_bytes: bytes) -> Optional[Dict[str, Any]]:
     """
-    Extrait les données d'un document via le VLM configuré (Groq ou Ollama).
-
-    Args:
-        image_bytes: L'image du document en bytes
-
-    Returns:
-        Dict avec les données extraites, ou None si échec.
+    Extrait les données d'un document via le VLM configuré.
     """
     try:
         mime_type, image_base64 = _normaliser_image_jpeg(image_bytes)
 
+        # ✅ CORRECTION : On ne force plus "moondream". 
+        # On laisse appeler_llm_vision utiliser parametres.ollama_modele_vision
         reponse_brute = await appeler_llm_vision(
             image_base64=image_base64,
             prompt=PROMPT_EXTRACTION_VLM,
-            modele="moondream",
             mime_type=mime_type,
+            # Le paramètre 'modele' est omis, donc le fallback de fournisseur_llm.py s'applique
         )
 
         if not reponse_brute:
@@ -125,7 +114,6 @@ def _parser_reponse_json(reponse_brute: str) -> Optional[Dict[str, Any]]:
 
     reponse_propre = reponse_brute.strip()
 
-    # Retirer les balises markdown ```json ... ```
     if reponse_propre.startswith("```"):
         lignes = reponse_propre.split("\n")
         if lignes and lignes[0].startswith("```"):
@@ -134,7 +122,6 @@ def _parser_reponse_json(reponse_brute: str) -> Optional[Dict[str, Any]]:
             lignes = lignes[:-1]
         reponse_propre = "\n".join(lignes).strip()
 
-    # Trouver le JSON entre accolades (premier { … dernier })
     premier_accolade = reponse_propre.find("{")
     dernier_accolade = reponse_propre.rfind("}")
     if premier_accolade != -1 and dernier_accolade != -1:
@@ -144,7 +131,6 @@ def _parser_reponse_json(reponse_brute: str) -> Optional[Dict[str, Any]]:
         donnees = json.loads(reponse_propre)
         if not isinstance(donnees, dict):
             return None
-        # Assainissement minimal des chaînes
         for cle in list(donnees.keys()):
             if donnees[cle] is None:
                 continue
