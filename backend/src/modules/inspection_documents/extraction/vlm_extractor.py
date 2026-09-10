@@ -15,32 +15,44 @@ from src.noyau import journal
 
 # ─── Prompt d'extraction ─────────────────────────────────────────────────────
 PROMPT_EXTRACTION_VLM = """\
-Analyse cette image de document d'identité et réponds UNIQUEMENT avec ce JSON exact :
+Tu es un expert en extraction de CNI béninoises et africaines.
 
+Sur cette image, extrais les informations suivantes :
+
+**NUMÉRO DE DOCUMENT** : Cherche le numéro de la carte qui se trouve généralement :
+- En haut de la carte
+- Au format "XXXX/LOCALITÉ" (ex: "0551/PARAKOU")
+- OU un numéro à 9 chiffres
+- NE PAS prendre le nom ou l'adresse !
+
+**NOM ET PRÉNOMS** : 
+- Nom de famille : le nom complet (ex: "ABOUDOU TRAORE")
+- Prénoms : le ou les prénoms (ex: "NIHAD")
+
+**DATES** : Format JJ/MM/AAAA
+- Date de naissance
+- Date d'expiration  
+- Date de délivrance
+
+Réponds UNIQUEMENT avec ce JSON :
 {
   "est_document_identite": true,
   "type_document": "cni_biometrique",
-  "pays": "SEN",
+  "pays": "BEN",
   "nom_famille": "...",
   "prenoms": "...",
   "date_naissance": "JJ/MM/AAAA",
-  "sexe": "M ou F",
-  "numero_document": "...",
+  "sexe": "M",
+  "numero_document": "0551/PARAKOU",
   "date_expiration": "JJ/MM/AAAA",
   "date_delivrance": "JJ/MM/AAAA",
-  "nationalite": "...",
-  "lieu_naissance": "...",
-  "mrz_ligne_1": "...",
-  "mrz_ligne_2": "...",
-  "mrz_ligne_3": "...",
+  "nationalite": "Béninoise",
+  "lieu_naissance": "PARAKOU",
+  "mrz_ligne_1": "",
+  "mrz_ligne_2": "",
+  "mrz_ligne_3": "",
   "confiance_extraction": 0.9
 }
-
-RÈGLES :
-- Remplace les "..." par les vraies valeurs extraites
-- Si un champ est illisible, mets null
-- Dates au format JJ/MM/AAAA
-- NE RÉPONDS QU'AVEC LE JSON, AUCUN AUTRE TEXTE
 """
 
 
