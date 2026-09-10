@@ -121,36 +121,44 @@ async def extraire_donnees_vlm(image_bytes: bytes) -> Optional[Dict[str, Any]]:
 
 
 def _parser_reponse_json(reponse_brute: str) -> Optional[Dict[str, Any]]:
-    """Parse la réponse JSON du VLM en gérant les formats variés."""
-    if not reponse_brute:
+    """Parse la réponse JSON du VLM avec une tolérance maximale aux erreurs de formatage."""
+    if not reponse_brute or not reponse_brute.strip():
+        journal.warning("VLM : Réponse complètement vide ou nulle reçue du modèle.")
+        journal.debug(f"Réponse brute complète (repr): {repr(reponse_brute)}")
         return None
 
     reponse_propre = reponse_brute.strip()
 
-    if reponse_propre.startswith("```"):
-        lignes = reponse_propre.split("\n")
-        if lignes and lignes[0].startswith("```"):
-            lignes = lignes[1:]
-        if lignes and lignes[-1].strip() == "```":
-            lignes = lignes[:-1]
-        reponse_propre = "\n".join(lignes).strip()
-
+    # 1. Chercher la première et la dernière accolade pour isoler le JSON
     premier_accolade = reponse_propre.find("{")
     dernier_accolade = reponse_propre.rfind("}")
-    if premier_accolade != -1 and dernier_accolade != -1:
+    
+    if premier_accolade != -1 and dernier_accolade != -1 and dernier_accolade > premier_accolade:
         reponse_propre = reponse_propre[premier_accolade:dernier_accolade + 1]
+    else:
+        journal.warning(f"VLM : Aucune accolade JSON '{{}}' trouvée dans la réponse.")
+        journal.debug(f"Début de la réponse brute : {reponse_propre[:300]}")
+        return None
 
     try:
         donnees = json.loads(reponse_propre)
+        
         if not isinstance(donnees, dict):
+            journal.warning(f"VLM : Le JSON parsé n'est pas un dictionnaire, mais un {type(donnees)}")
             return None
+        
+        # Assainissement minimal des chaînes (nettoie les sauts de ligne et espaces multiples)
         for cle in list(donnees.keys()):
             if donnees[cle] is None:
                 continue
             if isinstance(donnees[cle], str):
                 donnees[cle] = re.sub(r"\s+", " ", donnees[cle]).strip() or None
+                
+        journal.info("✅ VLM : JSON parsé et nettoyé avec succès.")
         return donnees
+        
     except json.JSONDecodeError as e:
-        journal.error(f"VLM : JSON invalide - {e}")
-        journal.debug(f"Réponse brute : {reponse_brute[:800]}")
+        journal.error(f"VLM : Échec du parsing JSON - {e}")
+        # On affiche un aperçu de ce qui a causé l'erreur pour le débogage
+        journal.debug(f"Contenu ayant échoué au parsing (500 premiers chars) : {repr(reponse_propre[:500])}")
         return None
