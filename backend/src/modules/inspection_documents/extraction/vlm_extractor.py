@@ -15,42 +15,32 @@ from src.noyau import journal
 
 # ─── Prompt d'extraction ─────────────────────────────────────────────────────
 PROMPT_EXTRACTION_VLM = """\
-Tu es un expert en lecture de documents d'identité africains et internationaux (CNI, passeport, permis, assurance, carte de séjour).
+Analyse cette image de document d'identité et réponds UNIQUEMENT avec ce JSON exact :
 
-Analyse l'image et réponds UNIQUEMENT par un objet JSON valide, sans texte autour, sans bloc markdown.
-
-Schéma attendu :
 {
-  "est_document_identite": true ou false,
-  "type_document": "cni_biometrique" | "cni_papier" | "passeport" | "permis_conduire" | "carte_assurance" | "carte_sejour" | "autre" | null,
-  "pays": "code ICAO à 3 lettres (ex: SEN, CIV, MLI, GHA) ou null",
-  "nom_famille": "texte ou null",
-  "prenoms": "texte ou null",
-  "date_naissance": "JJ/MM/AAAA ou null",
-  "sexe": "M" | "F" | null,
-  "numero_document": "texte ou null",
-  "date_expiration": "JJ/MM/AAAA ou null",
-  "date_delivrance": "JJ/MM/AAAA ou null",
-  "nationalite": "texte ou null",
-  "lieu_naissance": "texte ou null",
-  "mrz_ligne_1": "texte ou null",
-  "mrz_ligne_2": "texte ou null",
-  "mrz_ligne_3": "texte ou null",
-  "confiance_extraction": 0.0 a 1.0
+  "est_document_identite": true,
+  "type_document": "cni_biometrique",
+  "pays": "SEN",
+  "nom_famille": "...",
+  "prenoms": "...",
+  "date_naissance": "JJ/MM/AAAA",
+  "sexe": "M ou F",
+  "numero_document": "...",
+  "date_expiration": "JJ/MM/AAAA",
+  "date_delivrance": "JJ/MM/AAAA",
+  "nationalite": "...",
+  "lieu_naissance": "...",
+  "mrz_ligne_1": "...",
+  "mrz_ligne_2": "...",
+  "mrz_ligne_3": "...",
+  "confiance_extraction": 0.9
 }
 
-REGLES DE TRANSCRIPTION DE LA MRZ (zone de caracteres '<<<') :
-- La MRZ est la zone imprimee en machine-readable, composee de 2 ou 3 lignes.
-- Recopie CHAQUE ligne ENTIERE et EXACTEMENT, caractere par caractere,
-  y compris les chevrons '<' et les zeros, SANS reformater ni corriger.
-- Si tu ne vois pas de MRZ, mets null pour mrz_ligne_1/mrz_ligne_2/mrz_ligne_3.
-- Ne STOCKE JAMAIS le contenu d'un faux document : si tu as un doute sur un
-  caractere (0/O, 1/I, 5/S), transcris ce que tu vois.
-
-AUTRES REGLES STRICTES :
-- Si ce n'est PAS un document d'identite officiel, mets "est_document_identite": false.
-- Ne JAMAIS inventer. Si un champ n'est pas lisible, mets null.
-- Toutes les dates doivent etre au format JJ/MM/AAAA (ex: 15/03/1987).
+RÈGLES :
+- Remplace les "..." par les vraies valeurs extraites
+- Si un champ est illisible, mets null
+- Dates au format JJ/MM/AAAA
+- NE RÉPONDS QU'AVEC LE JSON, AUCUN AUTRE TEXTE
 """
 
 

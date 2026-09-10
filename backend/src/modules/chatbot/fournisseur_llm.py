@@ -139,9 +139,10 @@ async def _appeler_ollama_vision(
                         }
                     ],
                     "stream": False,
+                    "format": "json",
                     # ✅ CORRECTION CRUCIALE : num_predict=1500 empêche Ollama 
                     # de couper le JSON à 128 tokens par défaut.
-                    "options": {"temperature": 0.1, "num_predict": 1500},
+                    "options": {"temperature": 0.1, "num_predict": 2048},
                 },
             )
             reponse.raise_for_status()
