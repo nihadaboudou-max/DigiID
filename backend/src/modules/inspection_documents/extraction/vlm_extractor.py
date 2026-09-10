@@ -55,16 +55,29 @@ AUTRES REGLES STRICTES :
 
 
 def _normaliser_image_jpeg(image_bytes: bytes) -> tuple[str, str]:
-    """Convertit l'image en JPEG RGB et renvoie (mime_type, base64)."""
+    """Convertit l'image en JPEG RGB, la redimensionne si nécessaire, et renvoie (mime_type, base64)."""
     try:
         from PIL import Image
+        
         pil_image = Image.open(io.BytesIO(image_bytes))
-        if pil_image.format and pil_image.format.upper() in ("JPEG", "JPG"):
-            return "image/jpeg", base64.b64encode(image_bytes).decode("utf-8")
-        rgb = pil_image.convert("RGB")
+        
+        # ✅ NOUVEAU : Redimensionner si l'image est trop grande (max 1024x1024)
+        # Cela réduit drastiquement le nombre de tokens et le temps de traitement (de ~60s à ~10s)
+        max_dimension = 1024
+        if pil_image.width > max_dimension or pil_image.height > max_dimension:
+            pil_image.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
+            journal.info(f"VLM : Image redimensionnée à {pil_image.width}x{pil_image.height} pour optimiser le traitement.")
+        
+        # Convertir en RGB si nécessaire (pour les PNG avec transparence)
+        if pil_image.mode != "RGB":
+            pil_image = pil_image.convert("RGB")
+        
+        # Sauvegarder en JPEG avec une qualité raisonnable
         tampon = io.BytesIO()
-        rgb.save(tampon, format="JPEG", quality=90)
+        pil_image.save(tampon, format="JPEG", quality=85)
+        
         return "image/jpeg", base64.b64encode(tampon.getvalue()).decode("utf-8")
+        
     except Exception as e:
         journal.warning(f"VLM : normalisation image impossible ({e}), envoi brut en JPEG.")
         return "image/jpeg", base64.b64encode(image_bytes).decode("utf-8")

@@ -11,7 +11,7 @@ from src.config import parametres
 from src.noyau import journal
 from src.noyau.exceptions import ErreurServiceIndisponible
 
-TIMEOUT_SECONDES = 120.0  # Plus long pour la vision
+TIMEOUT_SECONDES = 400.0  # Plus long pour la vision
 
 # =============================================================================
 # 1. FONCTIONS POUR LE CHATBOT (TEXTE)
