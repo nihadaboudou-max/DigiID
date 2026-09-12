@@ -15,34 +15,31 @@ from src.noyau import journal
 
 # ─── Prompt d'extraction ─────────────────────────────────────────────────────
 PROMPT_EXTRACTION_VLM = """\
-Look at this identity card image carefully.
+Tu es un expert en numérisation de documents d'identité (CNI, Passeport, Permis) de tous les pays.
 
-Extract this information and respond ONLY with a JSON object, no explanation:
+Ta tâche est d'extraire les informations du document fourni et de répondre UNIQUEMENT avec un objet JSON valide.
+NE mets AUCUN texte avant ou après le JSON. NE mets PAS de balises ```json.
 
+Utilise EXACTEMENT ces noms de clés (en minuscules, avec des underscores) :
 {
-  "est_document_identite": true,
-  "type_document": "cni_biometrique",
-  "pays": "BEN",
-  "nom_famille": "family name here",
-  "prenoms": "first name here",
-  "date_naissance": "DD/MM/YYYY",
-  "sexe": "M or F",
-  "numero_document": "number at top of card",
-  "date_expiration": "DD/MM/YYYY",
-  "date_delivrance": "DD/MM/YYYY",
-  "nationalite": "Béninoise",
-  "lieu_naissance": "city name",
-  "mrz_ligne_1": "",
-  "mrz_ligne_2": "",
-  "mrz_ligne_3": "",
-  "confiance_extraction": 0.8
+  "nom_famille": "Le nom de famille (généralement en MAJUSCULES)",
+  "prenoms": "Le ou les prénoms",
+  "date_naissance": "Format JJ/MM/AAAA",
+  "sexe": "M ou F",
+  "numero_document": "Le numéro d'identification unique de la carte",
+  "date_expiration": "Format JJ/MM/AAAA",
+  "date_delivrance": "Format JJ/MM/AAAA",
+  "lieu_naissance": "Ville ou pays de naissance",
+  "nationalite": "La nationalité de la personne",
+  "pays_emetteur": "Code pays à 3 lettres (ex: FRA, SEN, BEN, CIV, MLI)",
+  "mrz_ligne_1": "Première ligne de la zone MRZ (si présente, sinon null)",
+  "mrz_ligne_2": "Deuxième ligne de la zone MRZ (si présente, sinon null)"
 }
 
-Rules:
-- document number format is usually XXXX/CITY like 0551/PARAKOU
-- dates must be DD/MM/YYYY format
-- if a field is not visible, use empty string ""
-- respond with JSON only, nothing before or after
+RÈGLES STRICTES :
+1. Si une information est absente ou illisible, écris EXACTEMENT : null
+2. Ne devine jamais une information.
+3. Réponds UNIQUEMENT avec le JSON brut.
 """
 
 

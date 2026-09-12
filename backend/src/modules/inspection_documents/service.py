@@ -232,9 +232,21 @@ def _completer_depuis_vlm(
     donnees_vlm: Optional[dict],
     donnees_mrz: dict,
 ) -> None:
-    """Comble les trous de l'OCR/NLP avec les champs fiables du VLM."""
+    """
+    Comble les trous de l'OCR/NLP avec les champs fiables du VLM.
+    Inclut un nettoyage strict pour éviter les hallucinations ("...", textes trop longs).
+    """
     if not donnees_vlm:
         return
+
+    # 1. Nettoyage préalable des valeurs du VLM (éviter les "...", "null", "inconnu")
+    vlm_clean = {}
+    for k, v in donnees_vlm.items():
+        if isinstance(v, str):
+            v = v.strip()
+            if v.lower() in ["...", "null", "none", "inconnu", "n/a", ""]:
+                v = None
+        vlm_clean[k] = v
 
     correspondances = {
         "nom_famille": "nom_famille",
@@ -246,35 +258,58 @@ def _completer_depuis_vlm(
         "nationalite": "nationalite",
         "numero_document": "numero_document",
     }
+    
     for cle_vlm, cle_cible in correspondances.items():
-        if donnees_nlp.get(cle_cible):
+        valeur_vlm = vlm_clean.get(cle_vlm)
+        
+        # On n'utilise la valeur VLM que si elle existe et est valide
+        if not valeur_vlm:
             continue
-        valeur = donnees_vlm.get(cle_vlm)
-        if not valeur:
+            
+        # 2. Traitement spécifique par type de champ
+        if cle_cible == "numero_document":
+            # Nettoyer : on garde seulement les caractères alphanumériques
+            propre_vlm = re.sub(r"[^A-Z0-9]", "", str(valeur_vlm).upper())
+            
+            # Un vrai numéro de document a rarement plus de 15 caractères et DOIT contenir des chiffres
+            if 5 <= len(propre_vlm) <= 15 and any(c.isdigit() for c in propre_vlm):
+                # On écrase l'OCR si le VLM a l'air plus fiable (ex: l'OCR a pris un mot au hasard)
+                donnees_nlp[cle_cible] = propre_vlm
+                journal.info(f"VLM -> Numéro document corrigé : {propre_vlm}")
             continue
-        valeur = str(valeur).strip()
 
         if cle_cible in ("date_naissance", "date_expiration", "date_delivrance"):
-            d = _normaliser_date(valeur)
+            d = _normaliser_date(str(valeur_vlm))
             if d:
                 donnees_nlp[cle_cible] = d
-        elif cle_cible == "numero_document":
-            propre = re.sub(r"[^A-Z0-9]", "", valeur.upper())
-            if 5 <= len(propre) <= 20:
-                donnees_nlp[cle_cible] = propre
-        elif cle_cible in ("nom_famille", "prenoms", "lieu_naissance", "nationalite"):
-            if valeur:
-                donnees_nlp[cle_cible] = valeur[:100]
+                journal.info(f"VLM -> Date {cle_cible} : {d}")
+            continue
 
+        if cle_cible in ("nom_famille", "prenoms", "lieu_naissance", "nationalite"):
+            # On nettoie les caractères spéciaux inutiles
+            propre = re.sub(r"[^A-ZÀ-Üa-zà-ü\s\-']", "", str(valeur_vlm)).strip()
+            if propre and len(propre) <= 50: # Un nom fait rarement plus de 50 caractères
+                # On remplace l'OCR s'il est vide ou si le VLM semble plus cohérent (plus court et précis)
+                if not donnees_nlp.get(cle_cible) or len(propre) < len(str(donnees_nlp.get(cle_cible, ""))):
+                    donnees_nlp[cle_cible] = propre[:50]
+                    journal.info(f"VLM -> {cle_cible} : {propre[:50]}")
+            continue
+
+    # 3. Gestion du sexe
     if not donnees_nlp.get("sexe"):
-        sexe_vlm = str(donnees_vlm.get("sexe") or "").upper()
-        if sexe_vlm in ("M", "F"):
-            donnees_nlp["sexe"] = sexe_vlm
+        sexe_vlm = str(vlm_clean.get("sexe") or "").upper()
+        if sexe_vlm in ("M", "F", "MASCULIN", "FEMININ"):
+            donnees_nlp["sexe"] = "M" if "M" in sexe_vlm else "F"
+            journal.info(f"VLM -> Sexe : {donnees_nlp['sexe']}")
 
+    # 4. Gestion du pays émetteur
     if not donnees_nlp.get("pays_emetteur"):
-        pays = str(donnees_vlm.get("pays") or "").upper()
-        if re.fullmatch(r"[A-Z]{3}", pays):
-            donnees_nlp["pays_emetteur"] = pays
+        pays = str(vlm_clean.get("pays") or vlm_clean.get("pays_emetteur") or "").upper()
+        # Chercher un code pays à 3 lettres
+        match_pays = re.search(r"\b([A-Z]{3})\b", pays)
+        if match_pays:
+            donnees_nlp["pays_emetteur"] = match_pays.group(1)
+            journal.info(f"VLM -> Pays émetteur : {donnees_nlp['pays_emetteur']}")
 
 
 async def _extraire_donnees_classique(
@@ -329,17 +364,20 @@ async def _extraire_donnees_classique(
         # ── 4. Identité commune (NOM, PRÉNOMS, naissance, sexe, lieu) ──
         donnees_nlp = extraire_par_labels(texte, PATTERNS_GENERIQUES)
 
-        # ── 5. Numéro de document (si absent du MRZ) ──
+        # ── 5. Numéro de document (si absent du MRZ et du VLM) ──
         if not donnees_nlp.get("numero_document") and not donnees_mrz.get("numero_document"):
+            # Regex plus stricte : exige la présence d'au moins un chiffre et limite la longueur
             m_num = re.search(
-                r"(?:N[°O]|NUM[ÉE]RO)\s*(?:D['`]?IDENTIT[ÉE]|CNI|PASSEPORT|PERMIS)?\s*[:\-]?\s*([A-Z0-9][A-Z0-9\s\-]{5,19})",
+                r"(?:N[°O]|NUM[ÉE]RO|ID)\s*[:\-]?\s*([A-Z0-9\-]{6,15})",
                 texte,
                 re.IGNORECASE,
             )
             if m_num:
                 numero = re.sub(r"[^A-Z0-9]", "", m_num.group(1).upper())
-                if 5 <= len(numero) <= 20:
+                # Validation : doit contenir au moins un chiffre et faire entre 6 et 15 caractères
+                if 6 <= len(numero) <= 15 and any(c.isdigit() for c in numero):
                     donnees_nlp["numero_document"] = numero
+                    journal.info(f"OCR -> Numéro document trouvé : {numero}")
 
         # ── 6. Dates expiration/délivrance étiquetées (si absentes du MRZ) ──
         if not donnees_nlp.get("date_expiration") and not donnees_mrz.get("date_expiration_date"):
