@@ -70,7 +70,7 @@ class ParametresApplication(BaseSettings):
     # --- Vision / Extraction de documents (VLM) ---
     # Modèle stabilisé chez Groq (prod) ; Ollama (dev) utilise un petit modèle local.
     groq_modele_vision: str = "llama-3.2-11b-vision-preview"
-    ollama_modele_vision: str = "moondream"
+    ollama_modele_vision: str = "qwen:latest"
     # False = reprise en OCR classique seul (mode « conformité stable »)
     activer_extraction_vlm: bool = True
 
