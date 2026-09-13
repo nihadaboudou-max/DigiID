@@ -11,14 +11,16 @@ from src.modules.chatbot.fournisseur_llm import appeler_llm_vision
 from src.noyau import journal
 
 PROMPT_EXTRACTION_VLM = """
-Tu es un expert en extraction de données de documents d'identité (CNI, Passeport, Permis) de tous les pays.
-Analyse l'image et extrais les informations dans un objet JSON strict.
+Tu es un expert en extraction de documents d'identité.
 
 RÈGLES ABSOLUES :
-1. Réponds UNIQUEMENT avec le JSON, aucun texte avant ou après.
-2. Si un champ est illisible ou absent, mets la valeur null (PAS de "...", PAS de "inconnu").
-3. Les dates doivent être au format "JJ/MM/AAAA".
-4. "numero_document" doit contenir des chiffres et/ou lettres (ex: "0551/PARAKOU" ou "500531082").
+1. Réponds UNIQUEMENT avec un objet JSON valide.
+2. Si une information est absente ou illisible, mets EXACTEMENT : null
+3. NE RÉPÈTE JAMAIS la même valeur dans plusieurs champs.
+4. Chaque champ doit avoir une valeur DIFFÉRENTE (sauf si vraiment identique sur le document).
+5. Pour le nom et prénom : cherche les MAJUSCULES après les labels "NOM", "SURNAME", "PRÉNOM".
+6. Pour le numéro : cherche un format comme "1234/VILLE" ou un bloc de 6-15 caractères alphanumériques.
+7. Pour les dates : format JJ/MM/AAAA uniquement.
 
 JSON À REMPLIR :
 {
@@ -31,9 +33,21 @@ JSON À REMPLIR :
   "date_delivrance": null,
   "lieu_naissance": null,
   "nationalite": null,
-  "pays_emetteur": null,
-  "mrz_ligne_1": null,
-  "mrz_ligne_2": null
+  "pays_emetteur": null
+}
+
+EXEMPLE DE BONNE RÉPONSE :
+{
+  "nom_famille": "ABOUDOU TRAORE",
+  "prenoms": "NIHAD",
+  "date_naissance": "12/10/2002",
+  "sexe": "F",
+  "numero_document": "0551/PARAKOU",
+  "date_expiration": "09/09/2034",
+  "date_delivrance": "09/09/2024",
+  "lieu_naissance": "PARAKOU",
+  "nationalite": "Béninoise",
+  "pays_emetteur": "BEN"
 }
 """
 

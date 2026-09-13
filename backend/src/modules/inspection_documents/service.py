@@ -290,15 +290,16 @@ def _completer_depuis_vlm(
     donnees_nlp: dict,
     donnees_vlm: Optional[dict],
     donnees_mrz: dict,
+    texte_ocr: str = "",  # ← NOUVEAU PARAMÈTRE
 ) -> None:
     """
-    Comble les trous de l'OCR/NLP avec les champs fiables du VLM.
-    Inclut un nettoyage strict pour éviter les hallucinations ("...", textes trop longs).
+    Comble UNIQUEMENT les champs vides avec le VLM.
+    Anti-hallucination : rejette les valeurs VLM qui n'apparaissent pas dans le texte OCR.
     """
     if not donnees_vlm:
         return
 
-    # 1. Nettoyage préalable des valeurs du VLM (éviter les "...", "null", "inconnu")
+    # 1. Nettoyage des valeurs VLM
     vlm_clean = {}
     for k, v in donnees_vlm.items():
         if isinstance(v, str):
@@ -307,6 +308,19 @@ def _completer_depuis_vlm(
                 v = None
         vlm_clean[k] = v
 
+    # 2. Détection d'hallucination par répétition
+    valeurs_vlm = [v for v in vlm_clean.values() if v and isinstance(v, str)]
+    from collections import Counter
+    repetitions = Counter(valeurs_vlm)
+    valeur_repetee = next((v for v, count in repetitions.items() if count >= 3), None)
+    
+    if valeur_repetee:
+        journal.warning(f"VLM hallucine : '{valeur_repetee}' répété {repetitions[valeur_repetee]} fois → rejet total")
+        # On garde seulement les champs structurés (dates, numéro)
+        vlm_clean = {k: v for k, v in vlm_clean.items() 
+                     if k in ("date_naissance", "date_expiration", "date_delivrance", "numero_document", "sexe", "pays_emetteur")}
+
+    # 3. Complétion UNIQUEMENT des champs vides
     correspondances = {
         "nom_famille": "nom_famille",
         "prenoms": "prenoms",
@@ -319,21 +333,32 @@ def _completer_depuis_vlm(
     }
     
     for cle_vlm, cle_cible in correspondances.items():
-        valeur_vlm = vlm_clean.get(cle_vlm)
-        
-        # On n'utilise la valeur VLM que si elle existe et est valide
-        if not valeur_vlm:
+        # ✅ CHANGEMENT CLÉ : on ne touche PAS aux champs déjà remplis par l'OCR
+        if donnees_nlp.get(cle_cible):
             continue
             
-        # 2. Traitement spécifique par type de champ
+        valeur_vlm = vlm_clean.get(cle_vlm)
+        if not valeur_vlm:
+            continue
+
+        # 4. Validation anti-hallucination : la valeur doit exister dans le texte OCR
+        if texte_ocr and isinstance(valeur_vlm, str):
+            valeur_upper = valeur_vlm.upper()
+            # On cherche si la valeur (ou une grande partie) apparaît dans l'OCR
+            if len(valeur_upper) >= 3 and valeur_upper not in texte_ocr.upper():
+                # Vérification partielle : au moins 60% des caractères doivent correspondre
+                mots_vlm = valeur_upper.split()
+                mots_trouves = sum(1 for m in mots_vlm if m in texte_ocr.upper())
+                if mots_trouves < len(mots_vlm) * 0.6:
+                    journal.warning(f"VLM -> {cle_cible} : '{valeur_vlm}' non trouvé dans OCR → rejeté (hallucination)")
+                    continue
+
+        # 5. Traitement par type de champ
         if cle_cible == "numero_document":
-            # Nettoyer : on garde seulement les caractères alphanumériques
-            propre_vlm = re.sub(r"[^A-Z0-9]", "", str(valeur_vlm).upper())
-            # Un vrai numéro de document a rarement plus de 15 caractères et DOIT contenir des chiffres
-            if 5 <= len(propre_vlm) <= 15 and any(c.isdigit() for c in propre_vlm):
-                # On écrase l'OCR si le VLM a l'air plus fiable
+            propre_vlm = re.sub(r"[^A-Z0-9/]", "", str(valeur_vlm).upper())
+            if 5 <= len(propre_vlm) <= 20 and any(c.isdigit() for c in propre_vlm):
                 donnees_nlp[cle_cible] = propre_vlm
-                journal.info(f"VLM -> Numéro document corrigé : {propre_vlm}")
+                journal.info(f"VLM -> Numéro document : {propre_vlm}")
             continue
 
         if cle_cible in ("date_naissance", "date_expiration", "date_delivrance"):
@@ -344,30 +369,24 @@ def _completer_depuis_vlm(
             continue
 
         if cle_cible in ("nom_famille", "prenoms", "lieu_naissance", "nationalite"):
-            # On nettoie les caractères spéciaux inutiles
             propre = re.sub(r"[^A-ZÀ-Üa-zà-ü\s\-']", "", str(valeur_vlm)).strip()
-            if propre and len(propre) <= 50:
-                # On remplace l'OCR s'il est vide ou si le VLM semble plus cohérent
-                if not donnees_nlp.get(cle_cible) or len(propre) < len(str(donnees_nlp.get(cle_cible, ""))):
-                    donnees_nlp[cle_cible] = propre[:50]
-                    journal.info(f"VLM -> {cle_cible} : {propre[:50]}")
+            if 2 <= len(propre) <= 50:
+                donnees_nlp[cle_cible] = propre[:50]
+                journal.info(f"VLM -> {cle_cible} : {propre[:50]}")
             continue
 
-    # 3. Gestion du sexe
+    # 6. Sexe et pays
     if not donnees_nlp.get("sexe"):
         sexe_vlm = str(vlm_clean.get("sexe") or "").upper()
-        if sexe_vlm in ("M", "F", "MASCULIN", "FEMININ"):
-            donnees_nlp["sexe"] = "M" if "M" in sexe_vlm else "F"
-            journal.info(f"VLM -> Sexe : {donnees_nlp['sexe']}")
+        if sexe_vlm in ("M", "F"):
+            donnees_nlp["sexe"] = sexe_vlm
 
-    # 4. Gestion du pays émetteur
     if not donnees_nlp.get("pays_emetteur"):
-        pays = str(vlm_clean.get("pays") or vlm_clean.get("pays_emetteur") or "").upper()
+        pays = str(vlm_clean.get("pays") or "").upper()
         match_pays = re.search(r"\b([A-Z]{3})\b", pays)
         if match_pays:
             donnees_nlp["pays_emetteur"] = match_pays.group(1)
-            journal.info(f"VLM -> Pays émetteur : {donnees_nlp['pays_emetteur']}")
-
+            
 
 # =============================================================================
 # PIPELINE PRINCIPAL D'EXTRACTION
@@ -482,7 +501,7 @@ async def _extraire_donnees_classique(
                 donnees_specifiques[cle] = valeur
 
         # ── 7bis. Complétion VLM : dates / MRZ / identité si l'OCR a des trous ──
-        _completer_depuis_vlm(donnees_nlp, donnees_vlm, donnees_mrz)
+        _completer_depuis_vlm(donnees_nlp, donnees_vlm, donnees_mrz, texte_ocr=texte)
         if confiance_vlm is not None:
             confiance = round(max(confiance, confiance_vlm * 100.0), 2)
 
