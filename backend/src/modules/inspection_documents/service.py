@@ -74,6 +74,7 @@ TYPES_MIME_AUTORISES = {
     "image/webp": "webp",
     "image/tiff": "tiff",
 }
+CODES_PAYS_TEXTES = ["SEN", "CIV", "MLI", "BEN", "BFA", "TOG", "GHA", "NGA", "GIN", "NER", "CMR", "COD", "COG"]
 
 
 # =============================================================================
@@ -100,9 +101,6 @@ async def _lire_image(fichier: UploadFile) -> bytes:
         )
     
     return contenu
-
-
-CODES_PAYS_TEXTES = ["SEN", "CIV", "MLI", "BEN", "BFA", "TOG", "GHA", "NGA", "GIN", "NER", "CMR", "COD", "COG"]
 
 
 def _normaliser_date(chaine: Optional[str]) -> Optional[str]:
@@ -227,6 +225,67 @@ def _fusionner_lignes_mrz(lignes_ocr: tuple, donnees_vlm: Optional[dict]) -> tup
     return ocr
 
 
+# =============================================================================
+# NOUVEAU : Extracteur spécifique CNI (le filet de sécurité ultime)
+# =============================================================================
+
+def _extraire_infos_specifiques_cni(texte: str, donnees_actuelles: dict) -> dict:
+    """
+    Règles de parsing spécifiques pour les CNI quand VLM et OCR standard échouent.
+    Gère les motifs typiques : "M/NOM", "NNNN/VILLE", dates de naissance.
+    """
+    resultat = donnees_actuelles.copy()
+    texte_upper = texte.upper()
+    
+    # 1. NOM DE FAMILLE (Motif "M/" ou "MME/" suivi du nom)
+    if not resultat.get("nom_famille"):
+        match_nom = re.search(r'M(?:ME)?\s*/\s*([A-ZÀ-Ü\s\-]{5,30})', texte_upper)
+        if match_nom:
+            nom = re.sub(r'\s+', ' ', match_nom.group(1).strip())
+            if 5 <= len(nom) <= 50:
+                resultat["nom_famille"] = nom
+                journal.info(f"CNI Parser -> Nom trouvé : {nom}")
+
+    # 2. PRÉNOMS (Souvent situé juste avant "M/" ou sur la ligne du dessus)
+    if not resultat.get("prenoms"):
+        match_prenom = re.search(r'([A-ZÀ-Ü]{3,15})\s+M(?:ME)?/', texte_upper)
+        if match_prenom:
+            prenom = match_prenom.group(1).strip()
+            if prenom not in ['REPUBLIQUE', 'NATIONALE', 'CARTE', 'IDENTITE', 'BENIN']:
+                resultat["prenoms"] = prenom
+                journal.info(f"CNI Parser -> Prénom trouvé : {prenom}")
+
+    # 3. NUMÉRO DE DOCUMENT (Format "NNNN/VILLE" ou 9 chiffres)
+    if not resultat.get("numero_document"):
+        # Cherche d'abord le format "0551/PARAKOU"
+        match_num1 = re.search(r'(\d{3,4}/[A-ZÀ-Ü]{3,15})', texte_upper)
+        if match_num1:
+            resultat["numero_document"] = match_num1.group(1).strip()
+            journal.info(f"CNI Parser -> Numéro format 1 : {resultat['numero_document']}")
+        else:
+            # Fallback : cherche un bloc de 9 chiffres (ex: 500531082)
+            match_num2 = re.search(r'\b(\d{9})\b', texte)
+            if match_num2:
+                resultat["numero_document"] = match_num2.group(1)
+                journal.info(f"CNI Parser -> Numéro format 2 : {resultat['numero_document']}")
+
+    # 4. DATE DE NAISSANCE (La plus ancienne entre 1940 et 2010)
+    if not resultat.get("date_naissance"):
+        dates = re.findall(r'(\d{1,2})[/\-\.](\d{1,2})[/\-\.](\d{2,4})', texte)
+        for j, m, a in dates:
+            annee = int(a) if len(a) == 4 else (1900 + int(a) if int(a) > 30 else 2000 + int(a))
+            if 1940 <= annee <= 2010 and 1 <= int(m) <= 12 and 1 <= int(j) <= 31:
+                resultat["date_naissance"] = f"{int(j):02d}/{int(m):02d}/{annee}"
+                journal.info(f"CNI Parser -> Date naissance : {resultat['date_naissance']}")
+                break
+
+    return resultat
+
+
+# =============================================================================
+# COMPLÉTION VLM AMÉLIORÉE (avec validation stricte anti-hallucination)
+# =============================================================================
+
 def _completer_depuis_vlm(
     donnees_nlp: dict,
     donnees_vlm: Optional[dict],
@@ -270,10 +329,9 @@ def _completer_depuis_vlm(
         if cle_cible == "numero_document":
             # Nettoyer : on garde seulement les caractères alphanumériques
             propre_vlm = re.sub(r"[^A-Z0-9]", "", str(valeur_vlm).upper())
-            
             # Un vrai numéro de document a rarement plus de 15 caractères et DOIT contenir des chiffres
             if 5 <= len(propre_vlm) <= 15 and any(c.isdigit() for c in propre_vlm):
-                # On écrase l'OCR si le VLM a l'air plus fiable (ex: l'OCR a pris un mot au hasard)
+                # On écrase l'OCR si le VLM a l'air plus fiable
                 donnees_nlp[cle_cible] = propre_vlm
                 journal.info(f"VLM -> Numéro document corrigé : {propre_vlm}")
             continue
@@ -288,8 +346,8 @@ def _completer_depuis_vlm(
         if cle_cible in ("nom_famille", "prenoms", "lieu_naissance", "nationalite"):
             # On nettoie les caractères spéciaux inutiles
             propre = re.sub(r"[^A-ZÀ-Üa-zà-ü\s\-']", "", str(valeur_vlm)).strip()
-            if propre and len(propre) <= 50: # Un nom fait rarement plus de 50 caractères
-                # On remplace l'OCR s'il est vide ou si le VLM semble plus cohérent (plus court et précis)
+            if propre and len(propre) <= 50:
+                # On remplace l'OCR s'il est vide ou si le VLM semble plus cohérent
                 if not donnees_nlp.get(cle_cible) or len(propre) < len(str(donnees_nlp.get(cle_cible, ""))):
                     donnees_nlp[cle_cible] = propre[:50]
                     journal.info(f"VLM -> {cle_cible} : {propre[:50]}")
@@ -305,12 +363,15 @@ def _completer_depuis_vlm(
     # 4. Gestion du pays émetteur
     if not donnees_nlp.get("pays_emetteur"):
         pays = str(vlm_clean.get("pays") or vlm_clean.get("pays_emetteur") or "").upper()
-        # Chercher un code pays à 3 lettres
         match_pays = re.search(r"\b([A-Z]{3})\b", pays)
         if match_pays:
             donnees_nlp["pays_emetteur"] = match_pays.group(1)
             journal.info(f"VLM -> Pays émetteur : {donnees_nlp['pays_emetteur']}")
 
+
+# =============================================================================
+# PIPELINE PRINCIPAL D'EXTRACTION
+# =============================================================================
 
 async def _extraire_donnees_classique(
     image_bytes: bytes,
@@ -323,7 +384,7 @@ async def _extraire_donnees_classique(
     En cas d'indisponibilité du VLM, on retombe sur l'OCR seul.
     """
     try:
-        # ── 0. VLM (si activé) : classification + complétion des champs ──
+        # ── 0. VLM (si activé) : classification + complétion des champs ─
         donnees_vlm = None
         confiance_vlm: Optional[float] = None
         if parametres.activer_extraction_vlm:
@@ -364,9 +425,8 @@ async def _extraire_donnees_classique(
         # ── 4. Identité commune (NOM, PRÉNOMS, naissance, sexe, lieu) ──
         donnees_nlp = extraire_par_labels(texte, PATTERNS_GENERIQUES)
 
-        # ── 5. Numéro de document (si absent du MRZ et du VLM) ──
+        # ── 5. Numéro de document (si absent du MRZ) ──
         if not donnees_nlp.get("numero_document") and not donnees_mrz.get("numero_document"):
-            # Regex plus stricte : exige la présence d'au moins un chiffre et limite la longueur
             m_num = re.search(
                 r"(?:N[°O]|NUM[ÉE]RO|ID)\s*[:\-]?\s*([A-Z0-9\-]{6,15})",
                 texte,
@@ -426,7 +486,13 @@ async def _extraire_donnees_classique(
         if confiance_vlm is not None:
             confiance = round(max(confiance, confiance_vlm * 100.0), 2)
 
-        # ── 8. Pays émetteur (MRZ d'abord, puis codes pays dans le texte) ──
+        # ── 8. Activation du parser CNI si les champs critiques sont encore vides ──
+        if type_document in (TypeDocument.CNI_BIOMETRIQUE, TypeDocument.CNI_PAPIER):
+            if not donnees_nlp.get("nom_famille") or not donnees_nlp.get("numero_document"):
+                journal.info("CNI détectée avec champs incomplets. Activation du parsing spécifique CNI.")
+                donnees_nlp = _extraire_infos_specifiques_cni(texte, donnees_nlp)
+
+        # ── 9. Pays émetteur (MRZ d'abord, puis codes pays dans le texte) ──
         code_pays = detecter_pays(texte, mrz_lignes)
         if not code_pays:
             for code in CODES_PAYS_TEXTES:
@@ -434,7 +500,7 @@ async def _extraire_donnees_classique(
                     code_pays = code
                     break
 
-        # ── 9. Assemblage + fusion (MRZ prioritaire) ──
+        # ── 10. Assemblage + fusion (MRZ prioritaire) ──
         if code_pays:
             donnees_nlp["pays_emetteur"] = code_pays
         donnees_nlp["donnees_specifiques"] = donnees_specifiques
@@ -455,6 +521,10 @@ async def _extraire_donnees_classique(
             mrz_valide=False,
         )
 
+
+# =============================================================================
+# PERSISTANCE EN BASE DE DONNÉES
+# =============================================================================
 
 async def _enregistrer_document(
     session: AsyncSession,
@@ -541,18 +611,15 @@ async def traiter_upload_document(
     donnees = await _extraire_donnees_classique(contenu, type_document)
     
     # 4. Validation métier dynamique
-    # Si les données sont vides, valider_document retournera est_valide=False, 
-    # mais nous NE levons PAS d'exception. Nous laissons le processus continuer.
     validation = valider_document(donnees)
     
-    # 5. Ajustement du statut pour la conformité (Banque/Gouvernement)
-    # Si l'OCR n'a pas pu tout extraire, on passe en EN_ATTENTE pour validation humaine.
+    # 5. Ajustement du statut pour la conformité
     if not validation.est_valide:
         validation.statut = StatutVerification.EN_ATTENTE
         validation.message = "Document reçu. Extraction partielle, en attente de vérification manuelle."
         journal.info("Document marqué comme EN_ATTENTE pour revue manuelle.")
 
-    # 6. Vérification de cohérence (seulement si on a assez de données)
+    # 6. Vérification de cohérence
     coherence = None
     if donnees.nom_famille or donnees.numero_document:
         coherence = await verifier_coherence_identite(
@@ -562,8 +629,6 @@ async def traiter_upload_document(
             utilisateur_cible_id=utilisateur_cible_id,
         )
         if not coherence.est_coherent:
-            # Même en cas d'incohérence, on peut choisir d'enregistrer en EN_ATTENTE 
-            # plutôt que de bloquer l'utilisateur, selon votre règle métier.
             validation.statut = StatutVerification.EN_ATTENTE
             validation.message = f"Incohérence détectée : {coherence.message}. En attente de revue."
 
