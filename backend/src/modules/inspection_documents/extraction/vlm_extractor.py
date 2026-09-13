@@ -39,14 +39,14 @@ JSON À REMPLIR :
 EXEMPLE DE BONNE RÉPONSE :
 {
   "nom_famille": "ABOUDOU TRAORE",
-  "prenoms": "NIHAD",
-  "date_naissance": "12/10/2002",
+  "prenoms": "Fadil",
+  "date_naissance": "12/10/2000",
   "sexe": "F",
-  "numero_document": "0551/PARAKOU",
-  "date_expiration": "09/09/2034",
-  "date_delivrance": "09/09/2024",
-  "lieu_naissance": "PARAKOU",
-  "nationalite": "Béninoise",
+  "numero_document": "0781/PARAKOU",
+  "date_expiration": "08/04/2025",
+  "date_delivrance": "09/09/2020",
+  "lieu_naissance": "KANDI",
+  "nationalite": "Béninois",
   "pays_emetteur": "BEN"
 }
 """
