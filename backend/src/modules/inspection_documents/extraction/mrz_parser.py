@@ -1,277 +1,289 @@
 # -*- coding: utf-8 -*-
 """
-Parseur MRZ universel (ICAO 9303) robuste aux erreurs OCR.
-Supporte TD1 (CNI 3 lignes), TD2 (CNI/Passeport 2 lignes), TD3 (Passeport 2 lignes).
-Inclut la validation des check digits et la correction des erreurs OCR courantes.
+Parseur MRZ (Machine Readable Zone) universel et robuste aux erreurs OCR.
+Formats supportés :
+- TD1 (3 × 30 car.) : CNI biométriques, cartes de séjour (majorité des CNI africaines)
+- TD2 (2 × 36 car.) : Cartes d'identité (ex: CNI béninoise), permis de conduire
+- TD3 (2 × 44 car.) : Passeports
+Norme ICAO 9303
 """
 import re
 from typing import Optional, Dict, Any
 from src.noyau.journal import journal
 
-CODES_PAYS_ICAO = {
+# =============================================================================
+# Codes pays ICAO (Afrique francophone + principaux pays)
+# =============================================================================
+CODES_PAYS_ICAO: dict[str, str] = {
     "CIV": "Côte d'Ivoire", "SEN": "Sénégal", "MLI": "Mali", "BFA": "Burkina Faso",
-    "BEN": "Bénin", "TGO": "Togo", "NER": "Niger", "GIN": "Guinée", "GHA": "Ghana",
-    "NGA": "Nigeria", "CMR": "Cameroun", "MAR": "Maroc", "DZA": "Algérie", "TUN": "Tunisie",
+    "BEN": "Bénin", "TGO": "Togo", "NER": "Niger", "GIN": "Guinée", "GNB": "Guinée-Bissau",
+    "GHA": "Ghana", "NGA": "Nigeria", "LBR": "Liberia", "SLE": "Sierra Leone",
+    "CMR": "Cameroun", "CAF": "République Centrafricaine", "TCD": "Tchad",
+    "COG": "Congo", "COD": "République Démocratique du Congo", "GAB": "Gabon",
+    "MAR": "Maroc", "DZA": "Algérie", "TUN": "Tunisie", "LBY": "Libye", "EGY": "Égypte",
+    "ZAF": "Afrique du Sud", "MDG": "Madagascar", "MUS": "Maurice", "MRT": "Mauritanie",
     "FRA": "France", "BEL": "Belgique", "CAN": "Canada", "USA": "États-Unis",
 }
 
-def _calculer_check_digit(valeur: str, poids: list = [7, 3, 1]) -> int:
-    """Calcule le check digit ICAO 9303."""
+TYPES_DOCUMENTS: dict[str, str] = {
+    "P": "Passeport", "P<": "Passeport", "PN": "Passeport national",
+    "I": "Carte d'identité", "ID": "Carte d'identité nationale", "IP": "Carte d'identité provisoire",
+    "A": "Carte de séjour", "AS": "Carte de séjour", "AC": "Carte de résident",
+    "C": "Permis de conduire", "C<": "Carte d'identité", "V": "Visa",
+}
+
+# =============================================================================
+# Fonctions utilitaires de nettoyage et validation
+# =============================================================================
+def _nettoyer_ligne_mrz(ligne: str, longueur_attendue: int) -> str:
+    """Nettoie une ligne MRZ des artefacts OCR et la padde à la longueur attendue."""
+    if not ligne:
+        return "<" * longueur_attendue
+    
+    # 1. Majuscules et suppression des espaces insécables
+    ligne = ligne.upper().replace(" ", "").replace("\u00a0", "").strip()
+    
+    # 2. Remplacer les caractères non valides (sauf alphanumérique et <) par <
+    ligne = "".join(c if c.isalnum() or c == "<" else "<" for c in ligne)
+    
+    # 3. Ajuster à la longueur attendue (padding ou troncature)
+    if len(ligne) > longueur_attendue:
+        ligne = ligne[:longueur_attendue]
+    elif len(ligne) < longueur_attendue:
+        ligne = ligne + "<" * (longueur_attendue - len(ligne))
+        
+    return ligne
+
+def _calculer_checksum_mrz(donnees: str) -> int:
+    """Calcule le checksum ICAO 9303 (poids 7, 3, 1)."""
+    poids = [7, 3, 1]
     total = 0
-    for i, char in enumerate(valeur):
-        if char.isdigit():
-            val = int(char)
-        elif char.isalpha():
-            val = ord(char.upper()) - 55  # A=10, B=11, ..., Z=35
-        elif char == '<':
-            val = 0
+    for i, c in enumerate(donnees):
+        if c == "<":
+            valeur = 0
+        elif c.isdigit():
+            valeur = int(c)
+        elif c.isalpha():
+            valeur = ord(c.upper()) - 55  # A=10, B=11, ..., Z=35
         else:
-            val = 0
-        total += val * poids[i % 3]
+            valeur = 0
+        total += valeur * poids[i % 3]
     return total % 10
 
-def _corriger_erreurs_ocr_mrz(ligne: str) -> str:
-    """Corrige les erreurs OCR courantes dans les lignes MRZ."""
-    if not ligne:
-        return ligne
-    
-    # Convertir en majuscules
-    ligne = ligne.upper()
-    
-    # Corrections de caractères ambigus (uniquement dans les zones numériques)
-    # Positions typiques : 0-8 (numéro doc), 13-18 (date naissance), 21-26 (date expiration)
-    corrections = {
-        'O': '0',  # O → 0
-        'I': '1',  # I → 1  
-        'S': '5',  # S → 5
-        'B': '8',  # B → 8
-        'Z': '2',  # Z → 2
-        'G': '6',  # G → 6
-        'Q': '0',  # Q → 0
-    }
-    
-    ligne_corrigee = list(ligne)
-    for i, char in enumerate(ligne_corrigee):
-        if char in corrections:
-            # Appliquer la correction surtout dans les zones numériques
-            ligne_corrigee[i] = corrections[char]
-    
-    return ''.join(ligne_corrigee)
+def _verifier_checksum_mrz(donnees: str, check_char: str) -> bool:
+    """Vérifie le checksum ICAO 9303 d'une portion de MRZ."""
+    if not donnees or not check_char or check_char == "<":
+        return False
+    try:
+        return str(_calculer_checksum_mrz(donnees)) == str(check_char)
+    except Exception:
+        return False
 
 def _convertir_date_mrz(date_mrz: str) -> Optional[str]:
-    """Convertit une date MRZ (AAMMJJ) en format JJ/MM/AAAA."""
+    """Convertit une date MRZ (AAMMJJ) en JJ/MM/AAAA."""
     if not date_mrz or len(date_mrz) < 6:
         return None
-    
     try:
         aa, mm, jj = int(date_mrz[0:2]), int(date_mrz[2:4]), int(date_mrz[4:6])
-        # Déterminer le siècle
         aaaa = 1900 + aa if aa >= 40 else 2000 + aa
-        
         if 1 <= mm <= 12 and 1 <= jj <= 31 and 1900 <= aaaa <= 2100:
             return f"{jj:02d}/{mm:02d}/{aaaa}"
-    except (ValueError, IndexError):
+    except ValueError:
         pass
-    
     return None
 
-def _detecter_format_mrz(l1: str, l2: str, l3: Optional[str] = None) -> str:
-    """Détecte le format MRZ (TD1, TD2 ou TD3) en fonction des lignes."""
-    if not l1 or not l2:
-        return "INCONNU"
-    
-    l1_len = len(l1.strip())
-    l2_len = len(l2.strip())
-    l3_exists = l3 is not None and len(l3.strip()) > 0
-    
-    # TD1 : 3 lignes de 30 caractères (CNI)
-    if l3_exists and l1_len <= 32 and l2_len <= 32:
-        return "TD1"
-    
-    # TD3 : 2 lignes de 44 caractères (Passeport)
-    if l2_len >= 40 and not l3_exists:
-        return "TD3"
-    
-    # TD2 : 2 lignes de 36 caractères (CNI papier / Passeport carte)
-    if l2_len >= 30 and l2_len <= 38:
-        return "TD2"
-    
-    # Détection par pattern
-    if l1.startswith('P<') or l1.startswith('I<'):
-        return "TD3" if l2_len >= 40 else "TD2"
-    
-    return "TD1" if l3_exists else "TD2"
-
-def _parser_mrz_td1(l1: str, l2: str, l3: str) -> Dict[str, Any]:
-    """Parse une MRZ TD1 (CNI - 3 lignes de 30 caractères)."""
-    resultat = {
-        "format": "TD1",
-        "nom_famille": "",
-        "prenoms": "",
-        "numero_document": "",
-        "date_naissance_date": None,
-        "date_expiration_date": None,
-        "sexe": "non_detecte",
-        "pays_emetteur": "",
-        "mrz_valide": False,
-        "erreurs_mrz": []
-    }
-    
+# =============================================================================
+# Parseurs spécifiques par format
+# =============================================================================
+def parser_mrz_td1(l1: str, l2: str, l3: str) -> Dict[str, Any]:
+    """Parse une MRZ au format TD1 (3 lignes × 30 caractères)."""
+    l1, l2, l3 = _nettoyer_ligne_mrz(l1, 30), _nettoyer_ligne_mrz(l2, 30), _nettoyer_ligne_mrz(l3, 30)
     erreurs = []
     
     try:
-        # Padding pour garantir 30 caractères
-        l1 = l1.ljust(30)
-        l2 = l2.ljust(30)
-        l3 = l3.ljust(30)
+        pays = l1[2:5].strip("<")
+        num_doc = l1[5:14].replace("<", "")
+        cs_doc = l1[14:15]
         
-        # Ligne 1 : Type + Pays + Numéro document + Check digit
-        resultat["pays_emetteur"] = l1[2:5].strip("<")
-        numero_doc_mrz = l1[5:14]
-        resultat["numero_document"] = numero_doc_mrz.replace("<", "").strip()
+        ddn = l2[0:6]
+        cs_ddn = l2[6:7]
+        sexe = "M" if l2[7:8] == "M" else "F" if l2[7:8] == "F" else "non_detecte"
         
-        # Validation check digit numéro document (position 14)
-        if _calculer_check_digit(numero_doc_mrz) != int(l1[14]) if l1[14].isdigit() else -1:
-            erreurs.append("Check digit numéro document invalide")
+        exp = l2[8:14]
+        cs_exp = l2[14:15]
         
-        # Ligne 2 : Date naissance + Check + Sexe + Date expiration + Check
-        resultat["date_naissance_date"] = _convertir_date_mrz(l2[0:6])
-        if _calculer_check_digit(l2[0:6]) != int(l2[6]) if l2[6].isdigit() else -1:
-            erreurs.append("Check digit date naissance invalide")
+        nationalite = l2[15:18].strip("<")
         
-        resultat["sexe"] = "M" if l2[7:8] == "M" else "F" if l2[7:8] == "F" else "non_detecte"
-        
-        resultat["date_expiration_date"] = _convertir_date_mrz(l2[8:14])
-        if _calculer_check_digit(l2[8:14]) != int(l2[14]) if l2[14].isdigit() else -1:
-            erreurs.append("Check digit date expiration invalide")
-        
-        # Ligne 3 : Nom et prénoms séparés par <<
         parties = l3.split("<<")
-        if parties:
-            resultat["nom_famille"] = parties[0].replace("<", " ").strip()
-        if len(parties) > 1:
-            resultat["prenoms"] = parties[1].replace("<", " ").strip()
+        nom_famille = parties[0].replace("<", " ").strip() if parties else ""
+        prenoms = parties[1].replace("<", " ").strip() if len(parties) > 1 else ""
         
-        # Validation finale
-        resultat["mrz_valide"] = len(erreurs) == 0
-        resultat["erreurs_mrz"] = erreurs
+        # Validations checksum
+        if not _verifier_checksum_mrz(num_doc, cs_doc): erreurs.append("Checksum numéro invalide")
+        if not _verifier_checksum_mrz(ddn, cs_ddn): erreurs.append("Checksum naissance invalide")
+        if not _verifier_checksum_mrz(exp, cs_exp): erreurs.append("Checksum expiration invalide")
         
-    except Exception as e:
-        journal.warning(f"Erreur parsing MRZ TD1 : {e}")
-        erreurs.append(f"Erreur de parsing : {str(e)}")
-    
-    resultat["pays_emetteur_nom"] = CODES_PAYS_ICAO.get(resultat["pays_emetteur"], resultat["pays_emetteur"])
-    return resultat
+        cs_global = l2[29:30]
+        if cs_global and cs_global != "<":
+            donnees_globales = l1[5:15] + l2[0:7] + l2[8:15]
+            if not _verifier_checksum_mrz(donnees_globales, cs_global):
+                erreurs.append("Checksum global invalide")
 
-def _parser_mrz_td2_ou_td3(l1: str, l2: str, format_mrz: str) -> Dict[str, Any]:
-    """Parse une MRZ TD2 (36 car.) ou TD3 (44 car.)."""
-    resultat = {
-        "format": format_mrz,
-        "nom_famille": "",
-        "prenoms": "",
-        "numero_document": "",
-        "date_naissance_date": None,
-        "date_expiration_date": None,
-        "sexe": "non_detecte",
-        "pays_emetteur": "",
-        "mrz_valide": False,
-        "erreurs_mrz": []
-    }
-    
+        return {
+            "format": "TD1",
+            "nom_famille": nom_famille,
+            "prenoms": prenoms,
+            "numero_document": num_doc,
+            "date_naissance_date": _convertir_date_mrz(ddn),
+            "date_expiration_date": _convertir_date_mrz(exp),
+            "sexe": sexe,
+            "pays_emetteur": pays,
+            "pays_emetteur_nom": CODES_PAYS_ICAO.get(pays, pays),
+            "nationalite": nationalite,
+            "nationalite_nom": CODES_PAYS_ICAO.get(nationalite, nationalite),
+            "mrz_valide": len(erreurs) == 0,
+            "erreurs_mrz": erreurs
+        }
+    except Exception as e:
+        journal.error(f"Erreur parsing MRZ TD1 : {e}")
+        return {"format": "TD1", "mrz_valide": False, "erreurs_mrz": [str(e)]}
+
+
+def parser_mrz_td2(l1: str, l2: str) -> Dict[str, Any]:
+    """Parse une MRZ au format TD2 (2 lignes × 36 caractères) - Ex: CNI Bénin."""
+    l1, l2 = _nettoyer_ligne_mrz(l1, 36), _nettoyer_ligne_mrz(l2, 36)
     erreurs = []
     
     try:
-        longueur = 36 if format_mrz == "TD2" else 44
+        pays = l1[2:5].strip("<")
+        reste_noms = l1[5:36].strip("<")
+        parties = reste_noms.split("<<")
+        nom_famille = parties[0].replace("<", " ").strip() if parties else ""
+        prenoms = parties[1].replace("<", " ").strip() if len(parties) > 1 else ""
         
-        # Padding
-        l1 = l1.ljust(longueur)
-        l2 = l2.ljust(longueur)
+        # Ligne 2 : Positions ICAO exactes
+        num_doc = l2[0:9].replace("<", "")
+        cs_doc = l2[9:10]
         
-        # Ligne 1 : Type + Pays + Nom/Prénoms
-        resultat["pays_emetteur"] = l1[2:5].strip("<")
+        nationalite = l2[10:13].strip("<")
         
-        # Noms séparés par <<
-        noms = l1[5:].split("<<")
-        if noms:
-            resultat["nom_famille"] = noms[0].replace("<", " ").strip()
-        if len(noms) > 1:
-            resultat["prenoms"] = noms[1].replace("<", " ").strip()
+        ddn = l2[13:19]
+        cs_ddn = l2[19:20]
         
-        # Ligne 2 : Numéro document + Check + Nationalité + Date naissance + Check + Sexe + Date expiration + Check + Check composite
-        numero_doc_mrz = l2[0:9]
-        resultat["numero_document"] = numero_doc_mrz.replace("<", "").strip()
+        sexe = "M" if l2[20:21] == "M" else "F" if l2[20:21] == "F" else "non_detecte"
         
-        if _calculer_check_digit(numero_doc_mrz) != int(l2[9]) if l2[9].isdigit() else -1:
-            erreurs.append("Check digit numéro document invalide")
+        # ✅ CORRECTION CRITIQUE : 6 caractères pour la date (21 à 26 inclus)
+        exp = l2[21:27]
+        cs_exp = l2[27:28]
         
-        resultat["date_naissance_date"] = _convertir_date_mrz(l2[13:19])
-        if _calculer_check_digit(l2[13:19]) != int(l2[19]) if l2[19].isdigit() else -1:
-            erreurs.append("Check digit date naissance invalide")
+        # Validations checksum
+        if not _verifier_checksum_mrz(num_doc, cs_doc): erreurs.append("Checksum numéro invalide")
+        if not _verifier_checksum_mrz(ddn, cs_ddn): erreurs.append("Checksum naissance invalide")
+        if not _verifier_checksum_mrz(exp, cs_exp): erreurs.append("Checksum expiration invalide")
         
-        resultat["sexe"] = "M" if l2[20:21] == "M" else "F" if l2[20:21] == "F" else "non_detecte"
-        
-        resultat["date_expiration_date"] = _convertir_date_mrz(l2[21:27])
-        if _calculer_check_digit(l2[21:27]) != int(l2[27]) if l2[27].isdigit() else -1:
-            erreurs.append("Check digit date expiration invalide")
-        
-        # Validation check digit composite (TD2/TD3)
-        pos_fin = 35 if format_mrz == "TD2" else 42
-        composite_str = l2[0:10] + l2[13:20] + l2[21:pos_fin]
-        if _calculer_check_digit(composite_str) != int(l2[pos_fin]) if l2[pos_fin].isdigit() else -1:
-            erreurs.append("Check digit composite invalide")
-        
-        resultat["mrz_valide"] = len(erreurs) == 0
-        resultat["erreurs_mrz"] = erreurs
-        
+        if len(l2) >= 36:
+            cs_global = l2[35:36]
+            if cs_global and cs_global != "<":
+                # Check global TD2 : numéro(0-9) + naissance(13-19) + expiration(21-27)
+                donnees_globales = l2[0:10] + l2[13:20] + l2[21:28]
+                if not _verifier_checksum_mrz(donnees_globales, cs_global):
+                    erreurs.append("Checksum global invalide")
+
+        return {
+            "format": "TD2",
+            "nom_famille": nom_famille,
+            "prenoms": prenoms,
+            "numero_document": num_doc,
+            "date_naissance_date": _convertir_date_mrz(ddn),
+            "date_expiration_date": _convertir_date_mrz(exp),
+            "sexe": sexe,
+            "pays_emetteur": pays,
+            "pays_emetteur_nom": CODES_PAYS_ICAO.get(pays, pays),
+            "nationalite": nationalite,
+            "nationalite_nom": CODES_PAYS_ICAO.get(nationalite, nationalite),
+            "mrz_valide": len(erreurs) == 0,
+            "erreurs_mrz": erreurs
+        }
     except Exception as e:
-        journal.warning(f"Erreur parsing MRZ {format_mrz} : {e}")
-        erreurs.append(f"Erreur de parsing : {str(e)}")
+        journal.error(f"Erreur parsing MRZ TD2 : {e}")
+        return {"format": "TD2", "mrz_valide": False, "erreurs_mrz": [str(e)]}
+
+
+def parser_mrz_td3(l1: str, l2: str) -> Dict[str, Any]:
+    """Parse une MRZ au format TD3 (2 lignes × 44 caractères) - Passeports."""
+    l1, l2 = _nettoyer_ligne_mrz(l1, 44), _nettoyer_ligne_mrz(l2, 44)
+    erreurs = []
     
-    resultat["pays_emetteur_nom"] = CODES_PAYS_ICAO.get(resultat["pays_emetteur"], resultat["pays_emetteur"])
-    return resultat
+    try:
+        pays = l1[2:5].strip("<")
+        noms = l1[5:44].strip("<")
+        parties = noms.split("<<")
+        nom_famille = parties[0].replace("<", " ").strip() if parties else ""
+        prenoms = parties[1].replace("<", " ").strip() if len(parties) > 1 else ""
+        
+        num_doc = l2[0:9].replace("<", "")
+        cs_doc = l2[9:10]
+        
+        nationalite = l2[10:13].strip("<")
+        
+        ddn = l2[13:19]
+        cs_ddn = l2[19:20]
+        
+        sexe = "M" if l2[20:21] == "M" else "F" if l2[20:21] == "F" else "non_detecte"
+        
+        exp = l2[21:27]
+        cs_exp = l2[27:28]
+        
+        if not _verifier_checksum_mrz(num_doc, cs_doc): erreurs.append("Checksum numéro invalide")
+        if not _verifier_checksum_mrz(ddn, cs_ddn): erreurs.append("Checksum naissance invalide")
+        if not _verifier_checksum_mrz(exp, cs_exp): erreurs.append("Checksum expiration invalide")
+
+        return {
+            "format": "TD3",
+            "nom_famille": nom_famille,
+            "prenoms": prenoms,
+            "numero_document": num_doc,
+            "date_naissance_date": _convertir_date_mrz(ddn),
+            "date_expiration_date": _convertir_date_mrz(exp),
+            "sexe": sexe,
+            "pays_emetteur": pays,
+            "pays_emetteur_nom": CODES_PAYS_ICAO.get(pays, pays),
+            "nationalite": nationalite,
+            "nationalite_nom": CODES_PAYS_ICAO.get(nationalite, nationalite),
+            "mrz_valide": len(erreurs) == 0,
+            "erreurs_mrz": erreurs
+        }
+    except Exception as e:
+        journal.error(f"Erreur parsing MRZ TD3 : {e}")
+        return {"format": "TD3", "mrz_valide": False, "erreurs_mrz": [str(e)]}
+
+# =============================================================================
+# Point d'entrée universel
+# =============================================================================
+def detecter_format_mrz(l1: str, l2: str, l3: Optional[str] = None) -> str:
+    """Détecte le format MRZ en fonction de la longueur des lignes."""
+    if l3 and len(l1.strip()) <= 32 and len(l2.strip()) <= 32:
+        return "TD1"
+    if 34 <= len(l2.strip()) <= 38:
+        return "TD2"
+    if len(l2.strip()) >= 40:
+        return "TD3"
+    return "inconnu"
 
 def parser_mrz_complet(l1: str, l2: str, l3: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Point d'entrée unique pour parser n'importe quelle MRZ.
-    Détecte automatiquement le format et applique le parser approprié.
-    """
+    """Parseur MRZ universel : détecte le format et extrait les données."""
     if not l1 or not l2:
-        journal.warning("MRZ : lignes 1 ou 2 manquantes")
-        return {
-            "format": "inconnu",
-            "nom_famille": "",
-            "prenoms": "",
-            "numero_document": "",
-            "date_naissance_date": None,
-            "date_expiration_date": None,
-            "sexe": "non_detecte",
-            "pays_emetteur": "",
-            "mrz_valide": False,
-            "erreurs_mrz": ["Lignes MRZ incomplètes"]
-        }
+        return {"format": "inconnu", "mrz_valide": False, "erreurs_mrz": ["Lignes MRZ manquantes"]}
     
-    # 1. Nettoyer les lignes (majuscules, correction OCR)
-    l1_clean = _corriger_erreurs_ocr_mrz(l1.strip())
-    l2_clean = _corriger_erreurs_ocr_mrz(l2.strip())
-    l3_clean = _corriger_erreurs_ocr_mrz(l3.strip()) if l3 else None
-    
-    journal.info(f"MRZ : Détection du format (l1={len(l1_clean)}car, l2={len(l2_clean)}car, l3={'present' if l3_clean else 'absent'})")
-    
-    # 2. Détecter le format
-    format_mrz = _detecter_format_mrz(l1_clean, l2_clean, l3_clean)
+    format_mrz = detecter_format_mrz(l1, l2, l3)
     journal.info(f"MRZ : Format détecté = {format_mrz}")
     
-    # 3. Parser selon le format
-    if format_mrz == "TD1":
-        if not l3_clean:
-            journal.error("MRZ TD1 nécessite 3 lignes mais seulemen 2 fournies")
-            return parser_mrz_complet("", "", "")  # Retourner une erreur
-        
-        return _parser_mrz_td1(l1_clean, l2_clean, l3_clean)
-    
-    elif format_mrz in ("TD2", "TD3"):
-        return _parser_mrz_td2_ou_td3(l1_clean, l2_clean, format_mrz)
-    
+    if format_mrz == "TD1" and l3:
+        return parser_mrz_td1(l1, l2, l3)
+    elif format_mrz == "TD2":
+        return parser_mrz_td2(l1, l2)
+    elif format_mrz == "TD3":
+        return parser_mrz_td3(l1, l2)
     else:
-        journal.warning(f"MRZ : Format inconnu, tentative TD2 par défaut")
-        return _parser_mrz_td2_ou_td3(l1_clean, l2_clean, "TD2")
+        journal.warning(f"MRZ : Format inconnu ou non supporté ({format_mrz})")
+        return {"format": format_mrz, "mrz_valide": False, "erreurs_mrz": ["Format non reconnu"]}
