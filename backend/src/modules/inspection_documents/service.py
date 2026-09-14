@@ -396,14 +396,8 @@ async def _extraire_donnees_classique(
     image_bytes: bytes,
     type_suggere: Optional[TypeDocument],
 ) -> DonneesDocumentExtraites:
-    """
-    Extraction hybride performante et stable :
-    VLM (classification + complétion dates/MRZ) + OCR classique (texte + MRZ exacte)
-    -> Parsing MRZ (source de vérité) -> Extraction NLP -> Fusion.
-    En cas d'indisponibilité du VLM, on retombe sur l'OCR seul.
-    """
     try:
-        # ── 0. VLM (si activé) : classification + complétion des champs ─
+        # ── 0. VLM (si activé) : classification + complétion des champs ──
         donnees_vlm = None
         confiance_vlm: Optional[float] = None
         if parametres.activer_extraction_vlm:
@@ -500,18 +494,18 @@ async def _extraire_donnees_classique(
             else:
                 donnees_specifiques[cle] = valeur
 
-        # ── 7bis. Complétion VLM : dates / MRZ / identité si l'OCR a des trous ──
-        _completer_depuis_vlm(donnees_nlp, donnees_vlm, donnees_mrz, texte_ocr=texte)
-        if confiance_vlm is not None:
-            confiance = round(max(confiance, confiance_vlm * 100.0), 2)
-
-        # ── 8. Activation du parser CNI si les champs critiques sont encore vides ──
+        # ✅ 7bis. CORRECTION : Parser CNI spécifique AVANT le VLM
         if type_document in (TypeDocument.CNI_BIOMETRIQUE, TypeDocument.CNI_PAPIER):
             if not donnees_nlp.get("nom_famille") or not donnees_nlp.get("numero_document"):
                 journal.info("CNI détectée avec champs incomplets. Activation du parsing spécifique CNI.")
                 donnees_nlp = _extraire_infos_specifiques_cni(texte, donnees_nlp)
 
-        # ── 9. Pays émetteur (MRZ d'abord, puis codes pays dans le texte) ──
+        # ✅ 7ter. Complétion VLM (seulement pour combler les trous restants, avec validation anti-hallucination)
+        _completer_depuis_vlm(donnees_nlp, donnees_vlm, donnees_mrz, texte_ocr=texte)
+        if confiance_vlm is not None:
+            confiance = round(max(confiance, confiance_vlm * 100.0), 2)
+
+        # ── 8. Pays émetteur (MRZ d'abord, puis codes pays dans le texte) ──
         code_pays = detecter_pays(texte, mrz_lignes)
         if not code_pays:
             for code in CODES_PAYS_TEXTES:
@@ -519,7 +513,7 @@ async def _extraire_donnees_classique(
                     code_pays = code
                     break
 
-        # ── 10. Assemblage + fusion (MRZ prioritaire) ──
+        # ── 9. Assemblage + fusion (MRZ prioritaire) ──
         if code_pays:
             donnees_nlp["pays_emetteur"] = code_pays
         donnees_nlp["donnees_specifiques"] = donnees_specifiques
