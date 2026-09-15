@@ -1,7 +1,8 @@
-# -*- coding: utf-8 -*-
+# -- coding: utf-8 --
 """
-Moteur OCR avancé avec détection MRZ multi-zones.
-Utilise OpenCV pour le prétraitement et Tesseract pour l'extraction.
+Moteur OCR global (Filet de secours).
+Extrait le texte brut complet et tente de trouver la MRZ globale.
+Le prétraitement lourd est désormais géré par zone_cropper.py.
 """
 import io
 import time
@@ -18,12 +19,14 @@ except ImportError:
 
 from src.noyau.journal import journal
 
-CONFIG_TESSERACT = "--oem 3 --psm 4 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/<>+-.()[]:,;!?àâäæçéèêëîïôöœùûüÿÀÂÄÆÇÉÈÊËÎÏÔÖŒÙÛÜŸ "
-CONFIG_TESSERACT_MRZ = "--oem 1 --psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<"
+# Configuration Tesseract pour le texte global (on accepte tout)
+CONFIG_TESSERACT_GLOBAL = "--oem 3 --psm 6"
+# Configuration Tesseract pour la MRZ globale (très restrictif)
+CONFIG_TESSERACT_MRZ = "--oem 1 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<"
 
 def _charger_image(donnees_image: bytes) -> Optional[np.ndarray]:
     try:
-        if not CV2_DISPONIBLE: 
+        if not CV2_DISPONIBLE:
             return None
         pil_image = Image.open(io.BytesIO(donnees_image)).convert("RGB")
         return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
@@ -31,70 +34,56 @@ def _charger_image(donnees_image: bytes) -> Optional[np.ndarray]:
         journal.error(f"Échec chargement image : {e}")
         return None
 
-def _pretraiter_image(image: np.ndarray) -> np.ndarray:
-    if not CV2_DISPONIBLE: 
-        return image
-    gris = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    debruite = cv2.fastNlMeansDenoising(gris, h=10)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    return clahe.apply(debruite)
-
-def _extraire_zone_mrz_intelligente(image: np.ndarray) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    """Détecte la MRZ dans plusieurs zones (pas seulement en bas)."""
-    if not CV2_DISPONIBLE: 
+def _extraire_zone_mrz_globale(image: np.ndarray) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """Détecte la MRZ dans l'image globale (fallback si le cropper échoue)."""
+    if not CV2_DISPONIBLE:
         return None, None, None
-    
+        
     hauteur, largeur = image.shape[:2]
-    # Zones à tester : Bas (75-100%), Milieu (40-60%), Image entière (fallback)
-    zones = [
-        image[int(hauteur * 0.75):hauteur, 0:largeur],
-        image[int(hauteur * 0.40):int(hauteur * 0.60), 0:largeur],
-        image
-    ]
-    
-    for zone in zones:
-        try:
-            _, zone_binaire = cv2.threshold(zone, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
-            import pytesseract
-            texte = pytesseract.image_to_string(Image.fromarray(zone_binaire), lang="eng", config=CONFIG_TESSERACT_MRZ)
-            lignes = [l.strip() for l in texte.split("\n") if l.strip()]
-            # Filtrer : une vraie MRZ contient beaucoup de '<' et fait > 25 chars
-            lignes_mrz = [l for l in lignes if len(l) >= 25 and l.count('<') > 5]
-            if len(lignes_mrz) >= 2:
-                return (lignes_mrz[0], lignes_mrz[1], lignes_mrz[2] if len(lignes_mrz) > 2 else None)
-        except Exception:
-            continue
-    return None, None, None
-
-def analyser_document(donnees_image: bytes) -> dict:
-    """Pipeline principal d'analyse OCR."""
-    debut = time.time()
-    image = _charger_image(donnees_image)
-    
-    # ✅ CORRECTION ICI : Utiliser 'is None' au lieu de 'not image' pour les tableaux NumPy
-    if image is None:
-        return {
-            "texte_brut": "", 
-            "confiance_moyenne": 0.0, 
-            "mrz_lignes": (None, None, None), 
-            "succes": False
-        }
-    
-    image_pretraitee = _pretraiter_image(image)
+    # On cherche dans le tiers inférieur
+    zone = image[int(hauteur * 0.65):hauteur, 0:largeur]
     
     try:
         import pytesseract
-        pil_image = Image.fromarray(image_pretraitee)
-        texte = pytesseract.image_to_string(pil_image, lang="fra+eng", config=CONFIG_TESSERACT)
-        donnees_ocr = pytesseract.image_to_data(pil_image, lang="fra+eng", config=CONFIG_TESSERACT, output_type=pytesseract.Output.DICT)
+        gris = cv2.cvtColor(zone, cv2.COLOR_BGR2GRAY)
+        _, binaire = cv2.threshold(gris, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        
+        texte = pytesseract.image_to_string(Image.fromarray(binaire), lang="eng", config=CONFIG_TESSERACT_MRZ)
+        lignes = [l.strip() for l in texte.split("\n") if l.strip()]
+        
+        # Filtrer : une vraie MRZ contient beaucoup de '<' et fait > 25 chars
+        lignes_mrz = [l for l in lignes if len(l) >= 25 and l.count('<') > 3]
+        if len(lignes_mrz) >= 2:
+            return (lignes_mrz[0], lignes_mrz[1], lignes_mrz[2] if len(lignes_mrz) > 2 else None)
+    except Exception as e:
+        journal.warning(f"OCR Engine: Erreur MRZ globale : {e}")
+        
+    return None, None, None
+
+def analyser_document(donnees_image: bytes) -> dict:
+    """Pipeline principal d'analyse OCR globale (Filet de secours)."""
+    debut = time.time()
+    image = _charger_image(donnees_image)
+    
+    if image is None:
+        return {"texte_brut": "", "confiance_moyenne": 0.0, "mrz_lignes": (None, None, None), "succes": False}
+
+    try:
+        import pytesseract
+        # Pas de prétraitement lourd ici, on laisse Tesseract faire sur l'image brute
+        # pour avoir le texte le plus large possible pour les Regex de secours.
+        pil_image = Image.fromarray(image)
+        texte = pytesseract.image_to_string(pil_image, lang="fra+eng", config=CONFIG_TESSERACT_GLOBAL)
+        
+        donnees_ocr = pytesseract.image_to_data(pil_image, lang="fra+eng", config=CONFIG_TESSERACT_GLOBAL, output_type=pytesseract.Output.DICT)
         confiances = [c for c in donnees_ocr["conf"] if c != -1]
         confiance = float(np.mean(confiances)) if confiances else 0.0
     except Exception as e:
-        journal.error(f"Erreur Tesseract : {e}")
+        journal.error(f"Erreur Tesseract global : {e}")
         texte, confiance = "", 0.0
 
-    mrz_lignes = _extraire_zone_mrz_intelligente(image)
-    
+    mrz_lignes = _extraire_zone_mrz_globale(image)
+
     return {
         "texte_brut": texte.strip(),
         "confiance_moyenne": round(confiance, 2),

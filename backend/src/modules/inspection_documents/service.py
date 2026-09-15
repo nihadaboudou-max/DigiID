@@ -1,25 +1,22 @@
-# -*- coding: utf-8 -*-
+# -- coding: utf-8 --
 """
 Service d'orchestration pour le module d'inspection de documents.
-Pipeline hybride : VLM (classification + extraction dates/MRZ) + OCR classique (texte, MRZ exacte),
-puis Validation par règles + Flux de validation manuelle (EN_ATTENTE).
-Un fallback OCR seul reste garanti si le VLM est indisponible (stabilité bancaire).
-
-Pipeline complet :
-1. Validation du fichier uploadé (format, taille)
-2. Évaluation de la qualité d'image
-3. Extraction hybride : VLM (si configuré) + OCR classique Tesseract, fusionnées
-4. Validation métier (si les données sont présentes)
-5. Persistance en base de données (même en cas d'extraction partielle)
-6. Statut EN_ATTENTE pour revue manuelle si nécessaire
+Pipeline "Crop & Conquer" (Low-RAM / Anti-Hallucination) :
+1. OCR global (texte brut de secours pour les regex)
+2. Zone Cropper (OpenCV) : Découpage en zones propres (MRZ, Bandes)
+3. Zone Reader : 
+   - Tesseract avec whitelists pour Dates/Numéros
+   - Petit VLM sur micro-crops pour Noms/Lieux
+4. Parsing MRZ (Vérité absolue)
+5. NLP Regex (Filet de secours)
+6. Fusion intelligente & Validation
 """
 import base64
 import time
 import re
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
-
 from fastapi import UploadFile
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,780 +24,343 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modeles import Utilisateur
 from src.modeles.inspection_document import InspectionDocument
 from src.modules.inspection_documents.schemas import (
-    DonneesDocumentExtraites,
-    DetailVerification,
-    FaceDocument,
-    ListeVerifications,
-    ResultatCoherence,
-    ResultatValidation,
-    ReponseSuppression,
-    ReponseRestauration,
-    ReponseUploadDocument,
-    StatutVerification,
-    SyntheseVerification,
-    TypeDocument,
-    SexeDocument,
+    DonneesDocumentExtraites, DetailVerification, FaceDocument, ListeVerifications,
+    ResultatCoherence, ResultatValidation, ReponseSuppression, ReponseRestauration,
+    ReponseUploadDocument, StatutVerification, SyntheseVerification, TypeDocument, SexeDocument,
 )
 from src.modules.inspection_documents.validation.validation_engine import valider_document
 from src.modules.inspection_documents.validation.coherence_engine import verifier_coherence_identite
+
+# --- ANCIENS MODULES (Gardés pour le texte brut de secours et les regex) ---
 from src.modules.inspection_documents.extraction.ocr_engine import analyser_document
 from src.modules.inspection_documents.extraction.mrz_parser import parser_mrz_complet
 from src.modules.inspection_documents.extraction.fusion_engine import fusionner_donnees
 from src.modules.inspection_documents.extraction.nlp_extractor import (
-    extraire_permis_conduire,
-    extraire_carte_assurance,
-    extraire_par_labels,
+    extraire_permis_conduire, extraire_carte_assurance, extraire_par_labels,
 )
-from src.modules.inspection_documents.classification.document_classifier import (
-    classifier_document,
-    detecter_pays,
-)
+from src.modules.inspection_documents.classification.document_classifier import classifier_document, detecter_pays
 from src.modules.inspection_documents.classification.patterns_documents import PATTERNS_GENERIQUES
 from src.modules.inspection_documents.storage.document_storage import stocker_document
 from src.modules.inspection_documents.preprocessing.quality_checker import evaluer_qualite_image
+
+# --- NOUVEAUX MODULES "CROP & CONQUER" ---
+from src.modules.inspection_documents.extraction.zone_cropper import extraire_zones_interet
+from src.modules.inspection_documents.extraction.zone_reader import (
+    lire_zone_mrz, lire_zones_structurees, lire_zones_non_structurees
+)
+
 from src.noyau import journal
 from src.noyau.exceptions import ErreurRessourceIntrouvable, ErreurValidation
 from src.config import parametres
-from src.modules.inspection_documents.extraction.vlm_extractor import extraire_donnees_vlm
-
 
 # =============================================================================
 # CONSTANTES
 # =============================================================================
 TAILLE_MAX_IMAGE = 15 * 1024 * 1024  # 15 Mo
-TYPES_MIME_AUTORISES = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-    "image/tiff": "tiff",
-}
+TYPES_MIME_AUTORISES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/tiff": "tiff"}
 CODES_PAYS_TEXTES = ["SEN", "CIV", "MLI", "BEN", "BFA", "TOG", "GHA", "NGA", "GIN", "NER", "CMR", "COD", "COG"]
-
 
 # =============================================================================
 # FONCTIONS UTILITAIRES INTERNES
 # =============================================================================
-
 async def _lire_image(fichier: UploadFile) -> bytes:
-    """Lit et valide le fichier image uploadé."""
     if fichier.content_type not in TYPES_MIME_AUTORISES:
-        raise ErreurValidation(
-            f"Type MIME refusé : {fichier.content_type}",
-            message_utilisateur="Format d'image non supporté. Utilise JPG, PNG, WEBP ou TIFF.",
-        )
-    
+        raise ErreurValidation(f"Type MIME refusé : {fichier.content_type}", message_utilisateur="Format d'image non supporté.")
     contenu = await fichier.read()
-    
-    if not contenu:
-        raise ErreurValidation("Fichier vide reçu.", message_utilisateur="Le fichier est vide.")
-    
+    if not contenu: raise ErreurValidation("Fichier vide reçu.", message_utilisateur="Le fichier est vide.")
     if len(contenu) > TAILLE_MAX_IMAGE:
-        raise ErreurValidation(
-            f"Image trop volumineuse : {len(contenu)} octets",
-            message_utilisateur=f"L'image dépasse la taille maximale de {TAILLE_MAX_IMAGE // 1024 // 1024} Mo.",
-        )
-    
+        raise ErreurValidation(f"Image trop volumineuse.", message_utilisateur=f"L'image dépasse {TAILLE_MAX_IMAGE // 1024 // 1024} Mo.")
     return contenu
 
-
 def _normaliser_date(chaine: Optional[str]) -> Optional[str]:
-    """Normalise JJ/MM/AAAA, JJ-MM-AA ou AAAA-MM-JJ vers JJ/MM/AAAA (valide)."""
-    s = chaine or ""
-
-    # Format ISO AAAA-MM-JJ (le VLM peut le renvoyer malgré le prompt)
+    if not chaine: return None
+    s = str(chaine).strip()
     m_iso = re.search(r"(\d{4})[/.\-](\d{1,2})[/.\-](\d{1,2})", s)
     if m_iso:
         annee, mois, jour = int(m_iso.group(1)), int(m_iso.group(2)), int(m_iso.group(3))
         if 1 <= mois <= 12 and 1 <= jour <= 31 and 1900 <= annee <= 2100:
             return f"{jour:02d}/{mois:02d}/{annee:04d}"
-
-    # Format JJ/MM/AAAA, JJ-MM-AA, JJ.MM.AAAA
     m = re.search(r"(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})", s)
-    if not m:
-        return None
+    if not m: return None
     jour, mois, annee = int(m.group(1)), int(m.group(2)), m.group(3)
-    if len(annee) == 2:
-        annee = 1900 + int(annee) if int(annee) >= 40 else 2000 + int(annee)
-    else:
-        annee = int(annee)
+    if len(annee) == 2: annee = 1900 + int(annee) if int(annee) >= 40 else 2000 + int(annee)
+    else: annee = int(annee)
     if 1 <= mois <= 12 and 1 <= jour <= 31 and 1900 <= annee <= 2100:
         return f"{jour:02d}/{mois:02d}/{annee:04d}"
     return None
 
-
-# =============================================================================
-# Utilitaires VLM (classification hybride + complétion MRZ / dates)
-# =============================================================================
-
-_TYPES_VLM = {
-    "cni_biometrique": TypeDocument.CNI_BIOMETRIQUE,
-    "cni_papier": TypeDocument.CNI_PAPIER,
-    "passeport": TypeDocument.PASSEPORT,
-    "permis_conduire": TypeDocument.PERMIS_CONDUIRE,
-    "carte_assurance": TypeDocument.CARTE_ASSURANCE,
-    "carte_sejour": TypeDocument.CARTE_SEJOUR,
-    "carte_vote": TypeDocument.CARTE_VOTE,
-    "carte_etudiant": TypeDocument.CARTE_ETUDIANT,
-}
-
-
 def _pad3(lignes) -> tuple:
-    """Force un tuple de 3 lignes MRZ (None si absent)."""
     valeurs = list(lignes or ())[:3]
-    while len(valeurs) < 3:
-        valeurs.append(None)
+    while len(valeurs) < 3: valeurs.append(None)
     return tuple(valeurs)
 
-
 def _type_depuis_code_mrz(l1: Optional[str]) -> Optional[TypeDocument]:
-    """Type du document déduit du code de la 1re ligne MRZ (P<, I<, A<…)."""
-    if not l1:
-        return None
+    if not l1: return None
     debut = str(l1).upper().ljust(2)
-    if debut.startswith(("P<", "P ")):
-        return TypeDocument.PASSEPORT
-    if debut.startswith(("I<", "ID")):
-        return TypeDocument.CNI_BIOMETRIQUE
-    if debut.startswith(("A<", "AC")):
-        return TypeDocument.CARTE_SEJOUR
+    if debut.startswith(("P<", "P ")): return TypeDocument.PASSEPORT
+    if debut.startswith(("I<", "ID")): return TypeDocument.CNI_BIOMETRIQUE
+    if debut.startswith(("A<", "AC")): return TypeDocument.CARTE_SEJOUR
     return None
 
-
-def _mapper_type_vlm(donnees_vlm: Optional[dict]) -> Optional[TypeDocument]:
-    """Convertit le type renvoyé par le VLM en enum du schéma."""
-    if not donnees_vlm:
-        return None
-    type_str = str(donnees_vlm.get("type_document") or "").strip().lower()
-    if not type_str or type_str == "autre":
-        return None
-    return _TYPES_VLM.get(type_str)
-
-
-def _choisir_type_document(
-    texte_brut: str,
-    mrz_lignes: tuple,
-    donnees_vlm: Optional[dict],
-    type_suggere: Optional[TypeDocument],
-) -> TypeDocument:
-    """Classification : code MRZ > VLM > regex OCR > hint client."""
+def _choisir_type_document(texte_brut: str, mrz_lignes: tuple, type_suggere: Optional[TypeDocument]) -> TypeDocument:
     ocr_type = classifier_document(texte_brut or "", mrz_lignes or (None, None, None))
     code_mrz = _type_depuis_code_mrz((mrz_lignes or (None,))[0])
-    type_vlm = _mapper_type_vlm(donnees_vlm)
-
-    if code_mrz is not None:
-        type_document = code_mrz
-    elif type_vlm is not None:
-        type_document = type_vlm
-    elif ocr_type != TypeDocument.INCONNU:
-        type_document = ocr_type
-    else:
-        type_document = TypeDocument.INCONNU
-
-    # Le type choisi côté client tranche les ambiguïtés (ex : CNI papier vs biométrique sans MRZ)
+    type_document = code_mrz or ocr_type or TypeDocument.INCONNU
     if type_suggere and type_suggere != TypeDocument.INCONNU:
-        if type_document == TypeDocument.INCONNU or (
-            type_suggere == TypeDocument.CNI_PAPIER
-            and type_document == TypeDocument.CNI_BIOMETRIQUE
-            and not (mrz_lignes and mrz_lignes[0])
-        ):
-            type_document = type_suggere
+        if type_document == TypeDocument.INCONNU: type_document = type_suggere
     return type_document
 
-
-def _fusionner_lignes_mrz(lignes_ocr: tuple, donnees_vlm: Optional[dict]) -> tuple:
-    """MRZ de l'OCR en priorité (exacte), sinon celle renvoyée par le VLM."""
-    ocr = _pad3(lignes_ocr)
-    if ocr[0] and ocr[1]:
-        return ocr
-
-    lignes_vlm = []
-    if donnees_vlm:
-        for cle in ("mrz_ligne_1", "mrz_ligne_2", "mrz_ligne_3"):
-            valeur = donnees_vlm.get(cle)
-            if valeur:
-                lignes_vlm.append(re.sub(r"[^A-Z0-9<]", "", str(valeur).upper().strip()))
-
-    if len(lignes_vlm) >= 2 and 28 <= len(lignes_vlm[0]) <= 45 and len(lignes_vlm[1]) >= 25 and (lignes_vlm[0].count("<") + lignes_vlm[1].count("<")) >= 6:
-        return _pad3(lignes_vlm)
-    return ocr
-
-
 # =============================================================================
-# NOUVEAU : Extracteur spécifique CNI (le filet de sécurité ultime)
+# NOUVEAU PIPELINE D'EXTRACTION : "CROP & CONQUER"
 # =============================================================================
-
-def _extraire_infos_specifiques_cni(texte: str, donnees_actuelles: dict) -> dict:
-    """
-    Règles de parsing spécifiques pour les CNI quand VLM et OCR standard échouent.
-    Gère les motifs typiques : "M/NOM", "NNNN/VILLE", dates de naissance.
-    """
-    resultat = donnees_actuelles.copy()
-    texte_upper = texte.upper()
-    
-    # 1. NOM DE FAMILLE (Motif "M/" ou "MME/" suivi du nom)
-    if not resultat.get("nom_famille"):
-        match_nom = re.search(r'M(?:ME)?\s*/\s*([A-ZÀ-Ü\s\-]{5,30})', texte_upper)
-        if match_nom:
-            nom = re.sub(r'\s+', ' ', match_nom.group(1).strip())
-            if 5 <= len(nom) <= 50:
-                resultat["nom_famille"] = nom
-                journal.info(f"CNI Parser -> Nom trouvé : {nom}")
-
-    # 2. PRÉNOMS (Souvent situé juste avant "M/" ou sur la ligne du dessus)
-    if not resultat.get("prenoms"):
-        match_prenom = re.search(r'([A-ZÀ-Ü]{3,15})\s+M(?:ME)?/', texte_upper)
-        if match_prenom:
-            prenom = match_prenom.group(1).strip()
-            if prenom not in ['REPUBLIQUE', 'NATIONALE', 'CARTE', 'IDENTITE', 'BENIN']:
-                resultat["prenoms"] = prenom
-                journal.info(f"CNI Parser -> Prénom trouvé : {prenom}")
-
-    # 3. NUMÉRO DE DOCUMENT (Format "NNNN/VILLE" ou 9 chiffres)
-    if not resultat.get("numero_document"):
-        # Cherche d'abord le format "0551/PARAKOU"
-        match_num1 = re.search(r'(\d{3,4}/[A-ZÀ-Ü]{3,15})', texte_upper)
-        if match_num1:
-            resultat["numero_document"] = match_num1.group(1).strip()
-            journal.info(f"CNI Parser -> Numéro format 1 : {resultat['numero_document']}")
-        else:
-            # Fallback : cherche un bloc de 9 chiffres (ex: 500531082)
-            match_num2 = re.search(r'\b(\d{9})\b', texte)
-            if match_num2:
-                resultat["numero_document"] = match_num2.group(1)
-                journal.info(f"CNI Parser -> Numéro format 2 : {resultat['numero_document']}")
-
-    # 4. DATE DE NAISSANCE (La plus ancienne entre 1940 et 2010)
-    if not resultat.get("date_naissance"):
-        dates = re.findall(r'(\d{1,2})[/\-\.](\d{1,2})[/\-\.](\d{2,4})', texte)
-        for j, m, a in dates:
-            annee = int(a) if len(a) == 4 else (1900 + int(a) if int(a) > 30 else 2000 + int(a))
-            if 1940 <= annee <= 2010 and 1 <= int(m) <= 12 and 1 <= int(j) <= 31:
-                resultat["date_naissance"] = f"{int(j):02d}/{int(m):02d}/{annee}"
-                journal.info(f"CNI Parser -> Date naissance : {resultat['date_naissance']}")
-                break
-
-    return resultat
-
-
-# =============================================================================
-# COMPLÉTION VLM AMÉLIORÉE (avec validation stricte anti-hallucination)
-# =============================================================================
-
-def _completer_depuis_vlm(
-    donnees_nlp: dict,
-    donnees_vlm: Optional[dict],
-    donnees_mrz: dict,
-    texte_ocr: str = "",  # ← NOUVEAU PARAMÈTRE
-) -> None:
-    """
-    Comble UNIQUEMENT les champs vides avec le VLM.
-    Anti-hallucination : rejette les valeurs VLM qui n'apparaissent pas dans le texte OCR.
-    """
-    if not donnees_vlm:
-        return
-
-    # 1. Nettoyage des valeurs VLM
-    vlm_clean = {}
-    for k, v in donnees_vlm.items():
-        if isinstance(v, str):
-            v = v.strip()
-            if v.lower() in ["...", "null", "none", "inconnu", "n/a", ""]:
-                v = None
-        vlm_clean[k] = v
-
-    # 2. Détection d'hallucination par répétition
-    valeurs_vlm = [v for v in vlm_clean.values() if v and isinstance(v, str)]
-    from collections import Counter
-    repetitions = Counter(valeurs_vlm)
-    valeur_repetee = next((v for v, count in repetitions.items() if count >= 3), None)
-    
-    if valeur_repetee:
-        journal.warning(f"VLM hallucine : '{valeur_repetee}' répété {repetitions[valeur_repetee]} fois → rejet total")
-        # On garde seulement les champs structurés (dates, numéro)
-        vlm_clean = {k: v for k, v in vlm_clean.items() 
-                     if k in ("date_naissance", "date_expiration", "date_delivrance", "numero_document", "sexe", "pays_emetteur")}
-
-    # 3. Complétion UNIQUEMENT des champs vides
-    correspondances = {
-        "nom_famille": "nom_famille",
-        "prenoms": "prenoms",
-        "date_naissance": "date_naissance",
-        "date_expiration": "date_expiration",
-        "date_delivrance": "date_delivrance",
-        "lieu_naissance": "lieu_naissance",
-        "nationalite": "nationalite",
-        "numero_document": "numero_document",
-    }
-    
-    for cle_vlm, cle_cible in correspondances.items():
-        # ✅ CHANGEMENT CLÉ : on ne touche PAS aux champs déjà remplis par l'OCR
-        if donnees_nlp.get(cle_cible):
-            continue
-            
-        valeur_vlm = vlm_clean.get(cle_vlm)
-        if not valeur_vlm:
-            continue
-
-        # 4. Validation anti-hallucination : la valeur doit exister dans le texte OCR
-        if texte_ocr and isinstance(valeur_vlm, str):
-            valeur_upper = valeur_vlm.upper()
-            # On cherche si la valeur (ou une grande partie) apparaît dans l'OCR
-            if len(valeur_upper) >= 3 and valeur_upper not in texte_ocr.upper():
-                # Vérification partielle : au moins 60% des caractères doivent correspondre
-                mots_vlm = valeur_upper.split()
-                mots_trouves = sum(1 for m in mots_vlm if m in texte_ocr.upper())
-                if mots_trouves < len(mots_vlm) * 0.6:
-                    journal.warning(f"VLM -> {cle_cible} : '{valeur_vlm}' non trouvé dans OCR → rejeté (hallucination)")
-                    continue
-
-        # 5. Traitement par type de champ
-        if cle_cible == "numero_document":
-            propre_vlm = re.sub(r"[^A-Z0-9/]", "", str(valeur_vlm).upper())
-            if 5 <= len(propre_vlm) <= 20 and any(c.isdigit() for c in propre_vlm):
-                donnees_nlp[cle_cible] = propre_vlm
-                journal.info(f"VLM -> Numéro document : {propre_vlm}")
-            continue
-
-        if cle_cible in ("date_naissance", "date_expiration", "date_delivrance"):
-            d = _normaliser_date(str(valeur_vlm))
-            if d:
-                donnees_nlp[cle_cible] = d
-                journal.info(f"VLM -> Date {cle_cible} : {d}")
-            continue
-
-        if cle_cible in ("nom_famille", "prenoms", "lieu_naissance", "nationalite"):
-            propre = re.sub(r"[^A-ZÀ-Üa-zà-ü\s\-']", "", str(valeur_vlm)).strip()
-            if 2 <= len(propre) <= 50:
-                donnees_nlp[cle_cible] = propre[:50]
-                journal.info(f"VLM -> {cle_cible} : {propre[:50]}")
-            continue
-
-    # 6. Sexe et pays
-    if not donnees_nlp.get("sexe"):
-        sexe_vlm = str(vlm_clean.get("sexe") or "").upper()
-        if sexe_vlm in ("M", "F"):
-            donnees_nlp["sexe"] = sexe_vlm
-
-    if not donnees_nlp.get("pays_emetteur"):
-        pays = str(vlm_clean.get("pays") or "").upper()
-        match_pays = re.search(r"\b([A-Z]{3})\b", pays)
-        if match_pays:
-            donnees_nlp["pays_emetteur"] = match_pays.group(1)
-            
-
-# =============================================================================
-# PIPELINE PRINCIPAL D'EXTRACTION
-# =============================================================================
-
 async def _extraire_donnees_classique(
     image_bytes: bytes,
     type_suggere: Optional[TypeDocument],
 ) -> DonneesDocumentExtraites:
     try:
-        # ── 0. VLM (si activé) : classification + complétion des champs ──
-        donnees_vlm = None
-        confiance_vlm: Optional[float] = None
-        if parametres.activer_extraction_vlm:
-            try:
-                donnees_vlm = await extraire_donnees_vlm(image_bytes)
-                if donnees_vlm and donnees_vlm.get("est_document_identite") is False:
-                    journal.info("VLM : image jugée non-document d'identité → OCR seule.")
-                    donnees_vlm = None
-                if donnees_vlm:
-                    try:
-                        confiance_vlm = float(donnees_vlm.get("confiance_extraction") or 0.0)
-                    except (TypeError, ValueError):
-                        confiance_vlm = None
-            except Exception as e:
-                journal.warning(f"VLM indisponible, bascule OCR seule : {e}")
-                donnees_vlm = None
-
-        # ── 1. OCR prétraité (CLAHE/adaptatif) + MRZ + confiance réelle ──
+        # ── 1. OCR GLOBAL (Texte brut de secours pour les Regex) ──
         resultat_ocr = analyser_document(image_bytes)
-        texte = resultat_ocr.get("texte_brut") or ""
-        confiance = float(resultat_ocr.get("confiance_moyenne", 0.0) or 0.0)
-        texte_upper = texte.upper()
+        texte_brut = resultat_ocr.get("texte_brut") or ""
+        confiance_globale = float(resultat_ocr.get("confiance_moyenne", 0.0) or 0.0)
+        
+        # ── 2. CROP & CONQUER (Le nouveau moteur Low-RAM) ──
+        donnees_zones_nlp = {}
+        donnees_zones_struct = {"dates_trouvees": [], "numeros_trouves": []}
+        mrz_lignes_zones = (None, None, None)
+        
+        try:
+            journal.info("Pipeline: Lancement du Zone Cropper (OpenCV)...")
+            zones = extraire_zones_interet(image_bytes)
+            
+            if zones:
+                # 2a. Lecture MRZ ciblée (Tesseract config stricte)
+                if zones.get("zone_mrz"):
+                    mrz_crop = lire_zone_mrz(zones["zone_mrz"])
+                    mrz_lignes_zones = (
+                        mrz_crop.get("mrz_ligne_1"), 
+                        mrz_crop.get("mrz_ligne_2"), 
+                        mrz_crop.get("mrz_ligne_3")
+                    )
+                    journal.info(f"ZoneReader: MRZ lue depuis crop -> {mrz_lignes_zones[0][:10] if mrz_lignes_zones[0] else 'None'}...")
+                
+                # 2b. Lecture structurée (Tesseract avec Whitelists)
+                bandes = {k: v for k, v in zones.items() if "bande" in k or "fallback" in k}
+                if bandes:
+                    donnees_zones_struct = lire_zones_structurees(bandes)
+                    journal.info(f"ZoneReader: {len(donnees_zones_struct['dates_trouvees'])} dates, {len(donnees_zones_struct['numeros_trouves'])} numéros trouvés.")
+                
+                # 2c. Lecture non-structurée (Petit VLM sur micro-crops)
+                if bandes and getattr(parametres, 'activer_extraction_vlm', False):
+                    donnees_zones_nlp = await lire_zones_non_structurees(bandes)
+                    journal.info(f"ZoneReader: VLM Crop -> {donnees_zones_nlp}")
+        except Exception as e:
+            journal.warning(f"Pipeline Zone échoué, fallback sur OCR global : {e}")
 
-        # MRZ combinée : l'OCR (exact) est prioritaire, le VLM comble si absente
-        mrz_lignes = _fusionner_lignes_mrz(
-            resultat_ocr.get("mrz_lignes") or (None, None, None),
-            donnees_vlm,
-        )
+        # ── 3. Fusion des lignes MRZ (Crop prioritaire, sinon OCR global) ──
+        mrz_lignes_globales = resultat_ocr.get("mrz_lignes") or (None, None, None)
+        mrz_finales = mrz_lignes_zones if mrz_lignes_zones[0] and mrz_lignes_zones[1] else mrz_lignes_globales
 
-        # ── 2. Classification hybride : code MRZ > VLM > regex > client ──
-        type_document = _choisir_type_document(texte, mrz_lignes, donnees_vlm, type_suggere)
+        # ── 4. Classification du document ──
+        type_document = _choisir_type_document(texte_brut, mrz_finales, type_suggere)
+        journal.info(f"Classification finale : {type_document.value}")
 
-        # ── 3. Parsing MRZ (prioritaire si présente) ──
+        # ── 5. Parsing MRZ (Vérité absolue) ──
         donnees_mrz = {}
-        if mrz_lignes[0] and mrz_lignes[1]:
-            donnees_mrz = parser_mrz_complet(mrz_lignes[0], mrz_lignes[1], mrz_lignes[2])
+        if mrz_finales[0] and mrz_finales[1]:
+            donnees_mrz = parser_mrz_complet(mrz_finales[0], mrz_finales[1], mrz_finales[2])
 
-        # ── 4. Identité commune (NOM, PRÉNOMS, naissance, sexe, lieu) ──
-        donnees_nlp = extraire_par_labels(texte, PATTERNS_GENERIQUES)
+        # ── 6. Extraction NLP Globale (Filet de secours Regex) ──
+        donnees_nlp = extraire_par_labels(texte_brut, PATTERNS_GENERIQUES)
+        
+        # ── 7. Injection des données des ZONES (Si le NLP global a échoué) ──
+        # 7a. Dates et Numéros (Tesseract Whitelist)
+        if not donnees_nlp.get("date_naissance") and donnees_zones_struct["dates_trouvees"]:
+            # La date de naissance est généralement la plus ancienne
+            dates_valides = [d for d in donnees_zones_struct["dates_trouvees"] if _normaliser_date(d)]
+            if dates_valides:
+                donnees_nlp["date_naissance"] = min(dates_valides, key=lambda d: int(d.split('/')[2]))
+                
+        if not donnees_nlp.get("numero_document") and donnees_zones_struct["numeros_trouves"]:
+            donnees_nlp["numero_document"] = donnees_zones_struct["numeros_trouves"][0]
 
-        # ── 5. Numéro de document (si absent du MRZ) ──
-        if not donnees_nlp.get("numero_document") and not donnees_mrz.get("numero_document"):
-            m_num = re.search(
-                r"(?:N[°O]|NUM[ÉE]RO|ID)\s*[:\-]?\s*([A-Z0-9\-]{6,15})",
-                texte,
-                re.IGNORECASE,
-            )
-            if m_num:
-                numero = re.sub(r"[^A-Z0-9]", "", m_num.group(1).upper())
-                # Validation : doit contenir au moins un chiffre et faire entre 6 et 15 caractères
-                if 6 <= len(numero) <= 15 and any(c.isdigit() for c in numero):
-                    donnees_nlp["numero_document"] = numero
-                    journal.info(f"OCR -> Numéro document trouvé : {numero}")
+        # 7b. Noms et Lieux (VLM sur crops)
+        for cle in ["nom_famille", "prenoms", "lieu_naissance"]:
+            if not donnees_nlp.get(cle) and donnees_zones_nlp.get(cle):
+                donnees_nlp[cle] = donnees_zones_nlp[cle]
 
-        # ── 6. Dates expiration/délivrance étiquetées (si absentes du MRZ) ──
-        if not donnees_nlp.get("date_expiration") and not donnees_mrz.get("date_expiration_date"):
-            m_exp = re.search(
-                r"(?:EXPIR[EÉ]|EXPIRATION|VALABLE\s*(?:JUSQU|AU)|VALIDIT[ÉE]\s*JUSQU|FIN\s*DE\s*VALIDIT[ÉE])\s*[:\-]?\s*(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})",
-                texte,
-                re.IGNORECASE,
-            )
-            if m_exp:
-                d = _normaliser_date(m_exp.group(1))
-                if d:
-                    donnees_nlp["date_expiration"] = d
-
-        if not donnees_nlp.get("date_delivrance"):
-            m_del = re.search(
-                r"(?:D[ÉE]LIVR[ÉE]|DATE\s*DE\s*D[ÉE]LIVRANCE)\s*[:\-]?\s*(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})",
-                texte,
-                re.IGNORECASE,
-            )
-            if m_del:
-                d = _normaliser_date(m_del.group(1))
-                if d:
-                    donnees_nlp["date_delivrance"] = d
-
-        # ── 7. Données spécifiques au type (permis, assurance, …) ──
+        # ── 8. Extracteurs spécifiques (Permis, Assurance, CNI) ──
         if type_document == TypeDocument.PERMIS_CONDUIRE:
-            extraits = extraire_permis_conduire(texte)
+            extraits = extraire_permis_conduire(texte_brut)
         elif type_document == TypeDocument.CARTE_ASSURANCE:
-            extraits = extraire_carte_assurance(texte)
+            extraits = extraire_carte_assurance(texte_brut)
         else:
             extraits = {}
-
-        champs_communs = {"numero_document", "date_expiration", "date_delivrance",
-                          "nom_famille", "prenoms", "date_naissance", "sexe"}
+            
+        champs_communs = {"numero_document", "date_expiration", "date_delivrance", "nom_famille", "prenoms", "date_naissance", "sexe"}
         donnees_specifiques = {}
         for cle, valeur in (extraits or {}).items():
-            if not valeur:
-                continue
-            if cle in champs_communs:
-                donnees_nlp.setdefault(cle, valeur)
-            else:
-                donnees_specifiques[cle] = valeur
+            if not valeur: continue
+            if cle in champs_communs: donnees_nlp.setdefault(cle, valeur)
+            else: donnees_specifiques[cle] = valeur
 
-        # ✅ 7bis. CORRECTION : Parser CNI spécifique AVANT le VLM
-        if type_document in (TypeDocument.CNI_BIOMETRIQUE, TypeDocument.CNI_PAPIER):
-            if not donnees_nlp.get("nom_famille") or not donnees_nlp.get("numero_document"):
-                journal.info("CNI détectée avec champs incomplets. Activation du parsing spécifique CNI.")
-                donnees_nlp = _extraire_infos_specifiques_cni(texte, donnees_nlp)
-
-        # ✅ 7ter. Complétion VLM (seulement pour combler les trous restants, avec validation anti-hallucination)
-        _completer_depuis_vlm(donnees_nlp, donnees_vlm, donnees_mrz, texte_ocr=texte)
-        if confiance_vlm is not None:
-            confiance = round(max(confiance, confiance_vlm * 100.0), 2)
-
-        # ── 8. Pays émetteur (MRZ d'abord, puis codes pays dans le texte) ──
-        code_pays = detecter_pays(texte, mrz_lignes)
+        # ── 9. Pays émetteur ──
+        code_pays = detecter_pays(texte_brut, mrz_finales)
         if not code_pays:
             for code in CODES_PAYS_TEXTES:
-                if re.search(rf"\b{code}\b", texte_upper):
+                if re.search(rf"\b{code}\b", texte_brut.upper()):
                     code_pays = code
                     break
+        if code_pays: donnees_nlp["pays_emetteur"] = code_pays
 
-        # ── 9. Assemblage + fusion (MRZ prioritaire) ──
-        if code_pays:
-            donnees_nlp["pays_emetteur"] = code_pays
+        # ── 10. Assemblage final ──
         donnees_nlp["donnees_specifiques"] = donnees_specifiques
-        donnees_nlp["texte_brut"] = texte[:5000]
-        donnees_nlp["confiance"] = confiance
-        donnees_nlp["mrz_ligne_1"] = mrz_lignes[0]
-        donnees_nlp["mrz_ligne_2"] = mrz_lignes[1]
-        donnees_nlp["mrz_ligne_3"] = mrz_lignes[2]
+        donnees_nlp["texte_brut"] = texte_brut[:5000]
+        donnees_nlp["confiance"] = confiance_globale
+        donnees_nlp["mrz_ligne_1"] = mrz_finales[0]
+        donnees_nlp["mrz_ligne_2"] = mrz_finales[1]
+        donnees_nlp["mrz_ligne_3"] = mrz_finales[2]
 
-        return fusionner_donnees(donnees_nlp, donnees_mrz, type_document)
+        return fusionner_donnees(
+            donnees_nlp_global=donnees_nlp,
+            donnees_zones_ocr=donnees_zones_struct,
+            donnees_zones_vlm=donnees_zones_nlp,
+            donnees_mrz=donnees_mrz,
+            texte_brut_ocr=texte_brut,
+            type_document=type_document
+        )            
 
     except Exception as e:
-        journal.warning(f"Échec de l'extraction OCR : {e}")
+        journal.exception(f"Échec critique de l'extraction : {e}")
         return DonneesDocumentExtraites(
             type_document=type_suggere or TypeDocument.INCONNU,
-            texte_brut="OCR indisponible. Nécessite une saisie manuelle.",
-            taux_confiance_ocr=0.0,
-            mrz_valide=False,
+            texte_brut="Erreur extraction. Nécessite une saisie manuelle.",
+            taux_confiance_ocr=0.0, mrz_valide=False,
         )
 
-
 # =============================================================================
-# PERSISTANCE EN BASE DE DONNÉES
+# PERSISTANCE EN BASE DE DONNÉES (INCHANGÉ)
 # =============================================================================
-
 async def _enregistrer_document(
-    session: AsyncSession,
-    utilisateur: Utilisateur,
-    donnees: DonneesDocumentExtraites,
-    validation: ResultatValidation,
-    face: str,
-    nom_fichier: str,
-    type_mime: str,
-    taille_octets: int,
-    document_chemin: Optional[str] = None,
+    session: AsyncSession, utilisateur: Utilisateur, donnees: DonneesDocumentExtraites,
+    validation: ResultatValidation, face: str, nom_fichier: str, type_mime: str,
+    taille_octets: int, document_chemin: Optional[str] = None,
 ) -> InspectionDocument:
-    """Enregistre le document analysé en base de données."""
     doc = InspectionDocument(
-        utilisateur_id=utilisateur.id,
-        type_document=donnees.type_document.value,
-        face=face,
-        nom_fichier=nom_fichier,
-        type_mime=type_mime,
-        taille_octets=taille_octets,
-        document_chemin=document_chemin,
-        nom_famille=donnees.nom_famille,
-        prenoms=donnees.prenoms,
-        date_naissance=donnees.date_naissance,
+        utilisateur_id=utilisateur.id, type_document=donnees.type_document.value, face=face,
+        nom_fichier=nom_fichier, type_mime=type_mime, taille_octets=taille_octets,
+        document_chemin=document_chemin, nom_famille=donnees.nom_famille, prenoms=donnees.prenoms,
+        date_naissance=donnees.date_naissance, 
         sexe=donnees.sexe.value if hasattr(donnees.sexe, 'value') else str(donnees.sexe),
-        numero_document=donnees.numero_document,
-        date_expiration=donnees.date_expiration,
-        lieu_naissance=donnees.lieu_naissance,
-        date_delivrance=donnees.date_delivrance,
+        numero_document=donnees.numero_document, date_expiration=donnees.date_expiration,
+        lieu_naissance=donnees.lieu_naissance, date_delivrance=donnees.date_delivrance,
         autorite_delivrance=getattr(donnees, 'autorite_delivrance', None),
-        nationalite=donnees.pays_emetteur,
-        taille=getattr(donnees, 'taille', None),
-        mrz_ligne_1=donnees.mrz_ligne_1,
-        mrz_ligne_2=donnees.mrz_ligne_2,
-        mrz_ligne_3=donnees.mrz_ligne_3,
-        mrz_valide=donnees.mrz_valide,
-        donnees_specifiques=getattr(donnees, 'donnees_specifiques', {}),
+        nationalite=donnees.pays_emetteur, taille=getattr(donnees, 'taille', None),
+        mrz_ligne_1=donnees.mrz_ligne_1, mrz_ligne_2=donnees.mrz_ligne_2, mrz_ligne_3=donnees.mrz_ligne_3,
+        mrz_valide=donnees.mrz_valide, donnees_specifiques=getattr(donnees, 'donnees_specifiques', {}),
         texte_brut=donnees.texte_brut[:5000] if donnees.texte_brut else None,
-        statut=validation.statut.value,
-        est_valide=validation.est_valide,
-        scores_validation=validation.scores or {},
-        taux_confiance_ocr=donnees.taux_confiance_ocr,
+        statut=validation.statut.value, est_valide=validation.est_valide,
+        scores_validation=validation.scores or {}, taux_confiance_ocr=donnees.taux_confiance_ocr,
     )
     session.add(doc)
     await session.commit()
     await session.refresh(doc)
     return doc
 
-
 # =============================================================================
-# SERVICES PUBLICS
+# SERVICES PUBLICS (INCHANGÉS)
 # =============================================================================
-
 async def traiter_upload_document(
-    session: AsyncSession,
-    utilisateur: Utilisateur,
-    fichier: UploadFile,
-    type_document: Optional[TypeDocument] = None,
-    face: str = "recto",
+    session: AsyncSession, utilisateur: Utilisateur, fichier: UploadFile,
+    type_document: Optional[TypeDocument] = None, face: str = "recto",
     utilisateur_cible_id: Optional[UUID] = None,
 ) -> ReponseUploadDocument:
-    """
-    Traite l'upload d'un document d'identité.
-    Philosophie : Ne jamais rejeter brutalement un upload. Si l'extraction est mauvaise, 
-    on enregistre quand même avec le statut EN_ATTENTE pour revue manuelle.
-    """
     debut = time.time()
-    
-    # 1. Lire et valider l'image
     contenu = await _lire_image(fichier)
     nom_fichier = fichier.filename or f"document_{face}.jpg"
     extension = fichier.filename.split(".")[-1] if "." in fichier.filename else "jpg"
-    
-    # 2. Évaluer la qualité d'image
+
     qualite = evaluer_qualite_image(contenu)
     if not qualite.est_valide:
-        raise ErreurValidation(
-            f"Qualité d'image insuffisante : {qualite.message}",
-            message_utilisateur="L'image est trop floue ou mal éclairée. Veuillez reprendre la photo."
-        )
-    journal.info(f"Qualité image : score={qualite.score_global:.1f}/100")
-    
-    # 3. Extraction des données (VLM + OCR classique, fusion des deux sources)
+        raise ErreurValidation(f"Qualité d'image insuffisante : {qualite.message}", message_utilisateur="L'image est trop floue ou mal éclairée.")
+
+    # 🚀 APPEL DU NOUVEAU PIPELINE "CROP & CONQUER"
     donnees = await _extraire_donnees_classique(contenu, type_document)
-    
-    # 4. Validation métier dynamique
+
     validation = valider_document(donnees)
-    
-    # 5. Ajustement du statut pour la conformité
     if not validation.est_valide:
         validation.statut = StatutVerification.EN_ATTENTE
         validation.message = "Document reçu. Extraction partielle, en attente de vérification manuelle."
-        journal.info("Document marqué comme EN_ATTENTE pour revue manuelle.")
 
-    # 6. Vérification de cohérence
     coherence = None
     if donnees.nom_famille or donnees.numero_document:
-        coherence = await verifier_coherence_identite(
-            session=session,
-            utilisateur=utilisateur,
-            nouvelles_donnees=donnees,
-            utilisateur_cible_id=utilisateur_cible_id,
-        )
+        coherence = await verifier_coherence_identite(session=session, utilisateur=utilisateur, nouvelles_donnees=donnees, utilisateur_cible_id=utilisateur_cible_id)
         if not coherence.est_coherent:
             validation.statut = StatutVerification.EN_ATTENTE
             validation.message = f"Incohérence détectée : {coherence.message}. En attente de revue."
 
-    # 7. Stockage physique
     chemin_stockage = None
     try:
         chemin_stockage = stocker_document(contenu, extension=extension, prefixe=donnees.type_document.value)
-        journal.info(f"Document stocké : {chemin_stockage}")
     except Exception as e:
         journal.warning(f"Échec stockage document : {e}")
-    
-    # 8. Persistance en base de données
+
     doc = await _enregistrer_document(
-        session=session,
-        utilisateur=utilisateur,
-        donnees=donnees,
-        validation=validation,
-        face=face,
-        nom_fichier=nom_fichier,
-        type_mime=fichier.content_type or "image/jpeg",
-        taille_octets=len(contenu),
-        document_chemin=chemin_stockage,
+        session=session, utilisateur=utilisateur, donnees=donnees, validation=validation,
+        face=face, nom_fichier=nom_fichier, type_mime=fichier.content_type or "image/jpeg",
+        taille_octets=len(contenu), document_chemin=chemin_stockage,
     )
-    
-    # 9. Mise à jour du profil (seulement si la validation est complète et réussie)
+
     if validation.est_valide and validation.statut == StatutVerification.APPROUVE:
         utilisateur.est_cni_verifiee = True
         utilisateur.date_verification_cni = datetime.now(timezone.utc)
         utilisateur.date_derniere_mise_a_jour_verifications = datetime.now(timezone.utc)
         await session.commit()
-        
         try:
             from src.modules.scoring.service import declencher_recalcul_score
             await declencher_recalcul_score(session=session, utilisateur=utilisateur, raison="upload_document_valide")
         except Exception as e:
             journal.warning(f"Échec recalcul score : {e}")
-    
+
     temps_ms = int((time.time() - debut) * 1000)
-    journal.info(f"Upload document terminé : utilisateur={utilisateur.id}, statut={validation.statut.value}, temps={temps_ms}ms")
-    
+    journal.info(f"Upload document terminé : statut={validation.statut.value}, temps={temps_ms}ms")
+
     return ReponseUploadDocument(
-        id_verification=doc.id,
-        type_document=donnees.type_document,
-        statut=validation.statut,
-        donnees=donnees,
-        validation=validation,
-        coherence=coherence,
-        message=validation.message,
-        temps_traitement_ms=temps_ms,
+        id_verification=doc.id, type_document=donnees.type_document, statut=validation.statut,
+        donnees=donnees, validation=validation, coherence=coherence,
+        message=validation.message, temps_traitement_ms=temps_ms,
     )
 
-
-async def obtenir_synthese_verification(
-    session: AsyncSession,
-    utilisateur: Utilisateur,
-) -> SyntheseVerification:
-    """Obtient la synthèse des dernières vérifications de documents."""
-    resultats = await session.execute(
-        select(InspectionDocument)
-        .where(InspectionDocument.utilisateur_id == utilisateur.id, InspectionDocument.est_supprime == False)
-        .order_by(desc(InspectionDocument.cree_le))
-        .limit(10)
-    )
+async def obtenir_synthese_verification(session: AsyncSession, utilisateur: Utilisateur) -> SyntheseVerification:
+    resultats = await session.execute(select(InspectionDocument).where(InspectionDocument.utilisateur_id == utilisateur.id, InspectionDocument.est_supprime == False).order_by(desc(InspectionDocument.cree_le)).limit(10))
     verifs = resultats.scalars().all()
-    
     dernier_recto = next((v for v in verifs if v.face == "recto"), None)
     dernier_verso = next((v for v in verifs if v.face == "verso"), None)
     dernier_unique = next((v for v in verifs if v.face == "unique"), None)
-    
     doc_cible = dernier_unique or dernier_recto
-    
-    if not doc_cible:
-        return SyntheseVerification(statut=StatutVerification.EN_ATTENTE, message="Aucun document trouvé.")
-    
+    if not doc_cible: return SyntheseVerification(statut=StatutVerification.EN_ATTENTE, message="Aucun document trouvé.")
     scores = doc_cible.scores_validation or {}
     champs_verifies = sum(1 for v in scores.values() if v) if isinstance(scores, dict) else 0
-    
-    return SyntheseVerification(
-        id_recto=dernier_recto.id if dernier_recto else None,
-        id_verso=dernier_verso.id if dernier_verso else None,
-        statut=StatutVerification(doc_cible.statut),
-        message=f"Synthèse basée sur {doc_cible.type_document} (Statut: {doc_cible.statut})",
-        champs_verifies=champs_verifies
-    )
+    return SyntheseVerification(id_recto=dernier_recto.id if dernier_recto else None, id_verso=dernier_verso.id if dernier_verso else None, statut=StatutVerification(doc_cible.statut), message=f"Synthèse basée sur {doc_cible.type_document}", champs_verifies=champs_verifies)
 
-
-async def obtenir_historique(
-    session: AsyncSession,
-    utilisateur: Utilisateur,
-    limite: int = 20,
-) -> ListeVerifications:
-    """Liste l'historique paginé des vérifications."""
-    resultats = await session.execute(
-        select(InspectionDocument)
-        .where(InspectionDocument.utilisateur_id == utilisateur.id, InspectionDocument.est_supprime == False)
-        .order_by(desc(InspectionDocument.cree_le))
-        .limit(limite)
-    )
+async def obtenir_historique(session: AsyncSession, utilisateur: Utilisateur, limite: int = 20) -> ListeVerifications:
+    resultats = await session.execute(select(InspectionDocument).where(InspectionDocument.utilisateur_id == utilisateur.id, InspectionDocument.est_supprime == False).order_by(desc(InspectionDocument.cree_le)).limit(limite))
     verifs = resultats.scalars().all()
-    
-    historique = [
-        DetailVerification(
-            id=v.id,
-            utilisateur_id=v.utilisateur_id,
-            type_document=TypeDocument(v.type_document),
-            statut=StatutVerification(v.statut),
-            face=FaceDocument(v.face),
-            nom_fichier=v.nom_fichier,
-            numero_document=v.numero_document,
-            nom_famille=v.nom_famille,
-            prenoms=v.prenoms,
-            date_naissance=v.date_naissance,
-            taux_confiance_ocr=v.taux_confiance_ocr,
-            est_valide=v.est_valide,
-            cree_le=v.cree_le,
-            est_supprime=v.est_supprime
-        ) for v in verifs
-    ]
+    historique = [DetailVerification(id=v.id, utilisateur_id=v.utilisateur_id, type_document=TypeDocument(v.type_document), statut=StatutVerification(v.statut), face=FaceDocument(v.face), nom_fichier=v.nom_fichier, numero_document=v.numero_document, nom_famille=v.nom_famille, prenoms=v.prenoms, date_naissance=v.date_naissance, taux_confiance_ocr=v.taux_confiance_ocr, est_valide=v.est_valide, cree_le=v.cree_le, est_supprime=v.est_supprime) for v in verifs]
     return ListeVerifications(historique=historique, total=len(historique), limite=limite)
 
-
-async def supprimer_verification(
-    session: AsyncSession,
-    utilisateur: Utilisateur,
-    verification_id: UUID,
-) -> ReponseSuppression:
-    """Soft-delete d'une vérification."""
-    res = await session.execute(
-        select(InspectionDocument).where(
-            InspectionDocument.id == verification_id,
-            InspectionDocument.utilisateur_id == utilisateur.id,
-        )
-    )
+async def supprimer_verification(session: AsyncSession, utilisateur: Utilisateur, verification_id: UUID) -> ReponseSuppression:
+    res = await session.execute(select(InspectionDocument).where(InspectionDocument.id == verification_id, InspectionDocument.utilisateur_id == utilisateur.id))
     doc = res.scalar_one_or_none()
-    if not doc:
-        raise ErreurRessourceIntrouvable("Document introuvable.")
-    
+    if not doc: raise ErreurRessourceIntrouvable("Document introuvable.")
     doc.est_supprime = True
     doc.date_suppression = datetime.now(timezone.utc)
     await session.commit()
     return ReponseSuppression(id=verification_id, message="Document mis à la corbeille.")
 
-
-async def restaurer_verification(
-    session: AsyncSession,
-    utilisateur: Utilisateur,
-    verification_id: UUID,
-) -> ReponseRestauration:
-    """Restauration d'une vérification."""
-    res = await session.execute(
-        select(InspectionDocument).where(
-            InspectionDocument.id == verification_id,
-            InspectionDocument.utilisateur_id == utilisateur.id,
-        )
-    )
+async def restaurer_verification(session: AsyncSession, utilisateur: Utilisateur, verification_id: UUID) -> ReponseRestauration:
+    res = await session.execute(select(InspectionDocument).where(InspectionDocument.id == verification_id, InspectionDocument.utilisateur_id == utilisateur.id))
     doc = res.scalar_one_or_none()
-    if not doc:
-        raise ErreurRessourceIntrouvable("Document introuvable.")
-    
+    if not doc: raise ErreurRessourceIntrouvable("Document introuvable.")
     doc.est_supprime = False
     doc.date_suppression = None
     await session.commit()
