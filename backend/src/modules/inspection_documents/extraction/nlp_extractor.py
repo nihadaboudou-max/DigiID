@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Extracteur NLP (Regex avancées) pour documents sans MRZ.
-Gère : Permis de conduire, Cartes d'assurance, Anciennes CNI, passeports, etc.
-Supporte les formats numérotés (1.Nom, 2.Prénom) et les champs composés.
+Gère : Permis de conduire (formats numérotés CEDEAO), Cartes d'assurance, Anciennes CNI, etc.
+Règle anti-hallucination : ne retourne JAMAIS un label comme valeur de champ.
 """
 import re
 from typing import Dict, List, Optional
@@ -26,7 +26,7 @@ _MOIS = {
 }
 
 # =============================================================================
-# Labels de champs (FR/EN) à ignorer en tant que valeurs
+# Labels de champs (FR/EN) à ignorer en tant que valeurs + mots neutres
 # =============================================================================
 _LABELS = {
     "NOM", "NOMS", "SURNAME", "SURNAMES", "LASTNAME", "LASTNAMES", "FAMILYNAME",
@@ -55,7 +55,6 @@ _LABELS = {
     "TITRE", "TITULAIRE", "HOLDER", "PORTEUR", "SIGNALEMENT", "ENFANT",
     "NOMDUSAGE", "USUALNAME", "ALIAS", "SEJOUR", "VOTE", "ELECTEUR",
     "ETUDIANT", "SCOLARITE", "PASSEPORT", "PASSPORT", "AUTORISATION",
-    "MIN", "TRANS", "TRANSPORTS", "TERRESTRES", "CATÉGORIES", "CATEGORIES",
 }
 
 _NEUTRES = {
@@ -63,13 +62,24 @@ _NEUTRES = {
     "AU", "AUX", "A", "ET", "EN", "N", "NO", "N°",
 }
 
+_CONTEXTES_NETTOYAGE = {
+    "nom_famille": "nom",
+    "prenoms": "prenoms",
+    "date_naissance": "date",
+    "date_expiration": "date",
+    "date_delivrance": "date",
+    "sexe": "sexe",
+    "numero_document": "numero",
+    "lieu_naissance": "lieu",
+}
+
 # =============================================================================
-# Utilitaires
+# Utilitaires de base
 # =============================================================================
 def _sans_accents(texte: str) -> str:
-    for a, b in [("É", "E"), ("È", "E"), ("Ê", "E"), ("", "E"),
+    for a, b in [("É", "E"), ("È", "E"), ("Ê", "E"), ("Ë", "E"),
                  ("À", "A"), ("Â", "A"), ("Ä", "A"),
-                 ("Î", "I"), ("", "I"),
+                 ("Î", "I"), ("Ï", "I"),
                  ("Ô", "O"), ("Ö", "O"),
                  ("Ù", "U"), ("Û", "U"), ("Ü", "U"),
                  ("Ç", "C"), ("Œ", "OE"), ("Æ", "AE")]:
@@ -81,7 +91,7 @@ def _mots(texte: str) -> List[str]:
     return [w for w in re.split(r"[^A-Z0-9]+", _sans_accents((texte or "").upper())) if w]
 
 def _ligne_est_que_labels(texte: str) -> bool:
-    """True si la ligne ne contient QUE des labels / mots neutres."""
+    """True si la ligne ne contient QUE des labels / mots neutres (en-tête)."""
     mots = _mots(texte)
     if not mots:
         return True
@@ -89,6 +99,22 @@ def _ligne_est_que_labels(texte: str) -> bool:
         if m not in _LABELS and m not in _NEUTRES:
             return False
     return True
+
+def _retirer_mots_labels_prefixe(texte: str) -> str:
+    """Retire les mots-labels qui précèdent la vraie valeur (ex : 'SURNAME DIOP' → 'DIOP')."""
+    mots = re.split(r"[\s/:;,()|]+", texte)
+    sortie: List[str] = []
+    vu_donnee = False
+    for m in mots:
+        if not m:
+            continue
+        normalise = _sans_accents(m.upper()).strip(".,")
+        if not vu_donnee:
+            if normalise in _LABELS or normalise in _NEUTRES:
+                continue
+            vu_donnee = True
+        sortie.append(m)
+    return " ".join(sortie).strip()
 
 # =============================================================================
 # Parsing de date tolérant
@@ -110,7 +136,7 @@ def _parser_date(valeur: str) -> Optional[str]:
         return None
     v = valeur.strip().strip(".:;,")
     
-    # 1) JJ/MM/AAAA ou JJ-MM-AAAA ou JJ.MM.AAAA (séparateurs mixtes)
+    # 1) JJ/MM/AAAA ou JJ-MM-AAAA ou JJ.MM.AAAA
     m = re.search(r"(\d{1,2})\s*[/.\- ]\s*(\d{1,2})\s*[/.\- ]\s*(\d{2,4})", v)
     if m:
         jour, mois, annee = int(m.group(1)), int(m.group(2)), m.group(3)
@@ -141,7 +167,7 @@ def _parser_date(valeur: str) -> Optional[str]:
         a4 = _annee_complete(m.group(3))
         if a4 and _valider_jour_mois_annee(jour, mois, a4):
             return f"{jour:02d}/{mois:02d}/{a4:04d}"
-    
+            
     return None
 
 # =============================================================================
@@ -185,7 +211,34 @@ def _nettoyer_valeur_securisee(valeur: str, contexte: str) -> Optional[str]:
     return valeur if valeur else None
 
 # =============================================================================
-# Extraction spécifique : Permis de conduire (amélioré)
+# Extraction de valeur depuis les lignes OCR (FONCTIONS CRUCIALES RÉINTRODUITES)
+# =============================================================================
+def _valeur_depuis_ligne(reste: str) -> Optional[str]:
+    """Extrait la valeur dans le reste d'une ligne après un label."""
+    if not reste:
+        return None
+    nettoye = reste.strip().strip(" \t:;,-/|·•\"'()")
+    if not nettoye or _ligne_est_que_labels(nettoye):
+        return None
+    nettoye = _retirer_mots_labels_prefixe(nettoye).strip(" \t:;,-/|·•\"'()")
+    return nettoye or None
+
+def _chercher_valeur_lignes_suivantes(lignes: List[str], debut: int) -> Optional[str]:
+    """Cherche la valeur sur les lignes suivantes en sautant les lignes-labels."""
+    for j in range(debut, min(debut + 4, len(lignes))):
+        ligne = lignes[j].strip()
+        if not ligne:
+            continue
+        if _ligne_est_que_labels(ligne):
+            continue
+        premier = _mots(ligne)[0] if _mots(ligne) else ""
+        if premier in _LABELS or premier in _NEUTRES:
+            continue # En-tête / autre champ, pas une donnée
+        return ligne
+    return None
+
+# =============================================================================
+# Extraction spécifique : Permis de conduire (Format CEDEAO numéroté)
 # =============================================================================
 def extraire_permis_conduire(texte: str) -> Dict:
     """Extraction spécifique pour Permis de Conduire avec support des formats numérotés."""
@@ -218,31 +271,30 @@ def extraire_permis_conduire(texte: str) -> Dict:
                 resultats["prenoms"] = valeur
                 break
     
-    # 4. Date et lieu de naissance (format composé: "12.10.2002 à PARAKOU")
+    # 4. Date et lieu de naissance composés (Gère "12.10.2002àPARAKOU" sans espace)
     for ligne in lignes:
         match = re.search(r"(?:\d+\.)?\s*DATE\s*(?:ET\s*)?LIEU\s*(?:DE\s*)?NAISS(?:ANCE)?\s*[:\-]?\s*(.+)", ligne, re.IGNORECASE)
         if match:
             valeur_composee = match.group(1).strip()
-            # Extraire la date (première partie)
+            # Extraire la date
             match_date = re.search(r"(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})", valeur_composee)
             if match_date:
                 d = _parser_date(match_date.group(1))
                 if d:
                     resultats["date_naissance"] = d
-            # Extraire le lieu (après "à" ou "AT")
-            match_lieu = re.search(r"(?:à|AT)\s+([A-ZÀ-Ü\s\-]{3,30})", valeur_composee, re.IGNORECASE)
+            # Extraire le lieu (après "à" ou "AT", avec ou sans espace)
+            match_lieu = re.search(r"(?:à|AT)\s*([A-ZÀ-Ü\s\-]{3,30})", valeur_composee, re.IGNORECASE)
             if match_lieu:
                 lieu = _nettoyer_valeur_securisee(match_lieu.group(1).strip(), "lieu")
                 if lieu:
                     resultats["lieu_naissance"] = lieu
             break
     
-    # 5. Date de délivrance (supporte "4a.Date délivr.:" ou "Date de délivrance:")
+    # 5. Date de délivrance (supporte "4a.Date délivr.:")
     for ligne in lignes:
         match = re.search(r"(?:\d+[a-z]?\.)?\s*DATE\s*(?:DE\s*)?D[ÉE]LIVR(?:ANCE|ÉE)?\s*[:\-]?\s*(.+)", ligne, re.IGNORECASE)
         if match:
             valeur = match.group(1).strip()
-            # Prendre la première date trouvée
             match_date = re.search(r"(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})", valeur)
             if match_date:
                 d = _parser_date(match_date.group(1))
@@ -253,14 +305,13 @@ def extraire_permis_conduire(texte: str) -> Dict:
     # 6. Date d'expiration (souvent après la date de délivrance sur la même ligne)
     for ligne in lignes:
         if "DELIVR" in ligne.upper() or "ISSUE" in ligne.upper():
-            # Chercher une deuxième date sur la même ligne
             dates = re.findall(r"(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})", ligne)
             if len(dates) >= 2:
                 d = _parser_date(dates[1])
                 if d:
                     resultats["date_expiration"] = d
                     break
-        # Fallback : chercher "EXPIRATION" ou "VALIDITE"
+        # Fallback
         match = re.search(r"(?:\d+\.)?\s*(?:EXPIRATION|EXPIR[EÉ]|VALIDIT[EÉ])\s*[:\-]?\s*(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})", ligne, re.IGNORECASE)
         if match:
             d = _parser_date(match.group(1))
@@ -268,14 +319,14 @@ def extraire_permis_conduire(texte: str) -> Dict:
                 resultats["date_expiration"] = d
                 break
     
-    # 7. Catégories (A, B, C, D, E, etc.)
+    # 7. Catégories
     match_cat = re.search(r"(?:\d+\.)?\s*CAT[ÉE]GORIE(?:S)?\s*[:\-]?\s*([A-E, ]+)", texte, re.IGNORECASE)
     if match_cat:
         resultats["categories_permis"] = [c.strip() for c in match_cat.group(1).split(",") if c.strip()]
     
     # 8. Autorité de délivrance
     for ligne in lignes:
-        match = re.search(r"(?:\d+[a-z]?\.)?\s*D[ÉE]LIVR[ÉE]\s*(?:PAR)\s*[:\-]?\s*(.+)", ligne, re.IGNORECASE)
+        match = re.search(r"(?:\d+[a-z]?\.)?\s*D[ÉE]LIVR[ÉE]\s*(?:PAR)?\s*[:\-]?\s*(.+)", ligne, re.IGNORECASE)
         if match:
             autorite = match.group(1).strip()
             if len(autorite) > 3 and not _ligne_est_que_labels(autorite):
@@ -321,13 +372,15 @@ def extraire_carte_assurance(texte: str) -> Dict:
 # =============================================================================
 def extraire_par_labels(texte: str, patterns: Dict[str, list]) -> Dict:
     """
-    Extraction générique basée sur des labels (NOM, PRÉNOM, DATE DE NAISSANCE...).
-    Supporte les formats numérotés (1.NOM, 2.PRÉNOM) et les champs composés.
+    Extraction générique basée sur des labels.
+    - Ne prend JAMAIS un label comme valeur.
+    - Gère 'Label: valeur' sur la même ligne et 'Label\nvaleur' sur la ligne suivante.
     """
     resultats = {}
     lignes = (texte or "").split("\n")
     
     for champ, regex_list in patterns.items():
+        contexte = _CONTEXTES_NETTOYAGE.get(champ, champ)
         for regex in regex_list:
             if not regex.startswith(r"\b"):
                 regex = r"\b" + regex
@@ -336,44 +389,21 @@ def extraire_par_labels(texte: str, patterns: Dict[str, list]) -> Dict:
                 if not match:
                     continue
                 
-                # Valeur sur la même ligne après le label
-                reste = ligne[match.end():].strip()
+                # 1) Valeur sur la même ligne après le label
+                valeur = _valeur_depuis_ligne(ligne[match.end():])
                 
-                # Si le champ est une date composée (date + lieu), extraire les deux
-                if champ == "date_naissance" and "LIEU" in ligne.upper():
-                    match_date = re.search(r"(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})", reste)
-                    if match_date:
-                        d = _parser_date(match_date.group(1))
-                        if d:
-                            resultats["date_naissance"] = d
-                    match_lieu = re.search(r"(?:à|AT)\s+([A-ZÀ-Ü\s\-]{3,30})", reste, re.IGNORECASE)
-                    if match_lieu:
-                        lieu = _nettoyer_valeur_securisee(match_lieu.group(1).strip(), "lieu")
-                        if lieu:
-                            resultats["lieu_naissance"] = lieu
-                    if "date_naissance" in resultats:
-                        break
-                else:
-                    # Valeur normale
-                    if reste and not _ligne_est_que_labels(reste):
-                        contexte = champ if champ in ("nom", "prenoms", "numero", "date", "sexe", "lieu") else champ
-                        nettoye = _nettoyer_valeur_securisee(reste, contexte)
-                        if nettoye:
-                            resultats[champ] = nettoye
-                            break
+                # 2) Sinon, valeur sur les lignes suivantes (en sautant les labels)
+                if not valeur:
+                    valeur = _chercher_valeur_lignes_suivantes(lignes, i + 1)
                     
-                    # Sinon, chercher sur les lignes suivantes
-                    for j in range(i + 1, min(i + 4, len(lignes))):
-                        ligne_suiv = lignes[j].strip()
-                        if ligne_suiv and not _ligne_est_que_labels(ligne_suiv):
-                            contexte = champ if champ in ("nom", "prenoms", "numero", "date", "sexe", "lieu") else champ
-                            nettoye = _nettoyer_valeur_securisee(ligne_suiv, contexte)
-                            if nettoye:
-                                resultats[champ] = nettoye
-                                break
-                    if champ in resultats:
-                        break
+                if not valeur:
+                    continue
+                
+                nettoye = _nettoyer_valeur_securisee(valeur, contexte)
+                if nettoye:
+                    resultats[champ] = nettoye
+                    break
             if champ in resultats:
                 break
-    
+                
     return resultats
