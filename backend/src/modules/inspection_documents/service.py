@@ -121,7 +121,7 @@ async def _extraire_donnees_classique(
         # ── 1. OCR GLOBAL (Texte brut de secours pour les Regex) ──
         resultat_ocr = analyser_document(image_bytes)
         texte_brut = resultat_ocr.get("texte_brut") or ""
-        confiance_globale = float(resultat_ocr.get("confiance_moyenne", 0.0) or 0.0)
+        confiance_globale = float(resultat_ocr.get("confiance_moyenne", 0.0) or 0.0)        
         
         # ── 2. CROP & CONQUER (Le nouveau moteur Low-RAM) ──
         donnees_zones_nlp = {}
@@ -148,11 +148,20 @@ async def _extraire_donnees_classique(
                 if bandes:
                     donnees_zones_struct = lire_zones_structurees(bandes)
                     journal.info(f"ZoneReader: {len(donnees_zones_struct['dates_trouvees'])} dates, {len(donnees_zones_struct['numeros_trouves'])} numéros trouvés.")
-                
+               
                 # 2c. Lecture non-structurée (Petit VLM sur micro-crops)
-                if bandes and getattr(parametres, 'activer_extraction_vlm', False):
+                # ⚠️ RÈGLE D'OR : Si la MRZ est lue, on SAUTE le VLM pour les noms/prénoms.
+                # Le MRZ parser s'en chargera avec 100% de certitude.
+                mrz_lue_avec_suces = mrz_lignes_zones[0] and mrz_lignes_zones[1] and "<<" in mrz_lignes_zones[0]
+                
+                if not mrz_lue_avec_suces and bandes and getattr(parametres, 'activer_extraction_vlm', False):
+                    journal.info("ZoneReader: MRZ absente ou incomplète. Activation du VLM de secours sur les crops.")
                     donnees_zones_nlp = await lire_zones_non_structurees(bandes)
                     journal.info(f"ZoneReader: VLM Crop -> {donnees_zones_nlp}")
+                elif mrz_lue_avec_suces:
+                    journal.info("ZoneReader: MRZ lue avec succès. VLM désactivé pour les noms (gain de temps/RAM).")
+
+
         except Exception as e:
             journal.warning(f"Pipeline Zone échoué, fallback sur OCR global : {e}")
 
