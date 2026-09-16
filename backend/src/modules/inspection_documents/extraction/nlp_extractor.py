@@ -7,6 +7,8 @@ Règle anti-hallucination : ne retourne JAMAIS un label comme valeur de champ.
 import re
 from typing import Dict, List, Optional
 
+from src.noyau import journal
+
 # =============================================================================
 # Mois (français / anglais) pour parser les dates en toutes lettres
 # =============================================================================
@@ -336,36 +338,77 @@ def extraire_permis_conduire(texte: str) -> Dict:
     return resultats
 
 # =============================================================================
-# Extraction spécifique : Carte d'assurance
+# Extraction spécifique : Carte d'assurance (Robuste au mélange OCR)
 # =============================================================================
 def extraire_carte_assurance(texte: str) -> Dict:
-    """Extraction spécifique pour Cartes d'Assurance."""
+    """
+    Extraction spécifique pour Cartes d'Assurance.
+    Tolère le mélange des champs dû à la lecture OCR de gauche à droite.
+    """
     resultats = {}
     texte_upper = texte.upper()
     
-    # Numéro de police / contrat
-    match = re.search(r"(?:N[°O]\s*(?:DE\s*)?POLICE|CONTRAT|N[°O]\s*CLIENT)\s*[:\-]?\s*([A-Z0-9\-]{6,20})", texte_upper)
+    # 1. Numéro de police / contrat (très tolérant)
+    # Cherche N°, POLICE, CONTRAT suivi de n'importe quel bloc alphanumérique
+    match = re.search(r"(?:N[°O]?|POLICE|CONTRAT|CLIENT|QUITTANCE)\s*[:\-]?\s*([A-Z0-9\-/]{5,25})", texte_upper)
     if match:
-        numero = _nettoyer_valeur_securisee(match.group(1), "numero")
-        if numero:
+        numero = re.sub(r'[^A-Z0-9\-/]', '', match.group(1)).strip()
+        if len(numero) >= 5:
             resultats["numero_police"] = numero
-    
-    # Date d'expiration / validité
-    match_exp = re.search(r"(?:VALABLE\s*(?:JUSQU|AU)|EXPIRATION|EXPIR[EÉ]|FIN\s*DE\s*VALIDIT[EÉ])\s*[:\-]?\s*(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})", texte, re.IGNORECASE)
-    if match_exp:
-        d = _parser_date(match_exp.group(1))
-        if d:
-            resultats["date_expiration"] = d
-    
-    # Compagnie d'assurance : première ligne qui n'est pas un label
+            journal.info(f"Assurance Parser -> Numéro police : {numero}")
+            
+    # 2. Immatriculation (format très variable : 1234 AB 01, 1234AB01, etc.)
+    match_imm = re.search(r"(?:IMMAT|VEHICULE|W[°O]?|PLAQUE)\s*[:\-]?\s*([A-Z0-9\-]{5,15})", texte_upper)
+    if match_imm:
+        imm = re.sub(r'[^A-Z0-9]', '', match_imm.group(1)).strip()
+        if len(imm) >= 5:
+            resultats["immatriculation"] = imm
+            journal.info(f"Assurance Parser -> Immatriculation : {imm}")
+            
+    # 3. Nom du souscripteur (après SOUSCRIPT, PRENEUR, NOM, ASSURE, TITULAIRE)
+    match_nom = re.search(r"(?:SOUSCRIPT|PRENEUR|NOM|ASSURE|TITULAIRE|PROPRIETAIRE)\s*[:\-]?\s*([A-ZÀ-Ü\s\-]{3,40})", texte_upper)
+    if match_nom:
+        nom = re.sub(r'\s+', ' ', match_nom.group(1)).strip()
+        # Filtrer les faux positifs (mots génériques qui pourraient être capturés)
+        mots_interdits = ['ASSURANCE', 'COMPAGNIE', 'POLICE', 'CONTRAT', 'VEHICULE', 'IMMAT']
+        if not any(mot in nom.upper() for mot in mots_interdits) and len(nom) > 3:
+            resultats["nom_souscripteur"] = nom
+            journal.info(f"Assurance Parser -> Souscripteur : {nom}")
+
+    # 4. Compagnie d'assurance (Souvent en haut, ou après "COMPAGNIE", "SA", "SARL")
     lignes = texte.split("\n")
-    for ligne in lignes[:6]:
+    for ligne in lignes[:8]: # On regarde seulement les premières lignes
         ligne = ligne.strip()
-        if len(ligne) > 3 and not _ligne_est_que_labels(ligne) and not re.match(r"^\d+$", ligne):
-            resultats["compagnie_assurance"] = ligne
-            break
-    
+        # Si la ligne contient des mots-clés de compagnie et n'est pas un label pur
+        if any(mot in ligne.upper() for mot in ['ASSURANCE', 'SA', 'SARL', 'VIE', 'IARD']):
+            if not _ligne_est_que_labels(ligne) and len(ligne) > 4:
+                resultats["compagnie_assurance"] = ligne
+                journal.info(f"Assurance Parser -> Compagnie : {ligne}")
+                break
+
+    # 5. Dates (Effet et Expiration)
+    # On cherche toutes les dates du document. 
+    # La première est généralement la date d'effet, la dernière la date d'expiration.
+    dates_trouvees = re.findall(r'(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})', texte)
+    dates_valides = []
+    for d in dates_trouvees:
+        d_norm = _parser_date(d)
+        if d_norm:
+            dates_valides.append(d_norm)
+            
+    if len(dates_valides) >= 2:
+        resultats["date_delivrance"] = dates_valides[0] # Date d'effet
+        resultats["date_expiration"] = dates_valides[-1] # Date d'expiration
+        journal.info(f"Assurance Parser -> Dates : {dates_valides[0]} au {dates_valides[-1]}")
+    elif len(dates_valides) == 1:
+        # Si une seule date, on vérifie si c'est près du mot "VALID" ou "EXPIR"
+        if re.search(r'(?:VALID|EXPIR|FIN)', texte, re.IGNORECASE):
+            resultats["date_expiration"] = dates_valides[0]
+        else:
+            resultats["date_delivrance"] = dates_valides[0]
+
     return resultats
+
 
 # =============================================================================
 # Extraction générique par labels (tous types de documents)
