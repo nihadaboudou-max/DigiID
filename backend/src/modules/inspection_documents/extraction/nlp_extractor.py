@@ -3,6 +3,7 @@
 Extracteur NLP (Regex avancées) pour documents sans MRZ.
 Gère : Permis de conduire (formats numérotés CEDEAO), Cartes d'assurance, Anciennes CNI, etc.
 Règle anti-hallucination : ne retourne JAMAIS un label comme valeur de champ.
+Solution universelle : délimitation dynamique des champs par les labels connus.
 """
 import re
 from typing import Dict, List, Optional
@@ -57,6 +58,8 @@ _LABELS = {
     "TITRE", "TITULAIRE", "HOLDER", "PORTEUR", "SIGNALEMENT", "ENFANT",
     "NOMDUSAGE", "USUALNAME", "ALIAS", "SEJOUR", "VOTE", "ELECTEUR",
     "ETUDIANT", "SCOLARITE", "PASSEPORT", "PASSPORT", "AUTORISATION",
+    # Labels spécifiques pour délimiter les champs adjacents (Assurance, etc.)
+    "MARQUE", "MODELE", "VEHICULE", "IMMATRICULATION", "TELEPHONE", "EMAIL"
 }
 
 _NEUTRES = {
@@ -117,6 +120,22 @@ def _retirer_mots_labels_prefixe(texte: str) -> str:
             vu_donnee = True
         sortie.append(m)
     return " ".join(sortie).strip()
+
+# =============================================================================
+# 🚀 SOLUTION UNIVERSELLE : Délimitation dynamique par les labels
+# =============================================================================
+def _construire_regex_fin_de_champ() -> str:
+    """
+    Construit dynamiquement une regex qui détecte n'importe quel label connu.
+    C'est le cœur de la solution professionnelle : on ne bloque jamais de valeur,
+    on s'arrête juste avant le prochain label, quel qu'il soit.
+    """
+    # On trie par longueur décroissante pour qu'un label long (ex: "IMMATRICULATION") 
+    # soit détecté avant un label court (ex: "N")
+    labels_tries = sorted(list(_LABELS), key=len, reverse=True)
+    labels_echappes = [re.escape(l) for l in labels_tries if l]
+    # Regex : "un espace, suivi d'un label, suivi optionnellement de : ou - et d'un espace"
+    return r"(?=\s+(?:" + "|".join(labels_echappes) + r")\s*[:\-]?\s)"
 
 # =============================================================================
 # Parsing de date tolérant
@@ -213,7 +232,7 @@ def _nettoyer_valeur_securisee(valeur: str, contexte: str) -> Optional[str]:
     return valeur if valeur else None
 
 # =============================================================================
-# Extraction de valeur depuis les lignes OCR (FONCTIONS CRUCIALES RÉINTRODUITES)
+# Extraction de valeur depuis les lignes OCR
 # =============================================================================
 def _valeur_depuis_ligne(reste: str) -> Optional[str]:
     """Extrait la valeur dans le reste d'une ligne après un label."""
@@ -222,7 +241,12 @@ def _valeur_depuis_ligne(reste: str) -> Optional[str]:
     nettoye = reste.strip().strip(" \t:;,-/|·•\"'()")
     if not nettoye or _ligne_est_que_labels(nettoye):
         return None
-    nettoye = _retirer_mots_labels_prefixe(nettoye).strip(" \t:;,-/|·•\"'()")
+    
+    # 🚀 SOLUTION UNIVERSELLE : Couper la valeur au prochain label connu
+    regex_fin = _construire_regex_fin_de_champ()
+    valeur_coupee = re.split(regex_fin, nettoye, flags=re.IGNORECASE)[0].strip()
+    
+    nettoye = _retirer_mots_labels_prefixe(valeur_coupee).strip(" \t:;,-/|·•\"'()")
     return nettoye or None
 
 def _chercher_valeur_lignes_suivantes(lignes: List[str], debut: int) -> Optional[str]:
@@ -348,61 +372,55 @@ def extraire_carte_assurance(texte: str) -> Dict:
     resultats = {}
     texte_upper = texte.upper()
     
-    # 1. Numéro de police / contrat (très tolérant)
-    # Cherche N°, POLICE, CONTRAT suivi de n'importe quel bloc alphanumérique
+    # 1. Numéro de police / contrat
     match = re.search(r"(?:N[°O]?|POLICE|CONTRAT|CLIENT|QUITTANCE)\s*[:\-]?\s*([A-Z0-9\-/]{5,25})", texte_upper)
     if match:
         numero = re.sub(r'[^A-Z0-9\-/]', '', match.group(1)).strip()
         if len(numero) >= 5:
             resultats["numero_police"] = numero
-            journal.info(f"Assurance Parser -> Numéro police : {numero}")
             
-    # 2. Immatriculation (format très variable : 1234 AB 01, 1234AB01, etc.)
+    # 2. Immatriculation
     match_imm = re.search(r"(?:IMMAT|VEHICULE|W[°O]?|PLAQUE)\s*[:\-]?\s*([A-Z0-9\-]{5,15})", texte_upper)
     if match_imm:
         imm = re.sub(r'[^A-Z0-9]', '', match_imm.group(1)).strip()
         if len(imm) >= 5:
             resultats["immatriculation"] = imm
-            journal.info(f"Assurance Parser -> Immatriculation : {imm}")
             
-    # 3. Nom du souscripteur (après SOUSCRIPT, PRENEUR, NOM, ASSURE, TITULAIRE)
-    match_nom = re.search(r"(?:SOUSCRIPT|PRENEUR|NOM|ASSURE|TITULAIRE|PROPRIETAIRE)\s*[:\-]?\s*([A-ZÀ-Ü\s\-]{3,40})", texte_upper)
-    if match_nom:
-        nom = re.sub(r'\s+', ' ', match_nom.group(1)).strip()
-        # Filtrer les faux positifs (mots génériques qui pourraient être capturés)
-        mots_interdits = ['ASSURANCE', 'COMPAGNIE', 'POLICE', 'CONTRAT', 'VEHICULE', 'IMMAT']
-        if not any(mot in nom.upper() for mot in mots_interdits) and len(nom) > 3:
+    # 3. 🚀 Nom du souscripteur : Extraction dynamique (s'arrête au prochain label)
+    match_debut = re.search(
+        r"(?:NOM\s*&\s*PR[ÉE]NOMS?|SOUSCRIPT|PRENEUR|ASSURE|TITULAIRE|PROPRIETAIRE)\s*[:\-]?\s*", 
+        texte_upper
+    )
+    if match_debut:
+        reste_ligne = texte_upper[match_debut.end():]
+        # On utilise la même logique universelle : couper au prochain label connu
+        regex_fin = _construire_regex_fin_de_champ()
+        nom_coupe = re.split(regex_fin, reste_ligne, flags=re.IGNORECASE)[0].strip()
+        
+        nom = re.sub(r'\s+', ' ', nom_coupe).strip(" \t:;,-/|·•\"'()")
+        
+        # Validation basique : doit faire entre 3 et 60 caractères, pas que des chiffres
+        if 3 <= len(nom) <= 60 and not nom.isdigit():
             resultats["nom_souscripteur"] = nom
-            journal.info(f"Assurance Parser -> Souscripteur : {nom}")
 
-    # 4. Compagnie d'assurance (Souvent en haut, ou après "COMPAGNIE", "SA", "SARL")
+    # 4. Compagnie d'assurance
     lignes = texte.split("\n")
-    for ligne in lignes[:8]: # On regarde seulement les premières lignes
+    for ligne in lignes[:8]:
         ligne = ligne.strip()
-        # Si la ligne contient des mots-clés de compagnie et n'est pas un label pur
         if any(mot in ligne.upper() for mot in ['ASSURANCE', 'SA', 'SARL', 'VIE', 'IARD']):
-            if not _ligne_est_que_labels(ligne) and len(ligne) > 4:
+            if not _ligne_est_que_labels(ligne) and 4 <= len(ligne) <= 60:
                 resultats["compagnie_assurance"] = ligne
-                journal.info(f"Assurance Parser -> Compagnie : {ligne}")
                 break
 
     # 5. Dates (Effet et Expiration)
-    # On cherche toutes les dates du document. 
-    # La première est généralement la date d'effet, la dernière la date d'expiration.
     dates_trouvees = re.findall(r'(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})', texte)
-    dates_valides = []
-    for d in dates_trouvees:
-        d_norm = _parser_date(d)
-        if d_norm:
-            dates_valides.append(d_norm)
-            
+    dates_valides = [d for d in dates_trouvees if _parser_date(d)]
+    
     if len(dates_valides) >= 2:
-        resultats["date_delivrance"] = dates_valides[0] # Date d'effet
-        resultats["date_expiration"] = dates_valides[-1] # Date d'expiration
-        journal.info(f"Assurance Parser -> Dates : {dates_valides[0]} au {dates_valides[-1]}")
+        resultats["date_delivrance"] = dates_valides[0]
+        resultats["date_expiration"] = dates_valides[-1]
     elif len(dates_valides) == 1:
-        # Si une seule date, on vérifie si c'est près du mot "VALID" ou "EXPIR"
-        if re.search(r'(?:VALID|EXPIR|FIN)', texte, re.IGNORECASE):
+        if re.search(r'(?:VALID|EXPIR|FIN|ECHEANCE)', texte, re.IGNORECASE):
             resultats["date_expiration"] = dates_valides[0]
         else:
             resultats["date_delivrance"] = dates_valides[0]
@@ -432,7 +450,7 @@ def extraire_par_labels(texte: str, patterns: Dict[str, list]) -> Dict:
                 if not match:
                     continue
                 
-                # 1) Valeur sur la même ligne après le label
+                # 1) Valeur sur la même ligne après le label (utilise désormais la coupure dynamique)
                 valeur = _valeur_depuis_ligne(ligne[match.end():])
                 
                 # 2) Sinon, valeur sur les lignes suivantes (en sautant les labels)
