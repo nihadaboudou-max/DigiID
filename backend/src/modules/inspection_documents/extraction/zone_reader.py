@@ -4,6 +4,7 @@ Zone Reader V2 : Lecteur Ciblé avec protection Anti-JSON et Regex tolérantes.
 """
 import io
 import re
+import time
 import base64
 from typing import Dict, List, Optional, Any
 from PIL import Image
@@ -113,8 +114,8 @@ def _nettoyer_et_valider_reponse_vlm(texte_brut: str) -> Optional[str]:
         
     return texte
 
-async def _micro_vlm_extract(image_bytes: bytes, prompt: str) -> Optional[str]:
-    """Appelle le VLM avec un TIMEOUT STRICT de 10 secondes."""
+async def _micro_vlm_extract(image_bytes: bytes, prompt: str, timeout: float = 6.0) -> Optional[str]:
+    """Appelle le VLM avec un TIMEOUT STRICT (paramétrable)."""
     if not getattr(parametres, 'activer_extraction_vlm', False): return None
         
     try:
@@ -127,7 +128,7 @@ async def _micro_vlm_extract(image_bytes: bytes, prompt: str) -> Optional[str]:
         pil_img.save(tampon, format="JPEG", quality=85)
         img_b64 = base64.b64encode(tampon.getvalue()).decode("utf-8")
         
-        # ⚠️ TIMEOUT STRICT : 10 secondes max pour ne pas bloquer le serveur
+        # ⚠️ TIMEOUT STRICT : borne la latence de chaque appel micro-crop
         try:
             reponse = await asyncio.wait_for(
                 appeler_llm_vision(
@@ -135,10 +136,10 @@ async def _micro_vlm_extract(image_bytes: bytes, prompt: str) -> Optional[str]:
                     prompt=prompt,
                     mime_type="image/jpeg",
                 ),
-                timeout=10.0
+                timeout=timeout
             )
         except asyncio.TimeoutError:
-            journal.warning("ZoneReader: VLM Timeout (10s). Abandon.")
+            journal.warning(f"ZoneReader: VLM Timeout ({timeout}s). Abandon.")
             return None
         
         return _nettoyer_et_valider_reponse_vlm(reponse)
@@ -149,8 +150,14 @@ async def _micro_vlm_extract(image_bytes: bytes, prompt: str) -> Optional[str]:
 
 
 
-async def lire_zones_non_structurees(bandes: Dict[str, bytes]) -> Dict[str, Optional[str]]:
+async def lire_zones_non_structurees(bandes: Dict[str, bytes], budget_secondes: float = 15.0) -> Dict[str, Optional[str]]:
+    """Lecture VLM des crops avec BUDGET TEMPOREL GLOBAL pour borner la latence totale."""
     resultats = {}
+    debut = time.monotonic()
+
+    def _reste_budget() -> float:
+        return max(1.0, budget_secondes - (time.monotonic() - debut))
+    
     
     # 🛡️ PROMPTS BLINDÉS : Interdiction formelle de faire du JSON
     prompt_nom = """
@@ -175,21 +182,26 @@ async def lire_zones_non_structurees(bandes: Dict[str, bytes]) -> Dict[str, Opti
     
     for nom_bande, img_bytes in bandes_a_analyser.items():
         if not img_bytes: continue
+
+        # ⏱️ Budget global épuisé -> on arrête proprement les appels VLM
+        if time.monotonic() - debut > budget_secondes:
+            journal.warning("ZoneReader: budget VLM global épuisé, arrêt des crops.")
+            break
             
         if "nom_famille" not in resultats:
-            val = await _micro_vlm_extract(img_bytes, prompt_nom)
+            val = await _micro_vlm_extract(img_bytes, prompt_nom, timeout=min(6.0, _reste_budget()))
             if val and len(val) > 2:
                 resultats["nom_famille"] = val
                 journal.info(f"VLM Crop ({nom_bande}) -> Nom: {val}")
                 
         if "prenoms" not in resultats:
-            val = await _micro_vlm_extract(img_bytes, prompt_prenom)
+            val = await _micro_vlm_extract(img_bytes, prompt_prenom, timeout=min(6.0, _reste_budget()))
             if val and len(val) > 2:
                 resultats["prenoms"] = val
                 journal.info(f"VLM Crop ({nom_bande}) -> Prénom: {val}")
 
         if "lieu_naissance" not in resultats:
-            val = await _micro_vlm_extract(img_bytes, prompt_lieu)
+            val = await _micro_vlm_extract(img_bytes, prompt_lieu, timeout=min(6.0, _reste_budget()))
             if val and len(val) > 2:
                 resultats["lieu_naissance"] = val
                 journal.info(f"VLM Crop ({nom_bande}) -> Lieu: {val}")

@@ -3,6 +3,7 @@
 Extracteur VLM (Vision Language Model) adapté pour Low-RAM.
 Supporte l'extraction sur image complète (fallback) et sur micro-crops (stratégie Crop & Conquer).
 """
+import asyncio
 import base64
 import io
 import json
@@ -45,16 +46,22 @@ def _normaliser_image_jpeg(image_bytes: bytes, max_dim: int = 1024) -> tuple[str
         journal.warning(f"VLM : normalisation image impossible ({e})")
         return "image/jpeg", base64.b64encode(image_bytes).decode("utf-8")
 
-async def extraire_donnees_vlm(image_bytes: bytes) -> Optional[Dict[str, Any]]:
-    """Extraction globale (Fallback)."""
+async def extraire_donnees_vlm(image_bytes: bytes, timeout: float = 15.0) -> Optional[Dict[str, Any]]:
+    """Extraction globale (Fallback). Timeout strict pour ne jamais bloquer le pipeline."""
     try:
         mime_type, image_base64 = _normaliser_image_jpeg(image_bytes, max_dim=1024)
-        reponse_brute = await appeler_llm_vision(
-            image_base64=image_base64,
-            prompt=PROMPT_EXTRACTION_VLM_GLOBAL,
-            mime_type=mime_type,
+        reponse_brute = await asyncio.wait_for(
+            appeler_llm_vision(
+                image_base64=image_base64,
+                prompt=PROMPT_EXTRACTION_VLM_GLOBAL,
+                mime_type=mime_type,
+            ),
+            timeout=timeout,
         )
         return _parser_reponse_json(reponse_brute)
+    except asyncio.TimeoutError:
+        journal.warning(f"VLM Global : timeout ({timeout}s), abandon.")
+        return None
     except Exception as e:
         journal.error(f"VLM Global : erreur extraction - {e}")
         return None

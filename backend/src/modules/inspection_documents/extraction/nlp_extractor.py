@@ -66,6 +66,48 @@ _NEUTRES = {
     "AU", "AUX", "A", "ET", "EN", "N", "NO", "N°",
 }
 
+# =============================================================================
+# 🛡️ LISTE NOIRE D'IDENTITÉ : tokens qui ne sont JAMAIS un nom de personne.
+# Empêche le mapping de champs (ex: "TOYOTA" -> nom_famille / prénom).
+# =============================================================================
+_MOTS_INTERDITS_NOM = {
+    # Marques / modèles véhicules (cause n°1 des faux noms)
+    "TOYOTA", "NISSAN", "HONDA", "FORD", "HYUNDAI", "KIA", "PEUGEOT", "RENAULT",
+    "CITROEN", "MERCEDES", "BENZ", "BMW", "AUDI", "VOLKSWAGEN", "SUZUKI", "MAZDA",
+    "MITSUBISHI", "CHEVROLET", "FIAT", "DACIA", "OPEL", "SKODA", "SEAT", "JEEP",
+    "COROLLA", "YARIS", "HILUX", "CAMRY", "RAV4", "PRIUS", "CIVIC", "ACCENT",
+    "ELANTRA", "SUNNY", "PASSAT", "GOLF", "CLIO", "MEGANE", "PARTNER", "BERLINGO",
+    # Champs techniques véhicule
+    "MARQUE", "MODELE", "VEHICULE", "IMMATRICULATION", "IMMAT", "CHASSIS", "VIN",
+    "CYLINDREE", "PUISSANCE", "CARROSSERIE", "ENERGIE", "ESSENCE", "DIESEL",
+    "BERLINE", "BREAK", "PLAQUE", "IMMATRICULE",
+    # Vocabulaire assurance / société / banque
+    "ASSURANCE", "ASSURANCES", "COMPAGNIE", "ASSUREUR", "POLICE", "CONTRAT",
+    "ATTESTATION", "GARANTIE", "PRIME", "COTISATION", "FRANCHISE", "PLAFOND",
+    "COUVERTURE", "ASSISTANCE", "FORMULE", "USAGE", "ECHEANCE", "ECHÉANCE",
+    "VALIDITE", "VALIDITÉ", "RESPONSABILITE", "CIVILE", "SOCIETE", "SOCIÉTÉ",
+    "BANQUE", "CLIENT", "SOUSCRIPTEUR", "CONDUCTEUR", "TITULAIRE", "PORTEUR",
+}
+
+# =============================================================================
+# 🛡️ VALIDATION D'UN TOKEN D'IDENTITÉ (nom/prénom)
+# =============================================================================
+def _mot_interdit_nom(mot: str) -> bool:
+    """True si le token ne peut jamais être un nom de personne."""
+    m = _sans_accents((mot or "").upper()).strip("-'.,:;()")
+    return m in _MOTS_INTERDITS_NOM
+
+def _est_mot_nom_valide(mot: str) -> bool:
+    """Un token est un nom-plausible : alphabétique, >=2 lettres, hors blacklist/labels."""
+    m = _sans_accents((mot or "").upper()).strip("-'.")
+    if len(m) < 2:
+        return False
+    if not re.fullmatch(r"[A-Z][A-Z\-']*", m):
+        return False
+    if m in _MOTS_INTERDITS_NOM or m in _LABELS or m in _NEUTRES:
+        return False
+    return True
+
 _CONTEXTES_NETTOYAGE = {
     "nom_famille": "nom",
     "prenoms": "prenoms",
@@ -128,46 +170,56 @@ def _construire_regex_fin_de_champ() -> str:
 # =============================================================================
 def _normaliser_et_mapper_identite(texte_brut: str) -> Dict[str, Optional[str]]:
     """
-    Moteur universel de mapping d'identité.
-    Sépare intelligemment un texte brut en nom et prénom basé sur la typographie (casse).
+    Moteur universel de mapping d'identité (typographie NOM/prénom).
+    🛡️ Durci : n'opère plus aveuglément sur tout le texte ; tout token non-personne
+    (marque, société, champ technique) invalide le résultat -> zéro fusion 'Toyota'.
     """
+    vide = {"nom_famille": None, "prenoms": None}
     if not texte_brut:
-        return {"nom_famille": None, "prenoms": None}
+        return vide
 
     # 1. Nettoyage des artefacts de début de ligne et labels
     texte_propre = re.sub(r"^[^a-zA-ZÀ-ÿ]+", "", texte_brut).strip()
-    texte_propre = re.sub(r"^(NOM|PRENOM|NOMS|PRENOMS|SURNAME|FIRSTNAME|NR|FI)\s*[:\-]?\s*", "", texte_propre, flags=re.IGNORECASE).strip()
-
+    texte_propre = re.sub(
+        r"^(NOM|PRENOM|NOMS|PRENOMS|SURNAME|FIRSTNAME|NR|FI)\s*[:\-]?\s*",
+        "", texte_propre, flags=re.IGNORECASE,
+    ).strip()
     if not texte_propre:
-        return {"nom_famille": None, "prenoms": None}
+        return vide
 
-    # 2. Séparation intelligente par la casse
-    mots = texte_propre.split()
-    if not mots:
-        return {"nom_famille": None, "prenoms": None}
+    # 2. GARDE-FOU : la présence d'un token interdit (marque/véhicule/société) => rejet.
+    tokens_bruts = [t for t in re.split(r"[\s,;/]+", texte_propre) if t]
+    if any(_mot_interdit_nom(t) for t in tokens_bruts):
+        journal.warning("Mapping identité: token non-personne détecté -> fallback ignoré.")
+        return vide
 
-    nom_parts = []
-    prenom_parts = []
+    # 3. On ne conserve QUE les tokens plausibles d'un nom de personne.
+    tokens = [t for t in tokens_bruts if _est_mot_nom_valide(t)]
+    if not tokens:
+        return vide
 
-    for mot in mots:
-        # Si le mot est entièrement en majuscules (et fait plus de 1 lettre), c'est le nom
-        if mot.isupper() and len(mot) > 1:
-            nom_parts.append(mot)
-        # Sinon, c'est un prénom
+    nom_parts = [m for m in tokens if m.isupper() and len(m) > 1]
+    prenom_parts = [m for m in tokens if not (m.isupper() and len(m) > 1)]
+
+    nom_famille = " ".join(nom_parts).strip() or None
+    prenoms = " ".join(prenom_parts).strip() or None
+
+    # 4. Rééquilibrage quand la casse ne tranche pas (tout majuscule OU tout minuscule).
+    if not nom_famille and prenoms:
+        parties = prenoms.split()
+        if len(parties) >= 2:
+            nom_famille, prenoms = parties[0], " ".join(parties[1:])
         else:
-            prenom_parts.append(mot)
-
-    nom_famille = " ".join(nom_parts).strip() if nom_parts else None
-    prenoms = " ".join(prenom_parts).strip() if prenom_parts else None
-
-    # Fallback : Si tout est en majuscule, le dernier mot est le prénom
-    if not prenoms and len(mots) > 1:
-        prenoms = mots[-1].capitalize()
-        nom_famille = " ".join(mots[:-1])
+            nom_famille, prenoms = prenoms, None
+    elif not prenoms and nom_famille:
+        parties = nom_famille.split()
+        if len(parties) >= 2:
+            prenoms = parties[-1].capitalize()
+            nom_famille = " ".join(parties[:-1])
 
     return {
         "nom_famille": nom_famille if nom_famille and len(nom_famille) >= 2 else None,
-        "prenoms": prenoms if prenoms and len(prenoms) >= 2 else None
+        "prenoms": prenoms if prenoms and len(prenoms) >= 2 else None,
     }
 
 # =============================================================================
@@ -224,8 +276,14 @@ def _nettoyer_valeur_securisee(valeur: str, contexte: str) -> Optional[str]:
         if _ligne_est_que_labels(valeur): return None
         if re.fullmatch(r"\d+", valeur): return None
         propre = re.sub(r"[^a-zA-ZÀ-ÿ\s\-']", "", valeur).strip()
-        if len(propre.strip()) >= 2: return propre
-        return None
+        if len(propre) < 2: return None
+        # 🛡️ Rejet d'une valeur contenant un token non-personne (marque, société, label)
+        tokens = [t for t in re.split(r"[\s\-']+", propre) if t]
+        if not tokens or any(_mot_interdit_nom(t) for t in tokens):
+            return None
+        if not any(_est_mot_nom_valide(t) for t in tokens):
+            return None
+        return propre
     if contexte == "numero":
         valeur = "".join(c for c in valeur.upper() if c.isalnum())
         return valeur if 5 <= len(valeur) <= 20 else None
@@ -434,7 +492,7 @@ def _separer_mots_colles(texte: str) -> str:
 def _est_valeur_valide_assurance(texte: str, type_attendu: str) -> bool:
     """Vérifie si le texte extrait est une vraie valeur et non un label ou un en-tête collé."""
     if not texte or len(texte) < 2: return False
-    texte_pur = re.sub(r'[^A-ZÀ-ÿ\s\-]', '', texte).strip()
+    texte_pur = re.sub(r'[^A-Za-zÀ-ÿ\s\-]', '', texte).strip()
     mots = texte_pur.split()
     
     # Rejeter si c'est un mot d'en-tête classique d'attestation
@@ -445,7 +503,13 @@ def _est_valeur_valide_assurance(texte: str, type_attendu: str) -> bool:
             return False
             
     if type_attendu == "nom":
-        return len(texte_pur) >= 2 and not texte_pur.isdigit()
+        if texte_pur.isdigit():
+            return False
+        # 🛡️ Anti-mapping : rejette les marques/sociétés (ex: "TOYOTA COROLLA")
+        tokens = [t for t in re.split(r"[\s\-']+", texte_pur) if t]
+        if any(_mot_interdit_nom(t) for t in tokens):
+            return False
+        return len(texte_pur) >= 2
     elif type_attendu == "immatriculation":
         return bool(re.search(r'[A-Z]', texte_pur)) and bool(re.search(r'\d', texte_pur))
     elif type_attendu == "numero":
@@ -468,9 +532,10 @@ def _extraire_valeur_apres_label(texte: str, labels_possibles: List[str], type_v
 def _separer_nom_prenom_assurance(valeur_complete: str) -> tuple[Optional[str], Optional[str]]:
     """Sépare un nom complet en nom et prénom(s) selon la convention NOM Prénom(s)."""
     if not valeur_complete: return None, None
-    valeur = re.sub(r'[^A-ZÀ-ÿ\s\-]', '', valeur_complete).strip()
-    mots = valeur.split()
-    
+    valeur = re.sub(r'[^A-Za-zÀ-ÿ\s\-]', '', valeur_complete).strip()
+    # 🛡️ On ne garde que les tokens plausibles d'une identité (rejette marques/labels)
+    mots = [m for m in valeur.split() if _est_mot_nom_valide(m)]
+
     if len(mots) == 0: return None, None
     elif len(mots) == 1: return mots[0], None
     else:

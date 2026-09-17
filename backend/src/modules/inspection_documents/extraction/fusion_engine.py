@@ -11,6 +11,7 @@ from typing import Optional, Dict, Any
 from src.modules.inspection_documents.schemas import (
     DonneesDocumentExtraites, TypeDocument, SexeDocument
 )
+from src.modules.inspection_documents.extraction.nlp_extractor import _mot_interdit_nom
 from src.noyau import journal
 
 # =============================================================================
@@ -24,6 +25,29 @@ POIDS_SOURCES = {
 }
 
 CHAMPS_CRITIQUES = ["nom_famille", "prenoms", "numero_document", "date_naissance"]
+
+# Clés de métadonnées présentes dans les dicts sources mais qui ne sont PAS des champs.
+_CLES_NON_CHAMPS = {
+    "texte_brut", "confiance", "donnees_specifiques",
+    "dates_trouvees", "numeros_trouves",
+}
+
+# =============================================================================
+# 🛡️ GARDE-FOU DE MAPPING FINAL : un champ d'identité ne peut pas contenir
+# un token non-personne (marque, société, champ technique) -> nettoyage/rejet.
+# =============================================================================
+def _bloquer_mapping_non_identite(donnees_finales: dict, sources_champs: dict) -> None:
+    for champ in ("nom_famille", "prenoms"):
+        valeur = donnees_finales.get(champ)
+        if not isinstance(valeur, str) or not valeur.strip():
+            continue
+        tokens = [t for t in re.split(r"[\s\-']+", valeur) if t]
+        if any(_mot_interdit_nom(t) for t in tokens):
+            journal.warning(
+                f"Mapping bloqué : '{valeur}' rejeté pour {champ} (token non-personne)."
+            )
+            donnees_finales[champ] = None
+            sources_champs.pop(champ, None)
 
 # =============================================================================
 # COMPARAISON ET VALIDATION CROISÉE (Le cœur de la robustesse)
@@ -130,19 +154,19 @@ def fusionner_donnees(
     
     # 1. INITIALISATION : NLP Global (60%)
     for cle, valeur in donnees_nlp_global.items():
-        if valeur and cle not in ["texte_brut", "confiance", "donnees_specifiques"]:
+        if valeur and cle not in _CLES_NON_CHAMPS:
             donnees_finales[cle] = valeur
             sources_champs[cle] = "nlp_global"
 
     # 2. OVERLAY : Zones OCR (90%)
     for cle, valeur in donnees_zones_ocr.items():
-        if valeur and cle not in ["texte_brut", "confiance", "donnees_specifiques"]:
+        if valeur and cle not in _CLES_NON_CHAMPS:
             donnees_finales[cle] = valeur
             sources_champs[cle] = "zone_ocr"
 
     # 3. OVERLAY : Zones VLM (85%)
     for cle, valeur in donnees_zones_vlm.items():
-        if not valeur or cle in ["texte_brut", "confiance", "donnees_specifiques"]:
+        if not valeur or cle in _CLES_NON_CHAMPS:
             continue
             
         if not donnees_finales.get(cle):
@@ -179,6 +203,9 @@ def fusionner_donnees(
             
         for champ in ["nom_famille", "prenoms", "numero_document", "date_naissance", "date_expiration"]:
             sources_champs[champ] = "mrz"
+
+    # 4bis. GARDE-FOU DE MAPPING : neutralise toute valeur non-identité (ex: marque).
+    _bloquer_mapping_non_identite(donnees_finales, sources_champs)
 
     # 5. SÉCURISATION PYDANTIC & NORMALISATION
     sexe_val = donnees_finales.get("sexe") or "non_detecte"
