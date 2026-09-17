@@ -172,6 +172,7 @@ class DetailVerification(BaseModel):
     type_document: TypeDocument
     statut: StatutVerification
     face: FaceDocument
+    
     nom_fichier: str
     numero_document: Optional[str] = None
     nom_famille: Optional[str] = None

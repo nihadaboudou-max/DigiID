@@ -82,15 +82,23 @@ def valider_document(donnees: DonneesDocumentExtraites) -> ResultatValidation:
             erreurs.append("MRZ manquante ou incomplète")
     
     elif donnees.type_document == TypeDocument.PERMIS_CONDUIRE:
-        # Catégories obligatoires
-        categories = donnees.donnees_specifiques.get("categories_permis", [])
+        # Catégories obligatoires (clé canonique + tolérance ancienne clé)
+        categories = (
+            donnees.donnees_specifiques.get("categories_permis")
+            or donnees.donnees_specifiques.get("categories")
+            or []
+        )
         scores["categories_presentes"] = len(categories) > 0
         if not scores["categories_presentes"]:
             erreurs.append("Catégories de permis manquantes")
     
     elif donnees.type_document == TypeDocument.CARTE_ASSURANCE:
-        # Numéro de police obligatoire
-        num_police = donnees.donnees_specifiques.get("numero_police")
+        # Numéro de contrat/police obligatoire (clé canonique, avec repli)
+        num_police = (
+            donnees.donnees_specifiques.get("numero_contrat")
+            or donnees.donnees_specifiques.get("numero_police")
+            or donnees.numero_document
+        )
         scores["numero_police"] = bool(num_police)
         if not scores["numero_police"]:
             erreurs.append("Numéro de police manquant")

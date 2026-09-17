@@ -38,6 +38,7 @@ from src.modules.inspection_documents.extraction.fusion_engine import fusionner_
 from src.modules.inspection_documents.extraction.nlp_extractor import (
     extraire_permis_conduire, extraire_carte_assurance, extraire_par_labels,
 )
+from src.modules.inspection_documents.extraction.field_mapper import mapper_champs_extraits
 from src.modules.inspection_documents.classification.document_classifier import classifier_document, detecter_pays
 from src.modules.inspection_documents.classification.patterns_documents import PATTERNS_GENERIQUES
 from src.modules.inspection_documents.storage.document_storage import stocker_document
@@ -205,34 +206,14 @@ async def _extraire_donnees_classique(
         else:
             extraits = {}
 
-        # 🚨 CORRECTION DU MAPPING : Traduction des clés spécifiques vers les clés communes
-        # C'est le "pont" qui manquait pour que l'assurance et le permis mappent correctement.
-        alias_mapping = {
-            "nom_souscripteur": "nom_famille",      # Assurance -> Modèle
-            "numero_police": "numero_document",     # Assurance -> Modèle
-            "prenoms_assure": "prenoms",            # Sécurité supplémentaire
-        }
-        
-        # On applique la traduction
-        extraits_traduits = {}
-        for cle, valeur in (extraits or {}).items():
-            cle_finale = alias_mapping.get(cle, cle)
-            extraits_traduits[cle_finale] = valeur
+        # 🎯 MAPPING CANONIQUE (module unique) : traduction des clés brutes des
+        # extracteurs vers les champs du schéma + les clés attendues en aval.
+        communs_extraits, donnees_specifiques = mapper_champs_extraits(extraits, type_document)
 
-        # 🚨 CORRECTION 2 : On ajoute les champs manquants qui doivent absolument remonter au modèle final
-        champs_communs = {
-            "numero_document", "date_expiration", "date_delivrance", 
-            "nom_famille", "prenoms", "date_naissance", "sexe",
-            "lieu_naissance", "autorite_delivrance"  # <- AJOUTÉS ICI (sinon ils partent en spécifique)
-        }
-        
-        donnees_specifiques = {}
-        for cle, valeur in extraits_traduits.items():
-            if not valeur: continue
-            if cle in champs_communs: 
-                donnees_nlp.setdefault(cle, valeur) # On injecte dans le flux principal
-            else: 
-                donnees_specifiques[cle] = valeur   # Le reste (ex: immatriculation, catégories) va en spécifique            
+        # Injection dans le flux principal SANS écraser une valeur déjà présente
+        for cle, valeur in communs_extraits.items():
+            if valeur and not donnees_nlp.get(cle):
+                donnees_nlp[cle] = valeur            
 
         # ── 9. Pays émetteur ──
         code_pays = detecter_pays(texte_brut, mrz_finales)
