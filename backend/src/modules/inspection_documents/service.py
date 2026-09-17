@@ -196,7 +196,7 @@ async def _extraire_donnees_classique(
         for cle in ["nom_famille", "prenoms", "lieu_naissance"]:
             if not donnees_nlp.get(cle) and donnees_zones_nlp.get(cle):
                 donnees_nlp[cle] = donnees_zones_nlp[cle]
-
+            
         # ── 8. Extracteurs spécifiques (Permis, Assurance, CNI) ──
         if type_document == TypeDocument.PERMIS_CONDUIRE:
             extraits = extraire_permis_conduire(texte_brut)
@@ -204,13 +204,35 @@ async def _extraire_donnees_classique(
             extraits = extraire_carte_assurance(texte_brut)
         else:
             extraits = {}
-            
-        champs_communs = {"numero_document", "date_expiration", "date_delivrance", "nom_famille", "prenoms", "date_naissance", "sexe"}
-        donnees_specifiques = {}
+
+        # 🚨 CORRECTION DU MAPPING : Traduction des clés spécifiques vers les clés communes
+        # C'est le "pont" qui manquait pour que l'assurance et le permis mappent correctement.
+        alias_mapping = {
+            "nom_souscripteur": "nom_famille",      # Assurance -> Modèle
+            "numero_police": "numero_document",     # Assurance -> Modèle
+            "prenoms_assure": "prenoms",            # Sécurité supplémentaire
+        }
+        
+        # On applique la traduction
+        extraits_traduits = {}
         for cle, valeur in (extraits or {}).items():
+            cle_finale = alias_mapping.get(cle, cle)
+            extraits_traduits[cle_finale] = valeur
+
+        # 🚨 CORRECTION 2 : On ajoute les champs manquants qui doivent absolument remonter au modèle final
+        champs_communs = {
+            "numero_document", "date_expiration", "date_delivrance", 
+            "nom_famille", "prenoms", "date_naissance", "sexe",
+            "lieu_naissance", "autorite_delivrance"  # <- AJOUTÉS ICI (sinon ils partent en spécifique)
+        }
+        
+        donnees_specifiques = {}
+        for cle, valeur in extraits_traduits.items():
             if not valeur: continue
-            if cle in champs_communs: donnees_nlp.setdefault(cle, valeur)
-            else: donnees_specifiques[cle] = valeur
+            if cle in champs_communs: 
+                donnees_nlp.setdefault(cle, valeur) # On injecte dans le flux principal
+            else: 
+                donnees_specifiques[cle] = valeur   # Le reste (ex: immatriculation, catégories) va en spécifique            
 
         # ── 9. Pays émetteur ──
         code_pays = detecter_pays(texte_brut, mrz_finales)
