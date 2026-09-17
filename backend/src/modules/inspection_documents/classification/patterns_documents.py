@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 Patterns de détection pour tous les types de documents.
-Organisés par type de document, avec des regex robustes
-pour tolérer les erreurs OCR.
+Organisés par type de document, avec des regex robustes pour tolérer les erreurs OCR.
 """
 
 # =============================================================================
 # PATTERNS DE CLASSIFICATION (Détection du type de document)
+# L'ordre est important : les types les plus spécifiques sont vérifiés en premier.
 # =============================================================================
 PATTERNS_CLASSIFICATION = {
     "passeport": [
@@ -15,18 +15,6 @@ PATTERNS_CLASSIFICATION = {
         r"P<",  # MRZ passeport
         r"R[ÉE]PUBLIQUE.*PASSEPORT",
     ],
-    "cni_biometrique": [
-        r"CARTE\s*NATIONALE\s*D[''`]IDENTIT[ÉE]",
-        r"CNI",
-        r"I<",  # MRZ carte d'identité
-        r"ID[A-Z]",  # MRZ
-        r"CARTE\s*D[''`]IDENTIT[ÉE]\s*BIOM[ÉE]TRIQUE",
-    ],
-    "cni_papier": [
-        r"CARTE\s*NATIONALE\s*D[''`]IDENTIT[ÉE]",
-        r"CNI",
-        r"CARTE\s*D[''`]IDENTIT[ÉE]",
-    ],
     "permis_conduire": [
         r"PERMIS\s*DE\s*CONDUIRE",
         r"DRIVING\s*LICENCE",
@@ -34,10 +22,10 @@ PATTERNS_CLASSIFICATION = {
         r"PERMIS\s*N[°O]",
     ],
     "carte_assurance": [
-        r"CARTE\s*VERTE",
-        r"ATTESTATION\s*D[''`]ASSURANCE",
-        r"POLICE\s*N[°O]",
         r"CONTRAT\s*D[''`]ASSURANCE",
+        r"ATTESTATION\s*D[''`]ASSURANCE",
+        r"CARTE\s*VERTE",
+        r"POLICE\s*N[°O]",
         r"ASSURANCE\s*(?:AUTO|V[ÉE]HICULE|RESPONSABILIT[ÉE])",
     ],
     "carte_sejour": [
@@ -45,6 +33,18 @@ PATTERNS_CLASSIFICATION = {
         r"TITRE\s*DE\s*S[ÉE]JOUR",
         r"RESIDENCE\s*PERMIT",
         r"A<",  # MRZ carte de séjour
+    ],
+    "cni_biometrique": [
+        r"CARTE\s*NATIONALE\s*D[''`]IDENTIT[ÉE]",
+        r"\bCNI\b",  # \b empêche de matcher "CNIN°" (exige un espace ou ponctuation après)
+        r"I<",  # MRZ carte d'identité
+        r"ID[A-Z]",  # MRZ
+        r"CARTE\s*D[''`]IDENTIT[ÉE]\s*BIOM[ÉE]TRIQUE",
+    ],
+    "cni_papier": [
+        r"CARTE\s*NATIONALE\s*D[''`]IDENTIT[ÉE]",
+        r"\bCNI\b",
+        r"CARTE\s*D[''`]IDENTIT[ÉE]",
     ],
     "carte_vote": [
         r"CARTE\s*D[''`][ÉE]LECTEUR",
