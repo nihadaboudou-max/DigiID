@@ -263,6 +263,57 @@ def _chercher_valeur_lignes_suivantes(lignes: List[str], debut: int) -> Optional
         return ligne
     return None
 
+
+def _normaliser_et_mapper_identite(texte_brut: str) -> Dict[str, Optional[str]]:
+    """
+    Moteur universel de mapping d'identité.
+    Sépare intelligemment un texte brut en nom et prénom basé sur la typographie,
+    sans utiliser de listes noires fragiles.
+    """
+    if not texte_brut:
+        return {"nom_famille": None, "prenoms": None}
+
+    # 1. Nettoyage des artefacts de début de ligne (ex: "s Nihad", "& Prénom", "Nom: ")
+    # On retire tout ce qui n'est pas une lettre au début, ainsi que les labels courants
+    texte_propre = re.sub(r"^[^a-zA-ZÀ-ÿ]+", "", texte_brut).strip()
+    texte_propre = re.sub(r"^(NOM|PRENOM|NOMS|PRENOMS|SURNAME|FIRSTNAME)\s*[:\-]?\s*", "", texte_propre, flags=re.IGNORECASE).strip()
+
+    if not texte_propre:
+        return {"nom_famille": None, "prenoms": None}
+
+    # 2. Séparation intelligente par la casse (Typographie)
+    # Sur la plupart des documents ouest-africains : NOM EN MAJUSCULES, Prénom en Capitale
+    mots = texte_propre.split()
+    if not mots:
+        return {"nom_famille": None, "prenoms": None}
+
+    nom_parts = []
+    prenom_parts = []
+
+    for mot in mots:
+        # Si le mot est entièrement en majuscules (et fait plus de 1 lettre), c'est probablement le nom
+        if mot.isupper() and len(mot) > 1:
+            nom_parts.append(mot)
+        # Sinon, c'est probablement un prénom (ou une particule)
+        else:
+            prenom_parts.append(mot)
+
+    # 3. Assemblage et fallback
+    nom_famille = " ".join(nom_parts).strip() if nom_parts else None
+    prenoms = " ".join(prenom_parts).strip() if prenom_parts else None
+
+    # Fallback : Si tout est en majuscule (ex: "ABOUDOU TRAORE NIHAD"), 
+    # on considère que le dernier mot est le prénom (convention courante)
+    if not prenoms and len(mots) > 1:
+        prenoms = mots[-1].capitalize()
+        nom_famille = " ".join(mots[:-1])
+
+    return {
+        "nom_famille": nom_famille if nom_famille and len(nom_famille) >= 2 else None,
+        "prenoms": prenoms if prenoms and len(prenoms) >= 2 else None
+    }
+    
+
 # =============================================================================
 # Extraction spécifique : Permis de conduire (Format CEDEAO numéroté)
 # =============================================================================
@@ -288,14 +339,27 @@ def extraire_permis_conduire(texte: str) -> Dict:
                 resultats["nom_famille"] = valeur
                 break
     
-    # 3. Prénom(s) (supporte "2.Prénom(s):" ou "Prénom(s):")
+    # 3. Prénom(s) avec Mapping Universel (Gère "s Nihad", "Nihad", "ABOUDOU Nihad", etc.)
     for ligne in lignes:
-        match = re.search(r"(?:\d+\.)?\s*PR[ÉE]NOM(?:\(S\))?\s*[:\-]?\s*(.+)", ligne, re.IGNORECASE)
+        # La regex capture "Prénom", "Prénoms", "Prénom(s)", "2. Prénoms :", etc.
+        match = re.search(r"(?:\d+\.)?\s*PR[ÉE]NOMS?\s*(?:\(S\))?\s*[:\-]?\s*(.+)", ligne, re.IGNORECASE)
         if match:
-            valeur = _nettoyer_valeur_securisee(match.group(1).strip(), "prenoms")
-            if valeur:
-                resultats["prenoms"] = valeur
+            texte_brut = match.group(1).strip()
+            
+            # 1ère tentative : Mapping intelligent (sépare par la casse MAJUSCULE/minuscule)
+            identite_mappee = _normaliser_et_mapper_identite(texte_brut)
+            
+            if identite_mappee.get("prenoms"):
+                resultats["prenoms"] = identite_mappee["prenoms"]
                 break
+                
+            # 2ème tentative (Fallback) : Si le moteur universel considère tout comme un "nom", 
+            # on nettoie quand même les artefacts de début de ligne (ex: "s ", "& ")
+            elif identite_mappee.get("nom_famille"):
+                valeur_propre = re.sub(r"^[^a-zA-ZÀ-ÿ]+", "", texte_brut).strip()
+                if 2 <= len(valeur_propre) <= 40:
+                    resultats["prenoms"] = valeur_propre
+                    break
     
     # 4. Date et lieu de naissance composés (Gère "12.10.2002àPARAKOU" sans espace)
     for ligne in lignes:
@@ -366,8 +430,7 @@ def extraire_permis_conduire(texte: str) -> Dict:
 # =============================================================================
 def extraire_carte_assurance(texte: str) -> Dict:
     """
-    Extraction spécifique pour Cartes d'Assurance.
-    Tolère le mélange des champs dû à la lecture OCR de gauche à droite.
+    Extraction spécifique pour Cartes d'Assurance avec mapping universel d'identité.
     """
     resultats = {}
     texte_upper = texte.upper()
@@ -378,44 +441,44 @@ def extraire_carte_assurance(texte: str) -> Dict:
         numero = re.sub(r'[^A-Z0-9\-/]', '', match.group(1)).strip()
         if len(numero) >= 5:
             resultats["numero_police"] = numero
-            
+
     # 2. Immatriculation
     match_imm = re.search(r"(?:IMMAT|VEHICULE|W[°O]?|PLAQUE)\s*[:\-]?\s*([A-Z0-9\-]{5,15})", texte_upper)
     if match_imm:
         imm = re.sub(r'[^A-Z0-9]', '', match_imm.group(1)).strip()
         if len(imm) >= 5:
             resultats["immatriculation"] = imm
-            
-    # 3. 🚀 Nom du souscripteur : Extraction dynamique (s'arrête au prochain label)
-    match_debut = re.search(
-        r"(?:NOM\s*&\s*PR[ÉE]NOMS?|SOUSCRIPT|PRENEUR|ASSURE|TITULAIRE|PROPRIETAIRE)\s*[:\-]?\s*", 
-        texte_upper
-    )
-    if match_debut:
-        reste_ligne = texte_upper[match_debut.end():]
-        # On utilise la même logique universelle : couper au prochain label connu
-        regex_fin = _construire_regex_fin_de_champ()
-        nom_coupe = re.split(regex_fin, reste_ligne, flags=re.IGNORECASE)[0].strip()
+
+    # 3. 🚀 MAPPING UNIVERSEL DU SOUSCRIPTEUR
+    # On cherche le bloc de texte après les labels d'identité
+    match_nom = re.search(r"(?:SOUSCRIPT|PRENEUR|NOM\s*&\s*PR[ÉE]NOMS?|ASSURE|TITULAIRE)\s*[:\-]?\s*(.+)", texte, re.IGNORECASE)
+    if match_nom:
+        texte_extrait = match_nom.group(1).strip()
         
-        nom = re.sub(r'\s+', ' ', nom_coupe).strip(" \t:;,-/|·•\"'()")
+        # On applique la coupure au prochain label connu (MARQUE, IMMAT, etc.)
+        # Cette logique doit être présente, on utilise une version simplifiée ici pour l'assurance
+        texte_coupe = re.split(r'\s+(?:MARQUE|MODELE|IMMATRICULATION|ADRESSE|T[ÉE]L[ÉE]PHONE)\s*', texte_extrait, flags=re.IGNORECASE)[0].strip()
         
-        # Validation basique : doit faire entre 3 et 60 caractères, pas que des chiffres
-        if 3 <= len(nom) <= 60 and not nom.isdigit():
-            resultats["nom_souscripteur"] = nom
+        # 🚀 APPLICATION DU MOTEUR UNIVERSEL
+        identite_mappee = _normaliser_et_mapper_identite(texte_coupe)
+        
+        if identite_mappee["nom_famille"]:
+            resultats["nom_famille"] = identite_mappee["nom_famille"]
+        if identite_mappee["prenoms"]:
+            resultats["prenoms"] = identite_mappee["prenoms"]
 
     # 4. Compagnie d'assurance
     lignes = texte.split("\n")
     for ligne in lignes[:8]:
         ligne = ligne.strip()
         if any(mot in ligne.upper() for mot in ['ASSURANCE', 'SA', 'SARL', 'VIE', 'IARD']):
-            if not _ligne_est_que_labels(ligne) and 4 <= len(ligne) <= 60:
+            if len(ligne) > 4 and not re.match(r"^\d+$", ligne):
                 resultats["compagnie_assurance"] = ligne
                 break
 
-    # 5. Dates (Effet et Expiration)
+    # 5. Dates
     dates_trouvees = re.findall(r'(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})', texte)
     dates_valides = [d for d in dates_trouvees if _parser_date(d)]
-    
     if len(dates_valides) >= 2:
         resultats["date_delivrance"] = dates_valides[0]
         resultats["date_expiration"] = dates_valides[-1]
