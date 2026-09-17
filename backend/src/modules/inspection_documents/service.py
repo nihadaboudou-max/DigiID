@@ -152,14 +152,14 @@ async def _extraire_donnees_classique(
                 # 2c. Lecture non-structurée (Petit VLM sur micro-crops)
                 # ⚠️ RÈGLE D'OR : Si la MRZ est lue, on SAUTE le VLM pour les noms/prénoms.
                 # Le MRZ parser s'en chargera avec 100% de certitude.
-                mrz_lue_avec_suces = mrz_lignes_zones[0] and mrz_lignes_zones[1] and "<<" in mrz_lignes_zones[0]
+                #mrz_lue_avec_suces = mrz_lignes_zones[0] and mrz_lignes_zones[1] and "<<" in mrz_lignes_zones[0]
                 
-                if not mrz_lue_avec_suces and bandes and getattr(parametres, 'activer_extraction_vlm', False):
-                    journal.info("ZoneReader: MRZ absente ou incomplète. Activation du VLM de secours sur les crops.")
-                    donnees_zones_nlp = await lire_zones_non_structurees(bandes)
-                    journal.info(f"ZoneReader: VLM Crop -> {donnees_zones_nlp}")
-                elif mrz_lue_avec_suces:
-                    journal.info("ZoneReader: MRZ lue avec succès. VLM désactivé pour les noms (gain de temps/RAM).")
+                #if not mrz_lue_avec_suces and bandes and getattr(parametres, 'activer_extraction_vlm', False):
+                #    journal.info("ZoneReader: MRZ absente ou incomplète. Activation du VLM de secours sur les crops.")
+                #    donnees_zones_nlp = await lire_zones_non_structurees(bandes)
+                #    journal.info(f"ZoneReader: VLM Crop -> {donnees_zones_nlp}")
+                #elif mrz_lue_avec_suces:
+                #    journal.info("ZoneReader: MRZ lue avec succès. VLM désactivé pour les noms (gain de temps/RAM).")
 
 
         except Exception as e:
@@ -232,7 +232,8 @@ async def _extraire_donnees_classique(
         return fusionner_donnees(
             donnees_nlp_global=donnees_nlp,
             donnees_zones_ocr=donnees_zones_struct,
-            donnees_zones_vlm=donnees_zones_nlp,
+            #donnees_zones_vlm=donnees_zones_nlp,
+            donnees_zones_vlm={},
             donnees_mrz=donnees_mrz,
             texte_brut_ocr=texte_brut,
             type_document=type_document
