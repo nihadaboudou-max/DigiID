@@ -264,131 +264,320 @@ def _chercher_valeur_lignes_suivantes(lignes: List[str], debut: int) -> Optional
         return ligne
     return None
 
+
 # =============================================================================
-# Extraction spécifique : Permis de conduire (avec Mapping Universel)
+# Extraction spécifique : Permis de conduire (Format CEDEAO numéroté OU non-numéroté)
 # =============================================================================
 def extraire_permis_conduire(texte: str) -> Dict:
+    """
+    Extraction ultra-robuste pour permis de conduire.
+    Gère à la fois les formats numérotés (1., 2., 4a...) et les formats sans numéros.
+    Utilise un filet de sécurité typographique en dernier recours.
+    """
     resultats = {}
-    texte_upper = texte.upper()
-    lignes = texte.split("\n")
+    if not texte:
+        return resultats
+
+    texte_nettoye = _nettoyer_texte_permis(texte)
+    lignes = texte_nettoye.split("\n")
     
-    # 1. Numéro de permis
-    match = re.search(r"(?:NNI|N[°O]|NUM[ÉE]RO|PERMIS)\s*(?:N[°O])?\s*[:\-]?\s*([A-Z0-9\-]{6,20})", texte_upper)
-    if match:
-        numero = _nettoyer_valeur_securisee(match.group(1), "numero")
-        if numero: resultats["numero_document"] = numero
-    
-    # 2. Nom (avec Mapping Universel)
-    for ligne in lignes:
-        match = re.search(r"(?:\d+\.)?\s*NOM\s*[:\-]?\s*(.+)", ligne, re.IGNORECASE)
-        if match:
-            identite = _normaliser_et_mapper_identite(match.group(1).strip())
-            if identite["nom_famille"]:
-                resultats["nom_famille"] = identite["nom_famille"]
-                if identite["prenoms"]: resultats["prenoms"] = identite["prenoms"]
-                break
-    
-    # 3. Prénom(s) (avec Mapping Universel)
-    if not resultats.get("prenoms"):
+    journal.info(f"Permis: Début extraction robuste ({len(texte_nettoye)} chars)")
+
+    # === 1. DÉTECTION PAYS ===
+    if "BENIN" in texte_nettoye or "BEN" in texte_nettoye:
+        resultats["pays_emetteur"] = "BEN"
+    elif "SENEGAL" in texte_nettoye or "SEN" in texte_nettoye:
+        resultats["pays_emetteur"] = "SEN"
+
+    # === 2. NOM DE FAMILLE (Niveau 1: Numéroté -> Niveau 2: Label -> Niveau 3: Universel) ===
+    match_nom = re.search(r'(?:1\s*\.?\s*)?NOM\s*/?\s*SURNAME?\s*[:\-]?\s*([A-ZÀ-Ÿ]+(?:\s+[A-ZÀ-Ÿ]+)+)', texte_nettoye)
+    if match_nom:
+        resultats["nom_famille"] = re.sub(r'[^A-ZÀ-Ÿ\s\-]', '', match_nom.group(1)).strip()
+    else:
+        # Fallback : chercher juste le label
         for ligne in lignes:
-            match = re.search(r"(?:\d+\.)?\s*PR[ÉE]NOMS?\s*(?:\(S\))?\s*[:\-]?\s*(.+)", ligne, re.IGNORECASE)
-            if match:
-                identite = _normaliser_et_mapper_identite(match.group(1).strip())
-                if identite["prenoms"]:
-                    resultats["prenoms"] = identite["prenoms"]
+            if re.search(r'\bNOM\b', ligne, re.IGNORECASE) and not re.search(r'PRENOM', ligne, re.IGNORECASE):
+                val = _valeur_depuis_ligne(ligne.split("NOM", 1)[1] if "NOM" in ligne else "")
+                if val:
+                    resultats["nom_famille"] = _nettoyer_valeur_securisee(val, "nom")
                     break
-                elif identite["nom_famille"]:
-                    valeur_propre = re.sub(r"^[^a-zA-ZÀ-ÿ]+", "", match.group(1).strip()).strip()
-                    if 2 <= len(valeur_propre) <= 40:
-                        resultats["prenoms"] = valeur_propre
-                        break
+
+    # === 3. PRÉNOMS (Niveau 1: Numéroté -> Niveau 2: Label -> Niveau 3: Universel) ===
+    match_prenoms = re.search(r'2\s*\.?\s*PRENOM\s*\(?S\)?\s*/?\s*(?:GIVEN\s*NAME)?\s*[:\-]?\s*([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s]*)', texte_nettoye)
+    if match_prenoms:
+        resultats["prenoms"] = re.sub(r'[^A-ZÀ-Ÿ\s\-]', '', match_prenoms.group(1)).strip()
+    else:
+        # Fallback : chercher juste le label
+        for ligne in lignes:
+            if re.search(r'\bPRENOM(?:S)?\b', ligne, re.IGNORECASE):
+                val = _valeur_depuis_ligne(ligne.split("PRENOM", 1)[1] if "PRENOM" in ligne else "")
+                if val:
+                    resultats["prenoms"] = _nettoyer_valeur_securisee(val, "prenoms")
+                    break
+
+    # 🚨 FILET DE SÉCURITÉ UNIVERSEL : Si Nom/Prénom sont toujours vides, on utilise la typographie
+    if not resultats.get("nom_famille") or not resultats.get("prenoms"):
+        journal.warning("Permis: Champs numérotés/labels échoués, activation du fallback typographique universel.")
+        fallback = _normaliser_et_mapper_identite(texte_nettoye)
+        if not resultats.get("nom_famille") and fallback.get("nom_famille"):
+            resultats["nom_famille"] = fallback["nom_famille"]
+        if not resultats.get("prenoms") and fallback.get("prenoms"):
+            resultats["prenoms"] = fallback["prenoms"]
+
+    # === 4. DATE ET LIEU DE NAISSANCE ===
+    # Cherche "12.10.2002 À PARAKOU" ou "NÉ LE 12/10/2002 À PARAKOU"
+    match_naiss = re.search(r'(\d{1,2}[\./-]\d{1,2}[\./-]\d{2,4})\s*(?:N[ÉE]\s*(?:LE)?\s*)?(?:À|A|AT)?\s*([A-ZÀ-Ÿ]{4,})', texte_nettoye)
+    if match_naiss:
+        resultats["date_naissance"] = _parser_date(match_naiss.group(1))
+        lieu = re.sub(r'[^A-ZÀ-Ÿ\s\-]', '', match_naiss.group(2)).strip()
+        if len(lieu) >= 3:
+            resultats["lieu_naissance"] = lieu
+    else:
+        # Fallback : prendre la plus ancienne date valide du document comme date de naissance
+        toutes_dates = _trouver_toutes_les_dates(texte_nettoye)
+        dates_valides = [_parser_date(d) for d in toutes_dates if _parser_date(d)]
+        if dates_valides:
+            resultats["date_naissance"] = min(dates_valides, key=lambda d: int(d.split('/')[2]))
+
+    # === 5. DATES DE DÉLIVRANCE ET EXPIRATION (Champs 4a et 4b ou labels) ===
+    match_4a = re.search(r'(?:4A\s*\.?\s*)?(?:DATE\s*)?D[ÉE]LIVR(?:ANCE|ÉE)?\s*[:\-]?\s*(\d{1,2}[\./-]\d{1,2}[\./-]\d{2,4})', texte_nettoye)
+    if match_4a:
+        resultats["date_delivrance"] = _parser_date(match_4a.group(1))
+        
+    match_4b = re.search(r'(?:4B\s*\.?\s*)?(?:EXPIR|VALID|FIN)\s*[:\-]?\s*(\d{1,2}[\./-]\d{1,2}[\./-]\d{2,4})', texte_nettoye)
+    if match_4b:
+        resultats["date_expiration"] = _parser_date(match_4b.group(1))
+
+    # Fallback dates : si pas trouvé, utiliser la logique des dates multiples
+    toutes_dates = _trouver_toutes_les_dates(texte_nettoye)
+    dates_valides = [_parser_date(d) for d in toutes_dates if _parser_date(d)]
+    if len(dates_valides) >= 2:
+        if not resultats.get("date_delivrance"):
+            resultats["date_delivrance"] = dates_valides[-2] # Avant-dernière
+        if not resultats.get("date_expiration"):
+            resultats["date_expiration"] = dates_valides[-1] # Dernière (la plus lointaine)
+
+    # === 6. NUMÉRO DE PERMIS (Champ 5 ou pattern générique) ===
+    match_numero = re.search(r'(?:5\s*\.?\s*)?N[°O]\s*PERMIS\s*/?\s*(?:LICENSE\s*NO)?\s*[:\-]?\s*([A-Z0-9\-]{6,20})', texte_nettoye)
+    if not match_numero:
+        # Fallback : chercher un pattern de numéro de permis type CEDEAO (ex: SN-2021-0094821)
+        match_numero = re.search(r'\b([A-Z]{2,3}[\-]\d{4}[\-]\d{5,7})\b', texte_nettoye)
+    if not match_numero:
+        # Fallback ultime : n'importe quel bloc alphanumérique après "PERMIS" ou "N°"
+        match_numero = re.search(r'(?:PERMIS|N[°O])\s*[:\-]?\s*([A-Z0-9\-]{6,20})', texte_nettoye)
     
-    # 4. Date et lieu de naissance
-    for ligne in lignes:
-        match = re.search(r"(?:\d+\.)?\s*DATE\s*(?:ET\s*)?LIEU\s*(?:DE\s*)?NAISS(?:ANCE)?\s*[:\-]?\s*(.+)", ligne, re.IGNORECASE)
-        if match:
-            val_comp = match.group(1).strip()
-            m_date = re.search(r"(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})", val_comp)
-            if m_date:
-                d = _parser_date(m_date.group(1))
-                if d: resultats["date_naissance"] = d
-            m_lieu = re.search(r"(?:à|AT|A)\s+([A-ZÀ-Ü\s\-]{3,30})", val_comp, re.IGNORECASE)
-            if m_lieu:
-                lieu = _nettoyer_valeur_securisee(m_lieu.group(1).strip(), "lieu")
-                if lieu: resultats["lieu_naissance"] = lieu
-            break
-    
-    # 5. Dates délivrance/expiration
-    for ligne in lignes:
-        if "DELIVR" in ligne.upper() or "ISSUE" in ligne.upper():
-            dates = re.findall(r"(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})", ligne)
-            if len(dates) >= 1:
-                d = _parser_date(dates[0])
-                if d: resultats["date_delivrance"] = d
-            if len(dates) >= 2:
-                d_exp = _parser_date(dates[1])
-                if d_exp: resultats["date_expiration"] = d_exp
-            break
-            
-    # 6. Catégories
-    match_cat = re.search(r"(?:\d+\.)?\s*CAT[ÉE]GORIE(?:S)?\s*[:\-]?\s*([A-E, ]+)", texte, re.IGNORECASE)
-    if match_cat:
-        resultats["categories_permis"] = [c.strip() for c in match_cat.group(1).split(",") if c.strip()]
-    
+    if match_numero:
+        num = re.sub(r'[^A-Z0-9\-]', '', match_numero.group(1)).strip()
+        if 6 <= len(num) <= 20:
+            resultats["numero_document"] = num
+
+    # === 7. AUTORITÉ DE DÉLIVRANCE (Champ 4c) ===
+    match_autorite = re.search(r'(?:4C\s*\.?\s*)?(?:AUTORIT[ÉE]\s*/?\s*AUTHORITY|D[ÉE]LIVR[ÉE]\s*PAR)\s*[:\-]?\s*([A-ZÀ-Ÿ\s\.]+?)(?=\d+\.|$)', texte_nettoye)
+    if match_autorite:
+        autorite = re.sub(r'[^A-ZÀ-Ÿ\s\.]', '', match_autorite.group(1)).strip()
+        if len(autorite) > 3:
+            resultats["autorite_delivrance"] = autorite
+
+    # === 8. CATÉGORIES (Champ 9) ===
+    match_cats = re.search(r'(?:9\s*\.?\s*)?CAT[ÉE]GORIES?\s*[:\-]?\s*([A-Z0-9\s]+?)(?:\s*[A-Z]\.|$)', texte_nettoye)
+    if match_cats:
+        cats_text = match_cats.group(1)
+        categories = re.findall(r'\b(A1|A2|A|B|C1|C2|C|D|E|F|G)\b', cats_text)
+        if categories:
+            resultats["categories_permis"] = categories
+
+    # Validation finale
+    champs_ok = sum([bool(resultats.get("nom_famille")), bool(resultats.get("prenoms")), bool(resultats.get("numero_document"))])
+    if champs_ok < 2:
+        journal.warning(f"Permis: Extraction faible ({champs_ok}/3 champs principaux). Texte: {texte_nettoye[:200]}")
+    else:
+        journal.info(f"Permis: Extraction réussie ({champs_ok}/3 champs principaux)")
+
     return resultats
 
 # =============================================================================
-# Extraction spécifique : Carte d'assurance (avec Coupure Dynamique)
+# Fonctions utilitaires pour Permis de Conduire
+# =============================================================================
+def _nettoyer_texte_permis(texte: str) -> str:
+    """Nettoie le texte en gardant un maximum d'informations structurantes."""
+    texte = texte.upper()
+    texte = re.sub(r'[{}()\[\]<>]', ' ', texte)
+    # Séparer les mots collés aux chiffres (ex: "A12" -> "A 12")
+    texte = re.sub(r'([A-Z])(\d)', r'\1 \2', texte)
+    texte = re.sub(r'(\d)([A-Z])', r'\1 \2', texte)
+    return re.sub(r'\s+', ' ', texte).strip()
+
+def _trouver_toutes_les_dates(texte: str) -> List[str]:
+    """Extrait toutes les dates au format JJ.MM.AAAA, JJ/MM/AAAA ou JJ-MM-AAAA."""
+    return re.findall(r'\b(\d{1,2}[\./-]\d{1,2}[\./-]\d{2,4})\b', texte)
+
+
+# =============================================================================
+# UTILITAIRES SPÉCIFIQUES ASSURANCE (Anti-bruit OCR et mots collés)
+# =============================================================================
+_LABELS_ARRET_ASSURANCE = (
+    r"NOM|PRÉNOM|PRENOM|ASSUR[ÉE]|TITULAIRE|SOUSCRIPTEUR|CONDUCTEUR|"
+    r"VÉHICULE|VEHICULE|MARQUE|MODÈLE|MODELE|IMMATRICULATION|PLAQUE|"
+    r"DATE|ADRESSE|TÉLÉPHONE|EMAIL|CONTRAT|POLICE|GARANTIE|PRIME|"
+    r"COTISATION|FRANCHISE|PLAFOND|COUVERTURE|ASSISTANCE|INFORMATIONS|"
+    r"DURÉE|FORMULE|USAGE|PUISANCE|ANNÉE|ECHEANCE|ÉCHÉANCE"
+)
+
+def _separer_mots_colles(texte: str) -> str:
+    """Sépare les mots collés par l'OCR (ex: 'CONTRATDASSURANCE' -> 'CONTRAT D ASSURANCE')."""
+    if not texte: return texte
+    texte = re.sub(r'([a-z0-9À-ÿ])([A-Z])', r'\1 \2', texte)
+    texte = re.sub(r'([A-ZÀ-ÿ])(\d)', r'\1 \2', texte)
+    texte = re.sub(r'(\d)([A-ZÀ-ÿ])', r'\1 \2', texte)
+    return texte
+
+def _est_valeur_valide_assurance(texte: str, type_attendu: str) -> bool:
+    """Vérifie si le texte extrait est une vraie valeur et non un label ou un en-tête collé."""
+    if not texte or len(texte) < 2: return False
+    texte_pur = re.sub(r'[^A-ZÀ-ÿ\s\-]', '', texte).strip()
+    mots = texte_pur.split()
+    
+    # Rejeter si c'est un mot d'en-tête classique d'attestation
+    mots_interdits = {'CONTRAT', 'POLICE', 'INFORMATIONS', 'GARANTIE', 'COUVERTURE', 
+                      'ATTESTATION', 'CERTIFICAT', 'COTISATION', 'FRANCHISE', 'FORMULE'}
+    for mot in mots:
+        if any(interdit in mot for interdit in mots_interdits):
+            return False
+            
+    if type_attendu == "nom":
+        return len(texte_pur) >= 2 and not texte_pur.isdigit()
+    elif type_attendu == "immatriculation":
+        return bool(re.search(r'[A-Z]', texte_pur)) and bool(re.search(r'\d', texte_pur))
+    elif type_attendu == "numero":
+        return bool(re.search(r'[\d\-]', texte_pur)) and len(texte_pur) >= 5
+    return True
+
+def _extraire_valeur_apres_label(texte: str, labels_possibles: List[str], type_valeur: str) -> Optional[str]:
+    """Extrait une valeur après un label, et s'ARRÊTE NET au prochain label connu."""
+    for label in labels_possibles:
+        # La lookahead (?=...) est la clé : elle force l'arrêt avant le prochain champ
+        pattern = rf'{label}\s*[:\-]?\s*([^\n§]{{1,100}}?)(?=\s+(?:{_LABELS_ARRET_ASSURANCE})\b|$)'
+        match = re.search(pattern, texte, re.IGNORECASE)
+        if match:
+            valeur = match.group(1).strip()
+            valeur = re.sub(r'[^A-ZÀ-ÿ0-9\s\-\.]', '', valeur) # Nettoyage léger
+            if _est_valeur_valide_assurance(valeur, type_valeur):
+                return valeur
+    return None
+
+def _separer_nom_prenom_assurance(valeur_complete: str) -> tuple[Optional[str], Optional[str]]:
+    """Sépare un nom complet en nom et prénom(s) selon la convention NOM Prénom(s)."""
+    if not valeur_complete: return None, None
+    valeur = re.sub(r'[^A-ZÀ-ÿ\s\-]', '', valeur_complete).strip()
+    mots = valeur.split()
+    
+    if len(mots) == 0: return None, None
+    elif len(mots) == 1: return mots[0], None
+    else:
+        # Convention : le premier mot (ou les premiers en majuscules) est le nom de famille
+        return mots[0], " ".join(mots[1:])
+
+# =============================================================================
+# Extraction spécifique : Carte d'assurance (Version Hybride Ultra-Robuste)
 # =============================================================================
 def extraire_carte_assurance(texte: str) -> Dict:
+    """
+    Extraction hybride pour assurance : gère les mots collés, s'arrête aux bons labels,
+    et sépare correctement NOM et PRÉNOM même si l'OCR a tout fusionné.
+    """
     resultats = {}
-    texte_upper = texte.upper()
+    if not texte: return resultats
+
+    # 1. Préparation du texte : séparer les mots collés pour aider les regex
+    texte_prep = _separer_mots_colles(texte).upper()
+    texte_prep = re.sub(r'\n\s*\n', ' § ', texte_prep) # Préserver les sauts de section
+    texte_prep = re.sub(r'\s+', ' ', texte_prep).strip()
     
-    # 1. Numéro de police
-    match = re.search(r"(?:N[°O]?|POLICE|CONTRAT|CLIENT|QUITTANCE)\s*[:\-]?\s*([A-Z0-9\-/]{5,25})", texte_upper)
-    if match:
-        numero = re.sub(r'[^A-Z0-9\-/]', '', match.group(1)).strip()
-        if len(numero) >= 5: resultats["numero_police"] = numero
+    journal.info("Assurance: Début extraction hybride robuste")
 
-    # 2. Immatriculation
-    match_imm = re.search(r"(?:IMMAT|VEHICULE|W[°O]?|PLAQUE)\s*[:\-]?\s*([A-Z0-9\-]{5,15})", texte_upper)
-    if match_imm:
-        imm = re.sub(r'[^A-Z0-9]', '', match_imm.group(1)).strip()
-        if len(imm) >= 5: resultats["immatriculation"] = imm
+    # === 1. IDENTITÉ DE L'ASSURÉ (La clé pour éviter "Toyota Corolla") ===
+    # On cherche "NOM & PRÉNOM" ou "NOM PRÉNOM", et on s'arrête avant "MARQUE" ou "IMMATRICULATION"
+    nom_prenom = _extraire_valeur_apres_label(
+        texte_prep, 
+        [r'NOM\s*(?:&\s*PRÉNOM|ET\s*PRÉNOM|ET\s*PRENOM)?', r'NOM\s+PRÉNOM', r'ASSUR[ÉE]\s*[:\-]?'], 
+        "nom"
+    )
+    
+    if nom_prenom:
+        resultats["nom_famille"], resultats["prenoms"] = _separer_nom_prenom_assurance(nom_prenom)
+        journal.info(f"✓ Assurance NOM/PRÉNOM: {resultats['nom_famille']} / {resultats['prenoms']}")
+    else:
+        # Fallback : utiliser le mapping universel typographique sur tout le texte
+        fallback = _normaliser_et_mapper_identite(texte_prep)
+        if fallback.get("nom_famille"): resultats["nom_famille"] = fallback["nom_famille"]
+        if fallback.get("prenoms"): resultats["prenoms"] = fallback["prenoms"]
+
+    # === 2. NUMÉRO DE POLICE / CONTRAT ===
+    match_contrat = re.search(r'\b([A-Z]{2,4}[\-]\d{4}[\-]\d{2,4}[\-]?\d{5,7})\b', texte_prep)
+    if match_contrat:
+        resultats["numero_police"] = match_contrat.group(1)
+    else:
+        resultats["numero_police"] = _extraire_valeur_apres_label(
+            texte_prep, [r'N[°O]\s*CONTRAT', r'CONTRAT\s*N[°O]?', r'POLICE\s*N[°O]?'], "numero"
+        )
+    if resultats.get("numero_police"):
+        journal.info(f"✓ Assurance CONTRAT: {resultats['numero_police']}")
+
+    # === 3. IMMATRICULATION ===
+    match_immat = re.search(r'\b([A-Z]{1,3}[\-]?\d{2,4}[\-]?[A-Z]{1,3})\b', texte_prep)
+    if match_immat:
+        # Filtrer les faux positifs (ex: numéros de téléphone ou de contrat longs)
+        candidat = match_immat.group(1)
+        if not (re.search(r'\d{4,}', candidat) and "-" not in candidat):
+            resultats["immatriculation"] = candidat
+    if not resultats.get("immatriculation"):
+        resultats["immatriculation"] = _extraire_valeur_apres_label(
+            texte_prep, [r'IMMATRICULATION', r'REGISTRATION', r'PLAQUE'], "immatriculation"
+        )
+    if resultats.get("immatriculation"):
+        journal.info(f"✓ Assurance IMMATRICULATION: {resultats['immatriculation']}")
+
+    # === 4. COMPAGNIE D'ASSURANCE ===
+    # Cherche les noms connus en priorité
+    assureurs_connus = ["ZUTO", "NSIA", "SUNU", "SAHAM", "VISTA", "UGAN", "AXA", "ALLIANZ"]
+    for assureur in assureurs_connus:
+        if assureur in texte_prep:
+            resultats["compagnie_assurance"] = assureur
+            break
             
-    # 3. Nom du souscripteur (avec Coupure Dynamique + Mapping Universel)
-    match_debut = re.search(r"(?:NOM\s*&\s*PR[ÉE]NOMS?|SOUSCRIPT|PRENEUR|ASSURE|TITULAIRE|PROPRIETAIRE)\s*[:\-]?\s*", texte_upper)
-    if match_debut:
-        reste_ligne = texte_upper[match_debut.end():]
-        regex_fin = _construire_regex_fin_de_champ()
-        nom_coupe = re.split(regex_fin, reste_ligne, flags=re.IGNORECASE)[0].strip()
-        nom = re.sub(r'\s+', ' ', nom_coupe).strip(" \t:;,-/|·•\"'()")
-        
-        # Mapping Universel
-        identite = _normaliser_et_mapper_identite(nom)
-        if identite["nom_famille"]: resultats["nom_famille"] = identite["nom_famille"]
-        if identite["prenoms"]: resultats["prenoms"] = identite["prenoms"]
+    if not resultats.get("compagnie_assurance"):
+        resultats["compagnie_assurance"] = _extraire_valeur_apres_label(
+            texte_prep, [r'COMPAGNIE', r'ASSUREUR', r'INSURER'], "texte"
+        )
+    if resultats.get("compagnie_assurance"):
+        journal.info(f"✓ Assurance COMPAGNIE: {resultats['compagnie_assurance']}")
 
-    # 4. Compagnie d'assurance
-    lignes = texte.split("\n")
-    for ligne in lignes[:8]:
-        ligne = ligne.strip()
-        if any(mot in ligne.upper() for mot in ['ASSURANCE', 'SA', 'SARL', 'VIE', 'IARD']):
-            if not _ligne_est_que_labels(ligne) and 4 <= len(ligne) <= 60:
-                resultats["compagnie_assurance"] = ligne
-                break
+    # === 5. DATES DE COUVERTURE (Effet et Expiration) ===
+    # Cherche le pattern "VALABLE DU JJ/MM/AAAA AU JJ/MM/AAAA"
+    match_periode = re.search(
+        r"VALABLE\s*(?:DU|DE|LE)?\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})\s*(?:AU|À|A|JUSQU[’' ]?AU?)\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})",
+        texte_prep
+    )
+    if match_periode:
+        resultats["date_delivrance"] = _parser_date(match_periode.group(1))
+        resultats["date_expiration"] = _parser_date(match_periode.group(2))
+    else:
+        # Fallback contextuel
+        if not resultats.get("date_delivrance"):
+            date_effet = _extraire_valeur_apres_label(texte_prep, [r"DATE\s*D[’']?EFFET", r"EFFET\s*LE", r"DU"], "date")
+            if date_effet: resultats["date_delivrance"] = _parser_date(date_effet)
+            
+        if not resultats.get("date_expiration"):
+            date_exp = _extraire_valeur_apres_label(texte_prep, [r"EXPIRATION", r"JUSQU[’' ]?AU?", r"AU", r"ECHEANCE"], "date")
+            if date_exp: resultats["date_expiration"] = _parser_date(date_exp)
 
-    # 5. Dates
-    dates_trouvees = re.findall(r'(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})', texte)
-    dates_valides = [d for d in dates_trouvees if _parser_date(d)]
-    if len(dates_valides) >= 2:
-        resultats["date_delivrance"] = dates_valides[0]
-        resultats["date_expiration"] = dates_valides[-1]
-    elif len(dates_valides) == 1:
-        if re.search(r'(?:VALID|EXPIR|FIN|ECHEANCE)', texte, re.IGNORECASE):
-            resultats["date_expiration"] = dates_valides[0]
-        else:
-            resultats["date_delivrance"] = dates_valides[0]
+        # Fallback ultime : prendre la première et la dernière date du document
+        if not resultats.get("date_delivrance") or not resultats.get("date_expiration"):
+            toutes_dates = re.findall(r'\b(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})\b', texte_prep)
+            dates_valides = [_parser_date(d) for d in toutes_dates if _parser_date(d)]
+            if len(dates_valides) >= 2:
+                if not resultats.get("date_delivrance"): resultats["date_delivrance"] = dates_valides[0]
+                if not resultats.get("date_expiration"): resultats["date_expiration"] = dates_valides[-1]
 
     return resultats
 
