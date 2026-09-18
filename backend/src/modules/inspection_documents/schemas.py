@@ -40,6 +40,7 @@ class StatutVerification(str, Enum):
     APPROUVE = "approuve"
     REJETE = "rejete"
     PARTIEL = "partiel"
+    EXPIRE = "expiree"
 
 
 class FaceDocument(str, Enum):

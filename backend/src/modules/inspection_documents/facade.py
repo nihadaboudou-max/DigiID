@@ -57,6 +57,73 @@ def _detecter_type(contenu: bytes) -> TypeDocument:
     return classifier_document(texte_brut, mrz_lignes)
 
 
+def _extraire_champ(donnees: Dict[str, Any], *cles: str) -> Optional[str]:
+    """Renvoie la 1re valeur non vide parmi les clés données (sinon None)."""
+    for cle in cles:
+        valeur = donnees.get(cle)
+        if valeur not in (None, "", [], {}):
+            return str(valeur)
+    return None
+
+
+async def _enregistrer_historique(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    resultat: Dict[str, Any],
+    nom_fichier: str,
+    type_mime: str,
+    taille_octets: int,
+    face: str,
+) -> None:
+    """Journalise le scan dans la table centrale `inspection_documents`.
+
+    C'est cette table que lit l'historique du frontend : sans cet écrit, les
+    documents scannés via l'interface unique n'apparaîtraient pas.
+    """
+    from src.modeles.inspection_document import InspectionDocument
+
+    donnees: Dict[str, Any] = resultat.get("donnees") or {}
+    statut = str(resultat.get("statut") or "en_attente")
+
+    confiance = 0.0
+    for cle in ("taux_confiance_ocr", "taux_confiance_moyen", "confiance"):
+        try:
+            if donnees.get(cle) is not None:
+                confiance = float(donnees[cle])
+                break
+        except (TypeError, ValueError):
+            continue
+
+    document = InspectionDocument(
+        utilisateur_id=utilisateur.id,
+        type_document=str(resultat.get("type_document") or "inconnu"),
+        face=face,
+        nom_fichier=nom_fichier,
+        type_mime=type_mime,
+        taille_octets=taille_octets,
+        nom_famille=_extraire_champ(donnees, "nom_famille", "nom", "titulaire_nom"),
+        prenoms=_extraire_champ(donnees, "prenoms", "prenom", "titulaire_prenoms"),
+        date_naissance=_extraire_champ(donnees, "date_naissance"),
+        date_expiration=_extraire_champ(donnees, "date_expiration"),
+        nationalite=_extraire_champ(donnees, "nationalite"),
+        numero_document=_extraire_champ(
+            donnees,
+            "numero_document",
+            "numero_immatriculation",
+            "numero_police",
+            "numero_chassis",
+            "numero_carte",
+        ),
+        texte_brut=(resultat.get("texte_brut") or None),
+        donnees_specifiques=donnees,
+        statut=statut,
+        est_valide=(statut == "approuve"),
+        taux_confiance_ocr=confiance,
+    )
+    session.add(document)
+    await session.commit()
+
+
 async def traiter(
     session: AsyncSession,
     utilisateur: Utilisateur,
@@ -94,8 +161,8 @@ async def traiter(
                     "carte de séjour, consulaire).",
         )
 
-    # 4. Délégation : l'adaptateur lit le fichier (position 0) et renvoie la réponse unifiée.
-    return await adaptateur(
+    # 4. Délégation : l'adaptateur lit le fichier (position 0).
+    resultat = await adaptateur(
         session,
         utilisateur,
         fichier,
@@ -104,3 +171,19 @@ async def traiter(
         enrolement_id=enrolement_id,
         utilisateur_cible_id=utilisateur_cible_id,
     )
+
+    # 5. Historique unifié : on journalise le scan dans la table centrale.
+    try:
+        await _enregistrer_historique(
+            session=session,
+            utilisateur=utilisateur,
+            resultat=resultat,
+            nom_fichier=fichier.filename or "document",
+            type_mime=fichier.content_type or "image/jpeg",
+            taille_octets=len(contenu),
+            face=face,
+        )
+    except Exception as e:  # pragma: no cover - ne doit jamais casser l'upload
+        journal.warning(f"Façade : échec enregistrement historique ({e})")
+
+    return resultat

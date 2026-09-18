@@ -5,10 +5,39 @@ Détecte le type de document (CNI, passeport, permis, assurance, etc.)
 en utilisant une approche multi-niveaux.
 """
 import re
+import unicodedata
 from typing import Optional
 from src.modules.inspection_documents.schemas import TypeDocument
 from src.modules.inspection_documents.classification.patterns_documents import PATTERNS_CLASSIFICATION
 from src.noyau.journal import journal
+
+
+# Marqueurs FORTS d'une assurance. On les teste en PRIORITÉ ABSOLUE : une
+# attestation d'assurance reprend les caractéristiques du véhicule
+# (« 1ère mise en circulation », « puissance fiscale », n° de châssis/VIN,
+# immatriculation) et serait sinon confondue avec une carte grise.
+MARQUEURS_ASSURANCE = (
+    "ASSURANCE",
+    "ASSUREUR",
+    "CARTE VERTE",
+    "RESPONSABILITE CIVILE",
+    "TOUS RISQUES",
+    "SINISTRE",
+    "PRIME D'ASSURANCE",
+)
+
+# Marqueur EXPLICITE d'une carte grise (titre "certificat d'immatriculation"),
+# tolérant aux variantes d'apostrophe/espaces produites par l'OCR.
+MOTIF_CARTE_GRISE = re.compile(
+    r"(CARTE\s*GRISE|CERTIFICAT\s*D['`\u2019]?\s*IMMATRICULATION)"
+)
+
+
+def _normaliser_texte(texte: str) -> str:
+    """Majuscules + suppression des accents (matching robuste aux erreurs OCR)."""
+    texte = unicodedata.normalize("NFKD", texte or "")
+    texte = "".join(c for c in texte if not unicodedata.combining(c))
+    return texte.upper()
 
 
 def classifier_document(texte_brut: str, mrz_lignes: tuple) -> TypeDocument:
@@ -20,12 +49,21 @@ def classifier_document(texte_brut: str, mrz_lignes: tuple) -> TypeDocument:
         return TypeDocument.INCONNU
     
     texte_upper = texte_brut.upper() if texte_brut else ""
-    
-    # ── NIVEAU 0 : Détection explicite prioritaire (Assurance) ──
-    # On vérifie ça AVANT tout pour éviter qu'un "CNI N°" dans une assurance ne la fasse classifier comme CNI
-    if "CONTRAT D'ASSURANCE" in texte_upper or "ATTESTATION D'ASSURANCE" in texte_upper or "CARTE VERTE" in texte_upper:
-        journal.info("Document classifié comme CARTE_ASSURANCE (motif explicite prioritaire)")
+    texte_norm = _normaliser_texte(texte_brut)
+
+    # ── NIVEAU 0 : Détection explicite prioritaire ──
+    # 0.a) ASSURANCE EN PREMIER. C'est le point clé : une carte grise et une
+    #      attestation d'assurance partagent des champs véhicule. Dès qu'un
+    #      marqueur d'assurance est présent, on tranche pour l'assurance.
+    if any(marqueur in texte_norm for marqueur in MARQUEURS_ASSURANCE):
+        journal.info("Document classifié comme CARTE_ASSURANCE (marqueur d'assurance prioritaire)")
         return TypeDocument.CARTE_ASSURANCE
+
+    # 0.b) CARTE GRISE uniquement sur un titre explicite ("CARTE GRISE" ou
+    #      "CERTIFICAT D'IMMATRICULATION"), jamais sur un simple champ véhicule.
+    if MOTIF_CARTE_GRISE.search(texte_norm):
+        journal.info("Document classifié comme CARTE_GRISE (titre explicite)")
+        return TypeDocument.CARTE_GRISE
 
     # ── NIVEAU 1 : Détection par MRZ (la plus fiable) ──
     if mrz_lignes and mrz_lignes[0]:

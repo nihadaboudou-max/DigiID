@@ -41,13 +41,14 @@ const LIBELLES_STATUT: Record<StatutVerification, string> = {
   [StatutVerification.APPROUVE]: "Approuvé",
   [StatutVerification.REJETE]: "Rejeté",
   [StatutVerification.PARTIEL]: "Partiel",
+  [StatutVerification.EXPIRE]: "Expiré",
 };
-
 const CLASSES_STATUT: Record<StatutVerification, string> = {
   [StatutVerification.EN_ATTENTE]: "bg-yellow-100 text-yellow-800",
   [StatutVerification.APPROUVE]: "bg-green-100 text-green-800",
   [StatutVerification.REJETE]: "bg-red-100 text-red-800",
   [StatutVerification.PARTIEL]: "bg-orange-100 text-orange-800",
+  [StatutVerification.EXPIRE]: "bg-amber-100 text-amber-800",
 };
 
 const OPTIONS_TYPE_DOCUMENT: { valeur: TypeDocument; libelle: string }[] = [

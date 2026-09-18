@@ -9,14 +9,27 @@ Organisés par type de document, avec des regex robustes pour tolérer les erreu
 # L'ordre est important : les types les plus spécifiques sont vérifiés en premier.
 # =============================================================================
 PATTERNS_CLASSIFICATION = {
-    # Ordre important : carte grise et consulaire AVANT les types generiques
-    # (une carte grise peut contenir "IMMATRICULATION" qui matcherait d'autres types).
+    # ORDRE CRITIQUE : l'assurance AVANT la carte grise. Les deux documents
+    # partagent des champs vehicule ("1ere mise en circulation", "puissance
+    # fiscale", n° de chassis/VIN, immatriculation) ; sans cet ordre, une
+    # attestation d'assurance serait detectee comme une carte grise.
+    "carte_assurance": [
+        r"ASSURANCE",
+        r"ASSUREUR",
+        r"CARTE\s*VERTE",
+        r"CONTRAT\s*D[''`]ASSURANCE",
+        r"ATTESTATION\s*D[''`]ASSURANCE",
+        r"RESPONSABILIT[ÉE]\s*CIVILE",
+        r"TOUS\s*RISQUES",
+        r"SINISTRE",
+        r"POLICE\s*N[°O]",
+    ],
+    # Carte grise : uniquement un TITRE explicite (les champs vehicule communs
+    # avec l'assurance ne doivent PAS suffire a la classifier).
     "carte_grise": [
         r"CARTE\s*GRISE",
-        r"CERTIFICAT\s*D[''`]IMMATRICULATION",
-        r"PUISSANCE\s*FISCALE",
-        r"1RE?\s*MISE\s*EN\s*CIRCULATION",
-        r"\bV\.?\s*I\.?\s*N\b",
+        r"CERTIFICAT\s*D[''`]?\s*IMMATRICULATION",
+        r"\bIMMATRICULATION\s*N",
     ],
     "carte_consulaire": [
         r"IMMATRICULATION\s*CONSULAIRE",
@@ -35,13 +48,6 @@ PATTERNS_CLASSIFICATION = {
         r"DRIVING\s*LICENCE",
         r"CAT[ÉE]GORIE",
         r"PERMIS\s*N[°O]",
-    ],
-    "carte_assurance": [
-        r"CONTRAT\s*D[''`]ASSURANCE",
-        r"ATTESTATION\s*D[''`]ASSURANCE",
-        r"CARTE\s*VERTE",
-        r"POLICE\s*N[°O]",
-        r"ASSURANCE\s*(?:AUTO|V[ÉE]HICULE|RESPONSABILIT[ÉE])",
     ],
     "carte_sejour": [
         r"CARTE\s*DE\s*S[ÉE]JOUR",

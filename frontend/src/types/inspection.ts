@@ -20,6 +20,7 @@ export enum StatutVerification {
   APPROUVE = "approuve",
   REJETE = "rejete",
   PARTIEL = "partiel",
+  EXPIRE = "expiree",
 }
 
 export enum FaceDocument {
