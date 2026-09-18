@@ -76,6 +76,20 @@ def _extraire_lignes_mrz_texte(texte_brut: str) -> Tuple[Optional[str], Optional
     return candidats[0], candidats[1], None
 
 
+def _nettoyer_nom(valeur: Optional[str]) -> Optional[str]:
+    """Nettoie un nom/prénom : retire symboles, ``<`` résiduels et libellés avalés."""
+    if not valeur:
+        return None
+    valeur = re.sub(r"[^A-Za-zÀ-ÿ'\- ]", " ", valeur)
+    valeur = re.sub(r"\s+", " ", valeur).strip()
+    # Si un mot-clé voisin a été capturé par erreur (ex: « DIOP PRENOM »), on coupe.
+    valeur = re.split(
+        r"\b(?:PRENOMS?|SURNAME|GIVEN|NAMES?|DATE|SEXE|NATIONALITE|LIEU|AUTORITE|EMETTEUR)\b",
+        valeur,
+    )[0].strip()
+    return valeur.upper() if valeur else None
+
+
 def _extraire_sexe(texte: str) -> Optional[str]:
     m = re.search(r"SEXE\s*[:\-]?\s*(M|F|MASCULIN|FEMININ|F[ÉE]MININ)", texte)
     if not m:
@@ -120,6 +134,13 @@ def extraire_donnees_passeport(
         except Exception as e:  # pragma: no cover - le parseur ne lève jamais
             journal.warning(f"Passeport : parsing MRZ échoué ({e})")
             mrz = {}
+        # Un passeport a TOUJOURS une MRZ TD3 : si l'OCR a livré un autre format,
+        # les champs MRZ sont douteux (source de lettres parasites) → repli texte.
+        if mrz and mrz.get("format") != "TD3":
+            journal.warning(
+                f"Passeport : MRZ {mrz.get('format')} inattendue (TD3 attendu) → repli sur le texte"
+            )
+            mrz = {}
 
     # ── 2. Fusion MRZ > regex ──
     numero_passeport = mrz.get("numero_document") or _extraire_apres(
@@ -128,8 +149,12 @@ def extraire_donnees_passeport(
     if numero_passeport:
         # Le nettoyage insère des espaces ("SN 1234567") : on les retire du numéro.
         numero_passeport = re.sub(r"\s+", "", numero_passeport)
-    nom_famille = mrz.get("nom_famille") or _extraire_apres(texte, [r"NOM", r"SURNAME"], 40)
-    prenoms = mrz.get("prenoms") or _extraire_apres(texte, [r"PRENOMS?", r"GIVEN\s*NAMES?"], 50)
+    nom_famille = _nettoyer_nom(mrz.get("nom_famille")) or _nettoyer_nom(
+        _extraire_apres(texte, [r"(?<![A-ZÀ-Ÿ])NOM\b", r"(?<![A-ZÀ-Ÿ])SURNAME\b"], 40)
+    )
+    prenoms = _nettoyer_nom(mrz.get("prenoms")) or _nettoyer_nom(
+        _extraire_apres(texte, [r"(?<![A-ZÀ-Ÿ])PRENOMS?\b", r"GIVEN\s*NAMES?\b"], 50)
+    )
     date_naissance = mrz.get("date_naissance_date") or _extraire_date_par_contexte(
         texte, [r"DATE\s*DE\s*NAISSANCE", r"NE\s*E?\s*LE", r"NAISSANCE"]
     )

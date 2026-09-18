@@ -8,7 +8,7 @@ Formats supportés :
 Norme ICAO 9303
 """
 import re
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from src.noyau.journal import journal
 
 # =============================================================================
@@ -92,6 +92,30 @@ def _convertir_date_mrz(date_mrz: str) -> Optional[str]:
         pass
     return None
 
+def _nettoyer_tokens_mrz(valeur: str) -> str:
+    """Nettoie un segment de nom MRZ (retire `<`, chiffres et symboles parasites)."""
+    valeur = (valeur or "").replace("<", " ")
+    # Un OCR imparfait transforme parfois la garniture en lettres/symboles parasites.
+    valeur = re.sub(r"[^A-Za-zÀ-ÿ'\- ]", " ", valeur)
+    valeur = re.sub(r"\s+", " ", valeur).strip()
+    return valeur.upper()
+
+
+def _nettoyer_noms_mrz(champ: str) -> Tuple[str, str]:
+    """Extrait (nom de famille, prénoms) d'un champ MRZ en ignorant la garniture.
+
+    La MRZ sépare le nom et les prénoms par `<<`, puis complète le champ par une
+    longue suite de `<`. Quand l'OCR lit mal cette garniture, il y ajoute des
+    lettres parasites (« K », « C »…) qui se retrouvaient collées aux noms.
+    On ne conserve donc QUE les deux premiers segments délimités par une suite
+    de 2 `<` (ou plus) : le reste est de la garniture, à ignorer.
+    """
+    morceaux = re.split(r"<{2,}", champ or "")
+    nom = _nettoyer_tokens_mrz(morceaux[0] if morceaux else "")
+    prenoms = _nettoyer_tokens_mrz(morceaux[1] if len(morceaux) > 1 else "")
+    return nom, prenoms
+
+
 # =============================================================================
 # Parseurs spécifiques par format
 # =============================================================================
@@ -114,9 +138,7 @@ def parser_mrz_td1(l1: str, l2: str, l3: str) -> Dict[str, Any]:
         
         nationalite = l2[15:18].strip("<")
         
-        parties = l3.split("<<")
-        nom_famille = parties[0].replace("<", " ").strip() if parties else ""
-        prenoms = parties[1].replace("<", " ").strip() if len(parties) > 1 else ""
+        nom_famille, prenoms = _nettoyer_noms_mrz(l3)
         
         # Validations checksum
         if not _verifier_checksum_mrz(num_doc, cs_doc): erreurs.append("Checksum numéro invalide")
@@ -156,10 +178,7 @@ def parser_mrz_td2(l1: str, l2: str) -> Dict[str, Any]:
     
     try:
         pays = l1[2:5].strip("<")
-        reste_noms = l1[5:36].strip("<")
-        parties = reste_noms.split("<<")
-        nom_famille = parties[0].replace("<", " ").strip() if parties else ""
-        prenoms = parties[1].replace("<", " ").strip() if len(parties) > 1 else ""
+        nom_famille, prenoms = _nettoyer_noms_mrz(l1[5:36])
         
         # Ligne 2 : Positions ICAO exactes
         num_doc = l2[0:9].replace("<", "")
@@ -216,10 +235,7 @@ def parser_mrz_td3(l1: str, l2: str) -> Dict[str, Any]:
     
     try:
         pays = l1[2:5].strip("<")
-        noms = l1[5:44].strip("<")
-        parties = noms.split("<<")
-        nom_famille = parties[0].replace("<", " ").strip() if parties else ""
-        prenoms = parties[1].replace("<", " ").strip() if len(parties) > 1 else ""
+        nom_famille, prenoms = _nettoyer_noms_mrz(l1[5:44])
         
         num_doc = l2[0:9].replace("<", "")
         cs_doc = l2[9:10]
