@@ -36,6 +36,7 @@ from .assurance_auto import AssuranceAuto
 from .carte_grise import CarteGrise
 from .carte_sejour import CarteSejour
 from .consulaire import CarteConsulaire
+from .passeport import Passeport
 from src.modeles.inspection_document import InspectionDocument
 
 __all__ = [
@@ -87,5 +88,6 @@ __all__ = [
     "CarteGrise",
     "CarteSejour",
     "CarteConsulaire",
+    "Passeport",
     "InspectionDocument",
 ]

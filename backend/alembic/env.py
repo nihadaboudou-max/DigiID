@@ -34,6 +34,7 @@ from src.modeles import (  # noqa: F401
     carte_grise,
     carte_sejour,
     consulaire,
+    passeport,
 )
 from src.config import parametres
 
