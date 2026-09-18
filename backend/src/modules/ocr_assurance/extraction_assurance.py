@@ -136,6 +136,19 @@ def _extraire_date_par_contexte(texte: str, contextes: List[str]) -> Optional[st
             return match.group(1)
     return None
 
+
+def _valeur_date(date_texte: str) -> Optional[Tuple[int, int, int]]:
+    """Convertit 'JJ/MM/AAAA' en (annee, mois, jour) pour comparaison."""
+    m = re.match(r'^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$', (date_texte or '').strip())
+    if not m:
+        return None
+    j, mo, a = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if a < 100:
+        a += 2000
+    if not (1 <= mo <= 12 and 1 <= j <= 31):
+        return None
+    return (a, mo, j)
+
 # =============================================================================
 # FONCTION PRINCIPALE D'EXTRACTION
 # =============================================================================
@@ -254,16 +267,27 @@ def extraire_donnees_assurance(
         donnees['date_expiration'] = match_periode.group(2)
     else:
         if not donnees['date_effet']:
-            donnees['date_effet'] = _extraire_date_par_contexte(texte, [r"DATE\s*D[’']?EFFET", r"START\s*DATE", r"EFFET\s*LE", r"DU"])
+            donnees['date_effet'] = _extraire_date_par_contexte(texte, [
+                r"DATE\s*D?[’']?\s*EFFET", r"DATED?EFFET", r"EFFET\s*LE",
+                r"START\s*DATE", r"\bDU\b",
+            ])
         if not donnees['date_expiration']:
-            donnees['date_expiration'] = _extraire_date_par_contexte(texte, [r"DATE\s*D[’']?EXPIRATION", r"EXPIRY\s*DATE", r"JUSQU[’' ]?AU?", r"AU", r"ECHEANCE"])
+            donnees['date_expiration'] = _extraire_date_par_contexte(texte, [
+                r"DATE\s*D?[’']?\s*(?:EXPIRATION|[ÉE]CH[ÉE]ANCE)", r"DATED?[ÉE]CH[ÉE]ANCE",
+                r"[ÉE]CH[ÉE]ANCE", r"EXPIRY\s*DATE", r"JUSQU[’' ]?AU?",
+                r"VALID[ÉE]?\s*(?:JUSQU|AU)", r"\bAU\b",
+            ])
     
     # Fallback ultime sur toutes les dates
     if not donnees['date_effet'] or not donnees['date_expiration']:
         toutes_dates = re.findall(r'\b(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})\b', texte)
-        if len(toutes_dates) >= 2:
-            if not donnees['date_effet']: donnees['date_effet'] = toutes_dates[0]
-            if not donnees['date_expiration']: donnees['date_expiration'] = toutes_dates[-1]
+        dates_triees = sorted(
+            (d for d in toutes_dates if _valeur_date(d)),
+            key=_valeur_date,
+        )
+        if len(dates_triees) >= 2:
+            if not donnees['date_effet']: donnees['date_effet'] = dates_triees[0]
+            if not donnees['date_expiration']: donnees['date_expiration'] = dates_triees[-1]
             journal.info(f"✓ Dates (Fallback): {donnees['date_effet']} -> {donnees['date_expiration']}")
 
     # === VALIDATION FINALE ===

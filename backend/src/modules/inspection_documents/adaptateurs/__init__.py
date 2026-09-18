@@ -9,6 +9,7 @@ from src.modules.inspection_documents.adaptateurs.carte_grise import adapter_car
 from src.modules.inspection_documents.adaptateurs.carte_sejour import adapter_carte_sejour
 from src.modules.inspection_documents.adaptateurs.cni import adapter_cni
 from src.modules.inspection_documents.adaptateurs.consulaire import adapter_consulaire
+from src.modules.inspection_documents.adaptateurs.passeport import adapter_passeport
 from src.modules.inspection_documents.adaptateurs.permis import adapter_permis
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "adapter_carte_grise",
     "adapter_carte_sejour",
     "adapter_consulaire",
+    "adapter_passeport",
 ]

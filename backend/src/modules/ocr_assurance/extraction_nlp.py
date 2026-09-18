@@ -56,7 +56,8 @@ LABELS_DATE_EFFET = (
     "effet", "debut", "début", "prise", "validite", "validité", "du", "commence",
 )
 LABELS_DATE_EXPIRATION = (
-    "expiration", "echeance", "échéance", "fin", "jusqu", "au", "à", "a", "validité", "validite",
+    "expiration", "expire", "echeance", "échéance", "fin", "jusqu", "au",
+    "validité", "validite", "terme",
 )
 
 # Mots-clés d'en-têtes d'attestations (bruit OCR collé) — jamais des valeurs
@@ -94,7 +95,16 @@ def _contexte(doc, ent, largeur: int = 6) -> Tuple[str, str]:
 
 
 def _contient(contexte: str, labels) -> bool:
-    return any(lab in contexte for lab in labels)
+    """Vrai si un label apparaît comme MOT ENTIER dans le contexte.
+
+    Le matching par sous-chaîne provoquait des faux positifs (ex. le label "a"
+    matché dans "DAKAR", ou "au" dans "AUTO"), ce qui faisait basculer la date
+    d'effet en date d'expiration.
+    """
+    for lab in labels:
+        if re.search(r"(?<![a-zà-ÿ])" + re.escape(lab) + r"(?![a-zà-ÿ])", contexte):
+            return True
+    return False
 
 
 def _est_bruit(texte: str) -> bool:
@@ -181,16 +191,46 @@ def _choisir_assureur(candidats_orgs: List[Tuple[Any, str, str]], texte_brut: st
     return meilleur
 
 
+# Libellés de dates collés par l'OCR ("DATEDEFFET" -> "DATE EFFET").
+_FORMES_COLLEES_DATES = (
+    ("datedeffet", "date effet"),
+    ("datedebut", "date debut"),
+    ("datedébut", "date début"),
+    ("datedecheance", "date echeance"),
+    ("datedéchéance", "date échéance"),
+    ("dateecheance", "date echeance"),
+    ("dateexpiration", "date expiration"),
+    ("dateemission", "date emission"),
+)
+
+
+def _degluer_labels_dates(contexte: str) -> str:
+    """Sépare les libellés de dates collés par l'OCR avant la classification."""
+    for colle, separe in _FORMES_COLLEES_DATES:
+        contexte = contexte.replace(colle, separe)
+    return contexte
+
+
 def _classifier_dates(candidats_dates: List[Tuple[Any, str, str]]) -> Tuple[Optional[str], Optional[str]]:
     """Classe les dates en (date d'effet, date d'expiration) via le contexte."""
     effet = expiration = None
     sans_contexte: List[str] = []
     for ent, avant, apres in candidats_dates:
         date_texte = ent.text.strip()
+        avant = _degluer_labels_dates(avant)
+        apres = _degluer_labels_dates(apres)
+        # Le libellé est cherché AVANT la date en priorité (sinon APRÈS) :
+        # ex. "DATE D'EFFET 01/05/2024 DATE D'ÉCHÉANCE 30/04/2025".
         if _contient(avant, LABELS_DATE_EXPIRATION):
             if expiration is None:
                 expiration = date_texte
         elif _contient(avant, LABELS_DATE_EFFET):
+            if effet is None:
+                effet = date_texte
+        elif _contient(apres, LABELS_DATE_EXPIRATION):
+            if expiration is None:
+                expiration = date_texte
+        elif _contient(apres, LABELS_DATE_EFFET):
             if effet is None:
                 effet = date_texte
         else:

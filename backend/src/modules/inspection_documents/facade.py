@@ -23,6 +23,7 @@ from src.modules.inspection_documents.adaptateurs import (
     adapter_carte_sejour,
     adapter_cni,
     adapter_consulaire,
+    adapter_passeport,
     adapter_permis,
 )
 from src.modules.inspection_documents.adaptateurs.commun import reponse_unifiee
@@ -35,6 +36,7 @@ ADAPTATEURS = {
     TypeDocument.CNI_BIOMETRIQUE: adapter_cni,
     TypeDocument.CNI_PAPIER: adapter_cni,
     TypeDocument.PERMIS_CONDUIRE: adapter_permis,
+    TypeDocument.PASSEPORT: adapter_passeport,
     TypeDocument.CARTE_ASSURANCE: adapter_assurance,
     TypeDocument.CARTE_GRISE: adapter_carte_grise,
     TypeDocument.CARTE_SEJOUR: adapter_carte_sejour,
