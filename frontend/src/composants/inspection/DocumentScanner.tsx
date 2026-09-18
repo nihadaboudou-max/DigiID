@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { TypeDocument, ReponseUploadDocument } from "@/types/inspection";
+import { TypeDocument, ReponseDocumentUnifie } from "@/types/inspection";
 import { uploadDocument } from "@/services/inspectionApi";
 import DocumentTypeSelector from "./DocumentTypeSelector";
 import ImageCapture from "./ImageCapture";
@@ -11,7 +11,7 @@ import DocumentHistory from "./DocumentHistory";
 export default function DocumentScanner() {
   const [selectedType, setSelectedType] = useState<TypeDocument | null>(null);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [result, setResult] = useState<ReponseUploadDocument | null>(null);
+  const [result, setResult] = useState<ReponseDocumentUnifie | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"scan" | "history">("scan");

@@ -59,6 +59,8 @@ export default function DocumentHistory() {
       [TypeDocument.PERMIS_CONDUIRE]: "Permis",
       [TypeDocument.CARTE_ASSURANCE]: "Assurance",
       [TypeDocument.CARTE_SEJOUR]: "Carte de séjour",
+      [TypeDocument.CARTE_GRISE]: "Carte grise",
+      [TypeDocument.CARTE_CONSULAIRE]: "Carte consulaire",
       [TypeDocument.CARTE_VOTE]: "Carte de vote",
       [TypeDocument.CARTE_ETUDIANT]: "Carte étudiant",
       [TypeDocument.INCONNU]: "Inconnu",

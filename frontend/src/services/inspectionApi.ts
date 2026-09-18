@@ -1,6 +1,6 @@
 import { clientAPI, obtenirTokenAcces } from "@/services/client_api";
 import {
-  ReponseUploadDocument,
+  ReponseDocumentUnifie,
   ListeVerifications,
   SyntheseVerification,
 } from "@/types/inspection";
@@ -15,17 +15,23 @@ export async function uploadDocument(
   fichier: File,
   typeDocument?: string,
   face: "recto" | "verso" | "unique" = "recto",
-  utilisateurCibleId?: string
-): Promise<ReponseUploadDocument> {
+  utilisateurCibleId?: string,
+  contexte: "citoyen" | "agent" = "citoyen",
+  enrolementId?: string
+): Promise<ReponseDocumentUnifie> {
   const formData = new FormData();
   formData.append("fichier", fichier);
   formData.append("face", face);
-  
+  formData.append("contexte", contexte);
+
   if (typeDocument) {
     formData.append("type_document", typeDocument);
   }
   if (utilisateurCibleId) {
     formData.append("utilisateur_cible_id", utilisateurCibleId);
+  }
+  if (enrolementId) {
+    formData.append("enrolement_id", enrolementId);
   }
 
   // Récupération du token via la fonction centralisée du projet

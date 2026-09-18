@@ -7,7 +7,7 @@ import {
   FaceDocument,
   StatutVerification,
   DetailVerification,
-  ReponseUploadDocument,
+  ReponseDocumentUnifie,
 } from "@/types/inspection";
 import {
   uploadDocument,
@@ -23,6 +23,8 @@ const LIBELLES_TYPE_DOCUMENT: Record<TypeDocument, string> = {
   [TypeDocument.PERMIS_CONDUIRE]: "Permis de conduire",
   [TypeDocument.CARTE_ASSURANCE]: "Carte d'assurance",
   [TypeDocument.CARTE_SEJOUR]: "Carte de séjour",
+  [TypeDocument.CARTE_GRISE]: "Carte grise",
+  [TypeDocument.CARTE_CONSULAIRE]: "Carte consulaire",
   [TypeDocument.CARTE_VOTE]: "Carte de vote",
   [TypeDocument.CARTE_ETUDIANT]: "Carte étudiant",
   [TypeDocument.INCONNU]: "Inconnu",
@@ -48,12 +50,6 @@ const CLASSES_STATUT: Record<StatutVerification, string> = {
   [StatutVerification.PARTIEL]: "bg-orange-100 text-orange-800",
 };
 
-const LIBELLES_SEXE: Record<string, string> = {
-  M: "Masculin",
-  F: "Féminin",
-  non_detecte: "Non détecté",
-};
-
 const OPTIONS_TYPE_DOCUMENT: { valeur: TypeDocument; libelle: string }[] = [
   { valeur: TypeDocument.CNI_BIOMETRIQUE, libelle: "CNI Biométrique" },
   { valeur: TypeDocument.CNI_PAPIER, libelle: "CNI Papier" },
@@ -61,6 +57,8 @@ const OPTIONS_TYPE_DOCUMENT: { valeur: TypeDocument; libelle: string }[] = [
   { valeur: TypeDocument.PERMIS_CONDUIRE, libelle: "Permis de conduire" },
   { valeur: TypeDocument.CARTE_ASSURANCE, libelle: "Carte d'assurance" },
   { valeur: TypeDocument.CARTE_SEJOUR, libelle: "Carte de séjour" },
+  { valeur: TypeDocument.CARTE_GRISE, libelle: "Carte grise" },
+  { valeur: TypeDocument.CARTE_CONSULAIRE, libelle: "Carte consulaire" },
   { valeur: TypeDocument.CARTE_VOTE, libelle: "Carte de vote" },
   { valeur: TypeDocument.CARTE_ETUDIANT, libelle: "Carte étudiant" },
 ];
@@ -70,7 +68,7 @@ export default function TestInspectionPage() {
   const [preview, setPreview] = useState<string | null>(null);
   const [typeDocument, setTypeDocument] = useState<TypeDocument | null>(null);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<ReponseUploadDocument | null>(null);
+  const [result, setResult] = useState<ReponseDocumentUnifie | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [historique, setHistorique] = useState<DetailVerification[]>([]);
   const [loadingHistorique, setLoadingHistorique] = useState(false);
@@ -246,14 +244,7 @@ export default function TestInspectionPage() {
             </div>
 
             {/* Résultats */}
-            {result && (
-              <ResultatsAnalyse
-                resultat={result}
-                libellesType={LIBELLES_TYPE_DOCUMENT}
-                libellesSexe={LIBELLES_SEXE}
-                libellesFace={LIBELLES_FACE}
-              />
-            )}
+            {result && <ResultatsAnalyse resultat={result} />}
 
             {/* Erreur */}
             {error && (
@@ -356,44 +347,27 @@ export default function TestInspectionPage() {
 
 // ── Bloc résultats ──────────────────────────────────────────────────────────
 interface ResultatsAnalyseProps {
-  resultat: ReponseUploadDocument;
-  libellesType: Record<TypeDocument, string>;
-  libellesSexe: Record<string, string>;
-  libellesFace: Record<FaceDocument, string>;
+  resultat: ReponseDocumentUnifie;
 }
 
-function ResultatsAnalyse({
-  resultat,
-  libellesType,
-  libellesSexe,
-  libellesFace,
-}: ResultatsAnalyseProps) {
-  const { donnees, validation, coherence, statut } = resultat;
+const LIBELLES_STATUT_UNIFIE: Record<string, string> = {
+  approuve: "Document validé",
+  rejete: "Document rejeté",
+  expiree: "Document expiré",
+  en_attente: "En attente de vérification",
+};
 
-  // Bandeau : visuel adapté au statut réel (pas seulement est_valide)
-  const statutOk = validation.est_valide;
-  const enAttente = statut === StatutVerification.EN_ATTENTE;
-  const partiel = statut === StatutVerification.PARTIEL;
+function ResultatsAnalyse({ resultat }: ResultatsAnalyseProps) {
+  const { donnees, statut, message, temps_ms, champs_extraits } = resultat;
+  const estOk = statut === "approuve";
+  const estExpire = statut === "expiree";
 
-  const classesBandeau = statutOk
+  const classesBandeau = estOk
     ? "bg-green-50 border-green-200"
-    : enAttente || partiel
-    ? "bg-yellow-50 border-yellow-200"
+    : estExpire
+    ? "bg-orange-50 border-orange-200"
     : "bg-red-50 border-red-200";
-  const iconeBandeau = statutOk
-    ? "✅"
-    : enAttente
-    ? "⏳"
-    : partiel
-    ? "⚠️"
-    : "❌";
-  const titreBandeau = statutOk
-    ? "Document validé"
-    : enAttente
-    ? "Vérification en attente"
-    : partiel
-    ? "Vérification partielle"
-    : "Document rejeté";
+  const iconeBandeau = estOk ? "✅" : estExpire ? "⏳" : "❌";
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
@@ -404,8 +378,10 @@ function ResultatsAnalyse({
         <div className="flex items-center">
           <span className="text-2xl mr-3">{iconeBandeau}</span>
           <div>
-            <p className="font-semibold">{titreBandeau}</p>
-            <p className="text-sm text-gray-600 mt-1">{validation.message}</p>
+            <p className="font-semibold">
+              {LIBELLES_STATUT_UNIFIE[statut] ?? statut}
+            </p>
+            <p className="text-sm text-gray-600 mt-1">{message}</p>
           </div>
         </div>
       </div>
@@ -413,124 +389,58 @@ function ResultatsAnalyse({
       {/* Informations générales */}
       <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600 mb-4">
         <span className="font-medium text-gray-800">
-          {libellesType[donnees.type_document] ?? donnees.type_document}
+          {LIBELLES_TYPE_DOCUMENT[resultat.type_document] ?? resultat.type_document}
         </span>
-        {donnees.pays_emetteur && <span>• {donnees.pays_emetteur}</span>}
-        {donnees.face && (
-          <span>• {libellesFace[donnees.face] ?? donnees.face}</span>
-        )}
         <span className="text-xs text-gray-400">
-          {resultat.temps_traitement_ms} ms
+          {champs_extraits} champ(s) • {temps_ms} ms
         </span>
       </div>
 
-      {/* Données extraites */}
+      {/* Données extraites (rendu générique quel que soit le document) */}
       <div className="space-y-3">
         <h3 className="font-semibold text-gray-800">Données extraites</h3>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <InfoField label="Nom" value={donnees.nom_famille} />
-          <InfoField label="Prénoms" value={donnees.prenoms} />
-          <InfoField label="Date de naissance" value={donnees.date_naissance} />
-          <InfoField label="Sexe" value={libellesSexe[donnees.sexe]} />
-          <InfoField label="N° Document" value={donnees.numero_document} />
-          <InfoField label="Date d'expiration" value={donnees.date_expiration} />
-          <InfoField label="Lieu de naissance" value={donnees.lieu_naissance} />
-          <InfoField
-            label="Date de délivrance"
-            value={donnees.date_delivrance}
-          />
-          <InfoField label="Nationalité" value={donnees.nationalite} />
-          <InfoField
-            label="Autorité de délivrance"
-            value={donnees.autorite_delivrance}
-          />
-          <InfoField
-            label="Confiance OCR"
-            value={`${donnees.taux_confiance_ocr.toFixed(1)}%`}
-          />
-          <InfoField
-            label="MRZ valide"
-            value={donnees.mrz_valide ? "Oui" : "Non"}
-          />
-        </div>
+        {Object.keys(donnees).length === 0 ? (
+          <p className="text-sm text-gray-500">Aucune donnée extraite.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {Object.entries(donnees).map(([cle, valeur]) => (
+              <InfoField
+                key={cle}
+                label={formaterLibelleChamp(cle)}
+                value={formaterValeur(valeur)}
+              />
+            ))}
+          </div>
+      )}
       </div>
 
-      {/* Cohérence */}
-      {coherence && (
-        <div className="mt-4">
-          <h3 className="font-semibold text-gray-800 mb-2">
-            Vérification d'identité
-          </h3>
-          <div
-            className={`p-3 rounded-lg text-sm ${
-              coherence.est_coherent
-                ? "bg-blue-50 text-blue-800"
-                : "bg-yellow-50 text-yellow-800"
-            }`}
-          >
-            {coherence.message}
-          </div>
-        </div>
-      )}
-
-      {/* Erreurs de validation */}
-      {validation.erreurs.length > 0 && (
-        <div className="mt-4">
-          <h3 className="font-semibold text-gray-800 mb-2">
-            Points bloquants
-          </h3>
-          <ul className="space-y-1">
-            {validation.erreurs.map((erreur, idx) => (
-              <li
-                key={idx}
-                className="text-xs px-3 py-1.5 rounded bg-red-50 text-red-700"
-              >
-                ✗ {erreur}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Scores */}
-      {Object.keys(validation.scores).length > 0 && (
-        <div className="mt-4">
-          <h3 className="font-semibold text-gray-800 mb-2">
-            Scores de validation
-          </h3>
-          <div className="grid grid-cols-2 gap-2">
-            {Object.entries(validation.scores).map(([key, value]) => (
-              <div
-                key={key}
-                className={`text-xs px-3 py-2 rounded ${
-                  value
-                    ? "bg-green-100 text-green-800"
-                    : "bg-red-100 text-red-800"
-                }`}
-              >
-                {value ? "✓" : "✗"} {key}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Détails techniques (MRZ / OCR) */}
-      {(donnees.mrz_ligne_1 || donnees.mrz_ligne_2) && (
+      {/* Texte brut OCR (aide au débogage) */}
+      {resultat.texte_brut && (
         <details className="mt-4 bg-gray-50 rounded-lg p-3">
           <summary className="text-sm font-medium text-gray-700 cursor-pointer">
-            Lignes MRZ détectées
+            Texte brut OCR
           </summary>
           <pre className="mt-2 text-xs font-mono text-gray-600 whitespace-pre-wrap break-all">
-            {donnees.mrz_ligne_1}
-            {"\n"}
-            {donnees.mrz_ligne_2}
-            {donnees.mrz_ligne_3 ? `\n${donnees.mrz_ligne_3}` : ""}
+            {resultat.texte_brut}
           </pre>
         </details>
       )}
     </div>
   );
+}
+
+function formaterLibelleChamp(cle: string): string {
+  return cle
+    .split("_")
+    .map((mot) => mot.charAt(0).toUpperCase() + mot.slice(1))
+    .join(" ");
+}
+
+function formaterValeur(valeur: any): string {
+  if (valeur === null || valeur === undefined) return "";
+  if (Array.isArray(valeur)) return valeur.join(", ");
+  if (typeof valeur === "object") return JSON.stringify(valeur);
+  return String(valeur);
 }
 
 // Composant helper pour afficher les champs

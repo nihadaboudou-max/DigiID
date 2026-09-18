@@ -23,6 +23,9 @@ _LIBELLES = {
     "permis": "permis de conduire",
     "assurance": "assurance",
     "passeport": "passeport",
+    "carte_grise": "carte grise",
+    "carte_sejour": "titre de séjour",
+    "consulaire": "carte consulaire",
 }
 
 SEUIL_JOURS = 30

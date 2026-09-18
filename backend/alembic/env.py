@@ -29,8 +29,11 @@ from src.modeles import (  # noqa: F401
     dossier_medical,
     enrolement,
     verification_police,
-    ong,
+        ong,
     token_reinitialisation,
+    carte_grise,
+    carte_sejour,
+    consulaire,
 )
 from src.config import parametres
 

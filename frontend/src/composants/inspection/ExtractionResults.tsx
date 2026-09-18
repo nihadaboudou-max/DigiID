@@ -1,12 +1,33 @@
 "use client";
 
-import { ReponseUploadDocument, StatutVerification } from "@/types/inspection";
+import { ReponseDocumentUnifie, TypeDocument } from "@/types/inspection";
 
 interface ExtractionResultsProps {
-  result: ReponseUploadDocument | null;
+  result: ReponseDocumentUnifie | null;
   loading: boolean;
   error: string | null;
 }
+
+const LIBELLES_TYPE: Record<string, string> = {
+  [TypeDocument.CNI_BIOMETRIQUE]: "CNI Biométrique",
+  [TypeDocument.CNI_PAPIER]: "CNI Papier",
+  [TypeDocument.PASSEPORT]: "Passeport",
+  [TypeDocument.PERMIS_CONDUIRE]: "Permis de conduire",
+  [TypeDocument.CARTE_ASSURANCE]: "Carte d'assurance",
+  [TypeDocument.CARTE_SEJOUR]: "Carte de séjour",
+  [TypeDocument.CARTE_GRISE]: "Carte grise",
+  [TypeDocument.CARTE_CONSULAIRE]: "Carte consulaire",
+  [TypeDocument.CARTE_VOTE]: "Carte de vote",
+  [TypeDocument.CARTE_ETUDIANT]: "Carte étudiant",
+  [TypeDocument.INCONNU]: "Inconnu",
+};
+
+const LIBELLES_STATUT: Record<string, string> = {
+  approuve: "Document validé",
+  rejete: "Document rejeté",
+  expiree: "Document expiré",
+  en_attente: "En attente de vérification",
+};
 
 export default function ExtractionResults({ result, loading, error }: ExtractionResultsProps) {
   if (loading) {
@@ -36,97 +57,84 @@ export default function ExtractionResults({ result, loading, error }: Extraction
     return null;
   }
 
-  const { donnees, validation, coherence } = result;
+    const { donnees, statut, message, temps_ms, champs_extraits } = result;
+  const estOk = statut === "approuve";
+  const estExpire = statut === "expiree";
+
+  const classesBandeau = estOk
+    ? "bg-green-50 border-green-200"
+    : estExpire
+    ? "bg-orange-50 border-orange-200"
+    : "bg-red-50 border-red-200";
+  const iconeBandeau = estOk ? "✅" : estExpire ? "⏳" : "❌";
 
   return (
     <div className="space-y-6">
-      {/* Statut de validation */}
-      <div
-        className={`p-4 rounded-lg border-2 ${
-          validation.est_valide
-            ? "bg-green-50 border-green-200"
-            : "bg-red-50 border-red-200"
-        }`}
-      >
+      {/* Statut */}
+      <div className={`p-4 rounded-lg border-2 ${classesBandeau}`}>
         <div className="flex items-center">
-          <div className="text-3xl mr-3">
-            {validation.est_valide ? "✅" : "❌"}
-          </div>
+          <div className="text-3xl mr-3">{iconeBandeau}</div>
           <div>
             <h4 className="font-semibold text-gray-800">
-              {validation.est_valide ? "Document validé" : "Document rejeté"}
+              {LIBELLES_STATUT[statut] ?? statut}
             </h4>
-            <p className="text-sm text-gray-600 mt-1">{validation.message}</p>
+            <p className="text-sm text-gray-600 mt-1">{message}</p>
           </div>
         </div>
       </div>
 
-      {/* Données extraites */}
+      {/* Données extraites (rendu générique quel que soit le document) */}
       <div className="bg-white border border-gray-200 rounded-lg p-6">
-        <h4 className="font-semibold text-gray-800 mb-4">
-          Données extraites
-        </h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <InfoField label="Nom" value={donnees.nom_famille} />
-          <InfoField label="Prénoms" value={donnees.prenoms} />
-          <InfoField label="Date de naissance" value={donnees.date_naissance} />
-          <InfoField label="Sexe" value={donnees.sexe} />
-          <InfoField label="Numéro document" value={donnees.numero_document} />
-          <InfoField label="Date d'expiration" value={donnees.date_expiration} />
-          <InfoField label="Lieu de naissance" value={donnees.lieu_naissance} />
-          <InfoField label="Nationalité" value={donnees.nationalite} />
-          <InfoField label="Pays émetteur" value={donnees.pays_emetteur} />
-          <InfoField label="Confiance OCR" value={`${donnees.taux_confiance_ocr.toFixed(1)}%`} />
-        </div>
-      </div>
-
-      {/* Cohérence identité */}
-      {coherence && (
-        <div
-          className={`p-4 rounded-lg border ${
-            coherence.est_coherent
-              ? "bg-blue-50 border-blue-200"
-              : "bg-yellow-50 border-yellow-200"
-          }`}
-        >
-          <h4 className="font-semibold text-gray-800 mb-2">
-            Vérification d'identité
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="font-semibold text-gray-800">
+            Données extraites — {LIBELLES_TYPE[result.type_document] ?? result.type_document}
           </h4>
-          <p className="text-sm text-gray-700">{coherence.message}</p>
-          {coherence.incoherences.length > 0 && (
-            <ul className="mt-2 space-y-1">
-              {coherence.incoherences.map((inc, idx) => (
-                <li key={idx} className="text-sm text-yellow-800">
-                  • {inc}
-                </li>
-              ))}
-            </ul>
-          )}
+          <span className="text-xs text-gray-400">
+            {champs_extraits} champ(s) • {temps_ms} ms
+          </span>
         </div>
-      )}
-
-      {/* Scores de validation */}
-      {Object.keys(validation.scores).length > 0 && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <h4 className="font-semibold text-gray-800 mb-3">
-            Scores de validation
-          </h4>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            {Object.entries(validation.scores).map(([key, value]) => (
-              <div
-                key={key}
-                className={`text-sm px-3 py-2 rounded ${
-                  value ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                }`}
-              >
-                {value ? "✓" : ""} {key}
-              </div>
+        {Object.keys(donnees).length === 0 ? (
+          <p className="text-sm text-gray-500">Aucune donnée extraite.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Object.entries(donnees).map(([cle, valeur]) => (
+              <InfoField
+                key={cle}
+                label={formaterLibelleChamp(cle)}
+                value={formaterValeur(valeur)}
+              />
             ))}
           </div>
-        </div>
+        )}
+      </div>
+
+            {/* Texte brut OCR (aide au débogage) */}
+      {result.texte_brut && (
+        <details className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <summary className="text-sm font-medium text-gray-700 cursor-pointer">
+            Texte brut OCR
+          </summary>
+          <pre className="mt-2 text-xs font-mono text-gray-600 whitespace-pre-wrap break-all">
+            {result.texte_brut}
+          </pre>
+        </details>
       )}
     </div>
   );
+}
+
+function formaterLibelleChamp(cle: string): string {
+  return cle
+    .split("_")
+    .map((mot) => mot.charAt(0).toUpperCase() + mot.slice(1))
+    .join(" ");
+}
+
+function formaterValeur(valeur: any): string {
+  if (valeur === null || valeur === undefined) return "";
+  if (Array.isArray(valeur)) return valeur.join(", ");
+  if (typeof valeur === "object") return JSON.stringify(valeur);
+  return String(valeur);
 }
 
 function InfoField({ label, value }: { label: string; value?: string }) {

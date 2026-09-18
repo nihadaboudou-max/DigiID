@@ -27,6 +27,8 @@ class TypeDocument(str, Enum):
     PERMIS_CONDUIRE = "permis_conduire"
     CARTE_ASSURANCE = "carte_assurance"
     CARTE_SEJOUR = "carte_sejour"
+    CARTE_GRISE = "carte_grise"
+    CARTE_CONSULAIRE = "carte_consulaire"
     CARTE_VOTE = "carte_vote"
     CARTE_ETUDIANT = "carte_etudiant"
     INCONNU = "inconnu"
@@ -202,3 +204,23 @@ class ReponseSuppression(BaseModel):
 class ReponseRestauration(BaseModel):
     id: UUID
     message: str = "Vérification restaurée avec succès."
+
+
+# =============================================================================
+# SCHÉMA DE RÉPONSE UNIFIÉE (interface unique d'extraction)
+# =============================================================================
+class ReponseDocumentUnifie(BaseModel):
+    """Réponse unique et identique pour les 6 documents de l'interface unique.
+
+        Chaque adaptateur renvoie exactement ce format, quel que soit le document,
+    afin que le frontend n'ait qu'un seul écran et un seul type de réponse.
+    """
+    type_document: TypeDocument = TypeDocument.INCONNU
+    identifiant: str = "00000000-0000-0000-0000-000000000000"
+    # approuve | rejete | expiree | en_attente
+    statut: str = "en_attente"
+    donnees: Dict[str, Any] = Field(default_factory=dict)
+    message: str = ""
+    champs_extraits: int = 0
+    texte_brut: str = ""
+    temps_ms: int = 0

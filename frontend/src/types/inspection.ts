@@ -8,6 +8,8 @@ export enum TypeDocument {
   PERMIS_CONDUIRE = "permis_conduire",
   CARTE_ASSURANCE = "carte_assurance",
   CARTE_SEJOUR = "carte_sejour",
+  CARTE_GRISE = "carte_grise",
+  CARTE_CONSULAIRE = "carte_consulaire",
   CARTE_VOTE = "carte_vote",
   CARTE_ETUDIANT = "carte_etudiant",
   INCONNU = "inconnu",
@@ -75,6 +77,21 @@ export interface ReponseUploadDocument {
   coherence?: ResultatCoherence;
   message: string;
   temps_traitement_ms: number;
+}
+
+/**
+ * Réponse UNIQUE et identique pour les 6 documents de l'interface unifiée.
+ * Quel que soit le document scanné, le backend renvoie exactement ce format.
+ */
+export interface ReponseDocumentUnifie {
+  type_document: TypeDocument;
+  identifiant: string;
+  statut: "approuve" | "rejete" | "expiree" | "en_attente";
+  donnees: Record<string, any>;
+  message: string;
+  champs_extraits: number;
+  texte_brut: string;
+  temps_ms: number;
 }
 
 export interface DetailVerification {

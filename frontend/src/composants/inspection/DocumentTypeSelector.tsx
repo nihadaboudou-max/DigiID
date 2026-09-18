@@ -14,6 +14,8 @@ const DOCUMENT_TYPES = [
   { value: TypeDocument.PERMIS_CONDUIRE, label: "Permis de Conduire", icon: "" },
   { value: TypeDocument.CARTE_ASSURANCE, label: "Carte d'Assurance", icon: "🛡️" },
   { value: TypeDocument.CARTE_SEJOUR, label: "Carte de Séjour", icon: "🏠" },
+  { value: TypeDocument.CARTE_GRISE, label: "Carte Grise", icon: "📄" },
+  { value: TypeDocument.CARTE_CONSULAIRE, label: "Carte Consulaire", icon: "📄" },
 ];
 
 export default function DocumentTypeSelector({ selectedType, onSelect }: DocumentTypeSelectorProps) {

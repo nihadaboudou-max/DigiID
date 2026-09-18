@@ -33,6 +33,9 @@ from src.modeles.equipe_membre import equipe_membres
 from src.modeles.rapport import Rapport, TypeRapport, StatutRapport
 from .permis_conduire import PermisConduire
 from .assurance_auto import AssuranceAuto
+from .carte_grise import CarteGrise
+from .carte_sejour import CarteSejour
+from .consulaire import CarteConsulaire
 from src.modeles.inspection_document import InspectionDocument
 
 __all__ = [
@@ -81,5 +84,8 @@ __all__ = [
     "StatutRapport", 
     "PermisConduire",
     "AssuranceAuto",
+    "CarteGrise",
+    "CarteSejour",
+    "CarteConsulaire",
     "InspectionDocument",
 ]

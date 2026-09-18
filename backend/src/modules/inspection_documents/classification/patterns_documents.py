@@ -9,6 +9,21 @@ Organisés par type de document, avec des regex robustes pour tolérer les erreu
 # L'ordre est important : les types les plus spécifiques sont vérifiés en premier.
 # =============================================================================
 PATTERNS_CLASSIFICATION = {
+    # Ordre important : carte grise et consulaire AVANT les types generiques
+    # (une carte grise peut contenir "IMMATRICULATION" qui matcherait d'autres types).
+    "carte_grise": [
+        r"CARTE\s*GRISE",
+        r"CERTIFICAT\s*D[''`]IMMATRICULATION",
+        r"PUISSANCE\s*FISCALE",
+        r"1RE?\s*MISE\s*EN\s*CIRCULATION",
+        r"\bV\.?\s*I\.?\s*N\b",
+    ],
+    "carte_consulaire": [
+        r"IMMATRICULATION\s*CONSULAIRE",
+        r"CARTE\s*CONSULAIRE",
+        r"\bCONSULAT\b",
+        r"\bAMBASSADE\b",
+    ],
     "passeport": [
         r"PASSEPORT",
         r"PASSPORT",

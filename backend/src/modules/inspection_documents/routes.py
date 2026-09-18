@@ -11,12 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.base_donnees.session import obtenir_session
 from src.modeles import Utilisateur
 from src.modules.authentification.dependances import utilisateur_courant
-from src.modules.inspection_documents import service
+from src.modules.inspection_documents import facade, service
 from src.modules.inspection_documents.schemas import (
     ListeVerifications,
+    ReponseDocumentUnifie,
     ReponseSuppression,
     ReponseRestauration,
-    ReponseUploadDocument,
     SyntheseVerification,
     TypeDocument,
 )
@@ -31,16 +31,20 @@ routeur_inspection = APIRouter(
 
 @routeur_inspection.post(
     "/upload",
-    response_model=ReponseUploadDocument,
-    summary="Uploader et analyser un document d'identité",
+    response_model=ReponseDocumentUnifie,
+    summary="Uploader et analyser un document (interface unique)",
 )
 async def upload_document(
-    fichier: UploadFile = File(..., description="Image du document (JPG, PNG, WEBP, TIFF)"),
+    fichier: UploadFile = File(..., description="Image du document (JPG, PNG, WEBP)"),
     type_document: Optional[TypeDocument] = Form(
         None,
         description="Type de document (auto-détecté si non fourni)"
     ),
     face: str = Form("recto", description="Face du document : recto, verso ou unique"),
+    contexte: str = Form("citoyen", description="Contexte : citoyen (auto-service) ou agent"),
+    enrolement_id: Optional[UUID] = Form(
+        None, description="Enrôlement cible (contexte agent uniquement)"
+    ),
     utilisateur_cible_id: Optional[UUID] = Form(
         None,
         description="UUID de l'utilisateur cible (uniquement pour les agents terrain)"
@@ -49,32 +53,33 @@ async def upload_document(
     session: Annotated[AsyncSession, Depends(obtenir_session)] = None,
 ):
     """
-    Upload une image de document et lance l'analyse complète :
-    1. Classification du type de document
-    2. Extraction OCR + MRZ + NLP
-    3. Validation métier
-    4. Vérification de cohérence avec le profil
-    
-    Pour les agents terrain : fournir `utilisateur_cible_id` pour enrôler un citoyen.
+    Interface UNIQUE d'extraction : une seule route, une seule réponse,
+    quel que soit le document (CNI, permis, assurance, carte grise,
+    carte de séjour, consulaire).
+
+    Le type est auto-détecté s'il n'est pas fourni. La réponse est toujours
+    au format `ReponseDocumentUnifie`.
     """
     if face not in ("recto", "verso", "unique"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Le paramètre 'face' doit être 'recto', 'verso' ou 'unique'.",
         )
-    
+
     try:
-        resultat = await service.traiter_upload_document(
+        resultat = await facade.traiter(
             session=session,
             utilisateur=utilisateur,
             fichier=fichier,
             type_document=type_document,
             face=face,
+            contexte=contexte,
+            enrolement_id=enrolement_id,
             utilisateur_cible_id=utilisateur_cible_id,
         )
-        
-        # Recalcul du score de confiance si validation réussie
-        if resultat.validation.est_valide:
+
+        # Recalcul du score de confiance si le document est approuvé
+        if resultat.get("statut") == "approuve":
             try:
                 from src.modules.scoring.service import declencher_recalcul_score
                 await declencher_recalcul_score(
@@ -84,14 +89,14 @@ async def upload_document(
                 )
             except Exception as e:
                 journal.warning(f"Échec recalcul score : {e}")
-        
+
         return resultat
-        
+
     except ErreurValidation as e:
         journal.warning(f"Validation échouée : {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail=e.message_utilisateur or str(e),
         )
     except Exception as e:
         journal.exception(f"Erreur upload document : {e}")
