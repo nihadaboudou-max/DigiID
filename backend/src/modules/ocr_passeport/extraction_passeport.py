@@ -176,7 +176,7 @@ def extraire_donnees_passeport(
     sexe = mrz.get("sexe")
     if not sexe or sexe == "non_detecte":
         sexe = _extraire_sexe(texte) or "non_detecte"
-    lieu_naissance = _extraire_apres(texte, [r"LIEU\s*DE\s*NAISSANCE", r"PLACE\s*OF\s*BIRTH", r"NE\s*A"], r"LIEU", 40)
+    lieu_naissance = _extraire_apres(texte, [r"LIEU\s*DE\s*NAISSANCE", r"PLACE\s*OF\s*BIRTH", r"NE\s*A"], 40)
     nationalite = mrz.get("nationalite_nom") or mrz.get("nationalite") or _extraire_apres(
         texte, [r"NATIONALITE"], 30
     )
