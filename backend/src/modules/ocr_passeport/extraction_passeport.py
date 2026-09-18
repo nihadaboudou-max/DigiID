@@ -76,17 +76,26 @@ def _extraire_lignes_mrz_texte(texte_brut: str) -> Tuple[Optional[str], Optional
     return candidats[0], candidats[1], None
 
 
+
 def _nettoyer_nom(valeur: Optional[str]) -> Optional[str]:
-    """Nettoie un nom/prénom : retire symboles, ``<`` résiduels et libellés avalés."""
+    """Nettoie un nom/prénom : retire symboles, K/X parasites et libellés avalés."""
     if not valeur:
         return None
+    # 1. Remplace les séparateurs MRZ (<) et symboles par des espaces
     valeur = re.sub(r"[^A-Za-zÀ-ÿ'\- ]", " ", valeur)
+    valeur = re.sub(r"[<>/\\|{}\[\]().,;:!?@#$%^&*+=~`\"'0-9]", " ", valeur)
+    # 2. Supprime les lettres parasites isolées ou répétées (K, X, KKKKK)
+    valeur = re.sub(r"\b[KX]{1,2}\b", "", valeur) # Supprime les K ou X isolés
+    valeur = re.sub(r"\b([A-Z])\1{3,}\b", "", valeur) # Supprime les suites (KKKKK)
+    
     valeur = re.sub(r"\s+", " ", valeur).strip()
-    # Si un mot-clé voisin a été capturé par erreur (ex: « DIOP PRENOM »), on coupe.
+    
+    # 3. Coupe si un mot-clé voisin a été capturé par erreur
     valeur = re.split(
         r"\b(?:PRENOMS?|SURNAME|GIVEN|NAMES?|DATE|SEXE|NATIONALITE|LIEU|AUTORITE|EMETTEUR)\b",
         valeur,
     )[0].strip()
+    
     return valeur.upper() if valeur else None
 
 
@@ -167,7 +176,7 @@ def extraire_donnees_passeport(
     sexe = mrz.get("sexe")
     if not sexe or sexe == "non_detecte":
         sexe = _extraire_sexe(texte) or "non_detecte"
-    lieu_naissance = _extraire_apres(texte, [r"LIEU\s*DE\s*NAISSANCE", r"NE\s*A", r"LIEU"], 40)
+    lieu_naissance = _extraire_apres(texte, [r"LIEU\s*DE\s*NAISSANCE", r"PLACE\s*OF\s*BIRTH", r"NE\s*A"], r"LIEU", 40)
     nationalite = mrz.get("nationalite_nom") or mrz.get("nationalite") or _extraire_apres(
         texte, [r"NATIONALITE"], 30
     )
