@@ -327,18 +327,20 @@ async def traiter_upload_document(
     nom_fichier = fichier.filename or f"document_{face}.jpg"
     extension = fichier.filename.split(".")[-1] if "." in fichier.filename else "jpg"
 
+    # 1. ✅ Vérification de la qualité (Échec rapide)
     qualite = evaluer_qualite_image(contenu)
     if not qualite.est_valide:
-        raise ErreurValidation(f"Qualité d'image insuffisante : {qualite.message}", message_utilisateur="L'image est trop floue ou mal éclairée.")
+        raise ErreurValidation(
+            f"Qualité d'image insuffisante : {qualite.message}", 
+            message_utilisateur="L'image est trop floue ou mal éclairée."
+        )
 
-    # 🚀 APPEL DU NOUVEAU PIPELINE "CROP & CONQUER"
+    # 2. Extraction OCR
     donnees = await _extraire_donnees_classique(contenu, type_document)
 
-    # ✅ NOUVEAU : Vérifier l'unicité du numéro de document AVANT toute autre vérification
+    # 3. ✅ Vérification d'unicité du numéro (Échec rapide)
     if donnees.numero_document:
-        # On utilise .value si c'est un Enum, sinon on convertit en string
         type_doc_str = donnees.type_document.value if hasattr(donnees.type_document, 'value') else str(donnees.type_document)
-        
         await verifier_numero_document_unique(
             session=session,
             numero_document=donnees.numero_document,
@@ -346,11 +348,7 @@ async def traiter_upload_document(
             utilisateur_id=str(utilisateur.id)
         )
 
-    validation = valider_document(donnees)
-    if not validation.est_valide:
-        validation.statut = StatutVerification.EN_ATTENTE
-        validation.message = "Document reçu. Extraction partielle, en attente de vérification manuelle."
-
+    # 4. ✅ Vérification de cohérence avec le profil (ÉCHEC RAPIDE CORRIGÉ)
     coherence = None
     if donnees.nom_famille or donnees.numero_document:
         coherence = await verifier_coherence_identite(
@@ -359,27 +357,43 @@ async def traiter_upload_document(
             nouvelles_donnees=donnees, 
             utilisateur_cible_id=utilisateur_cible_id
         )
+        
+        # 🚨 CORRECTION CRUCIALE : Si ce n'est pas cohérent, on REJETTE IMMÉDIATEMENT.
+        # On n'enregistre PAS le document en base de données.
         if not coherence.est_coherent:
-            validation.statut = StatutVerification.EN_ATTENTE
-            validation.message = f"Incohérence détectée : {coherence.message}. En attente de revue."
+            raise ErreurValidation(
+                "Incohérence d'identité",
+                message_utilisateur=f"Incohérence détectée : {coherence.message}. Veuillez corriger votre nom/prénom dans votre profil avant de réessayer."
+            )
 
+    # 5. Validation interne du document (Règles métier OCR)
+    validation = valider_document(donnees)
+    if not validation.est_valide:
+        # Si la validation interne échoue, on peut le mettre en attente pour revue manuelle
+        # MAIS on ne lève pas d'exception ici, car c'est une limite de l'OCR, pas une fraude
+        validation.statut = StatutVerification.EN_ATTENTE
+        validation.message = "Document reçu. Extraction partielle, en attente de vérification manuelle."
+
+    # 6. Stockage du fichier physique
     chemin_stockage = None
     try:
         chemin_stockage = stocker_document(contenu, extension=extension, prefixe=donnees.type_document.value)
     except Exception as e:
         journal.warning(f"Échec stockage document : {e}")
 
+    # 7. ✅ Enregistrement en base de données (SEULEMENT SI LES VÉRIFICATIONS 1, 3 et 4 ONT RÉUSSI)
     doc = await _enregistrer_document(
         session=session, utilisateur=utilisateur, donnees=donnees, validation=validation,
         face=face, nom_fichier=nom_fichier, type_mime=fichier.content_type or "image/jpeg",
         taille_octets=len(contenu), document_chemin=chemin_stockage,
     )
 
+    # 8. Mise à jour du statut utilisateur si tout est approuvé
     if validation.est_valide and validation.statut == StatutVerification.APPROUVE:
         utilisateur.est_cni_verifiee = True
         utilisateur.date_verification_cni = datetime.now(timezone.utc)
         utilisateur.date_derniere_mise_a_jour_verifications = datetime.now(timezone.utc)
-        await session.commit()
+        await session.commit() # Commit des changements utilisateur
         try:
             from src.modules.scoring.service import declencher_recalcul_score
             await declencher_recalcul_score(session=session, utilisateur=utilisateur, raison="upload_document_valide")
