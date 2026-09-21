@@ -5,6 +5,7 @@ Compare les données du document avec le profil utilisateur.
 Gère deux modes : citoyen (comparaison stricte) et agent terrain (pas de comparaison).
 """
 from typing import Optional
+import unicodedata
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modeles import Utilisateur
@@ -14,6 +15,29 @@ from src.modules.inspection_documents.schemas import (
 )
 from src.noyau import journal, dechiffrer_donnee
 
+def normaliser_chaine(chaine: str) -> str:
+    """
+    Normalise une chaîne pour une comparaison robuste :
+    - Supprime les accents (é -> e, è -> e)
+    - Met en majuscules
+    - Supprime tous les espaces, tirets et apostrophes
+    
+    Exemples :
+    "ABOUDOU TRAORE" -> "ABOUDOUTRAORE"
+    "ABOUDOUTRAORE"  -> "ABOUDOUTRAORE"
+    "M'Bala"         -> "MBALA"
+    """
+    if not chaine:
+        return ""
+    
+    # 1. Supprimer les accents
+    chaine = unicodedata.normalize('NFD', chaine)
+    chaine = ''.join(c for c in chaine if unicodedata.category(c) != 'Mn')
+    
+    # 2. Mettre en majuscules et supprimer les espaces/caractères spéciaux
+    chaine = chaine.upper().replace(" ", "").replace("-", "").replace("'", "").replace("`", "")
+    
+    return chaine.strip()
 
 async def verifier_coherence_identite(
     session: AsyncSession,
@@ -23,19 +47,7 @@ async def verifier_coherence_identite(
 ) -> ResultatCoherence:
     """
     Vérifie la cohérence entre le document et le profil utilisateur.
-    
-    Deux modes :
-    - Citoyen : comparaison stricte Nom/Prénom avec le profil
-    - Agent terrain : pas de comparaison (l'agent enrôle un tiers)
-    
-    Args:
-        session: Session DB
-        utilisateur: Utilisateur connecté (celui qui upload)
-        nouvelles_donnees: Données extraites du document
-        utilisateur_cible_id: UUID de l'utilisateur cible (si agent terrain)
-    
-    Returns:
-        ResultatCoherence avec statut et message
+    Utilise une normalisation robuste pour éviter les faux positifs (espaces, accents).
     """
     # ── Mode agent terrain : pas de vérification de cohérence ──
     if hasattr(utilisateur, 'role') and utilisateur.role in ("agent_terrain", "enroleur"):
@@ -50,27 +62,35 @@ async def verifier_coherence_identite(
                 message="Mode agent terrain : cohérence vérifiée ultérieurement.",
             )
     
-    # ── Mode citoyen : comparaison stricte ──
+    # ── Mode citoyen : comparaison normalisée ──
     incoherences = []
     
     # 1. Comparaison Nom
     nom_utilisateur = dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else ""
     if nom_utilisateur and nouvelles_donnees.nom_famille:
-        nom_doc = nouvelles_donnees.nom_famille.upper().strip()
-        nom_profil = nom_utilisateur.upper().strip()
-        if nom_profil != nom_doc:
+        # On normalise les deux chaînes pour la comparaison
+        nom_doc_norm = normaliser_chaine(nouvelles_donnees.nom_famille)
+        nom_profil_norm = normaliser_chaine(nom_utilisateur)
+        
+        if nom_profil_norm != nom_doc_norm:
+            # On utilise les versions originales (juste upper/strip) pour le message d'erreur
             incoherences.append(
-                f"Nom document ({nom_doc}) ≠ Nom profil ({nom_profil})"
+                f"Nom document ({nouvelles_donnees.nom_famille.upper().strip()}) ≠ Nom profil ({nom_utilisateur.upper().strip()})"
             )
     
     # 2. Comparaison Prénom (premier prénom uniquement)
     prenom_utilisateur = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else ""
     if prenom_utilisateur and nouvelles_donnees.prenoms:
-        prenom_doc = _extraire_premier_prenom(nouvelles_donnees.prenoms).upper()
-        prenom_profil = _extraire_premier_prenom(prenom_utilisateur).upper()
-        if prenom_profil != prenom_doc:
+        # On extrait d'abord le premier prénom, puis on le normalise
+        prenom_doc_brut = _extraire_premier_prenom(nouvelles_donnees.prenoms)
+        prenom_profil_brut = _extraire_premier_prenom(prenom_utilisateur)
+        
+        prenom_doc_norm = normaliser_chaine(prenom_doc_brut)
+        prenom_profil_norm = normaliser_chaine(prenom_profil_brut)
+        
+        if prenom_profil_norm != prenom_doc_norm:
             incoherences.append(
-                f"Prénom document ({prenom_doc}) ≠ Prénom profil ({prenom_profil})"
+                f"Prénom document ({prenom_doc_brut.upper().strip()}) ≠ Prénom profil ({prenom_profil_brut.upper().strip()})"
             )
     
     # ── Résultat ──
@@ -82,7 +102,7 @@ async def verifier_coherence_identite(
         return ResultatCoherence(
             est_coherent=False,
             mode="citoyen",
-            message="Incohérence détectée : " + "; ".join(incoherences),
+            message="Incohérence détectée : " + "; ".join(incoherences) + ". Veuillez corriger votre nom/prénom dans vos paramètres avant de scanner.",
             incoherences=incoherences,
         )
     

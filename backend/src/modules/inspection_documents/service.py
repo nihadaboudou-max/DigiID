@@ -21,6 +21,7 @@ from fastapi import UploadFile
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modeles import DocumentIdentite
 from src.modeles import Utilisateur
 from src.modeles.inspection_document import InspectionDocument
 from src.modules.inspection_documents.schemas import (
@@ -110,6 +111,40 @@ def _choisir_type_document(texte_brut: str, mrz_lignes: tuple, type_suggere: Opt
     if type_suggere and type_suggere != TypeDocument.INCONNU:
         if type_document == TypeDocument.INCONNU: type_document = type_suggere
     return type_document
+
+async def verifier_numero_document_unique(
+    session: AsyncSession,
+    numero_document: str,
+    type_document: str,
+    utilisateur_id: str
+) -> None:
+    """
+    Vérifie qu'un numéro de document n'existe pas déjà en base de données.
+    Lève une ErreurValidation si le document est déjà enregistré.
+    """
+    # On cherche un document avec le même numéro ET le même type
+    stmt = select(DocumentIdentite).where(
+        DocumentIdentite.numero_document == numero_document.strip().upper(),
+        DocumentIdentite.type_document == type_document
+    )
+    
+    resultat = await session.execute(stmt)
+    document_existant = resultat.scalar_one_or_none()
+    
+    if document_existant:
+        # Cas 1 : C'est le même utilisateur qui tente de re-uploader le même document
+        if str(document_existant.utilisateur_id) == str(utilisateur_id):
+            raise ErreurValidation(
+                "Document déjà enregistré",
+                message_utilisateur=f"Vous avez déjà enregistré ce {type_document} (N° {numero_document}). Vous ne pouvez pas l'ajouter plusieurs fois."
+            )
+        # Cas 2 : C'est un autre utilisateur qui possède déjà ce numéro (Fraude potentielle)
+        else:
+            raise ErreurValidation(
+                "Numéro de document déjà utilisé",
+                message_utilisateur=f"Ce numéro de {type_document} ({numero_document}) est déjà associé à un autre compte dans le système. Veuillez vérifier le numéro ou contacter le support."
+            )
+
 
 # =============================================================================
 # NOUVEAU PIPELINE D'EXTRACTION : "CROP & CONQUER"
@@ -299,6 +334,18 @@ async def traiter_upload_document(
     # 🚀 APPEL DU NOUVEAU PIPELINE "CROP & CONQUER"
     donnees = await _extraire_donnees_classique(contenu, type_document)
 
+    # ✅ NOUVEAU : Vérifier l'unicité du numéro de document AVANT toute autre vérification
+    if donnees.numero_document:
+        # On utilise .value si c'est un Enum, sinon on convertit en string
+        type_doc_str = donnees.type_document.value if hasattr(donnees.type_document, 'value') else str(donnees.type_document)
+        
+        await verifier_numero_document_unique(
+            session=session,
+            numero_document=donnees.numero_document,
+            type_document=type_doc_str,
+            utilisateur_id=str(utilisateur.id)
+        )
+
     validation = valider_document(donnees)
     if not validation.est_valide:
         validation.statut = StatutVerification.EN_ATTENTE
@@ -306,7 +353,12 @@ async def traiter_upload_document(
 
     coherence = None
     if donnees.nom_famille or donnees.numero_document:
-        coherence = await verifier_coherence_identite(session=session, utilisateur=utilisateur, nouvelles_donnees=donnees, utilisateur_cible_id=utilisateur_cible_id)
+        coherence = await verifier_coherence_identite(
+            session=session, 
+            utilisateur=utilisateur, 
+            nouvelles_donnees=donnees, 
+            utilisateur_cible_id=utilisateur_cible_id
+        )
         if not coherence.est_coherent:
             validation.statut = StatutVerification.EN_ATTENTE
             validation.message = f"Incohérence détectée : {coherence.message}. En attente de revue."
