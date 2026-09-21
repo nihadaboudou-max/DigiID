@@ -21,7 +21,7 @@ from fastapi import UploadFile
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modeles import DocumentIdentite
+from src.modeles import InspectionDocument
 from src.modeles import Utilisateur
 from src.modeles.inspection_document import InspectionDocument
 from src.modules.inspection_documents.schemas import (
@@ -112,6 +112,7 @@ def _choisir_type_document(texte_brut: str, mrz_lignes: tuple, type_suggere: Opt
         if type_document == TypeDocument.INCONNU: type_document = type_suggere
     return type_document
 
+
 async def verifier_numero_document_unique(
     session: AsyncSession,
     numero_document: str,
@@ -119,31 +120,37 @@ async def verifier_numero_document_unique(
     utilisateur_id: str
 ) -> None:
     """
-    Vérifie qu'un numéro de document n'existe pas déjà en base de données.
-    Lève une ErreurValidation si le document est déjà enregistré.
+    Vérifie qu'un numéro de document n'existe pas déjà dans la table InspectionDocument.
     """
-    # On cherche un document avec le même numéro ET le même type
-    stmt = select(DocumentIdentite).where(
-        DocumentIdentite.numero_document == numero_document.strip().upper(),
-        DocumentIdentite.type_document == type_document
+    # Nettoyage du numéro pour la comparaison (majuscules, sans espaces)
+    numero_propre = numero_document.strip().upper()
+    
+    journal.info(f"🔍 VÉRIFICATION UNICITÉ : Recherche du numéro '{numero_propre}' pour le type '{type_document}'")
+    
+    stmt = select(InspectionDocument).where(
+        InspectionDocument.numero_document == numero_propre,
+        InspectionDocument.type_document == type_document,
+        InspectionDocument.est_supprime == False # On ignore les documents supprimés
     )
     
     resultat = await session.execute(stmt)
     document_existant = resultat.scalar_one_or_none()
     
     if document_existant:
-        # Cas 1 : C'est le même utilisateur qui tente de re-uploader le même document
+        journal.warning(f"⚠️ DOUBLON DÉTECTÉ : Le numéro {numero_propre} existe déjà (ID: {document_existant.id})")
+        
         if str(document_existant.utilisateur_id) == str(utilisateur_id):
             raise ErreurValidation(
                 "Document déjà enregistré",
-                message_utilisateur=f"Vous avez déjà enregistré ce {type_document} (N° {numero_document}). Vous ne pouvez pas l'ajouter plusieurs fois."
+                message_utilisateur=f"Vous avez déjà enregistré ce document (N° {numero_document}). Vous ne pouvez pas l'ajouter plusieurs fois."
             )
-        # Cas 2 : C'est un autre utilisateur qui possède déjà ce numéro (Fraude potentielle)
         else:
             raise ErreurValidation(
-                "Numéro de document déjà utilisé",
-                message_utilisateur=f"Ce numéro de {type_document} ({numero_document}) est déjà associé à un autre compte dans le système. Veuillez vérifier le numéro ou contacter le support."
+                "Numéro de document déjà utilisé par un autre compte",
+                message_utilisateur=f"Ce numéro de document ({numero_document}) est déjà associé à un autre compte dans le système."
             )
+    
+    journal.info("✅ VÉRIFICATION UNICITÉ : Numéro libre, validation réussie.")
 
 
 # =============================================================================
@@ -341,13 +348,16 @@ async def traiter_upload_document(
     # 3. ✅ Vérification d'unicité du numéro (Échec rapide)
     if donnees.numero_document:
         type_doc_str = donnees.type_document.value if hasattr(donnees.type_document, 'value') else str(donnees.type_document)
+        journal.info(f"📝 Tentative d'upload du document N° {donnees.numero_document}")        
         await verifier_numero_document_unique(
             session=session,
             numero_document=donnees.numero_document,
             type_document=type_doc_str,
             utilisateur_id=str(utilisateur.id)
         )
-
+    else:
+        journal.warning("⚠️ Aucun numéro de document extrait par l'OCR. La vérification d'unicité est ignorée.")
+        
     # 4. ✅ Vérification de cohérence avec le profil (ÉCHEC RAPIDE CORRIGÉ)
     coherence = None
     if donnees.nom_famille or donnees.numero_document:
