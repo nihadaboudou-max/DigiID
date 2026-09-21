@@ -6,7 +6,7 @@ tous les types de documents (CNI, Passeport, Permis, Assurance, etc.).
 """
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, ForeignKey, JSON
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -16,6 +16,13 @@ from src.base_donnees.base import Base
 class InspectionDocument(Base):
     """Représente une vérification de document d'identité scanné."""
     __tablename__ = "inspection_documents"
+
+    # ✅ AJOUT CRUCIAL : Empêcher les doublons de numéros de document
+    __table_args__ = (
+        UniqueConstraint('numero_document', 'type_document', name='uq_document_numero_type'),
+        # Optionnel : Si tu veux aussi empêcher qu'un même utilisateur uploade 2 fois le MÊME type de document (même avec un numéro différent)
+        # UniqueConstraint('utilisateur_id', 'type_document', name='uq_user_doc_type'),
+    )
 
     # --- Clé primaire et relations ---
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4, index=True)
