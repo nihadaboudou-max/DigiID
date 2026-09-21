@@ -20,6 +20,7 @@ from uuid import UUID
 from fastapi import UploadFile
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from src.modeles import InspectionDocument
 from src.modeles import Utilisateur
@@ -392,11 +393,20 @@ async def traiter_upload_document(
         journal.warning(f"Échec stockage document : {e}")
 
     # 7. ✅ Enregistrement en base de données (SEULEMENT SI LES VÉRIFICATIONS 1, 3 et 4 ONT RÉUSSI)
-    doc = await _enregistrer_document(
-        session=session, utilisateur=utilisateur, donnees=donnees, validation=validation,
-        face=face, nom_fichier=nom_fichier, type_mime=fichier.content_type or "image/jpeg",
-        taille_octets=len(contenu), document_chemin=chemin_stockage,
-    )
+    try:
+        doc = await _enregistrer_document(
+            session=session, utilisateur=utilisateur, donnees=donnees, validation=validation,
+            face=face, nom_fichier=nom_fichier, type_mime=fichier.content_type or "image/jpeg",
+            taille_octets=len(contenu), document_chemin=chemin_stockage,
+        )
+    except IntegrityError:
+        # ✅ C'EST ICI QUE LA BASE DE DONNÉES NOUS SAUVE !
+        await session.rollback() # Annuler la transaction en cours
+        journal.warning(f"Tentative de doublon détectée par la BDD pour le numéro: {donnees.numero_document}")
+        raise ErreurValidation(
+            "Document déjà enregistré dans le système",
+            message_utilisateur=f"Ce numéro de {type_document.value if type_document else 'document'} ({donnees.numero_document}) existe déjà dans notre base de données. Impossible de l'enregistrer une seconde fois."
+        )
 
     # 8. Mise à jour du statut utilisateur si tout est approuvé
     if validation.est_valide and validation.statut == StatutVerification.APPROUVE:
