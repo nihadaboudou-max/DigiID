@@ -40,6 +40,9 @@ from .passeport import Passeport
 from src.modeles.inspection_document import InspectionDocument
 from src.modeles.logistique import (
     Gare, Ligne, Vehicule, Voyage, ActeurLogistique, STATUTS_VOYAGE, ROLES_ACTEUR,
+    Ticket, STATUTS_TICKET, TYPES_TICKET,
+    Colis, STATUTS_COLIS,
+    ColisEvenement, TYPES_EVENEMENT_COLIS,
 )
 
 __all__ = [
@@ -100,4 +103,11 @@ __all__ = [
     "ActeurLogistique",
     "STATUTS_VOYAGE",
     "ROLES_ACTEUR",
+    "Ticket",
+    "STATUTS_TICKET",
+    "TYPES_TICKET",
+    "Colis",
+    "STATUTS_COLIS",
+    "ColisEvenement",
+    "TYPES_EVENEMENT_COLIS",
 ]

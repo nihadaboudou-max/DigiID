@@ -108,17 +108,20 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
     }),
 
     # ─── Pivot logistique (Plan B) ───
+    # S1 : lire/écrire/supprimer le référentiel.
+    # S2 : créer des colis (logistique.colis.creer) et scanner (logistique.scan).
     RoleUtilisateur.GERANT_GARE: frozenset({
         "logistique.lire", "logistique.ecrire", "logistique.supprimer",
+        "logistique.colis.creer", "logistique.scan",
     }),
     RoleUtilisateur.RECEVEUR: frozenset({
-        "logistique.lire",
+        "logistique.lire", "logistique.colis.creer", "logistique.scan",
     }),
     RoleUtilisateur.CHAUFFEUR: frozenset({
-        "logistique.lire",
+        "logistique.lire", "logistique.scan",
     }),
     RoleUtilisateur.COMMERCANT: frozenset({
-        "logistique.lire",
+        "logistique.lire", "logistique.colis.creer",
     }),
     
     # Citoyen — accès à ses propres données uniquement

@@ -1,15 +1,19 @@
 
 # -*- coding: utf-8 -*-
-"""Routes API du domaine logistique (référentiel)."""
+"""Routes API du domaine logistique (référentiel + colis de bout en bout)."""
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
-from src.modeles import Gare, Ligne, Vehicule, Voyage, ActeurLogistique, Utilisateur
+from src.modeles import (
+    Gare, Ligne, Vehicule, Voyage, ActeurLogistique, Utilisateur,
+    Ticket, Colis, ColisEvenement,
+)
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.logistique import service, schemas
+from src.modules.qr_dynamique.service import construire_url_qr_durable
 from src.modules.logistique.dependances import (
     obtenir_gare_ou_404, obtenir_ligne_ou_404, obtenir_vehicule_ou_404,
     obtenir_voyage_ou_404, obtenir_acteur_ou_404,
@@ -60,6 +64,26 @@ async def _enrichir_acteur(session: AsyncSession, acteur: ActeurLogistique) -> A
     acteur.utilisateur_nom = await _nom_utilisateur(session, acteur.utilisateur_id)
     acteur.gare_nom = await _nom_gare(session, acteur.gare_id)
     return acteur
+
+
+async def _enrichir_colis(session: AsyncSession, colis: Colis) -> Colis:
+    colis.gare_depart_nom = await _nom_gare(session, colis.gare_depart_id)
+    colis.gare_arrivee_nom = await _nom_gare(session, colis.gare_arrivee_id)
+    colis.expediteur_nom = await _nom_utilisateur(session, colis.expediteur_id)
+    colis.receveur_nom = await _nom_utilisateur(session, colis.receveur_id)
+    colis.chauffeur_nom = await _nom_utilisateur(session, colis.chauffeur_id)
+    ticket = await service.obtenir_ticket_du_colis(session, colis)
+    colis.code_clair = ticket.code_clair if ticket else None
+    colis.qr_token = ticket.qr_token if ticket else None
+    colis.qr_code_url = construire_url_qr_durable(ticket.qr_token) if ticket else None
+    return colis
+
+
+async def _enrichir_evenement(
+    session: AsyncSession, evenement: ColisEvenement
+) -> ColisEvenement:
+    evenement.acteur_nom = await _nom_utilisateur(session, evenement.acteur_id)
+    return evenement
 
 
 # ─── Gares ───────────────────────────────────────────────────────────
@@ -398,6 +422,100 @@ async def supprimer_acteur(
     await service.supprimer_acteur(session, acteur.id)
 
 
+# ─── Colis ──────────────────────────────────────────────────────────
+
+routeur_colis = APIRouter(prefix="/colis", tags=["Logistique — Colis"])
+
+
+@routeur_colis.post("", response_model=schemas.ColisEnregistre,
+                    status_code=status.HTTP_201_CREATED,
+                    summary="Enregistrer un colis (génère le ticket QR + numéro en clair)")
+@require_permission("logistique.colis.creer")
+async def enregistrer_colis(
+    donnees: schemas.ColisCreate,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    colis, ticket = await service.creer_colis(session, donnees, utilisateur_courant)
+    await _enrichir_colis(session, colis)
+    ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
+    return {"colis": colis, "ticket": ticket}
+
+
+@routeur_colis.get("", response_model=schemas.ReponseListe[schemas.ColisResponse],
+                   summary="Lister les colis")
+@require_permission("logistique.lire")
+async def lister_colis(
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    page: int = Query(1, ge=1),
+    par_page: int = Query(20, ge=1, le=100),
+    statut: str | None = Query(None),
+    gare_id: UUID | None = Query(None),
+    voyage_id: UUID | None = Query(None),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    colis_liste, total = await service.lister_colis(
+        session, page, par_page, statut, gare_id, voyage_id
+    )
+    for colis in colis_liste:
+        await _enrichir_colis(session, colis)
+    return schemas.ReponseListe(elements=colis_liste, total=total, page=page, par_page=par_page)
+
+
+@routeur_colis.get("/{colis_id}/evenements",
+                   response_model=list[schemas.ColisEvenementResponse],
+                   summary="Timeline d'un colis")
+@require_permission("logistique.lire")
+async def lister_evenements_colis(
+    colis_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    evenements = await service.lister_evenements(session, colis_id)
+    for evenement in evenements:
+        await _enrichir_evenement(session, evenement)
+    return evenements
+
+
+@routeur_colis.get("/{code}", response_model=schemas.ColisResponse,
+                   summary="Obtenir un colis par code clair (ou token QR)")
+@require_permission("logistique.lire")
+async def obtenir_colis(
+    code: str,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    colis, _ = await service.obtenir_colis_par_code(session, code)
+    return await _enrichir_colis(session, colis)
+
+
+# ─── Scans ──────────────────────────────────────────────────────────
+
+routeur_scans = APIRouter(tags=["Logistique — Scans"])
+
+
+@routeur_scans.post("/scans", response_model=schemas.ScanResponse,
+                    summary="Scanner un ticket (livraison idempotente, anti-« DÉJÀ LIVRÉ »)")
+@routeur_scans.post("/scan", response_model=schemas.ScanResponse, include_in_schema=False)
+@require_permission("logistique.scan")
+async def scanner_ticket(
+    donnees: schemas.ScanCreate,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    resultat = await service.enregistrer_scan(session, donnees, utilisateur_courant)
+    colis = resultat.get("colis")
+    if colis is not None:
+        await _enrichir_colis(session, colis)
+    evenement = resultat.get("evenement")
+    if evenement is not None:
+        await _enrichir_evenement(session, evenement)
+    ticket = resultat.get("ticket")
+    if ticket is not None:
+        ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
+    return resultat
+
+
 # ─── Agrégation ──────────────────────────────────────────────────────
 
 routeur_logistique = APIRouter(prefix="/api/v1/logistique")
@@ -406,3 +524,5 @@ routeur_logistique.include_router(routeur_lignes)
 routeur_logistique.include_router(routeur_vehicules)
 routeur_logistique.include_router(routeur_voyages)
 routeur_logistique.include_router(routeur_acteurs)
+routeur_logistique.include_router(routeur_colis)
+routeur_logistique.include_router(routeur_scans)

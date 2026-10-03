@@ -169,6 +169,30 @@ def _construire_url_qr(token: str, base_url: Optional[str] = None) -> str:
     return f"{frontend}/police/scan-qr?token={token}"
 
 
+def generer_token_durable(contexte: str = "") -> str:
+    """
+    Génère un token QR **durable** (sans expiration) pour les tickets/étiquettes.
+
+    Différence avec `_generer_token_securise` : ce token n'est PAS stocké dans
+    Redis et n'expire pas après 30 s — il est persisté en base (colonne
+    `tickets.qr_token`) pour rester scannable pendant toute la durée de vie de
+    l'envoi. Le token reste opaque : seul un lookup en base le résout.
+    """
+    aleatoire = secrets.token_urlsafe(32)
+    donnees = f"{contexte}:{datetime.now(timezone.utc).isoformat()}:{aleatoire}"
+    return hashlib.sha256(donnees.encode()).hexdigest()[:48]
+
+
+def construire_url_qr_durable(
+    token: str,
+    chemin: str = "logistique/scan",
+    base_url: Optional[str] = None,
+) -> str:
+    """Construit l'URL encodée dans le QR d'un ticket (page frontend navigable)."""
+    frontend = (base_url or os.getenv("URL_FRONTEND", "http://152.228.141.69:3000")).rstrip("/")
+    return f"{frontend}/{chemin.lstrip('/')}?token={token}"
+
+
 async def generer_qr_code(
     session: AsyncSession,
     utilisateur: Utilisateur,

@@ -193,3 +193,134 @@ class ActeurResponse(BaseModel):
     utilisateur_nom: Optional[str] = None
     gare_nom: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+
+
+# ─── Ticket (QR + numéro en clair) ───────────────────────────────────
+
+class TicketResponse(BaseModel):
+    id: UUID
+    code_clair: str
+    qr_token: str
+    qr_code_url: Optional[str] = None
+    type: str
+    reference_id: Optional[UUID] = None
+    voyage_id: Optional[UUID] = None
+    statut: str
+    nb_scans: int
+    premier_scan_le: Optional[datetime] = None
+    imprime_le: Optional[datetime] = None
+    cree_le: datetime
+    modifie_le: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ─── Colis ───────────────────────────────────────────────────────────
+
+class ColisCreate(BaseModel):
+    destinataire_nom: str = Field(..., min_length=2, max_length=150)
+    destinataire_tel: str = Field(..., min_length=6, max_length=30)
+    gare_depart_id: UUID
+    gare_arrivee_id: UUID
+    description: Optional[str] = Field(None, max_length=500)
+    poids_kg: Optional[float] = Field(None, ge=0)
+    valeur_fcfa: Optional[int] = Field(None, ge=0)
+    frais_fcfa: int = Field(100, ge=0)
+    # Si non fournis, l'expéditeur ET le receveur = utilisateur courant (guichet).
+    expediteur_id: Optional[UUID] = None
+    receveur_id: Optional[UUID] = None
+    voyage_id: Optional[UUID] = None
+    chauffeur_id: Optional[UUID] = None
+
+    @model_validator(mode="after")
+    def _gares_distinctes(self):
+        if self.gare_depart_id == self.gare_arrivee_id:
+            raise ValueError("Les gares de départ et d'arrivée doivent être différentes")
+        return self
+
+
+class ColisResponse(BaseModel):
+    id: UUID
+    ticket_id: Optional[UUID] = None
+    code_clair: Optional[str] = None
+    qr_token: Optional[str] = None
+    qr_code_url: Optional[str] = None
+    expediteur_id: Optional[UUID] = None
+    destinataire_nom: str
+    destinataire_tel: str
+    description: Optional[str] = None
+    poids_kg: Optional[float] = None
+    valeur_fcfa: Optional[int] = None
+    gare_depart_id: UUID
+    gare_arrivee_id: UUID
+    voyage_id: Optional[UUID] = None
+    receveur_id: Optional[UUID] = None
+    chauffeur_id: Optional[UUID] = None
+    statut: str
+    frais_fcfa: int
+    livre_le: Optional[datetime] = None
+    cree_le: datetime
+    modifie_le: Optional[datetime] = None
+    # Champs enrichis (noms lisibles)
+    gare_depart_nom: Optional[str] = None
+    gare_arrivee_nom: Optional[str] = None
+    expediteur_nom: Optional[str] = None
+    receveur_nom: Optional[str] = None
+    chauffeur_nom: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ColisEnregistre(BaseModel):
+    """Réponse d'enregistrement d'un colis : le colis + son ticket (QR + code)."""
+    colis: ColisResponse
+    ticket: TicketResponse
+
+
+# ─── Événements (timeline) ───────────────────────────────────────────
+
+class ColisEvenementResponse(BaseModel):
+    id: UUID
+    colis_id: UUID
+    type_evenement: str
+    acteur_id: Optional[UUID] = None
+    acteur_nom: Optional[str] = None
+    gare_id: Optional[UUID] = None
+    localisation: Optional[str] = None
+    horodatage: datetime
+    idempotency_key: Optional[str] = None
+    synchro_le: Optional[datetime] = None
+    cree_le: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ─── Scan ────────────────────────────────────────────────────────────
+
+TypeEvenementScan = Literal["livraison", "depart", "mise_en_transit", "arrivee"]
+
+
+class ScanCreate(BaseModel):
+    """Payload d'un scan : soit un token QR, soit le code clair (repli manuel)."""
+    token: Optional[str] = Field(None, max_length=200)
+    code_clair: Optional[str] = Field(None, max_length=40)
+    type_evenement: TypeEvenementScan = "livraison"
+    gare_id: Optional[UUID] = None
+    voyage_id: Optional[UUID] = None
+    localisation: Optional[str] = Field(None, max_length=200)
+    idempotency_key: Optional[str] = Field(None, max_length=120)
+    horodatage: Optional[datetime] = None
+
+    @model_validator(mode="after")
+    def _cible_obligatoire(self):
+        if not self.token and not self.code_clair:
+            raise ValueError("Fournir soit 'token', soit 'code_clair'")
+        return self
+
+
+class ScanResponse(BaseModel):
+    succes: bool
+    deja_livre: bool = False
+    deja_scanne: bool = False
+    message: str
+    statut_colis: Optional[str] = None
+    colis: Optional[ColisResponse] = None
+    ticket: Optional[TicketResponse] = None
+    evenement: Optional[ColisEvenementResponse] = None
