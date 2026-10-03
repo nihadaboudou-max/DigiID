@@ -63,6 +63,7 @@ const LIENS_SUPER_ADMIN: Lien[] = [
   // ← NOUVEAUX LIENS AJOUTÉS
   { href: "/super-admin/domaines", libelle: "Domaines", Icone: IconeAccueil },
   { href: "/super-admin/departements", libelle: "Départements", Icone: IconeStatistique },
+  { href: "/super-admin/logistique", libelle: "Logistique", Icone: IconePartage },
   { href: "/super-admin/invitations", libelle: "Invitations", Icone: IconeEnvoyer },
   // ← FIN NOUVEAUX LIENS
   { href: "/super-admin/administrateurs", libelle: "Administrateurs", Icone: IconeBouclier },

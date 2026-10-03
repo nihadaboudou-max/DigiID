@@ -37,6 +37,12 @@ class RoleUtilisateur(str, Enum):
     # ─── Niveau 5 : Citoyen ──────────────────────────────────────────
     CITOYEN = "citoyen"
 
+    # Pivot logistique (Plan B)
+    GERANT_GARE = "gerant_gare"
+    RECEVEUR = "receveur"
+    CHAUFFEUR = "chauffeur"
+    COMMERCANT = "commercant"
+
 
 # ─── Groupes de rôles ────────────────────────────────────────────────
 
@@ -88,6 +94,13 @@ ROLES_ONG: Final[frozenset] = frozenset({
 ROLES_AGENT_TERRAIN: Final[frozenset] = frozenset({
     RoleUtilisateur.CHEF_AGENT,
     RoleUtilisateur.AGENT_TERRAIN,
+})
+
+# Roles operationnels logistiques (acces aux outils terrain)
+ROLES_LOGISTIQUE: Final[frozenset] = frozenset({
+    RoleUtilisateur.GERANT_GARE,
+    RoleUtilisateur.RECEVEUR,
+    RoleUtilisateur.CHAUFFEUR,
 })
 
 # ─── Rôles professionnels (tous sauf citoyen) ────────────────────────
@@ -186,7 +199,11 @@ def obtenir_niveau_hierarchie(role: str) -> int:
         return 2
     if role in ROLES_CHEF:
         return 3
+    if role == RoleUtilisateur.GERANT_GARE:
+        return 3
     if role in ROLES_AGENT:
+        return 4
+    if role in (RoleUtilisateur.RECEVEUR, RoleUtilisateur.CHAUFFEUR, RoleUtilisateur.COMMERCANT):
         return 4
     if role in ROLES_CITOYEN:
         return 5

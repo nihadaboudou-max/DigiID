@@ -106,6 +106,9 @@ from src.modules.ocr_passeport.routes import routeur_passeport
 ## Module Inspection de Documents — routeur pour l'upload et l'analyse OCR des documents d'identité
 from src.modules.inspection_documents import routeur_inspection
 
+# --- Pivot logistique (Plan B) — référentiel gares/lignes/véhicules/voyages/acteurs ---
+from src.modules.logistique import routeur_logistique
+
 
 # Routeur racine — préfixe et tag globaux gérés au montage
 routeur_v1 = APIRouter()
@@ -206,3 +209,6 @@ routeur_v1.include_router(routeur_passeport)
 
 ## Module Inspection de Documents — routeur pour l'upload et l'analyse OCR des documents d'identité
 routeur_v1.include_router(routeur_inspection)
+
+# Pivot logistique (Plan B) — référentiel logistique
+routeur_v1.include_router(routeur_logistique)

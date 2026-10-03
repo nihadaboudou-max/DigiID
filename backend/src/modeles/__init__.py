@@ -38,6 +38,9 @@ from .carte_sejour import CarteSejour
 from .consulaire import CarteConsulaire
 from .passeport import Passeport
 from src.modeles.inspection_document import InspectionDocument
+from src.modeles.logistique import (
+    Gare, Ligne, Vehicule, Voyage, ActeurLogistique, STATUTS_VOYAGE, ROLES_ACTEUR,
+)
 
 __all__ = [
     "Utilisateur",
@@ -90,4 +93,11 @@ __all__ = [
     "CarteConsulaire",
     "Passeport",
     "InspectionDocument",
+    "Gare",
+    "Ligne",
+    "Vehicule",
+    "Voyage",
+    "ActeurLogistique",
+    "STATUTS_VOYAGE",
+    "ROLES_ACTEUR",
 ]

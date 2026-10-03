@@ -106,6 +106,20 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
         "agent.lire", "agent.ecrire",
         "enrolement.lire", "enrolement.ecrire",
     }),
+
+    # ─── Pivot logistique (Plan B) ───
+    RoleUtilisateur.GERANT_GARE: frozenset({
+        "logistique.lire", "logistique.ecrire", "logistique.supprimer",
+    }),
+    RoleUtilisateur.RECEVEUR: frozenset({
+        "logistique.lire",
+    }),
+    RoleUtilisateur.CHAUFFEUR: frozenset({
+        "logistique.lire",
+    }),
+    RoleUtilisateur.COMMERCANT: frozenset({
+        "logistique.lire",
+    }),
     
     # Citoyen — accès à ses propres données uniquement
     RoleUtilisateur.CITOYEN: frozenset({

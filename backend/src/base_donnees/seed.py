@@ -139,6 +139,43 @@ DONNEES_ROLES: list[dict] = [
         ),
         "niveau_hierarchie": RolesUtilisateur.hierarchie()[RolesUtilisateur.SUPER_ADMINISTRATEUR],
     },
+    # ─── Pivot logistique (Plan B) ───
+    {
+        "nom_technique": RolesUtilisateur.GERANT_GARE.value,
+        "nom_affichage": "Gérant de gare",
+        "description": (
+            "Gérant d'une gare logistique. Administre la gare : lignes, véhicules, "
+            "acteurs (receveurs/chauffeurs) et tarifs."
+        ),
+        "niveau_hierarchie": RolesUtilisateur.hierarchie()[RolesUtilisateur.GERANT_GARE],
+    },
+    {
+        "nom_technique": RolesUtilisateur.RECEVEUR.value,
+        "nom_affichage": "Receveur",
+        "description": (
+            "Receveur de gare. Enregistre les colis et bagages au guichet, "
+            "imprime les tickets et gère les livraisons (scan)."
+        ),
+        "niveau_hierarchie": RolesUtilisateur.hierarchie()[RolesUtilisateur.RECEVEUR],
+    },
+    {
+        "nom_technique": RolesUtilisateur.CHAUFFEUR.value,
+        "nom_affichage": "Chauffeur",
+        "description": (
+            "Chauffeur de véhicule. Consulte les listes de voyage, scanne les colis "
+            "en route et suit son score logistique."
+        ),
+        "niveau_hierarchie": RolesUtilisateur.hierarchie()[RolesUtilisateur.CHAUFFEUR],
+    },
+    {
+        "nom_technique": RolesUtilisateur.COMMERCANT.value,
+        "nom_affichage": "Commerçant",
+        "description": (
+            "Commerçant e-commerce. Expédie des colis, suit ses envois, gère "
+            "son abonnement et télécharge ses reçus."
+        ),
+        "niveau_hierarchie": RolesUtilisateur.hierarchie()[RolesUtilisateur.COMMERCANT],
+    },
 ]
 
 

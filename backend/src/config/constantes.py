@@ -43,6 +43,12 @@ class RolesUtilisateur(str, Enum):
     AGENT = "agent"
     POLICE = "police"
 
+    # ─── Pivot logistique (Plan B) ───
+    GERANT_GARE = "gerant_gare"
+    RECEVEUR = "receveur"
+    CHAUFFEUR = "chauffeur"
+    COMMERCANT = "commercant"
+
     @classmethod
     def hierarchie(cls) -> dict:
         """
@@ -59,6 +65,10 @@ class RolesUtilisateur(str, Enum):
             cls.CHEF_MEDICAL: 6,
             cls.CHEF_ONG: 6,
             cls.CHEF_AGENT: 6,
+            cls.GERANT_GARE: 6,
+            cls.RECEVEUR: 4,
+            cls.CHAUFFEUR: 4,
+            cls.COMMERCANT: 4,
             cls.ADMIN_DOMAINE: 7,
             cls.ADMINISTRATEUR: 10,
             cls.SUPER_ADMINISTRATEUR: 100,
