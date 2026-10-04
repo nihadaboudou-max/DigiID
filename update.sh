@@ -40,42 +40,62 @@ echo "🗄️  Application des migrations de base de données (si nécessaire)..
 docker compose run --rm backend alembic upgrade head || echo "ℹ️  Aucune nouvelle migration à appliquer."
 
 # ────────────────────────────────────────────────────────────────
-# 4. Redémarrage à chaud des services
+# 4. Redémarrage à chaud du backend
 # ────────────────────────────────────────────────────────────────
-echo "🔄 Redémarrage des services..."
-# 'restart' est beaucoup plus rapide et fluide que 'down' puis 'up'
+echo "🔄 Redémarrage du backend..."
+# Le code backend est monté en volume (./backend:/app) : un simple
+# 'restart' suffit pour prendre en compte les modifications de code.
 docker compose restart backend
 
-# Gestion du Frontend (Optionnelle mais recommandée si code modifié)
-echo "💡 Le frontend est en mode production (Next.js Standalone)."
-echo "   Si vous avez modifié du code React/TypeScript, il doit être reconstruit."
-read -p "Voulez-vous reconstruire le frontend maintenant ? (y/N) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "🏗️  Reconstruction du frontend en cours..."
-    docker compose build --no-cache frontend
-    docker compose restart frontend
+# ────────────────────────────────────────────────────────────────
+# 5. Frontend — reconstruction AUTOMATIQUE si les sources ont changé
+# ────────────────────────────────────────────────────────────────
+# ⚠️ Le frontend tourne en build de PRODUCTION (Next.js standalone) :
+#    le code React/TS est figé dans l'image Docker. Toute modification de
+#    frontend/ exige donc : rebuild de l'image + RECRÉATION du conteneur.
+#
+# ⚠️⚠️ Un simple 'docker compose restart frontend' NE SUFFIT PAS : il relance
+#    le conteneur existant, qui continue d'utiliser l'ANCIENNE image.
+#    Il faut impérativement 'up -d --force-recreate frontend'.
+echo "🔍 Vérification des sources frontend..."
+FRONT_HASH=$(find frontend -type f -print0 \
+    | grep -zv -E '/(node_modules|\.next)/' \
+    | sort -z | xargs -0 md5sum 2>/dev/null | md5sum | awk '{print $1}') || FRONT_HASH=""
+LAST_FRONT_HASH_FILE=".last_frontend_hash"
+LAST_FRONT_HASH=""
+[ -f "$LAST_FRONT_HASH_FILE" ] && LAST_FRONT_HASH=$(cat "$LAST_FRONT_HASH_FILE")
+
+if [ "${FORCER_FRONTEND:-0}" = "1" ] || [ "$FRONT_HASH" != "$LAST_FRONT_HASH" ]; then
+    echo "🏗️  Sources frontend modifiées → reconstruction de l'image..."
+    docker compose build frontend
+    # ⚠️ 'up -d --force-recreate' est OBLIGATOIRE (et non 'restart') :
+    # sinon le conteneur repart avec l'ancienne image et le code reste inchangé.
+    docker compose up -d --force-recreate frontend
+    echo "$FRONT_HASH" > "$LAST_FRONT_HASH_FILE"
+    echo "✅ Frontend reconstruit et conteneur recréé."
+    echo "   Pensez à recharger le navigateur : Ctrl+Shift+R (cache JS)."
 else
-    echo "ℹ️  Frontend non reconstruit. Les changements de code backend sont déjà actifs."
+    echo "✅ Aucune modification frontend — reconstruction inutile."
+    echo "   (Pour forcer malgré tout : FORCER_FRONTEND=1 ./update.sh)"
 fi
 
 # ────────────────────────────────────────────────────────────────
-# 5. Vérification de santé (Health Check robuste)
+# 6. Vérification de santé (Health Check robuste)
 # ────────────────────────────────────────────────────────────────
 echo "⏳ Vérification de la santé du système..."
 
 # On vérifie depuis l'intérieur du conteneur pour éviter les problèmes de ports exposés
-# On tente jusqu'à 5 fois (10 secondes max) pour laisser le temps au backend de démarrer
-for i in {1..5}; do
+# On tente jusqu'à 10 fois (20 secondes max) pour laisser le temps au backend de démarrer
+for i in {1..10}; do
     if docker compose exec -T backend curl -s -f http://localhost:8000/api/v1/sante-leger > /dev/null 2>&1; then
         echo "✅ Système DigiID mis à jour avec succès et opérationnel !"
         break
     else
-        if [ $i -eq 5 ]; then
-            echo "❌ Attention : Le backend ne répond pas après 10 secondes."
+        if [ $i -eq 10 ]; then
+            echo "❌ Attention : Le backend ne répond pas après 20 secondes."
             echo "   Consultez les logs avec : docker compose logs --tail=30 backend"
         else
-            echo "⏳ Attente du démarrage du backend... (essai $i/5)"
+            echo "⏳ Attente du démarrage du backend... (essai $i/10)"
             sleep 2
         fi
     fi

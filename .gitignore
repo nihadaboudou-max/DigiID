@@ -72,3 +72,7 @@ Thumbs.db
 *.save
 *.py.save
 tmp/
+
+# --- Empreintes locales des scripts de déploiement (update.sh) ---
+.last_requirements_hash
+.last_frontend_hash
