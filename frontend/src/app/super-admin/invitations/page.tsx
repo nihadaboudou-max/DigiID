@@ -96,8 +96,21 @@ function Contenu() {
     setErreurCreation(null);
     setCreationEnCours(true);
     try {
-      await clientAPI.post("/api/v1/invitations", formCreation, { authentifie: true });
-      notifier("Invitation envoyée avec succès !", "succes");
+      const reponse = await clientAPI.post<{ email_envoye?: boolean | null; email_detail?: string | null }>(
+        "/api/v1/invitations",
+        formCreation,
+        { authentifie: true },
+      );
+      // ⚠️ L'invitation est créée même si l'email n'est pas parti (ex : SMTP/SendGrid
+      //    non configuré). On l'affiche clairement au lieu d'un faux « envoyé ! ».
+      if (reponse?.email_envoye === false) {
+        notifier(
+          reponse.email_detail || "Invitation créée, mais l'email n'a PAS pu être envoyé.",
+          "avertissement",
+        );
+      } else {
+        notifier("Invitation envoyée avec succès !", "succes");
+      }
       setModaleOuverte(false);
       setFormCreation({ email: "", role: "admin_domaine", message: "" });
       charger();
@@ -111,8 +124,19 @@ function Contenu() {
   const gererRenvoi = async (id: string) => {
     if (!confirm("Renvoyer cette invitation ?")) return;
     try {
-      await clientAPI.post(`/api/v1/invitations/${id}/renvoyer`, {}, { authentifie: true });
-      notifier("Invitation renvoyée", "succes");
+      const reponse = await clientAPI.post<{ email_envoye?: boolean | null; email_detail?: string | null }>(
+        `/api/v1/invitations/${id}/renvoyer`,
+        {},
+        { authentifie: true },
+      );
+      if (reponse?.email_envoye === false) {
+        notifier(
+          reponse.email_detail || "Email de rappel NON envoyé (service email non configuré).",
+          "avertissement",
+        );
+      } else {
+        notifier("Invitation renvoyée", "succes");
+      }
       charger();
     } catch (e) {
       notifier(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur", "erreur");
@@ -186,6 +210,11 @@ function Contenu() {
                 <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
           Envoie des invitations pour créer des comptes (admin, chef, agent,
           guichet logistique, chauffeur, commerçant).
+          {" "}
+          <span className="text-terre">
+            Si l'email ne part pas (service email non configuré), un avertissement s'affiche
+            et l'invitation reste disponible dans le tableau.
+          </span>
         </p>
       </header>
 

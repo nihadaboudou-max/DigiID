@@ -110,10 +110,13 @@ class ParametresApplication(BaseSettings):
     email_expediteur: str = "DigiID <bigdataism2024@gmail.com>"
 
     # --- Email (SMTP Gmail - utilise le mot de passe d'application) ---
+    # ⚠️ AUCUN secret en dur dans le code : le mot de passe d'application Gmail
+    #    doit venir du .env (SMTP_MOT_DE_PASSE). Sans lui, l'application passe
+    #    en « mode mock » (les emails ne partent pas) et le signale au démarrage.
     smtp_serveur: str = "smtp.gmail.com"
     smtp_port: int = 587
     smtp_utilisateur: str = "bigdataism2024@gmail.com"
-    smtp_mot_de_passe: str = "izcwgbdvjlohzkag"
+    smtp_mot_de_passe: str = ""
 
     # --- Email (SendGrid - API HTTP, fonctionne sur Render) ---
     sendgrid_api_key: str = ""

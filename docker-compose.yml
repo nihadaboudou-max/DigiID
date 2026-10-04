@@ -98,10 +98,18 @@ services:
       - ACTIVER_2FA_OBLIGATOIRE_ADMIN=${ACTIVER_2FA_OBLIGATOIRE_ADMIN:-false}
       - DUREE_VALIDITE_CODE_2FA_SECONDES=${DUREE_VALIDITE_CODE_2FA_SECONDES:-300}
 
-      # ─── Email ─────────────────────────────────────────
-      - SMTP_MOT_DE_PASSE=${SMTP_MOT_DE_PASSE}
+      # ─── Email ────────────────────────────────────────
+      # ⚠️ Sans SMTP_MOT_DE_PASSE (ou SENDGRID_API_KEY), l'app passe en « mode
+      #    mock » : les invitations sont créées mais AUCUN email n'est envoyé.
+      #    Ces variables ne sont lues qu'à la CRÉATION du conteneur : après
+      #    modification du .env, il faut recréer le backend
+      #    (docker compose up -d --force-recreate backend), pas juste "restart".
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-bigdataism2024@gmail.com}
+      - SMTP_MOT_DE_PASSE=${SMTP_MOT_DE_PASSE:-}
       - EMAIL_EXPEDITEUR=${EMAIL_EXPEDITEUR:-DigiID <bigdataism2024@gmail.com>}
-      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY:-}
 
       # ─── Monitoring ────────────────────────────────────
       - NIVEAU_JOURNAL=${NIVEAU_JOURNAL:-INFO}

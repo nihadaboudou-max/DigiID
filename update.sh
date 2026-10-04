@@ -40,12 +40,26 @@ echo "🗄️  Application des migrations de base de données (si nécessaire)..
 docker compose run --rm backend alembic upgrade head || echo "ℹ️  Aucune nouvelle migration à appliquer."
 
 # ────────────────────────────────────────────────────────────────
-# 4. Redémarrage à chaud du backend
+# 4. Backend — redémarrage (ou recréation si .env a changé)
 # ────────────────────────────────────────────────────────────────
-echo "🔄 Redémarrage du backend..."
-# Le code backend est monté en volume (./backend:/app) : un simple
-# 'restart' suffit pour prendre en compte les modifications de code.
-docker compose restart backend
+# ⚠️ Le code backend est monté en volume (./backend:/app) : un simple 'restart'
+#    suffit pour le code. MAIS les variables d'environnement (.env) sont figées
+#    à la CRÉATION du conteneur : 'restart' ne les recharge PAS.
+#    (ex : ajouter SMTP_MOT_DE_PASSE pour que les emails d'invitation partent)
+echo "🔍 Vérification du fichier .env..."
+ENV_HASH=$(md5sum .env 2>/dev/null | awk '{print $1}') || ENV_HASH=""
+LAST_ENV_HASH_FILE=".last_env_hash"
+LAST_ENV_HASH=""
+[ -f "$LAST_ENV_HASH_FILE" ] && LAST_ENV_HASH=$(cat "$LAST_ENV_HASH_FILE")
+
+if [ "$ENV_HASH" != "$LAST_ENV_HASH" ]; then
+    echo "🔄 .env modifié → recréation du backend pour recharger la configuration..."
+    docker compose up -d --force-recreate backend
+    echo "$ENV_HASH" > "$LAST_ENV_HASH_FILE"
+else
+    echo "🔄 Redémarrage du backend (code uniquement, .env inchangé)..."
+    docker compose restart backend
+fi
 
 # ────────────────────────────────────────────────────────────────
 # 5. Frontend — reconstruction AUTOMATIQUE si les sources ont changé

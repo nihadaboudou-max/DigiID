@@ -100,6 +100,31 @@ async def cycle_de_vie(application: FastAPI):
     journal.info(f"Environnement : {parametres.environnement}")
     journal.info(f"Version API : {parametres.version_api}")
 
+    # ─── Diagnostic email ────────────────────────────────────────────────
+    # Sans ce contrôle, un envoi en mode mock (aucun service configuré) est
+    # invisible : l'API répond « invitation créée » alors qu'aucun email
+    # n'est parti (invitation, code 2FA, vérification d'email…).
+    try:
+        from src.noyau.notification import (
+            etat_configuration_email,
+            adresse_email_expediteur,
+        )
+        etat_email = etat_configuration_email()
+        if etat_email == "mode_mock":
+            journal.warning(
+                "⚠️  EMAIL NON CONFIGURÉ (mode mock) : AUCUN email ne sera envoyé "
+                "(invitations, codes 2FA, vérifications). "
+                "Définir SMTP_MOT_DE_PASSE ou SENDGRID_API_KEY dans .env, "
+                "puis : docker compose up -d --force-recreate backend"
+            )
+        else:
+            journal.info(
+                f"Service email actif : {etat_email} "
+                f"(expéditeur : {adresse_email_expediteur()})"
+            )
+    except Exception as erreur:
+        journal.warning(f"Diagnostic email indisponible : {erreur}")
+
     # Lancer l'initialisation complète en arrière-plan
     # Render Free PostgreSQL peut être lent au démarrage d'une nouvelle instance.
     # Au lieu de bloquer le yield (ce qui cause 'connection reset by peer'

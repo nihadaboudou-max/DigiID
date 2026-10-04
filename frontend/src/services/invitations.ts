@@ -19,6 +19,10 @@ export interface Invitation {
   date_creation: string;
   date_expiration: string;
   date_acceptation: string | null;
+  /** Statut réel de l'envoi de l'email (false = invitation créée mais email NON parti) */
+  email_envoye?: boolean | null;
+  /** Explication quand email_envoye === false (service email non configuré, échec…) */
+  email_detail?: string | null;
 }
 
 export interface InvitationCreate {

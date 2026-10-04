@@ -95,13 +95,21 @@ function Contenu() {
     setCreationEnCours(true);
     try {
       // ✅ CORRECTION : Utiliser le service
-      await creerInvitation({
+      const invitation = await creerInvitation({
         email: formCreation.email,
         role: formCreation.role,
         domaine_id: utilisateur?.domaine_id || undefined,
         message: formCreation.message || undefined,
       });
-      notifier("Invitation envoyée au chef avec succès !", "succes");
+      // ⚠️ Invitation créée même si l'email n'est pas parti → avertir clairement.
+      if (invitation?.email_envoye === false) {
+        notifier(
+          invitation.email_detail || "Invitation créée, mais l'email n'a PAS pu être envoyé.",
+          "avertissement",
+        );
+      } else {
+        notifier("Invitation envoyée au chef avec succès !", "succes");
+      }
       setModaleOuverte(false);
       setFormCreation({ email: "", role: "chef_police", message: "" });
       charger();
@@ -115,8 +123,15 @@ function Contenu() {
   const gererRenvoi = async (id: string) => {
     if (!confirm("Renvoyer cette invitation ?")) return;
     try {
-      await renvoyerInvitation(id);
-      notifier("Invitation renvoyée", "succes");
+      const invitation = await renvoyerInvitation(id);
+      if (invitation?.email_envoye === false) {
+        notifier(
+          invitation.email_detail || "Email de rappel NON envoyé (service email non configuré).",
+          "avertissement",
+        );
+      } else {
+        notifier("Invitation renvoyée", "succes");
+      }
       charger();
     } catch (e) {
       notifier(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur", "erreur");

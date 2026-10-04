@@ -39,6 +39,36 @@ def generer_token_invitation(longueur: int = 32) -> str:
 
 
 # =============================================================================
+# Diagnostic de la configuration email
+# =============================================================================
+
+def etat_configuration_email() -> str:
+    """
+    Indique par quel canal les emails peuvent réellement partir :
+
+      - ``"sendgrid"`` → SENDGRID_API_KEY défini
+      - ``"smtp"``     → SMTP_MOT_DE_PASSE défini (Gmail)
+      - ``"mode_mock"`` → AUCUN envoi réel : les emails sont seulement journalisés
+
+    Utilisé pour alerter l'administrateur (démarrage + réponses API) au lieu
+    de laisser un envoi échouer silencieusement.
+    """
+    if parametres.sendgrid_api_key:
+        return "sendgrid"
+    if parametres.smtp_mot_de_passe:
+        return "smtp"
+    return "mode_mock"
+
+
+def adresse_email_expediteur() -> str:
+    """Extrait l'adresse pure depuis « Nom <email> » (EMAIL_EXPEDITEUR)."""
+    expediteur = parametres.email_expediteur or "bigdataism2024@gmail.com"
+    if "<" in expediteur and ">" in expediteur:
+        return expediteur.split("<")[1].split(">")[0].strip()
+    return expediteur.strip()
+
+
+# =============================================================================
 # Envoi d'emails — Fonction principale avec fallback automatique
 # =============================================================================
 
@@ -69,8 +99,13 @@ def envoyer_email(
         return _envoyer_via_smtp(destinataire, sujet, corps_texte, corps_html)
     
     # 3. Mode mock
-    journal.info(
-        f"[EMAIL][MOCK] A: {destinataire} | Sujet: {sujet}\nCorps:\n{corps_texte}"
+    # ⚠️ Aucun email ne part réellement : on le signale clairement en WARNING
+    #    (un simple journal.info passait inaperçu et faisait croire à un envoi OK).
+    journal.warning(
+        "[EMAIL][MOCK] ⚠️ AUCUN SERVICE D'EMAIL CONFIGURÉ : l'email n'a PAS été envoyé. "
+        "Définir SENDGRID_API_KEY ou SMTP_MOT_DE_PASSE dans .env, "
+        "puis recréer le conteneur backend (docker compose up -d --force-recreate backend). "
+        f"Destinataire: {destinataire} | Sujet: {sujet}\nCorps:\n{corps_texte}"
     )
     return False
 
@@ -95,7 +130,13 @@ def _envoyer_via_sendgrid(
             },
             json={
                 "personalizations": [{"to": [{"email": destinataire}]}],
-                "from": {"email": "noreply@digiid.africa", "name": "DigiID"},
+                # ⚠️ SendGrid refuse (403) tout expéditeur non vérifié : on utilise
+                #    EMAIL_EXPEDITEUR (l'adresse validée comme « Single Sender »)
+                #    au lieu d'une adresse de domaine non authentifiée.
+                "from": {
+                    "email": adresse_email_expediteur(),
+                    "name": "DigiID",
+                },
                 "subject": sujet,
                 "content": contenu,
             },
@@ -124,11 +165,7 @@ def _envoyer_via_smtp(
 ) -> bool:
     """Envoie via SMTP Gmail (mot de passe d'application Google)."""
     expediteur = parametres.email_expediteur or "DigiID <bigdataism2024@gmail.com>"
-    
-    if "<" in expediteur and ">" in expediteur:
-        adresse_expediteur = expediteur.split("<")[1].split(">")[0].strip()
-    else:
-        adresse_expediteur = expediteur
+    adresse_expediteur = adresse_email_expediteur()
     
     msg = MIMEMultipart("alternative")
     msg["From"] = expediteur

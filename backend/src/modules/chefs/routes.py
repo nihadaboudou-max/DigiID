@@ -845,12 +845,16 @@ async def creer_invitation_chef(
         
         invitation = await creer_invitation(session, invitation_data, chef.id)
         
-        # Envoyer l'email d'invitation
-        from src.noyau.notification import envoyer_email_invitation
+                
+        
+        from src.noyau.notification import envoyer_email_invitation, etat_configuration_email
         
         nom_invitant = f"{dechiffrer_donnee(chef.prenom_chiffre) if chef.prenom_chiffre else ''} {dechiffrer_donnee(chef.nom_chiffre) if chef.nom_chiffre else ''}".strip()
         
-        envoyer_email_invitation(
+        # ⚠️ Le statut est renvoyé à l'interface : l'email peut très bien ne pas
+        #    partir (mode mock si SMTP/SendGrid n'est pas configuré) alors que
+        #    l'invitation, elle, est bien créée.
+        email_envoye = envoyer_email_invitation(
             destinataire=invitation.email,
             role=invitation.role,
             token=invitation.token,
@@ -858,6 +862,16 @@ async def creer_invitation_chef(
             nom_domaine=None,
             message_personnalise=data.get("message"),
         )
+        email_detail = None
+        if not email_envoye:
+            etat = etat_configuration_email()
+            email_detail = (
+                "Aucun service d'email configuré sur le serveur : renseigner "
+                "SMTP_MOT_DE_PASSE (Gmail) ou SENDGRID_API_KEY dans .env, puis "
+                "recréer le conteneur backend."
+                if etat == "mode_mock"
+                else f"L'envoi via {etat} a échoué. Vérifier les logs du backend."
+            )
         
         return {
             "id": str(invitation.id),
@@ -866,6 +880,8 @@ async def creer_invitation_chef(
             "statut": invitation.statut,
             "date_creation": invitation.date_creation.isoformat(),
             "date_expiration": invitation.date_expiration.isoformat(),
+            "email_envoye": email_envoye,
+            "email_detail": email_detail,
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

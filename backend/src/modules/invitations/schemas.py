@@ -74,6 +74,13 @@ class InvitationResponse(BaseModel):
     date_acceptation: Optional[datetime]
     cree_par: UUID
 
+    # ─── Statut réel de l'envoi de l'email ───────────────────────────────
+    # L'invitation est créée même si l'email échoue (ex : service email non
+    # configuré → mode mock). Ces champs permettent à l'interface d'afficher
+    # un avertissement au lieu d'un faux « Invitation envoyée ! ».
+    email_envoye: Optional[bool] = None
+    email_detail: Optional[str] = None
+
     class Config:
         from_attributes = True
 

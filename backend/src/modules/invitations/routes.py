@@ -18,6 +18,7 @@ from src.modules.invitations.dependances import obtenir_invitation_ou_404
 from src.noyau.notification import (
     envoyer_email_invitation,
     envoyer_email_renvoyer_invitation,
+    etat_configuration_email,
 )
 
 from src.modules.invitations.schemas import (
@@ -115,8 +116,13 @@ async def creer(
     """Crée une nouvelle invitation par email."""
     try:
         invitation = await creer_invitation(session, donnees, utilisateur_courant.id)
-        
-        # ✅ CORRECTION : Envoyer l'email avec le nouveau service
+
+        # ✅ Envoi de l'email — le résultat est renvoyé à l'interface.
+        #    Une invitation créée sans email ne doit PAS s'afficher en « succès » :
+        #    c'est ce qui masquait le mode mock (aucun service email configuré).
+        email_envoye = False
+        email_detail: str | None = None
+
         try:
             # Récupérer les infos pour le template
             domaine_nom = None
@@ -141,7 +147,7 @@ async def creer(
                 message_personnalise = donnees.message
             
             # ✅ Envoyer l'email d'invitation (synchrone, pas async)
-            succes = envoyer_email_invitation(
+            email_envoye = envoyer_email_invitation(
                 destinataire=invitation.email,
                 role=invitation.role,
                 token=invitation.token,
@@ -150,18 +156,34 @@ async def creer(
                 message_personnalise=message_personnalise,
             )
             
-            if succes:
+            if email_envoye:
                 journal.info(f"[INVITATION] ✅ Email envoyé à {invitation.email}")
             else:
+                etat = etat_configuration_email()
+                if etat == "mode_mock":
+                    email_detail = (
+                        "Aucun service d'email configuré sur le serveur : renseigner "
+                        "SMTP_MOT_DE_PASSE (Gmail) ou SENDGRID_API_KEY dans .env, puis "
+                        "recréer le conteneur backend. L'invitation existe mais "
+                        "l'email n'a pas été envoyé — communique le lien manuellement."
+                    )
+                else:
+                    email_detail = (
+                        f"L'envoi via {etat} a échoué. Vérifier les logs du backend "
+                        "(identifiants SMTP / expéditeur SendGrid vérifié)."
+                    )
                 journal.warning(
-                    f"[INVITATION] ⚠️ Email non envoyé (mode mock ou erreur) → {invitation.email}"
+                    f"[INVITATION] ⚠️ Email NON envoyé à {invitation.email} → {email_detail}"
                 )
             
         except Exception as e:
             # L'invitation est créée même si l'email échoue
+            email_detail = f"Erreur technique pendant l'envoi de l'email : {e}"
             journal.error(f"[INVITATION] ❌ Erreur envoi email: {e}")
-        
-        return invitation
+
+        return InvitationResponse.model_validate(invitation).model_copy(
+            update={"email_envoye": email_envoye, "email_detail": email_detail}
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -264,28 +286,44 @@ async def renvoyer(
     await session.commit()
     await session.refresh(invitation)
     
-    # ✅ CORRECTION : Renvoyer l'email avec le nouveau service
+        
+    
+        
+    # Renvoyer l'email avec le nouveau service (le statut d'envoi est renvoyé à l'interface)
+    email_envoye = False
+    email_detail: str | None = None
     try:
         nom_invitant = _obtenir_nom_invitant(utilisateur_courant)
         
         # ✅ Envoyer l'email de rappel (synchrone)
-        succes = envoyer_email_renvoyer_invitation(
+        email_envoye = envoyer_email_renvoyer_invitation(
             destinataire=invitation.email,
             role=invitation.role,
             token=invitation.token,
             nom_invitant=nom_invitant,
         )
         
-        if succes:
+        if email_envoye:
             journal.info(f"[INVITATION] ✅ Email de rappel envoyé à {invitation.email}")
         else:
+            etat = etat_configuration_email()
+            email_detail = (
+                "Aucun service d'email configuré sur le serveur : renseigner "
+                "SMTP_MOT_DE_PASSE (Gmail) ou SENDGRID_API_KEY dans .env, puis "
+                "recréer le conteneur backend."
+                if etat == "mode_mock"
+                else f"L'envoi via {etat} a échoué. Vérifier les logs du backend."
+            )
             journal.warning(
-                f"[INVITATION] ⚠️ Email de rappel non envoyé → {invitation.email}"
+                f"[INVITATION] ⚠️ Email de rappel NON envoyé → {invitation.email} : {email_detail}"
             )
     except Exception as e:
+        email_detail = f"Erreur technique pendant l'envoi de l'email : {e}"
         journal.error(f"[INVITATION] ❌ Erreur envoi rappel: {e}")
-    
-    return invitation
+
+    return InvitationResponse.model_validate(invitation).model_copy(
+        update={"email_envoye": email_envoye, "email_detail": email_detail}
+    )
 
 
 # =============================================================================
