@@ -49,6 +49,11 @@ const ROLES_DISPONIBLES = [
   { role: "agent_medical", libelle: "Agent Médical" },
   { role: "agent_terrain", libelle: "Agent Terrain" },
   { role: "agent_ong", libelle: "Agent ONG" },
+  // ✅ Pivot logistique (Plan B)
+  { role: "gerant_gare", libelle: "Gérant de gare" },
+  { role: "receveur", libelle: "Receveur (guichet)" },
+  { role: "chauffeur", libelle: "Chauffeur" },
+  { role: "commercant", libelle: "Commerçant" },
   { role: "administrateur", libelle: "Administrateur" },
   { role: "super_administrateur", libelle: "Super administrateur" },
 ];
@@ -235,6 +240,11 @@ function Contenu() {
           admin_domaine: "ocre",
           administrateur: "ocre",
           super_administrateur: "terre",
+          // Pivot logistique
+          gerant_gare: "terre",
+          receveur: "lagune",
+          chauffeur: "ocre",
+          commercant: "ocre",
         };
         const roles: Record<string, string> = {
           citoyen: "Citoyen",
@@ -247,6 +257,11 @@ function Contenu() {
           admin_domaine: "Admin Domaine",
           administrateur: "Admin",
           super_administrateur: "Super admin",
+          // Pivot logistique
+          gerant_gare: "Gérant de gare",
+          receveur: "Receveur",
+          chauffeur: "Chauffeur",
+          commercant: "Commerçant",
         };
         return <Badge variante={vars[u.role] || "lagune"}>{roles[u.role] || u.role}</Badge>;
       },
@@ -877,6 +892,12 @@ function RoleModal({
             <optgroup label="🔧 Administration">
               <option value="administrateur">Administrateur</option>
               <option value="super_administrateur">Super administrateur</option>
+            </optgroup>
+            <optgroup label="🚚 Logistique (colis)">
+              <option value="gerant_gare">Gérant de gare</option>
+              <option value="receveur">Receveur (guichet)</option>
+              <option value="chauffeur">Chauffeur</option>
+              <option value="commercant">Commerçant</option>
             </optgroup>
           </select>
         </div>

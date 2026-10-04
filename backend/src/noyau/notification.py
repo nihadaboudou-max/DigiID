@@ -309,6 +309,11 @@ LABELS_ROLES = {
     "agent_medical": "Agent Médical",
     "agent_ong": "Agent ONG",
     "agent_terrain": "Agent Terrain",
+    # ─── Pivot logistique (Plan B) ───
+    "gerant_gare": "Gérant de gare",
+    "receveur": "Receveur (guichet colis)",
+    "chauffeur": "Chauffeur",
+    "commercant": "Commerçant",
 }
 
 
@@ -431,8 +436,8 @@ def envoyer_email_renvoyer_invitation(
     Envoie un email de rappel pour une invitation déjà envoyée.
     """
     label_role = LABELS_ROLES.get(role, role.replace("_", " ").title())
-    # ✅ CORRECTION : URL cohérente
-    url_activation = f"http://152.228.141.69:3000/accepter-invitation/{token}"
+    # ✅ CORRECTION : URL cohérente (frontend configuré, plus d'IP en dur)
+    url_activation = f"{parametres.url_frontend.rstrip('/')}/accepter-invitation/{token}"
     
     sujet = "DigiID — Rappel : Votre invitation est toujours active"
     

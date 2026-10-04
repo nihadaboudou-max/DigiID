@@ -34,8 +34,13 @@ const ROLES_INVITABLES = [
   { value: "chef_agent", label: "Chef Enrôlement", couleur: "lagune" },
   { value: "agent_police", label: "Agent Police", couleur: "terre" },
   { value: "agent_medical", label: "Agent Médical", couleur: "lagune" },
-  { value: "agent_ong", label: "Agent ONG", couleur: "ocre" },
+    { value: "agent_ong", label: "Agent ONG", couleur: "ocre" },
   { value: "agent_terrain", label: "Agent Terrain", couleur: "lagune" },
+  // ✅ Pivot logistique (Plan B) — terrain & acteurs du colis
+  { value: "gerant_gare", label: "Gérant de gare", couleur: "terre" },
+  { value: "receveur", label: "Receveur (guichet)", couleur: "lagune" },
+  { value: "chauffeur", label: "Chauffeur", couleur: "ocre" },
+  { value: "commercant", label: "Commerçant", couleur: "ocre" },
 ];
 
 export default function PageInvitations() {
@@ -178,8 +183,9 @@ function Contenu() {
       <header>
         <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Super administration</p>
         <h1 className="mt-1 text-2xl">Gestion des Invitations</h1>
-        <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
-          Envoie des invitations pour créer des comptes (admin, chef, agent).
+                <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
+          Envoie des invitations pour créer des comptes (admin, chef, agent,
+          guichet logistique, chauffeur, commerçant).
         </p>
       </header>
 

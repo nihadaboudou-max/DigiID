@@ -34,6 +34,11 @@ const LABELS_ROLES: Record<string, string> = {
   agent_terrain: "Agent Terrain",
   administrateur: "Administrateur",
   super_administrateur: "Super Administrateur",
+  // ✅ Pivot logistique (Plan B)
+  gerant_gare: "Gérant de gare",
+  receveur: "Receveur (guichet colis)",
+  chauffeur: "Chauffeur",
+  commercant: "Commerçant",
 };
 
 // Couleurs par rôle (utilisant les variantes valides)
@@ -47,6 +52,11 @@ const COULEURS_ROLES: Record<string, "lagune" | "ocre" | "terre" | "succes" | "n
   agent_medical: "lagune",
   agent_ong: "ocre",
   agent_terrain: "lagune",
+  // Pivot logistique (Plan B)
+  gerant_gare: "terre",
+  receveur: "lagune",
+  chauffeur: "ocre",
+  commercant: "ocre",
 };
 
 export default function PageAccepterInvitation() {

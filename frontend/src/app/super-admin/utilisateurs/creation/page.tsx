@@ -18,7 +18,7 @@ import { useNotifications } from "@/contextes/notifications";
 import { creerProfilUtilisateur, type CreerProfilRequete } from "@/services/super_admin_utilisateurs";
 import { ErreurAPI } from "@/services/client_api";
 
-type TypeRole = "chef_police" | "chef_medical" | "chef_ong" | "chef_agent" | "agent_police" | "agent_medical" | "agent_terrain" | "agent_ong";
+type TypeRole = "chef_police" | "chef_medical" | "chef_ong" | "chef_agent" | "agent_police" | "agent_medical" | "agent_terrain" | "agent_ong" | "gerant_gare" | "receveur" | "chauffeur" | "commercant";
 
 const ROLES_CREATION: { role: TypeRole; libelle: string; icone: string; description: string }[] = [
   // ─── Chefs de département ───
@@ -70,6 +70,31 @@ const ROLES_CREATION: { role: TypeRole; libelle: string; icone: string; descript
     libelle: "Agent ONG",
     icone: "🤝",
     description: "Consultation des profils pour programmes d'aide",
+  },
+  // ─── Pivot logistique (Plan B) ───
+  {
+    role: "receveur",
+    libelle: "Receveur",
+    icone: "📦",
+    description: "Guichet : enregistrement des colis, encaissement des frais, scan/livraison",
+  },
+  {
+    role: "chauffeur",
+    libelle: "Chauffeur",
+    icone: "🚚",
+    description: "Scan des colis en route (départ, transit, arrivée)",
+  },
+  {
+    role: "gerant_gare",
+    libelle: "Gérant de gare",
+    icone: "🏢",
+    description: "Référentiel (gares, lignes, véhicules, voyages) + supervision du guichet",
+  },
+  {
+    role: "commercant",
+    libelle: "Commerçant",
+    icone: "🛒",
+    description: "Expédition de colis et suivi de ses envois",
   },
 ];
 
@@ -160,7 +185,8 @@ export default function PageCreationProfil() {
           </p>
           <h1 className="mt-1 text-2xl">Créer un profil</h1>
           <p className="text-ardoise-clair mt-1 text-sm">
-            Crée un compte pour un agent, médecin, policier ou ONG. 
+            Crée un compte pour un agent, un chef de département, un acteur du
+            guichet logistique (receveur, chauffeur, gérant de gare) ou un commerçant.
             Le formulaire reste stable — pas de risque de perte si tu cliques à côté.
           </p>
         </header>
