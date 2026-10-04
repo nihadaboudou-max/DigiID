@@ -47,6 +47,7 @@ export interface Colis {
   gare_depart_nom: string | null;
   gare_arrivee_nom: string | null;
   expediteur_nom: string | null;
+  expediteur_tel: string | null;
   receveur_nom: string | null;
   chauffeur_nom: string | null;
 }
@@ -93,6 +94,9 @@ export interface ColisEnregistre {
 export interface DonneesColis {
   destinataire_nom: string;
   destinataire_tel: string;
+  /** Expéditeur saisi au guichet (souvent un tiers sans compte DigiID). */
+  expediteur_nom?: string | null;
+  expediteur_tel?: string | null;
   gare_depart_id: string;
   gare_arrivee_id: string;
   description?: string | null;

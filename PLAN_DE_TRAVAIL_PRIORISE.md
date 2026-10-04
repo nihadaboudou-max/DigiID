@@ -72,7 +72,7 @@
 
 #### Étape S3 — Interface receveur (guichet)
 - **Objectif** : écran guichet utilisable par un receveur peu scolarisé.
-- **Contenu** : espace `/receveur` (dashboard, assistant colis 3 étapes, ticket imprimable,
+- **Contenu** : espace `/receveur` (dashboard, assistant colis 4 étapes, ticket imprimable,
   scan/livraison) ; `BarreLaterale` (rôle receveur).
 - **Livrable démontrable** : démo guichet de bout en bout.
 - **Dépendances** : S2.

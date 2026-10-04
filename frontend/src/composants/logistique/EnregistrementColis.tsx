@@ -2,10 +2,11 @@
 /**
  * Assistant d'enregistrement d'un colis — guichet receveur (S3).
  *
- * Parcours en 3 étapes pensé pour un agent peu à l'aise avec l'informatique :
- *   1. Destinataire (qui reçoit ? d'où vers où ?)
- *   2. Détails & frais (optionnels sauf les frais)
- *   3. Récapitulatif → enregistrement (net) → impression du ticket
+ * Parcours en 4 étapes pensé pour un agent peu à l'aise avec l'informatique :
+ *   1. Expéditeur (qui dépose le colis ?)
+ *   2. Destinataire (qui reçoit ? d'où vers où ?)
+ *   3. Détails & frais (optionnels sauf les frais)
+ *   4. Récapitulatif → enregistrement (net) → impression du ticket
  *
  * À l'enregistrement, le backend génère le ticket (numéro en clair + QR durable).
  */
@@ -28,12 +29,13 @@ import {
 import { formaterFcfa } from "./format";
 import { TicketImprimable } from "./TicketImprimable";
 
-type Etape = 1 | 2 | 3;
+type Etape = 1 | 2 | 3 | 4;
 
 const ETAPES: { numero: Etape; titre: string }[] = [
-  { numero: 1, titre: "Destinataire" },
-  { numero: 2, titre: "Détails & frais" },
-  { numero: 3, titre: "Récapitulatif" },
+  { numero: 1, titre: "Expéditeur" },
+  { numero: 2, titre: "Destinataire" },
+  { numero: 3, titre: "Détails & frais" },
+  { numero: 4, titre: "Récapitulatif" },
 ];
 
 export function EnregistrementColis() {
@@ -47,6 +49,8 @@ export function EnregistrementColis() {
 
   // Formulaire
   const [etape, setEtape] = useState<Etape>(1);
+  const [expediteurNom, setExpediteurNom] = useState("");
+  const [expediteurTel, setExpediteurTel] = useState("");
   const [destinataireNom, setDestinataireNom] = useState("");
   const [destinataireTel, setDestinataireTel] = useState("");
   const [gareDepartId, setGareDepartId] = useState("");
@@ -107,8 +111,12 @@ export function EnregistrementColis() {
   }, [gares]);
 
   const nombreChiffresTel = destinataireTel.replace(/\D/g, "").length;
+  const nombreChiffresTelExpediteur = expediteurTel.replace(/\D/g, "").length;
 
-  const etape1Valide =
+  const etapeExpediteurValide =
+    expediteurNom.trim().length >= 2 && nombreChiffresTelExpediteur >= 6;
+
+  const etapeDestinataireValide =
     destinataireNom.trim().length >= 2 &&
     nombreChiffresTel >= 6 &&
     !!gareDepartId &&
@@ -122,6 +130,8 @@ export function EnregistrementColis() {
   function nouvelEnregistrement() {
     setResultat(null);
     setEtape(1);
+    setExpediteurNom("");
+    setExpediteurTel("");
     setDestinataireNom("");
     setDestinataireTel("");
     setDescription("");
@@ -141,6 +151,8 @@ export function EnregistrementColis() {
       const poids = poidsKg ? Number(poidsKg.replace(",", ".")) : null;
       const valeur = valeurFcfa ? Number(valeurFcfa.replace(",", ".")) : null;
       const reponse = await logistiqueAPI.colis.creer({
+        expediteur_nom: expediteurNom.trim() || null,
+        expediteur_tel: expediteurTel.trim() || null,
         destinataire_nom: destinataireNom.trim(),
         destinataire_tel: destinataireTel.trim(),
         gare_depart_id: gareDepartId,
@@ -231,8 +243,44 @@ export function EnregistrementColis() {
         </Carte>
       ) : (
         <>
-          {/* ─── Étape 1 : Destinataire ─── */}
+          {/* ─── Étape 1 : Expéditeur ─── */}
           {etape === 1 && (
+            <Carte
+              titre="Qui dépose le colis ?"
+              description="Renseignez l'expéditeur (la personne qui envoie le colis)."
+            >
+              <div className="space-y-4">
+                <ChampSaisie
+                  libelle="Nom de l'expéditeur"
+                  required
+                  value={expediteurNom}
+                  onChange={(e) => setExpediteurNom(e.target.value)}
+                  placeholder="Ex : Moussa Diallo"
+                />
+                <ChampSaisie
+                  libelle="Téléphone de l'expéditeur"
+                  required
+                  value={expediteurTel}
+                  onChange={(e) => setExpediteurTel(e.target.value)}
+                  placeholder="Ex : 77 123 45 67"
+                  inputMode="tel"
+                  aide="Au moins 6 chiffres — sert à joindre l'expéditeur si besoin."
+                />
+                <div className="flex justify-end">
+                  <Bouton
+                    variante="primaire"
+                    disabled={!etapeExpediteurValide}
+                    onClick={() => setEtape(2)}
+                  >
+                    Continuer
+                  </Bouton>
+                </div>
+              </div>
+            </Carte>
+          )}
+
+          {/* ─── Étape 2 : Destinataire ─── */}
+          {etape === 2 && (
             <Carte
               titre="Qui reçoit le colis ?"
               description="Renseignez le destinataire puis le trajet du colis."
@@ -300,11 +348,14 @@ export function EnregistrementColis() {
                   </div>
                 </div>
 
-                <div className="flex justify-end">
+                <div className="flex justify-between">
+                  <Bouton variante="ghost" onClick={() => setEtape(1)}>
+                    ← Retour
+                  </Bouton>
                   <Bouton
                     variante="primaire"
-                    disabled={!etape1Valide}
-                    onClick={() => setEtape(2)}
+                    disabled={!etapeDestinataireValide}
+                    onClick={() => setEtape(3)}
                   >
                     Continuer
                   </Bouton>
@@ -313,8 +364,8 @@ export function EnregistrementColis() {
             </Carte>
           )}
 
-          {/* ─── Étape 2 : Détails & frais ─── */}
-          {etape === 2 && (
+          {/* ─── Étape 3 : Détails & frais ─── */}
+          {etape === 3 && (
             <Carte
               titre="Détails & frais"
               description="Ces informations sont optionnelles, sauf les frais à encaisser."
@@ -380,13 +431,13 @@ export function EnregistrementColis() {
                 )}
 
                 <div className="flex justify-between">
-                  <Bouton variante="ghost" onClick={() => setEtape(1)}>
+                  <Bouton variante="ghost" onClick={() => setEtape(2)}>
                     ← Retour
                   </Bouton>
                   <Bouton
                     variante="primaire"
                     disabled={!fraisValide}
-                    onClick={() => setEtape(3)}
+                    onClick={() => setEtape(4)}
                   >
                     Récapitulatif
                   </Bouton>
@@ -395,10 +446,12 @@ export function EnregistrementColis() {
             </Carte>
           )}
 
-          {/* ─── Étape 3 : Récapitulatif ─── */}
-          {etape === 3 && (
+          {/* ─── Étape 4 : Récapitulatif ─── */}
+          {etape === 4 && (
             <Carte titre="Vérifiez avant d'enregistrer">
               <dl className="space-y-2 text-sm">
+                <Ligne libelle="Expéditeur" valeur={expediteurNom} />
+                <Ligne libelle="Téléphone expéditeur" valeur={expediteurTel} />
                 <Ligne libelle="Destinataire" valeur={destinataireNom} />
                 <Ligne libelle="Téléphone" valeur={destinataireTel} />
                 <Ligne
@@ -426,13 +479,17 @@ export function EnregistrementColis() {
               </dl>
 
               <div className="flex justify-between mt-6">
-                <Bouton variante="ghost" onClick={() => setEtape(2)}>
+                <Bouton variante="ghost" onClick={() => setEtape(3)}>
                   ← Retour
                 </Bouton>
                 <Bouton
                   variante="succes"
                   chargement={enregistrement}
-                  disabled={enregistrement || !etape1Valide}
+                  disabled={
+                    enregistrement ||
+                    !etapeExpediteurValide ||
+                    !etapeDestinataireValide
+                  }
                   onClick={enregistrer}
                 >
                   <IconeCheck className="w-4 h-4" /> Enregistrer le colis

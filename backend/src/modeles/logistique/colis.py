@@ -52,6 +52,10 @@ class Colis(Base, MelangeTracabilite):
     )
     destinataire_nom: Mapped[str] = mapped_column(String(150), nullable=False)
     destinataire_tel: Mapped[str] = mapped_column(String(30), nullable=False)
+    # Expéditeur saisi au guichet (souvent un tiers sans compte DigiID).
+    # Distinct de `expediteur_id` (compte DigiID facultatif).
+    expediteur_nom: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    expediteur_tel: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     poids_kg: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     valeur_fcfa: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

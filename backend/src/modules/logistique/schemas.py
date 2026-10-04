@@ -219,6 +219,9 @@ class TicketResponse(BaseModel):
 class ColisCreate(BaseModel):
     destinataire_nom: str = Field(..., min_length=2, max_length=150)
     destinataire_tel: str = Field(..., min_length=6, max_length=30)
+    # Expéditeur saisi au guichet (souvent un tiers sans compte DigiID).
+    expediteur_nom: Optional[str] = Field(None, max_length=150)
+    expediteur_tel: Optional[str] = Field(None, max_length=30)
     gare_depart_id: UUID
     gare_arrivee_id: UUID
     description: Optional[str] = Field(None, max_length=500)
@@ -264,6 +267,7 @@ class ColisResponse(BaseModel):
     gare_depart_nom: Optional[str] = None
     gare_arrivee_nom: Optional[str] = None
     expediteur_nom: Optional[str] = None
+    expediteur_tel: Optional[str] = None
     receveur_nom: Optional[str] = None
     chauffeur_nom: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)

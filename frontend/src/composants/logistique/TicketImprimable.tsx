@@ -73,6 +73,10 @@ export function TicketImprimable({
                 </dd>
               </div>
               <div className="flex gap-2">
+                <dt className="text-ardoise-clair min-w-[92px]">Expéditeur</dt>
+                <dd className="font-medium">{colis?.expediteur_nom || "—"}</dd>
+              </div>
+              <div className="flex gap-2">
                 <dt className="text-ardoise-clair min-w-[92px]">Destinataire</dt>
                 <dd className="font-medium">{colis?.destinataire_nom || "—"}</dd>
               </div>

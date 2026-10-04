@@ -355,6 +355,8 @@ async def creer_colis(
 
     colis = Colis(
         expediteur_id=expediteur_id,
+        expediteur_nom=(donnees.expediteur_nom or "").strip() or None,
+        expediteur_tel=(donnees.expediteur_tel or "").strip() or None,
         destinataire_nom=donnees.destinataire_nom.strip(),
         destinataire_tel=donnees.destinataire_tel.strip(),
         description=donnees.description,

@@ -69,7 +69,9 @@ async def _enrichir_acteur(session: AsyncSession, acteur: ActeurLogistique) -> A
 async def _enrichir_colis(session: AsyncSession, colis: Colis) -> Colis:
     colis.gare_depart_nom = await _nom_gare(session, colis.gare_depart_id)
     colis.gare_arrivee_nom = await _nom_gare(session, colis.gare_arrivee_id)
-    colis.expediteur_nom = await _nom_utilisateur(session, colis.expediteur_id)
+    # Nom d'expéditeur saisi au guichet ; repli sur le compte DigiID s'il est vide.
+    if not colis.expediteur_nom:
+        colis.expediteur_nom = await _nom_utilisateur(session, colis.expediteur_id)
     colis.receveur_nom = await _nom_utilisateur(session, colis.receveur_id)
     colis.chauffeur_nom = await _nom_utilisateur(session, colis.chauffeur_id)
     ticket = await service.obtenir_ticket_du_colis(session, colis)
