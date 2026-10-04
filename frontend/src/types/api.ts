@@ -129,9 +129,9 @@ export function cheminTableauDeBord(role: RoleUtilisateur): string {
     case "receveur":
     case "gerant_gare":
       return "/receveur/dashboard";
-    // Chauffeur : scan en route (S4)
+    // Chauffeur : voyages + scan en route (S4)
     case "chauffeur":
-      return "/logistique/scan";
+      return "/chauffeur/dashboard";
     // Commerçant : enregistrement de colis (S6)
     case "commercant":
       return "/receveur/colis/nouveau";

@@ -97,7 +97,13 @@ export const logistiqueAPI = {
     supprimer: (id: string) => clientAPI.delete(`${BASE}/vehicules/${id}`, opts),
   },
   voyages: {
-    lister: () => clientAPI.get<ReponseListe<Voyage>>(`${BASE}/voyages?par_page=100`, opts),
+    lister: (filtres?: { statut?: string; par_page?: number }) => {
+      const qs = new URLSearchParams();
+      qs.set("par_page", String(filtres?.par_page ?? 100));
+      if (filtres?.statut) qs.set("statut", filtres.statut);
+      return clientAPI.get<ReponseListe<Voyage>>(`${BASE}/voyages?${qs.toString()}`, opts);
+    },
+    obtenir: (id: string) => clientAPI.get<Voyage>(`${BASE}/voyages/${id}`, opts),
     creer: (d: Record<string, unknown>) => clientAPI.post<Voyage>(`${BASE}/voyages`, d, opts),
     supprimer: (id: string) => clientAPI.delete(`${BASE}/voyages/${id}`, opts),
   },
@@ -168,4 +174,28 @@ export async function gareDeLActeur(
     // Un agent sans permission de lecture du référentiel ne doit pas bloquer le guichet.
     return null;
   }
+}
+
+/**
+ * Libellé lisible d'une ligne : « Gare départ → Gare arrivée » (S4).
+ *
+ * Le backend renvoie les noms de gares enrichis (`gare_depart_nom`,
+ * `gare_arrivee_nom`) ; on retombe sur un libellé neutre si absents.
+ */
+export function libelleLigne(ligne: Ligne | null | undefined): string {
+  if (!ligne) return "Trajet inconnu";
+  return `${ligne.gare_depart_nom ?? "?"} → ${ligne.gare_arrivee_nom ?? "?"}`;
+}
+
+/**
+ * Retrouve les voyages affectés à un chauffeur (S4).
+ *
+ * L'API de liste ne filtre pas par chauffeur : on filtre côté client sur
+ * `chauffeur_id` (identifiant utilisateur du chauffeur).
+ */
+export async function voyagesDuChauffeur(
+  utilisateurId: string,
+): Promise<Voyage[]> {
+  const reponse = await logistiqueAPI.voyages.lister({ par_page: 100 });
+  return reponse.elements.filter((v) => v.chauffeur_id === utilisateurId);
 }

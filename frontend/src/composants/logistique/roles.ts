@@ -33,3 +33,16 @@ export const ROLES_SCAN: string[] = [
   "super_administrateur",
   "super_admin",
 ];
+
+/**
+ * Vue chauffeur (S4) : ses voyages, les colis à bord et le scan en route.
+ *
+ * Le gérant de gare et les administrateurs peuvent consulter l'espace pour
+ * le support, mais seuls le chauffeur (et les admins) y accèdent en pratique.
+ */
+export const ROLES_CHAUFFEUR: string[] = [
+  "chauffeur",
+  "gerant_gare",
+  "super_administrateur",
+  "super_admin",
+];

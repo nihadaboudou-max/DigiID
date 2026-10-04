@@ -44,6 +44,8 @@ interface Proprietes {
   tokenInitial?: string;
   /** Action par défaut (livraison au guichet, départ en route…). */
   typeParDefaut?: TypeEvenementScan;
+  /** Voyage auquel rattacher le scan (espace chauffeur — S4). */
+  voyageId?: string | null;
 }
 
 /** Génère une clé d'idempotence (UUID si disponible, sinon repli). */
@@ -58,6 +60,7 @@ function genererCleIdempotence(): string {
 export function ScannerTicket({
   tokenInitial,
   typeParDefaut = "livraison",
+  voyageId = null,
 }: Proprietes) {
   const { utilisateur } = useAuthentification();
 
@@ -110,6 +113,7 @@ export function ScannerTicket({
         ...cible,
         type_evenement: typeEvenement,
         gare_id: gareContexte?.id ?? null,
+        voyage_id: voyageId,
         idempotency_key: genererCleIdempotence(),
       });
       setResultat(reponse);

@@ -20,11 +20,20 @@ interface Proprietes {
   colis: Colis[];
   /** Message affiché si la liste est vide. */
   messageVide?: string;
+  /** Base des liens de suivi (défaut : guichet receveur). */
+  baseSuivi?: string;
+  /**
+   * Si fourni, ajoute une action « Scanner » par ligne pointant vers cette base
+   * (`{baseScan}?code=<code_clair>`). Utilisé par l'espace chauffeur (S4).
+   */
+  baseScan?: string;
 }
 
 export function TableauColis({
   colis,
   messageVide = "Aucun colis pour le moment.",
+  baseSuivi = "/receveur/tickets",
+  baseScan,
 }: Proprietes) {
   if (colis.length === 0) {
     return <p className="text-sm text-ardoise-clair italic py-6 text-center">{messageVide}</p>;
@@ -42,6 +51,7 @@ export function TableauColis({
             <th className="py-2 pr-3 font-semibold text-right">Frais</th>
             <th className="py-2 pr-3 font-semibold">Enregistré</th>
             <th className="py-2 font-semibold text-right">Suivi</th>
+            {baseScan && <th className="py-2 font-semibold text-right">Action</th>}
           </tr>
         </thead>
         <tbody>
@@ -78,7 +88,7 @@ export function TableauColis({
               <td className="py-2.5 text-right">
                 {c.code_clair ? (
                   <Link
-                    href={`/receveur/tickets/${encodeURIComponent(c.code_clair)}`}
+                    href={`${baseSuivi}/${encodeURIComponent(c.code_clair)}`}
                     className="text-lagune hover:underline font-medium whitespace-nowrap"
                   >
                     Voir →
@@ -87,6 +97,20 @@ export function TableauColis({
                   "—"
                 )}
               </td>
+              {baseScan && (
+                <td className="py-2.5 text-right">
+                  {c.code_clair ? (
+                    <Link
+                      href={`${baseScan}?code=${encodeURIComponent(c.code_clair)}`}
+                      className="text-ocre-fonce hover:underline font-medium whitespace-nowrap"
+                    >
+                      Scanner
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

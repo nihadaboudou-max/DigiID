@@ -39,7 +39,7 @@ const REDIRECTIONS_PAR_ROLE: Record<string, string> = {
   // Pivot logistique — le guichet (S3)
   "receveur": "/receveur/dashboard",
   "gerant_gare": "/receveur/dashboard",
-  "chauffeur": "/logistique/scan",
+  "chauffeur": "/chauffeur/dashboard",
   "commercant": "/receveur/colis/nouveau",
 };
 

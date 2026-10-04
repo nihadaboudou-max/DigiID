@@ -164,3 +164,27 @@ export const LIBELLES_EVENEMENT: Record<TypeEvenementColis, string> = {
   arrivee: "Arrivée à destination",
   livraison: "Remise au destinataire",
 };
+
+// ─── Voyages (espace chauffeur — S4) ─────────────────────────────────
+
+/** Cycle de vie d'un voyage. */
+export type StatutVoyage = "planifie" | "en_cours" | "termine" | "annule";
+
+/** Libellé lisible d'un statut de voyage. */
+export const LIBELLES_STATUT_VOYAGE: Record<StatutVoyage, string> = {
+  planifie: "Planifié",
+  en_cours: "En cours",
+  termine: "Terminé",
+  annule: "Annulé",
+};
+
+/** Variante de `Badge` par statut de voyage. */
+export const VARIANTES_STATUT_VOYAGE: Record<
+  StatutVoyage,
+  "info" | "ocre" | "succes" | "terre"
+> = {
+  planifie: "info",
+  en_cours: "ocre",
+  termine: "succes",
+  annule: "terre",
+};

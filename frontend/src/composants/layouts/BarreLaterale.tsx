@@ -303,7 +303,8 @@ export function BarreLaterale() {
   // ─── PIVOT LOGISTIQUE : Chauffeur (scan en route) ────────────────
   else if (utilisateur.role === "chauffeur") {
     liens = [
-      { href: "/logistique/scan", libelle: "Scanner un colis", Icone: IconeScan },
+      { href: "/chauffeur/dashboard", libelle: "Mes voyages", Icone: IconeColis },
+      { href: "/chauffeur/scan", libelle: "Scanner un colis", Icone: IconeScan },
       { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
     ];
     titreSection = "Chauffeur";

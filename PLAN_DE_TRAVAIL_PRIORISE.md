@@ -27,7 +27,7 @@
 | **S1** | Référentiel logistique (gares, lignes, véhicules, voyages, acteurs) + rôles | 🔴 P0 | — | M |
 | **S2** | Colis de bout en bout (enregistrement + ticket QR + code clair + scan + timeline) | 🔴 P0 | S1 | L |
 | **S3** | Interface receveur (guichet) + ticket imprimable/affichable | 🔴 P0 | S2 | M |
-| **S4** | Interface chauffeur (scan en route) | 🔴 P0 | S2 | S |
+| **S4** | Interface chauffeur (scan en route) ✅ | 🔴 P0 | S2 | S |
 | **S5** | Accessibilité v1 : sélecteur 4 langues + `BoutonVocal` + audios démo | 🔴 P0 | S3 | M |
 | **S6** | Paiement minimal : commission + wallet + espèces / 1 opérateur (mock) | 🔴 P0 | S2 | M |
 | **S7** | Suivi public (colis + familial) + SMS | 🔴 P0 | S2 | M |
@@ -77,9 +77,12 @@
 - **Livrable démontrable** : démo guichet de bout en bout.
 - **Dépendances** : S2.
 
-#### Étape S4 — Interface chauffeur
+#### Étape S4 — Interface chauffeur ✅ (fait)
 - **Objectif** : lister les colis d'un voyage et scanner.
-- **Contenu** : espace `/chauffeur` (voyages, liste colis, scan).
+- **Contenu** : espace `/chauffeur` — `dashboard` (mes voyages + compteurs de colis), `voyages/[id]`
+  (liste des colis à bord + scan par colis), `scan` (QR/code clair, action « mise en transit » par défaut,
+  rattachement au voyage via `voyage_id`). Navigation `BarreLaterale`/`MenuMobile` + redirection de
+  connexion (`cheminTableauDeBord`) câblées.
 - **Livrable démontrable** : chauffeur qui scanne en route.
 - **Dépendances** : S2.
 
@@ -166,17 +169,16 @@
 
 ## Prochaine action immédiate
 
-> **Démarrer l'Étape S1 — Référentiel logistique + rôles.**
-> C'est la fondation : sans gares/lignes/voyages, aucun colis ne peut être enregistré.
+> **S1 → S4 livrées.** Démarrer l'**Étape S5 — Accessibilité v1 (voix + 4 langues)**.
 
-Je propose de commencer par :
-1. les **modèles** (`gares`, `lignes`, `vehicules`, `voyages`, `acteurs_logistiques`),
-2. l'**extension des rôles** (`constantes_roles.py`),
-3. les **schémas + routes CRUD** du module,
-4. la **migration Alembic**.
+Rappel de ce qui est en place côté logistique :
+- **S1** : référentiel (gares, lignes, véhicules, voyages, acteurs) + rôles.
+- **S2/S3** : colis de bout en bout, tickets QR + code clair, scan idempotent, espace receveur.
+- **S4** : espace chauffeur (`/chauffeur/dashboard`, `/chauffeur/voyages/[id]`, `/chauffeur/scan`).
 
-Dis-moi **« OK on attaque S1 »** (ou ajuste l'ordre) et je commence par les modèles.
+Prochaine étape S5 : `ContexteLangue` + sélecteur 4 langues (à l'oreille), `BoutonVocal`,
+`GestionnaireAudio`, petit jeu d'audios démo (FR + 1 langue locale minimum).
 
 ---
 
-*Fin du plan. Aucun code écrit tant que l'ordre n'est pas validé.*
+*Fin du plan.*
