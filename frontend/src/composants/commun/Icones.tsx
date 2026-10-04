@@ -188,3 +188,21 @@ export const IconeFlecheBas = (p: SVGProps<SVGSVGElement>) => (
     <polyline points="6 9 12 15 18 9" />
   </svg>
 );
+
+/** Colis / marchandise (guichet logistique). */
+export const IconeColis = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...proprietesDefaut} {...p}>
+    <path d="M21 8l-9-5-9 5v8l9 5 9-5z" />
+    <path d="M3 8l9 5 9-5" />
+    <path d="M12 13v8" />
+    <path d="M7.5 5.5l9 5" />
+  </svg>
+);
+
+/** Ticket / étiquette QR. */
+export const IconeTicket = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...proprietesDefaut} {...p}>
+    <path d="M4 7a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 100 4v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2a2 2 0 100-4z" />
+    <path d="M14 5v14" strokeDasharray="2 2" />
+  </svg>
+);

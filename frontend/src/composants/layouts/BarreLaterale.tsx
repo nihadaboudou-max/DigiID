@@ -16,7 +16,7 @@ import {
   IconePartage, IconeParametres, IconeBouclier, IconeStatistique,
   IconeAlerte, IconeJournal, IconeCle, IconeVisage,
   IconeIdentite, IconeEmail, IconeCadenas, IconeScan, IconeFlecheBas,
-  IconeCheck, IconeEnvoyer,
+  IconeCheck, IconeEnvoyer, IconeColis, IconeTicket,
 } from "@/composants/commun/Icones";
 
 interface Lien {
@@ -282,6 +282,42 @@ export function BarreLaterale() {
       { href: "/chef-enrolement/profil", libelle: "Mon profil", Icone: IconeParametres },
     ];
     titreSection = "Chef Enrôlement";
+    couleurLabel = "text-lagune";
+    accentColor = "bg-lagune";
+  }
+
+  // ─── PIVOT LOGISTIQUE : Guichet (receveur / gérant de gare) ──────
+  else if (utilisateur.role === "receveur" || utilisateur.role === "gerant_gare") {
+    liens = [
+      { href: "/receveur/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/receveur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
+      { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
+      { href: "/receveur/scan", libelle: "Scanner / Livrer", Icone: IconeScan },
+    ];
+    titreSection =
+      utilisateur.role === "receveur" ? "Guichet logistique" : "Gérant de gare";
+    couleurLabel = "text-lagune";
+    accentColor = "bg-lagune";
+  }
+
+  // ─── PIVOT LOGISTIQUE : Chauffeur (scan en route) ────────────────
+  else if (utilisateur.role === "chauffeur") {
+    liens = [
+      { href: "/logistique/scan", libelle: "Scanner un colis", Icone: IconeScan },
+      { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
+    ];
+    titreSection = "Chauffeur";
+    couleurLabel = "text-ocre";
+    accentColor = "bg-ocre";
+  }
+
+  // ─── PIVOT LOGISTIQUE : Commerçant (enregistrement) ──────────────
+  else if (utilisateur.role === "commercant") {
+    liens = [
+      { href: "/receveur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
+      { href: "/receveur/tickets", libelle: "Mes colis", Icone: IconeTicket },
+    ];
+    titreSection = "Commerçant";
     couleurLabel = "text-lagune";
     accentColor = "bg-lagune";
   }

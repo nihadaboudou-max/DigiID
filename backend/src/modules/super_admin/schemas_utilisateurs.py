@@ -53,6 +53,15 @@ class CreerProfilRequete(BaseModel):
             # Administration
             RolesUtilisateur.ADMINISTRATEUR.value,
             RolesUtilisateur.SUPER_ADMINISTRATEUR.value,
+            # ─── Pivot logistique (Plan B) ───
+            # Gérant de gare : référentiel + guichet (colis/scan).
+            # Receveur : enregistrement des colis + scan/livraison (guichet).
+            # Chauffeur : scan (départs/arrivées) — espace dédié en S4.
+            # Commerçant : enregistrement de colis — espace dédié en S6.
+            RolesUtilisateur.GERANT_GARE.value,
+            RolesUtilisateur.RECEVEUR.value,
+            RolesUtilisateur.CHAUFFEUR.value,
+            RolesUtilisateur.COMMERCANT.value,
         ]
         if v not in roles_autorises:
             raise ValueError(

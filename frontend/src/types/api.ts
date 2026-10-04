@@ -18,7 +18,13 @@ export type RoleUtilisateur =
   | "agent_police"         // Niveau 4 : Agents Terrain
   | "agent_medical"
   | "agent_ong"
-  | "agent_terrain";
+
+  | "agent_terrain"
+  // ─── Pivot logistique (Plan B) ─────────────────────────────────
+  | "gerant_gare"          // Référentiel + supervision du guichet
+  | "receveur"             // Guichet : colis + scan/livraison
+  | "chauffeur"            // Scan départs/arrivées (espace dédié S4)
+  | "commercant";          // Enregistrement de colis (espace dédié S6)
 
 /** Rôles qui ont un panneau d'administration dédié */
 export const ROLES_ADMIN: RoleUtilisateur[] = [
@@ -76,6 +82,18 @@ export const ROLES_PROFESSIONNELS: RoleUtilisateur[] = [
   "agent_medical",
   "agent_ong",
   "agent_terrain",
+  "gerant_gare",
+  "receveur",
+  "chauffeur",
+  "commercant",
+];
+
+/** NOUVEAU : Rôles du pivot logistique (Plan B). */
+export const ROLES_LOGISTIQUE: RoleUtilisateur[] = [
+  "gerant_gare",
+  "receveur",
+  "chauffeur",
+  "commercant",
 ];
 
 /**
@@ -107,9 +125,24 @@ export function cheminTableauDeBord(role: RoleUtilisateur): string {
       return "/chef-ong";
     case "chef_agent":
       return "/chef-enrolement";
+    // Pivot logistique : le guichet (receveur & gérant de gare)
+    case "receveur":
+    case "gerant_gare":
+      return "/receveur/dashboard";
+    // Chauffeur : scan en route (S4)
+    case "chauffeur":
+      return "/logistique/scan";
+    // Commerçant : enregistrement de colis (S6)
+    case "commercant":
+      return "/receveur/colis/nouveau";
     default:
       return "/tableau-de-bord";
   }
+}
+
+/** NOUVEAU : Vérifie si le rôle appartient au pivot logistique. */
+export function estRoleLogistique(role: RoleUtilisateur): boolean {
+  return ROLES_LOGISTIQUE.includes(role);
 }
 
 /**
@@ -140,7 +173,9 @@ export function obtenirNiveauHierarchie(role: RoleUtilisateur): number {
   if (role === "super_admin" || role === "super_administrateur") return 1;
   if (role === "admin_domaine" || role === "administrateur") return 2;
   if (ROLES_CHEF.includes(role)) return 3;
+  if (role === "gerant_gare") return 3;
   if (ROLES_AGENT.includes(role)) return 4;
+  if (role === "receveur" || role === "chauffeur" || role === "commercant") return 4;
   if (role === "citoyen") return 5;
   return 99;
 }

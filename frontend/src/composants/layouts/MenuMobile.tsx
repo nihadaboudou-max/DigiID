@@ -14,6 +14,7 @@ import {
   IconePartage, IconeParametres, IconeBouclier, IconeStatistique,
   IconeAlerte, IconeJournal, IconeCle, IconeCheck, IconeFlecheBas, IconeVisage,
   IconeIdentite, IconeEmail, IconeCadenas, IconeScan, IconeEnvoyer,
+  IconeColis, IconeTicket,
 } from "@/composants/commun/Icones";
 
 interface Lien {
@@ -110,6 +111,24 @@ const LIENS_CHEF_ENROLEMENT: Lien[] = [
   { href: "/chef-enrolement/rapports", libelle: "Rapports", Icone: IconePartage },
 ];
 
+// ✅ Pivot logistique (Plan B) — guichet, chauffeur, commerçant
+const LIENS_RECEVEUR: Lien[] = [
+  { href: "/receveur/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+  { href: "/receveur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
+  { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
+  { href: "/receveur/scan", libelle: "Scanner / Livrer", Icone: IconeScan },
+];
+
+const LIENS_CHAUFFEUR: Lien[] = [
+  { href: "/logistique/scan", libelle: "Scanner un colis", Icone: IconeScan },
+  { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
+];
+
+const LIENS_COMMERCANT: Lien[] = [
+  { href: "/receveur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
+  { href: "/receveur/tickets", libelle: "Mes colis", Icone: IconeTicket },
+];
+
 // ---- Composant section pliable mobile ----
 function SectionPlieMobile({
   titre,
@@ -176,6 +195,13 @@ export function BoutonMenuMobile() {
   const estChef = estChefOng || estChefPolice || estChefMedical || estChefEnrolement;
   const estProfessionnel = estMedecin || estAgent || estPolice || estOng;
 
+  // ✅ Pivot logistique (Plan B)
+  const estReceveur =
+    utilisateur.role === "receveur" || utilisateur.role === "gerant_gare";
+  const estChauffeur = utilisateur.role === "chauffeur";
+  const estCommercant = utilisateur.role === "commercant";
+  const estLogistique = estReceveur || estChauffeur || estCommercant;
+
   const initiales = utilisateur.prenom
     ? (utilisateur.prenom.charAt(0) + (utilisateur.nom?.charAt(0) || "")).toUpperCase()
     : utilisateur.email?.charAt(0).toUpperCase() || "?";
@@ -228,6 +254,19 @@ export function BoutonMenuMobile() {
     couleurSection = "text-ocre";
     bgCercle = "bg-ocre";
     titreSection = "ONG Partenaire";
+  } else if (estReceveur) {
+    couleurSection = "text-lagune";
+    bgCercle = "bg-lagune";
+    titreSection =
+      utilisateur.role === "receveur" ? "Guichet logistique" : "Gérant de gare";
+  } else if (estChauffeur) {
+    couleurSection = "text-ocre";
+    bgCercle = "bg-ocre";
+    titreSection = "Chauffeur";
+  } else if (estCommercant) {
+    couleurSection = "text-lagune";
+    bgCercle = "bg-lagune";
+    titreSection = "Commerçant";
   }
 
   return (
@@ -720,9 +759,67 @@ export function BoutonMenuMobile() {
               )}
 
               {/* ============================================================ */}
+              {/* ✅ PIVOT LOGISTIQUE (guichet, chauffeur, commerçant) */}
+              {/* ============================================================ */}
+              {estLogistique && (
+                <>
+                  <SectionPlieMobile
+                    titre={
+                      estReceveur
+                        ? utilisateur.role === "receveur"
+                          ? "Guichet logistique"
+                          : "Gérant de gare"
+                        : estChauffeur
+                          ? "Chauffeur"
+                          : "Commerçant"
+                    }
+                    couleur={estChauffeur ? "text-ocre" : "text-lagune"}
+                    initialOuvert={true}
+                  >
+                    <div className="pl-2">
+                      {(estReceveur
+                        ? LIENS_RECEVEUR
+                        : estChauffeur
+                          ? LIENS_CHAUFFEUR
+                          : LIENS_COMMERCANT
+                      ).map(({ href, libelle, Icone }) => {
+                        const actif = pathname === href || pathname.startsWith(href);
+                        return (
+                          <Link
+                            key={href}
+                            href={href}
+                            onClick={() => setOuvert(false)}
+                            className={clsx(
+                              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 transition-all duration-200",
+                              actif
+                                ? "bg-sable text-lagune font-semibold"
+                                : "text-ardoise hover:bg-sable/60",
+                            )}
+                          >
+                            <div
+                              className={clsx(
+                                "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+                                actif
+                                  ? "bg-lagune text-white"
+                                  : "bg-sable-clair text-ardoise-clair",
+                              )}
+                            >
+                              <Icone className="w-3.5 h-3.5" />
+                            </div>
+                            <span>{libelle}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </SectionPlieMobile>
+                  <MenuCitoyenComplet pathname={pathname} setOuvert={setOuvert} />
+                </>
+              )}
+
+              {/* ============================================================ */}
               {/* CITOYEN — utilisateur normal */}
               {/* ============================================================ */}
-              {!estSuperAdminRole && !estAdminDomaine && !estAdminRole && !estProfessionnel && !estChef && (
+              {!estSuperAdminRole && !estAdminDomaine && !estAdminRole && !estProfessionnel && !estChef && !estLogistique && (
                 <div>
                   <SectionPlieMobile titre="Navigation" couleur="text-lagune" initialOuvert={true}>
                     <div className="pl-2">
