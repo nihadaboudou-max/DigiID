@@ -57,6 +57,19 @@ function genererCleIdempotence(): string {
   return `scan-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/**
+ * Attend que le navigateur ait peint (deux frames).
+ *
+ * Nécessaire avant `Html5Qrcode.start()` : un conteneur qui passe de `hidden`
+ * à visible doit d'abord obtenir une largeur réelle, sans quoi html5-qrcode
+ * fige la vidéo à 0px (caméra active mais image invisible).
+ */
+function attendrePeinture(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
+
 export function ScannerTicket({
   tokenInitial,
   typeParDefaut = "livraison",
@@ -73,6 +86,7 @@ export function ScannerTicket({
   const [resultat, setResultat] = useState<ResultatScan | null>(null);
 
   const [cameraOuverte, setCameraOuverte] = useState(false);
+  const [cameraEnDemarrage, setCameraEnDemarrage] = useState(false);
   const [erreurCamera, setErreurCamera] = useState<string | null>(null);
   const refScanner = useRef<Html5Qrcode | null>(null);
 
@@ -131,9 +145,18 @@ export function ScannerTicket({
 
   async function demarrerCamera() {
     setErreurCamera(null);
-    if (refScanner.current) return;
+    if (refScanner.current || cameraOuverte) return;
+
+    // ✅ 1. Rendre le conteneur VISIBLE avant `start()` : html5-qrcode fige la
+    //    largeur de la vidéo sur `parentElement.clientWidth`, qui vaut 0 si le
+    //    conteneur est `display:none` → caméra active mais image invisible.
+    setCameraEnDemarrage(true);
+    setCameraOuverte(true);
+
     try {
       const module = await import("html5-qrcode");
+      // ✅ 2. Attendre la peinture : le conteneur vient d'obtenir sa largeur.
+      await attendrePeinture();
       const instance = new module.Html5Qrcode(ID_LECTEUR);
       await instance.start(
         { facingMode: "environment" },
@@ -146,13 +169,14 @@ export function ScannerTicket({
         () => undefined,
       );
       refScanner.current = instance;
-      setCameraOuverte(true);
     } catch {
       refScanner.current = null;
       setCameraOuverte(false);
       setErreurCamera(
-        "Caméra indisponible. Saisissez le numéro du colis à la main.",
+        "Caméra indisponible ou accès refusé. Saisissez le numéro du colis à la main.",
       );
+    } finally {
+      setCameraEnDemarrage(false);
     }
   }
 
@@ -160,6 +184,7 @@ export function ScannerTicket({
     const instance = refScanner.current;
     refScanner.current = null;
     setCameraOuverte(false);
+    setCameraEnDemarrage(false);
     if (instance) {
       try {
         await instance.stop();
@@ -223,7 +248,12 @@ export function ScannerTicket({
               <IconeCheck className="w-4 h-4" /> Valider le scan
             </Bouton>
             {!cameraOuverte ? (
-              <Bouton variante="secondaire" onClick={() => void demarrerCamera()}>
+              <Bouton
+                variante="secondaire"
+                disabled={cameraEnDemarrage}
+                chargement={cameraEnDemarrage}
+                onClick={() => void demarrerCamera()}
+              >
                 <IconeScan className="w-4 h-4" /> Scanner avec la caméra
               </Bouton>
             ) : (
@@ -233,15 +263,31 @@ export function ScannerTicket({
             )}
           </div>
 
-          {/* Zone caméra (html5-qrcode) */}
-          <div
-            id={ID_LECTEUR}
-            className={
-              cameraOuverte
-                ? "rounded-xl overflow-hidden border border-ardoise-clair/20"
-                : "hidden"
-            }
-          />
+          {/*
+            Zone caméra (html5-qrcode).
+            ⚠️ Ne PAS laisser le conteneur en `hidden` pendant `start()` : la
+            librairie mesure `parentElement.clientWidth` (0 si caché) pour fixer
+            la largeur de la vidéo. On le rend visible AVANT de démarrer et on
+            force la vidéo à occuper la largeur disponible.
+          */}
+          {/* L'indicateur de chargement est HORS du conteneur `#ID_LECTEUR` :
+              `clear()` fait `innerHTML = ""` sur ce dernier et effacerait un
+              enfant géré par React. */}
+          <div className="relative">
+            <div
+              id={ID_LECTEUR}
+              className={
+                cameraOuverte
+                  ? "relative w-full min-h-[280px] rounded-xl overflow-hidden border border-ardoise-clair/20 bg-black [&_video]:!w-full [&_video]:h-auto [&_video]:block"
+                  : "hidden"
+              }
+            />
+            {cameraOuverte && cameraEnDemarrage && (
+              <p className="absolute inset-0 z-10 flex items-center justify-center text-sm text-white/80 bg-black/50">
+                Activation de la caméra…
+              </p>
+            )}
+          </div>
 
           {erreurCamera && (
             <Alerte variante="avertissement">{erreurCamera}</Alerte>
