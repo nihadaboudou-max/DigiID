@@ -14,10 +14,11 @@ import type { Html5Qrcode } from "html5-qrcode";
 
 import { Alerte } from "@/composants/commun/Alerte";
 import { Badge } from "@/composants/commun/Badge";
-import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { IconeCheck, IconeScan } from "@/composants/commun/Icones";
+import { BoutonVocal } from "@/composants/accessibilite/BoutonVocal";
+import { useLangue } from "@/i18n/useLangue";
 import { useAuthentification } from "@/contextes/authentification";
 import { ErreurAPI } from "@/services/client_api";
 import { gareDeLActeur, logistiqueAPI, type Gare } from "@/services/logistique_api";
@@ -76,6 +77,7 @@ export function ScannerTicket({
   voyageId = null,
 }: Proprietes) {
   const { utilisateur } = useAuthentification();
+  const { t, jouer } = useLangue();
 
   const [code, setCode] = useState(tokenInitial ?? "");
   const [typeEvenement, setTypeEvenement] = useState<TypeEvenementScan>(typeParDefaut);
@@ -132,6 +134,10 @@ export function ScannerTicket({
       });
       setResultat(reponse);
       setCode("");
+      // Alerte parlée anti-fraude : « DÉJÀ LIVRÉ » est annoncé à voix haute.
+      if (reponse.deja_livre) {
+        jouer("scan.deja_livre", t("scan.deja_livre"));
+      }
     } catch (e) {
       setErreur(
         e instanceof ErreurAPI
@@ -198,13 +204,13 @@ export function ScannerTicket({
   return (
     <div className="space-y-5">
       <Carte
-        titre="Scanner un ticket colis"
-        description="Scannez le QR Code du ticket, ou tapez le numéro imprimé."
+        titre={t("scan.carte_titre")}
+        description={t("scan.carte_desc")}
       >
         <div className="space-y-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-ardoise">
-              Action à enregistrer
+              {t("scan.action_label")}
             </label>
             <select
               className="champ-saisie"
@@ -225,7 +231,7 @@ export function ScannerTicket({
           </div>
 
           <ChampSaisie
-            libelle="Numéro du colis ou contenu du QR"
+            libelle={t("scan.numero_label")}
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder="Ex : DKR-2025-000001"
@@ -239,27 +245,36 @@ export function ScannerTicket({
           />
 
           <div className="flex flex-wrap gap-3">
-            <Bouton
+            <BoutonVocal
               variante="primaire"
+              cleAudio="btn.valider_scan"
+              texteAudio={t("btn.valider_scan")}
               disabled={enCours || !code.trim()}
               chargement={enCours && !cameraOuverte}
               onClick={() => void executerScan(code)}
             >
-              <IconeCheck className="w-4 h-4" /> Valider le scan
-            </Bouton>
+              <IconeCheck className="w-4 h-4" /> {t("btn.valider_scan")}
+            </BoutonVocal>
             {!cameraOuverte ? (
-              <Bouton
+              <BoutonVocal
                 variante="secondaire"
+                cleAudio="btn.scanner_camera"
+                texteAudio={t("btn.scanner_camera")}
                 disabled={cameraEnDemarrage}
                 chargement={cameraEnDemarrage}
                 onClick={() => void demarrerCamera()}
               >
-                <IconeScan className="w-4 h-4" /> Scanner avec la caméra
-              </Bouton>
+                <IconeScan className="w-4 h-4" /> {t("btn.scanner_camera")}
+              </BoutonVocal>
             ) : (
-              <Bouton variante="ghost" onClick={() => void arreterCamera()}>
-                Fermer la caméra
-              </Bouton>
+              <BoutonVocal
+                variante="ghost"
+                cleAudio="btn.fermer_camera"
+                texteAudio={t("btn.fermer_camera")}
+                onClick={() => void arreterCamera()}
+              >
+                {t("btn.fermer_camera")}
+              </BoutonVocal>
             )}
           </div>
 

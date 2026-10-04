@@ -14,6 +14,7 @@ import { useAuthentification } from "@/contextes/authentification";
 import { cheminTableauDeBord as cheminTDB } from "@/types/api";
 import { useNotifications } from "@/contextes/notifications";
 import { IconeDeconnexion } from "@/composants/commun/Icones";
+import { BoutonMuet } from "@/composants/accessibilite/BoutonMuet";
 
 export function EnTete() {
   const { utilisateur, estConnecte, seDeconnecter } = useAuthentification();
@@ -45,6 +46,7 @@ export function EnTete() {
         </div>
 
         <nav className="flex items-center gap-1 sm:gap-2">
+          <BoutonMuet />
           {estConnecte && utilisateur ? (
             <>
               <Link

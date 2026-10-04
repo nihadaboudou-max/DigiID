@@ -7,6 +7,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "@/styles/globaux.css";
 
+import { FournisseurLangue } from "@/i18n/useLangue";
 import { FournisseurAuthentification } from "@/contextes/authentification";
 import { FournisseurNotifications } from "@/contextes/notifications";
 import { ConteneurLayout } from "@/composants/layouts/ConteneurLayout";
@@ -39,11 +40,14 @@ export default function LayoutRacine({
   return (
     <html lang="fr" className={poppins.variable}>
       <body className="min-h-screen">
-        <FournisseurAuthentification>
-          <FournisseurNotifications>
-            <ConteneurLayout>{children}</ConteneurLayout>
-          </FournisseurNotifications>
-        </FournisseurAuthentification>
+        {/* Le contexte de langue englobe l'authentification (voir archi accessibilité). */}
+        <FournisseurLangue>
+          <FournisseurAuthentification>
+            <FournisseurNotifications>
+              <ConteneurLayout>{children}</ConteneurLayout>
+            </FournisseurNotifications>
+          </FournisseurAuthentification>
+        </FournisseurLangue>
       </body>
     </html>
   );

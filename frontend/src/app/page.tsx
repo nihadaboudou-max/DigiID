@@ -5,10 +5,18 @@
 import Link from "next/link";
 import { Bouton } from "@/composants/commun/Bouton";
 import { PiedDePage } from "@/composants/layouts/PiedDePage";
+import { SelecteurLangue } from "@/composants/accessibilite/SelecteurLangue";
 
 export default function PageAccueil() {
   return (
     <main className="flex-grow">
+      {/* ─── SÉLECTEUR DE LANGUE (accessibilité — choix à l'oreille) ─── */}
+      <section className="bg-white border-b border-ardoise-clair/10 py-8 px-6">
+        <div className="max-w-contenu mx-auto">
+          <SelecteurLangue />
+        </div>
+      </section>
+
       {/* ─── SECTION HÉROS ─── */}
       <section className="bg-sable-clair py-12 md:py-20 px-6">
         <div className="max-w-contenu mx-auto grid md:grid-cols-2 gap-10 items-center">

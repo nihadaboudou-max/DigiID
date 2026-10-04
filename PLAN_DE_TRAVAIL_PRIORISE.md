@@ -28,7 +28,7 @@
 | **S2** | Colis de bout en bout (enregistrement + ticket QR + code clair + scan + timeline) | 🔴 P0 | S1 | L |
 | **S3** | Interface receveur (guichet) + ticket imprimable/affichable | 🔴 P0 | S2 | M |
 | **S4** | Interface chauffeur (scan en route) ✅ | 🔴 P0 | S2 | S |
-| **S5** | Accessibilité v1 : sélecteur 4 langues + `BoutonVocal` + audios démo | 🔴 P0 | S3 | M |
+| **S5** | Accessibilité v1 : sélecteur 4 langues + `BoutonVocal` + audios démo ✅ | 🔴 P0 | S3 | M |
 | **S6** | Paiement minimal : commission + wallet + espèces / 1 opérateur (mock) | 🔴 P0 | S2 | M |
 | **S7** | Suivi public (colis + familial) + SMS | 🔴 P0 | S2 | M |
 | | **➜ FIN PROTOTYPE MÉMOIRE (démontrable)** | | | |
@@ -86,15 +86,20 @@
 - **Livrable démontrable** : chauffeur qui scanne en route.
 - **Dépendances** : S2.
 
-#### Étape S5 — Accessibilité v1 (voix + langues)
+#### Étape S5 — Accessibilité v1 (voix + langues) ✅ (fait)
 - **Objectif** : rendre la démo accessible aux non‑lecteurs.
 - **Contenu** : `ContexteLangue` + sélecteur **4 langues** (Dendi/Bariba/Fon/FR, choix à l'oreille) ;
   `BoutonVocal` sur le parcours colis ; `GestionnaireAudio` ; **petit jeu d'audios démo**
   (accueil, boutons clés, confirmations) — enregistrés pour le FR et le Fon au minimum.
+- **Réalisé** : `src/i18n/` (`langues.ts`, `useLangue.tsx`, `gestionnaire_audio.ts`, `audios.ts`,
+  `fr/fon/dendi/bariba.json`) ; `src/composants/accessibilite/` (`SelecteurLangue`, `BoutonVocal`,
+  `BoutonMuet`) ; sélecteur sur l'accueil + Paramètres ; `BoutonVocal` sur l'assistant colis, le scan
+  et les tableaux de bord receveur/chauffeur ; repli **TTS** automatique tant que les `.mp3`
+  ne sont pas déposés dans `public/audios/` (structure + `README` fournis).
 - **Livrable démontrable** : cliquer un bouton → la voix explique (dans la langue choisie).
 - **Dépendances** : S3.
 - **Definition of done** : bouton muet fonctionne, FR + 1 langue locale opérationnels,
-  repli audible si un audio manque.
+  repli audible si un audio manque. ✅
 
 ### Sprint 3 — Argent + suivi (clôt le prototype)
 
@@ -169,15 +174,17 @@
 
 ## Prochaine action immédiate
 
-> **S1 → S4 livrées.** Démarrer l'**Étape S5 — Accessibilité v1 (voix + 4 langues)**.
+> **S1 → S5 livrées.** Démarrer l'**Étape S6 — Paiement minimal (commission + wallet)**.
 
 Rappel de ce qui est en place côté logistique :
 - **S1** : référentiel (gares, lignes, véhicules, voyages, acteurs) + rôles.
 - **S2/S3** : colis de bout en bout, tickets QR + code clair, scan idempotent, espace receveur.
 - **S4** : espace chauffeur (`/chauffeur/dashboard`, `/chauffeur/voyages/[id]`, `/chauffeur/scan`).
+- **S5** : accessibilité v1 — sélecteur 4 langues (Dendi/Bariba/Fon/FR), `BoutonVocal`,
+  `GestionnaireAudio` (repli TTS), bouton muet ; audios à déposer dans `public/audios/`.
 
-Prochaine étape S5 : `ContexteLangue` + sélecteur 4 langues (à l'oreille), `BoutonVocal`,
-`GestionnaireAudio`, petit jeu d'audios démo (FR + 1 langue locale minimum).
+Prochaine étape S6 : paiement minimal — commission `100 FCFA` dont `25 FCFA` au receveur,
+portefeuilles + mouvement de cagnotte (espèces / 1 opérateur mobile money en mock).
 
 ---
 

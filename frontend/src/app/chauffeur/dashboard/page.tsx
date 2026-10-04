@@ -18,6 +18,7 @@ import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspacePr
 import { formaterDate } from "@/composants/logistique/format";
 import { ROLES_CHAUFFEUR } from "@/composants/logistique/roles";
 import { useAuthentification } from "@/contextes/authentification";
+import { useLangue } from "@/i18n/useLangue";
 import { ErreurAPI } from "@/services/client_api";
 import {
   libelleLigne,
@@ -41,6 +42,7 @@ export default function PageTableauDeBordChauffeur() {
 
 function Contenu() {
   const { utilisateur } = useAuthentification();
+  const { t, jouer } = useLangue();
   const [voyages, setVoyages] = useState<Voyage[]>([]);
   const [lignes, setLignes] = useState<Ligne[]>([]);
   const [colis, setColis] = useState<Colis[]>([]);
@@ -107,15 +109,16 @@ function Contenu() {
     <div className="space-y-6 apparition">
       {/* En-tête */}
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold text-ardoise">Espace chauffeur</h1>
+        <h1 className="text-2xl font-bold text-ardoise">{t("chauffeur.titre")}</h1>
         <p className="text-sm text-ardoise-clair">
-          Vos voyages, les colis à bord et le scan en route.
+          {t("chauffeur.sous_titre")}
         </p>
       </div>
 
       {/* Action rapide : scan */}
       <Link
         href="/chauffeur/scan"
+        onClick={() => jouer("btn.scanner_un_colis")}
         className="carte hover:border-ocre/40 hover:shadow-md transition-all duration-200 group block"
       >
         <div className="flex items-center gap-3">
@@ -123,9 +126,9 @@ function Contenu() {
             <IconeScan className="w-6 h-6" />
           </div>
           <div>
-            <p className="font-semibold text-ardoise">Scanner un colis</p>
+            <p className="font-semibold text-ardoise">{t("chauffeur.scan_carte")}</p>
             <p className="text-xs text-ardoise-clair mt-0.5">
-              Enregistrer un départ, une mise en transit ou une arrivée
+              {t("chauffeur.scan_carte_desc")}
             </p>
           </div>
         </div>
@@ -139,8 +142,8 @@ function Contenu() {
 
       {/* Liste des voyages */}
       <Carte
-        titre="Mes voyages"
-        description="Ouvrez un voyage pour voir la liste des colis à bord."
+        titre={t("chauffeur.mes_voyages")}
+        description={t("chauffeur.mes_voyages_desc")}
       >
         <label className="flex items-center gap-2 text-xs text-ardoise-clair mb-4">
           <input

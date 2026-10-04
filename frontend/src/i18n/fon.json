@@ -1,0 +1,14 @@
+{
+  "_note": "Traductions provisoires (Fon) — à valider et à enregistrer par un locuteur natif avant la soutenance. Les clés absentes se replient automatiquement sur le français.",
+  "accueil.bienvenue": "Kúabɔ̀ ɖò DigiID",
+  "langue.titre": "Sɔ́ gbè towe",
+  "langue.description": "Yi kàn nǔ ɔ́ ɖó bo sè, énɛ́wú ɖó sɔ́ gbè towe.",
+  "langue.ecouter": "Sè",
+  "btn.continuer": "Yì nukɔn",
+  "btn.retour": "Lɛ́ gɔ́ wa",
+  "btn.enregistrer_colis": "Wlán kúnú ɖé",
+  "btn.valider_scan": "Sɔ́ nǔ kpɔ́n",
+  "receveur.titre": "Gáre ɔ́ kɔ́n",
+  "chauffeur.titre": "Azɔ̀nxwatɔ́ kɔ́n",
+  "colis.succes.titre": "Kúnú ɔ́ kò nyí wlán"
+}

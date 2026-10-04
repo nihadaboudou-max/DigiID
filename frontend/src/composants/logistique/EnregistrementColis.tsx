@@ -17,6 +17,8 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { IconeCheck, IconeColis, IconeTicket } from "@/composants/commun/Icones";
+import { BoutonVocal } from "@/composants/accessibilite/BoutonVocal";
+import { useLangue } from "@/i18n/useLangue";
 import { useAuthentification } from "@/contextes/authentification";
 import { ErreurAPI } from "@/services/client_api";
 import {
@@ -31,15 +33,16 @@ import { TicketImprimable } from "./TicketImprimable";
 
 type Etape = 1 | 2 | 3 | 4;
 
-const ETAPES: { numero: Etape; titre: string }[] = [
-  { numero: 1, titre: "Expéditeur" },
-  { numero: 2, titre: "Destinataire" },
-  { numero: 3, titre: "Détails & frais" },
-  { numero: 4, titre: "Récapitulatif" },
+const ETAPES: { numero: Etape; cleTitre: string }[] = [
+  { numero: 1, cleTitre: "colis.etape.expediteur" },
+  { numero: 2, cleTitre: "colis.etape.destinataire" },
+  { numero: 3, cleTitre: "colis.etape.details" },
+  { numero: 4, cleTitre: "colis.etape.recap" },
 ];
 
 export function EnregistrementColis() {
   const { utilisateur } = useAuthentification();
+  const { t } = useLangue();
 
   // Référentiel
   const [gares, setGares] = useState<Gare[]>([]);
@@ -179,19 +182,24 @@ export function EnregistrementColis() {
   if (resultat) {
     return (
       <div className="space-y-5 apparition">
-        <Alerte variante="succes" titre="Colis enregistré">
-          Le ticket a été généré. Imprimez l'étiquette et collez-la sur le colis.
+        <Alerte variante="succes" titre={t("colis.succes.titre")}>
+          {t("colis.succes.desc")}
         </Alerte>
 
         <TicketImprimable ticket={resultat.ticket} colis={resultat.colis} />
 
         <div className="no-print flex flex-wrap gap-3">
-          <Bouton variante="primaire" onClick={nouvelEnregistrement}>
-            <IconeColis className="w-4 h-4" /> Enregistrer un autre colis
-          </Bouton>
+          <BoutonVocal
+            variante="primaire"
+            cleAudio="btn.autre_colis"
+            texteAudio={t("btn.autre_colis")}
+            onClick={nouvelEnregistrement}
+          >
+            <IconeColis className="w-4 h-4" /> {t("btn.autre_colis")}
+          </BoutonVocal>
           <a href={`/receveur/tickets/${encodeURIComponent(resultat.ticket.code_clair)}`}>
             <Bouton variante="ghost">
-              <IconeTicket className="w-4 h-4" /> Voir le suivi du colis
+              <IconeTicket className="w-4 h-4" /> {t("btn.voir_suivi")}
             </Bouton>
           </a>
         </div>
@@ -225,7 +233,7 @@ export function EnregistrementColis() {
                   actif ? "font-semibold text-ardoise" : "text-ardoise-clair"
                 }
               >
-                {e.titre}
+                {t(e.cleTitre)}
               </span>
               {i < ETAPES.length - 1 && (
                 <span className="w-6 h-px bg-ardoise-clair/20 mx-1" />
@@ -246,8 +254,8 @@ export function EnregistrementColis() {
           {/* ─── Étape 1 : Expéditeur ─── */}
           {etape === 1 && (
             <Carte
-              titre="Qui dépose le colis ?"
-              description="Renseignez l'expéditeur (la personne qui envoie le colis)."
+              titre={t("colis.expediteur.titre")}
+              description={t("colis.expediteur.desc")}
             >
               <div className="space-y-4">
                 <ChampSaisie
@@ -267,13 +275,15 @@ export function EnregistrementColis() {
                   aide="Au moins 6 chiffres — sert à joindre l'expéditeur si besoin."
                 />
                 <div className="flex justify-end">
-                  <Bouton
+                  <BoutonVocal
                     variante="primaire"
+                    cleAudio="btn.continuer"
+                    texteAudio={t("btn.continuer")}
                     disabled={!etapeExpediteurValide}
                     onClick={() => setEtape(2)}
                   >
-                    Continuer
-                  </Bouton>
+                    {t("btn.continuer")}
+                  </BoutonVocal>
                 </div>
               </div>
             </Carte>
@@ -282,8 +292,8 @@ export function EnregistrementColis() {
           {/* ─── Étape 2 : Destinataire ─── */}
           {etape === 2 && (
             <Carte
-              titre="Qui reçoit le colis ?"
-              description="Renseignez le destinataire puis le trajet du colis."
+              titre={t("colis.destinataire.titre")}
+              description={t("colis.destinataire.desc")}
             >
               <div className="space-y-4">
                 <ChampSaisie
@@ -349,16 +359,23 @@ export function EnregistrementColis() {
                 </div>
 
                 <div className="flex justify-between">
-                  <Bouton variante="ghost" onClick={() => setEtape(1)}>
-                    ← Retour
-                  </Bouton>
-                  <Bouton
+                  <BoutonVocal
+                    variante="ghost"
+                    cleAudio="btn.retour"
+                    texteAudio={t("btn.retour")}
+                    onClick={() => setEtape(1)}
+                  >
+                    ← {t("btn.retour")}
+                  </BoutonVocal>
+                  <BoutonVocal
                     variante="primaire"
+                    cleAudio="btn.continuer"
+                    texteAudio={t("btn.continuer")}
                     disabled={!etapeDestinataireValide}
                     onClick={() => setEtape(3)}
                   >
-                    Continuer
-                  </Bouton>
+                    {t("btn.continuer")}
+                  </BoutonVocal>
                 </div>
               </div>
             </Carte>
@@ -367,8 +384,8 @@ export function EnregistrementColis() {
           {/* ─── Étape 3 : Détails & frais ─── */}
           {etape === 3 && (
             <Carte
-              titre="Détails & frais"
-              description="Ces informations sont optionnelles, sauf les frais à encaisser."
+              titre={t("colis.details.titre")}
+              description={t("colis.details.desc")}
             >
               <div className="space-y-4">
                 <ChampSaisie
@@ -448,7 +465,7 @@ export function EnregistrementColis() {
 
           {/* ─── Étape 4 : Récapitulatif ─── */}
           {etape === 4 && (
-            <Carte titre="Vérifiez avant d'enregistrer">
+            <Carte titre={t("colis.recap.titre")}>
               <dl className="space-y-2 text-sm">
                 <Ligne libelle="Expéditeur" valeur={expediteurNom} />
                 <Ligne libelle="Téléphone expéditeur" valeur={expediteurTel} />
@@ -479,11 +496,18 @@ export function EnregistrementColis() {
               </dl>
 
               <div className="flex justify-between mt-6">
-                <Bouton variante="ghost" onClick={() => setEtape(3)}>
-                  ← Retour
-                </Bouton>
-                <Bouton
+                <BoutonVocal
+                  variante="ghost"
+                  cleAudio="btn.retour"
+                  texteAudio={t("btn.retour")}
+                  onClick={() => setEtape(3)}
+                >
+                  ← {t("btn.retour")}
+                </BoutonVocal>
+                <BoutonVocal
                   variante="succes"
+                  cleAudio="btn.enregistrer"
+                  texteAudio={t("btn.enregistrer")}
                   chargement={enregistrement}
                   disabled={
                     enregistrement ||
@@ -492,8 +516,8 @@ export function EnregistrementColis() {
                   }
                   onClick={enregistrer}
                 >
-                  <IconeCheck className="w-4 h-4" /> Enregistrer le colis
-                </Bouton>
+                  <IconeCheck className="w-4 h-4" /> {t("btn.enregistrer")}
+                </BoutonVocal>
               </div>
             </Carte>
           )}

@@ -16,6 +16,7 @@ import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspacePr
 import { ROLES_GUICHET } from "@/composants/logistique/roles";
 import { TableauColis } from "@/composants/logistique/TableauColis";
 import { useAuthentification } from "@/contextes/authentification";
+import { useLangue } from "@/i18n/useLangue";
 import { ErreurAPI } from "@/services/client_api";
 import { gareDeLActeur, logistiqueAPI, type Gare } from "@/services/logistique_api";
 import type { Colis } from "@/types/logistique";
@@ -30,6 +31,7 @@ export default function PageTableauDeBordReceveur() {
 
 function Contenu() {
   const { utilisateur } = useAuthentification();
+  const { t, jouer } = useLangue();
   const [gare, setGare] = useState<Gare | null>(null);
   const [colis, setColis] = useState<Colis[]>([]);
   const [chargement, setChargement] = useState(true);
@@ -84,11 +86,11 @@ function Contenu() {
     <div className="space-y-6 apparition">
       {/* En-tête */}
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold text-ardoise">Guichet logistique</h1>
+        <h1 className="text-2xl font-bold text-ardoise">{t("receveur.titre")}</h1>
         <p className="text-sm text-ardoise-clair">
           {gare
-            ? `Gare : ${gare.nom} (${gare.ville})`
-            : "Aucune gare de rattachement — contactez l'administrateur."}
+            ? t("receveur.gare", { gare: `${gare.nom} (${gare.ville})` })
+            : t("receveur.sans_gare")}
         </p>
       </div>
 
@@ -97,20 +99,22 @@ function Contenu() {
         <ActionRapide
           href="/receveur/colis/nouveau"
           icone={<IconeColis className="w-6 h-6" />}
-          titre="Enregistrer un colis"
-          description="Créer un ticket et imprimer l'étiquette"
+          titre={t("receveur.action.enregistrer")}
+          description={t("receveur.action.enregistrer_desc")}
+          onClick={() => jouer("btn.enregistrer_colis")}
         />
         <ActionRapide
           href="/receveur/scan"
           icone={<IconeScan className="w-6 h-6" />}
-          titre="Scanner / Livrer"
-          description="Remettre un colis au destinataire"
+          titre={t("receveur.action.scanner")}
+          description={t("receveur.action.scanner_desc")}
+          onClick={() => jouer("btn.valider_scan")}
         />
         <ActionRapide
           href="/receveur/tickets"
           icone={<IconeTicket className="w-6 h-6" />}
-          titre="Colis & tickets"
-          description="Rechercher un colis et voir son suivi"
+          titre={t("receveur.action.tickets")}
+          description={t("receveur.action.tickets_desc")}
         />
       </div>
 
@@ -118,16 +122,16 @@ function Contenu() {
 
       {/* Compteurs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <Compteur libelle="Total" valeur={compteurs.total} couleur="text-ardoise" />
-        <Compteur libelle="Enregistrés" valeur={compteurs.enregistre} couleur="text-blue-700" />
-        <Compteur libelle="En transit" valeur={compteurs.en_transit} couleur="text-ocre-fonce" />
-        <Compteur libelle="Arrivés" valeur={compteurs.arrive} couleur="text-lagune" />
-        <Compteur libelle="Livrés" valeur={compteurs.livre} couleur="text-green-700" />
+        <Compteur libelle={t("receveur.compteur.total")} valeur={compteurs.total} couleur="text-ardoise" />
+        <Compteur libelle={t("receveur.compteur.enregistres")} valeur={compteurs.enregistre} couleur="text-blue-700" />
+        <Compteur libelle={t("receveur.compteur.en_transit")} valeur={compteurs.en_transit} couleur="text-ocre-fonce" />
+        <Compteur libelle={t("receveur.compteur.arrives")} valeur={compteurs.arrive} couleur="text-lagune" />
+        <Compteur libelle={t("receveur.compteur.livres")} valeur={compteurs.livre} couleur="text-green-700" />
       </div>
 
       {/* Derniers colis */}
       <Carte
-        titre="Derniers colis enregistrés"
+        titre={t("receveur.derniers")}
         description={gare ? `Colis de la gare ${gare.nom} ou à destination.` : undefined}
       >
         {chargement ? (
@@ -160,15 +164,18 @@ function ActionRapide({
   icone,
   titre,
   description,
+  onClick,
 }: {
   href: string;
   icone: React.ReactNode;
   titre: string;
   description: string;
+  onClick?: () => void;
 }) {
   return (
     <Link
       href={href}
+      onClick={onClick}
       className="carte hover:border-lagune/40 hover:shadow-md transition-all duration-200 group"
     >
       <div className="flex items-start gap-3">

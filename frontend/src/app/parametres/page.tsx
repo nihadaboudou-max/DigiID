@@ -12,6 +12,8 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { Alerte } from "@/composants/commun/Alerte";
 import { Gestion2FA } from "@/composants/commun/Gestion2FA";
+import { SelecteurLangue } from "@/composants/accessibilite/SelecteurLangue";
+import { BoutonMuet } from "@/composants/accessibilite/BoutonMuet";
 import {
   IconeCle, IconeBouclier, IconeLangue, IconeJournal, IconeEnvoyer, IconeUtilisateur
 } from "@/composants/commun/Icones";
@@ -197,33 +199,19 @@ function Contenu() {
           <div className="w-9 h-9 bg-lagune/10 text-lagune rounded-lg flex items-center justify-center flex-shrink-0">
             <IconeLangue />
           </div>
-          <div>
+          <div className="flex-1">
             <h3 className="text-base font-semibold text-ardoise">Langue d'affichage</h3>
             <p className="text-xs text-ardoise-clair mt-0.5">
-              Choisis la langue dans laquelle DigiID s'affiche pour toi.
+              Choisis ta langue en l'écoutant. La voix de DigiID s'adapte à ton choix.
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { code: "fr", libelle: "Français", actif: true },
-            { code: "wo", libelle: "Wolof", actif: false },
-            { code: "fo", libelle: "Fon", actif: false },
-          ].map((langue) => (
-            <button
-              key={langue.code}
-              type="button"
-              disabled={!langue.actif}
-              className={`px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                langue.actif
-                  ? "bg-lagune text-white border-lagune"
-                  : "bg-sable text-ardoise-clair border-ardoise-clair/20 cursor-not-allowed"
-              }`}
-            >
-              {langue.libelle}
-              {!langue.actif && <span className="block text-[10px] italic mt-0.5 opacity-70">Bientôt</span>}
-            </button>
-          ))}
+        <SelecteurLangue variante="compacte" />
+
+        {/* Voix : couper / réactiver le son */}
+        <div className="mt-4 pt-3 border-t border-ardoise-clair/10 flex items-center justify-between gap-3">
+          <p className="text-xs text-ardoise-clair">Voix de l'application (guidage parlé)</p>
+          <BoutonMuet />
         </div>
       </Carte>
 
