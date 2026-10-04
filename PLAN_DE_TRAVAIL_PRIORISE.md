@@ -29,7 +29,7 @@
 | **S3** | Interface receveur (guichet) + ticket imprimable/affichable | 🔴 P0 | S2 | M |
 | **S4** | Interface chauffeur (scan en route) ✅ | 🔴 P0 | S2 | S |
 | **S5** | Accessibilité v1 : sélecteur 4 langues + `BoutonVocal` + audios démo ✅ | 🔴 P0 | S3 | M |
-| **S6** | Paiement minimal : commission + wallet + espèces / 1 opérateur (mock) | 🔴 P0 | S2 | M |
+| **S6** | Paiement minimal : commission + wallet + espèces / 1 opérateur (mock) ✅ | 🔴 P0 | S2 | M |
 | **S7** | Suivi public (colis + familial) + SMS | 🔴 P0 | S2 | M |
 | | **➜ FIN PROTOTYPE MÉMOIRE (démontrable)** | | | |
 | **S8** | Refonte documents « 1 document = 1 table » | 🟠 P1 | — | L |
@@ -103,12 +103,19 @@
 
 ### Sprint 3 — Argent + suivi (clôt le prototype)
 
-#### Étape S6 — Paiement minimal
+#### Étape S6 — Paiement minimal ✅ (fait)
 - **Objectif** : montrer le modèle économique (100 FCFA, dont 25 FCFA au receveur).
 - **Contenu** : `transactions_paiement`, `commissions`, `portefeuilles`, `mouvements_portefeuille` ;
   moyen **espèces** (wallet interne) + **1 opérateur mobile money en mode mock** ;
   crédit automatique de la cagnotte du receveur.
-- **Livrable démontrable** : enregistrer un colis → payer → cagnotte du receveur créditée.
+- **Réalisé** : modèles + migration Alembic (`portefeuilles`, `mouvements_portefeuille`,
+  `transactions_paiement`, `commissions`) ; module `src/modules/paiement/` (schemas, service,
+  routes, `mobile_money/` mock Wave + espèces) ; permissions `paiement.lire` / `paiement.payer` ;
+  config `commission_receveur_fcfa=25`. Frontend : `PortefeuilleCarte`, `PaiementColis`,
+  page `/receveur/cagnotte`, encaissement intégré au ticket (enregistrement + fiche colis),
+  navigation « Ma cagnotte ».
+- **Livrable démontrable** : enregistrer un colis → encaisser 100 FCFA (espèces ou Wave mock)
+  → **25 FCFA** créditent la cagnotte du receveur (visible sur `/receveur/cagnotte`).
 - **Dépendances** : S2.
 
 #### Étape S7 — Suivi public + SMS
@@ -174,7 +181,7 @@
 
 ## Prochaine action immédiate
 
-> **S1 → S5 livrées.** Démarrer l'**Étape S6 — Paiement minimal (commission + wallet)**.
+> **S1 → S6 livrées.** Démarrer l'**Étape S7 — Suivi public + SMS**.
 
 Rappel de ce qui est en place côté logistique :
 - **S1** : référentiel (gares, lignes, véhicules, voyages, acteurs) + rôles.
@@ -182,9 +189,10 @@ Rappel de ce qui est en place côté logistique :
 - **S4** : espace chauffeur (`/chauffeur/dashboard`, `/chauffeur/voyages/[id]`, `/chauffeur/scan`).
 - **S5** : accessibilité v1 — sélecteur 4 langues (Dendi/Bariba/Fon/FR), `BoutonVocal`,
   `GestionnaireAudio` (repli TTS), bouton muet ; audios à déposer dans `public/audios/`.
+- **S6** : paiement minimal — API `/api/v1/paiement` (wallet, transactions, commissions),
+  encaissement 100 FCFA dont **25 FCFA** au receveur (espèces / Wave mock), page `/receveur/cagnotte`.
 
-Prochaine étape S6 : paiement minimal — commission `100 FCFA` dont `25 FCFA` au receveur,
-portefeuilles + mouvement de cagnotte (espèces / 1 opérateur mobile money en mock).
+Prochaine étape S7 : suivi public `/suivi/[code]` (colis + familial) et SMS départ/arrivée (mock).
 
 ---
 

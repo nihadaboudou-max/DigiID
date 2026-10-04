@@ -109,6 +109,9 @@ from src.modules.inspection_documents import routeur_inspection
 # --- Pivot logistique (Plan B) — référentiel gares/lignes/véhicules/voyages/acteurs ---
 from src.modules.logistique import routeur_logistique
 
+# --- Pivot logistique (Plan B) — paiement (wallet, transactions, commissions) ---
+from src.modules.paiement import routeur_paiement
+
 
 # Routeur racine — préfixe et tag globaux gérés au montage
 routeur_v1 = APIRouter()
@@ -212,3 +215,6 @@ routeur_v1.include_router(routeur_inspection)
 
 # Pivot logistique (Plan B) — référentiel logistique
 routeur_v1.include_router(routeur_logistique)
+
+# Pivot logistique (Plan B) — paiement / cagnotte
+routeur_v1.include_router(routeur_paiement)

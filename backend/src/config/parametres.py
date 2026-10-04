@@ -101,6 +101,13 @@ class ParametresApplication(BaseSettings):
     seuil_score_risque_blocage: int = 80
     seuil_tentatives_connexion_echec: int = 5
 
+    # --- Paiement & commissions (Plan B — S6) ---
+    # Micro-commission reversée au receveur (crédit automatique de sa cagnotte)
+    # sur l'enregistrement d'un colis. Modifiable via l'environnement.
+    commission_receveur_fcfa: int = 25
+    # Opérateur mobile money activé (mode mock en développement) : "wave".
+    operateur_mobile_money: str = "wave"
+
                     # --- 2FA ---
     activer_2fa_obligatoire_admin: bool = True
     duree_validite_code_2fa_secondes: int = 300

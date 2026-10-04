@@ -19,6 +19,7 @@ import { formaterDateHeure, formaterFcfa } from "@/composants/logistique/format"
 import { ROLES_GUICHET } from "@/composants/logistique/roles";
 import { SuiviTimeline } from "@/composants/logistique/SuiviTimeline";
 import { TicketImprimable } from "@/composants/logistique/TicketImprimable";
+import { PaiementColis } from "@/composants/paiement/PaiementColis";
 import { ErreurAPI } from "@/services/client_api";
 import { logistiqueAPI } from "@/services/logistique_api";
 import {
@@ -155,6 +156,11 @@ function Contenu() {
         {/* Colonne gauche : ticket */}
         <div className="space-y-6">
           <TicketImprimable ticket={ticket} colis={colis} />
+
+          {/* S6 — encaissement des frais (si pas encore payé) */}
+          <div className="no-print">
+            <PaiementColis colis={colis} />
+          </div>
         </div>
 
         {/* Colonne droite : détails + timeline */}

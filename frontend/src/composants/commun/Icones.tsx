@@ -206,3 +206,12 @@ export const IconeTicket = (p: SVGProps<SVGSVGElement>) => (
     <path d="M14 5v14" strokeDasharray="2 2" />
   </svg>
 );
+
+/** Portefeuille / cagnotte électronique (paiement S6). */
+export const IconePortefeuille = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...proprietesDefaut} {...p}>
+    <path d="M3 8a2 2 0 012-2h10a2 2 0 012 2v1" />
+    <rect x="3" y="7" width="18" height="13" rx="2" />
+    <circle cx="16.5" cy="13.5" r="1.3" />
+  </svg>
+);

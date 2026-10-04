@@ -29,6 +29,7 @@ import fon from "./fon.json";
 import dendi from "./dendi.json";
 import bariba from "./bariba.json";
 import { CLE_MUET, gestionnaireAudio } from "./gestionnaire_audio";
+import { ACTIVER_PREACHARGEMENT_AUDIO } from "./config";
 import {
   CLE_LANGUE,
   estLangue,
@@ -139,10 +140,14 @@ export function FournisseurLangue({ children }: { children: ReactNode }) {
     definirMuet(!gestionnaireAudio.estMuet());
   }, [definirMuet]);
 
-  // Précharge le pack de la langue courante à chaque changement.
-  // (Le `precharger` est volontairement non appelé par défaut : tant que les
-  // fichiers `.mp3` ne sont pas déposés dans `public/audios/`, le préchargement
-  // générerait des 404 en console. À activer une fois les enregistrements faits.)
+  // Précharge le pack de la langue courante.
+  // 🔌 Piloté par l'interrupteur ACTIVER_PREACHARGEMENT_AUDIO (voir `config.ts`).
+  // Il reste `false` tant que les .mp3 ne sont pas déposés dans `public/audios/`
+  // (sinon : erreurs 404 en console). Passer l'interrupteur à `true` le jour venu.
+  useEffect(() => {
+    if (!ACTIVER_PREACHARGEMENT_AUDIO) return;
+    gestionnaireAudio.precharger(langue);
+  }, [langue]);
 
   const valeur = useMemo<ContexteLangueValeur>(
     () => ({

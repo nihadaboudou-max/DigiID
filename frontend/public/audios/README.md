@@ -38,3 +38,22 @@ avertissement en console.
 
 ➡️ Pour une démo « voix humaine » complète, faire enregistrer les fichiers par
 des locuteurs natifs (Fon, Dendi, Bariba) et les déposer ici.
+
+## ⚙️ Interrupteur à activer après l'enregistrement
+
+Tant que les `.mp3` n'existent pas, le préchargement reste coupé pour éviter des
+erreurs 404 en console. **Le jour où les fichiers sont déposés ici**, ouvrir :
+
+`src/i18n/config.ts`
+
+et passer :
+
+```ts
+// avant
+ACTIVER_PREACHARGEMENT_AUDIO = false;
+// après
+ACTIVER_PREACHARGEMENT_AUDIO = true;
+```
+
+C'est le **seul** changement à faire : le hook `useLangue` branche déjà le
+préchargement quand l'interrupteur est à `true`.

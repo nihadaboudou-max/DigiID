@@ -14,7 +14,7 @@ import {
   IconePartage, IconeParametres, IconeBouclier, IconeStatistique,
   IconeAlerte, IconeJournal, IconeCle, IconeCheck, IconeFlecheBas, IconeVisage,
   IconeIdentite, IconeEmail, IconeCadenas, IconeScan, IconeEnvoyer,
-  IconeColis, IconeTicket,
+  IconeColis, IconeTicket, IconePortefeuille,
 } from "@/composants/commun/Icones";
 
 interface Lien {
@@ -117,17 +117,20 @@ const LIENS_RECEVEUR: Lien[] = [
   { href: "/receveur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
   { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
   { href: "/receveur/scan", libelle: "Scanner / Livrer", Icone: IconeScan },
+  { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
 ];
 
 const LIENS_CHAUFFEUR: Lien[] = [
   { href: "/chauffeur/dashboard", libelle: "Mes voyages", Icone: IconeColis },
   { href: "/chauffeur/scan", libelle: "Scanner un colis", Icone: IconeScan },
   { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
+  { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
 ];
 
 const LIENS_COMMERCANT: Lien[] = [
   { href: "/receveur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
   { href: "/receveur/tickets", libelle: "Mes colis", Icone: IconeTicket },
+  { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
 ];
 
 // ---- Composant section pliable mobile ----

@@ -18,6 +18,7 @@ import { Carte } from "@/composants/commun/Carte";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { IconeCheck, IconeColis, IconeTicket } from "@/composants/commun/Icones";
 import { BoutonVocal } from "@/composants/accessibilite/BoutonVocal";
+import { PaiementColis } from "@/composants/paiement/PaiementColis";
 import { useLangue } from "@/i18n/useLangue";
 import { useAuthentification } from "@/contextes/authentification";
 import { ErreurAPI } from "@/services/client_api";
@@ -61,7 +62,7 @@ export function EnregistrementColis() {
   const [description, setDescription] = useState("");
   const [poidsKg, setPoidsKg] = useState("");
   const [valeurFcfa, setValeurFcfa] = useState("");
-  const [fraisFcfa, setFraisFcfa] = useState("");
+  const [fraisFcfa, setFraisFcfa] = useState("100");
   const [voyageId, setVoyageId] = useState("");
 
   // État d'envoi
@@ -140,7 +141,7 @@ export function EnregistrementColis() {
     setDescription("");
     setPoidsKg("");
     setValeurFcfa("");
-    setFraisFcfa("");
+    setFraisFcfa("100");
     setVoyageId("");
     setGareArriveeId("");
     setGareDepartId(gareGuichet?.id ?? "");
@@ -187,6 +188,9 @@ export function EnregistrementColis() {
         </Alerte>
 
         <TicketImprimable ticket={resultat.ticket} colis={resultat.colis} />
+
+        {/* S6 — encaissement des frais + commission du receveur */}
+        <PaiementColis colis={resultat.colis} />
 
         <div className="no-print flex flex-wrap gap-3">
           <BoutonVocal
@@ -415,7 +419,7 @@ export function EnregistrementColis() {
                     value={fraisFcfa}
                     onChange={(e) => setFraisFcfa(e.target.value)}
                     inputMode="numeric"
-                    placeholder="Ex : 1500"
+                    placeholder="Ex : 100"
                     erreur={fraisValide ? undefined : "Montant invalide"}
                   />
                 </div>

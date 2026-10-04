@@ -46,3 +46,28 @@ export const ROLES_CHAUFFEUR: string[] = [
   "super_administrateur",
   "super_admin",
 ];
+
+/**
+ * Paiement / cagnotte (S6) — permission `paiement.lire`.
+ *
+ * Tous les acteurs du pivot logistique disposent d'une cagnotte (le receveur
+ * est crédité de 25 FCFA par colis enregistré) ; les admins peuvent consulter
+ * pour le support.
+ */
+export const ROLES_CAGNOTTE: string[] = [
+  "receveur",
+  "gerant_gare",
+  "chauffeur",
+  "commercant",
+  "super_administrateur",
+  "super_admin",
+];
+
+/** Encaisser un paiement (permission `paiement.payer`). */
+export const ROLES_PAIEMENT: string[] = [
+  "receveur",
+  "gerant_gare",
+  "commercant",
+  "super_administrateur",
+  "super_admin",
+];

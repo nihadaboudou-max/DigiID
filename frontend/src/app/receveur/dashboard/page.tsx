@@ -11,10 +11,11 @@ import Link from "next/link";
 import { Alerte } from "@/composants/commun/Alerte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
-import { IconeColis, IconeScan, IconeTicket } from "@/composants/commun/Icones";
+import { IconeColis, IconePortefeuille, IconeScan, IconeTicket } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { ROLES_GUICHET } from "@/composants/logistique/roles";
 import { TableauColis } from "@/composants/logistique/TableauColis";
+import { PortefeuilleCarte } from "@/composants/paiement/PortefeuilleCarte";
 import { useAuthentification } from "@/contextes/authentification";
 import { useLangue } from "@/i18n/useLangue";
 import { ErreurAPI } from "@/services/client_api";
@@ -95,7 +96,7 @@ function Contenu() {
       </div>
 
       {/* Actions rapides */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <ActionRapide
           href="/receveur/colis/nouveau"
           icone={<IconeColis className="w-6 h-6" />}
@@ -116,7 +117,17 @@ function Contenu() {
           titre={t("receveur.action.tickets")}
           description={t("receveur.action.tickets_desc")}
         />
+        {/* S6 — cagnotte du guichet (commissions) */}
+        <ActionRapide
+          href="/receveur/cagnotte"
+          icone={<IconePortefeuille className="w-6 h-6" />}
+          titre="Ma cagnotte"
+          description="Commissions reçues sur les colis encaissés."
+        />
       </div>
+
+      {/* S6 — portefeuille : solde + derniers mouvements */}
+      <PortefeuilleCarte limiteMouvements={3} />
 
       {erreur && <Alerte variante="erreur" titre="Erreur">{erreur}</Alerte>}
 

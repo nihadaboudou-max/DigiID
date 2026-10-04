@@ -44,6 +44,12 @@ from src.modeles.logistique import (
     Colis, STATUTS_COLIS,
     ColisEvenement, TYPES_EVENEMENT_COLIS,
 )
+from src.modeles.paiement import (
+    Portefeuille, DEVISES,
+    MouvementPortefeuille, SENS_MOUVEMENT, MOTIFS_MOUVEMENT,
+    TransactionPaiement, TYPES_TRANSACTION, STATUTS_TRANSACTION, MOYENS_PAIEMENT,
+    Commission, STATUTS_COMMISSION,
+)
 
 __all__ = [
     "Utilisateur",
@@ -110,4 +116,15 @@ __all__ = [
     "STATUTS_COLIS",
     "ColisEvenement",
     "TYPES_EVENEMENT_COLIS",
+    "Portefeuille",
+    "DEVISES",
+    "MouvementPortefeuille",
+    "SENS_MOUVEMENT",
+    "MOTIFS_MOUVEMENT",
+    "TransactionPaiement",
+    "TYPES_TRANSACTION",
+    "STATUTS_TRANSACTION",
+    "MOYENS_PAIEMENT",
+    "Commission",
+    "STATUTS_COMMISSION",
 ]
