@@ -14,7 +14,7 @@ import urllib.parse
 from functools import lru_cache
 from typing import List, Literal
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -113,10 +113,32 @@ class ParametresApplication(BaseSettings):
     # ⚠️ AUCUN secret en dur dans le code : le mot de passe d'application Gmail
     #    doit venir du .env (SMTP_MOT_DE_PASSE). Sans lui, l'application passe
     #    en « mode mock » (les emails ne partent pas) et le signale au démarrage.
-    smtp_serveur: str = "smtp.gmail.com"
-    smtp_port: int = 587
-    smtp_utilisateur: str = "bigdataism2024@gmail.com"
-    smtp_mot_de_passe: str = ""
+    #
+    # ⚠️ IMPORTANT (noms de variables) : les fichiers .env / docker-compose.yml
+    #    et services/email.py utilisent les noms ANGLAIS (SMTP_HOST, SMTP_USER,
+    #    SMTP_PORT) alors que ces champs sont en français. On accepte LES DEUX
+    #    via AliasChoices pour que la configuration soit réellement lue
+    #    (sinon SMTP_HOST/SMTP_USER étaient silencieusement ignorés).
+    smtp_serveur: str = Field(
+        default="smtp.gmail.com",
+        validation_alias=AliasChoices(
+            "SMTP_SERVEUR", "SMTP_HOST", "smtp_serveur", "smtp_host"
+        ),
+    )
+    smtp_port: int = Field(
+        default=587,
+        validation_alias=AliasChoices("SMTP_PORT", "smtp_port"),
+    )
+    smtp_utilisateur: str = Field(
+        default="bigdataism2024@gmail.com",
+        validation_alias=AliasChoices(
+            "SMTP_UTILISATEUR", "SMTP_USER", "smtp_utilisateur", "smtp_user"
+        ),
+    )
+    smtp_mot_de_passe: str = Field(
+        default="",
+        validation_alias=AliasChoices("SMTP_MOT_DE_PASSE", "smtp_mot_de_passe"),
+    )
 
     # --- Email (SendGrid - API HTTP, fonctionne sur Render) ---
     sendgrid_api_key: str = ""
