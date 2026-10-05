@@ -18,7 +18,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects import postgresql 
 
 revision: str = "20260816_1000_suivi_familial_sms"
 down_revision: Union[str, None] = "20260815_1000_nombre_articles_colis"
