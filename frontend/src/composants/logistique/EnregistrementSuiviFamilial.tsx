@@ -1,13 +1,21 @@
-
 "use client";
 /**
- * Enregistrement d'un enfant voyageant seul — suivi familial (Plan B, étape S7).
+ * Enregistrement d'un passager — suivi familial (Plan B, étape S7 / P0 ajusté).
  *
- * Fort impact social : la famille confie un enfant à un transporteur ; le
- * guichet crée un ticket ``ENFANT`` (QR + code ``ENF-…``) et le parent reçoit
- * un **SMS de confirmation**. Au départ puis à l'arrivée, un second SMS est
- * envoyé automatiquement (voir la liste des suivis). L'enfant dispose aussi
- * d'une **page publique** de suivi (`/suivi/ENF-…`) consultable sans compte.
+ * Fort impact social : la famille confie un enfant (ou un adulte voyage seul) à
+ * un transporteur. Le guichet crée un ticket ``ENFANT`` (QR + code ``ENF-…``) et
+ * le parent reçoit un **SMS de confirmation**. Au départ, à l'approche puis à
+ * l'arrivée, des SMS sont envoyés automatiquement. L'enfant dispose aussi d'une
+ * **page publique** de suivi (`/suivi/ENF-…`) consultable sans compte.
+ *
+ * Ajustements P0 :
+ *  - **Contacts** : acheteur du ticket (enfant) / numéro du passager (adulte)
+ *    **et** un proche de confiance à prévenir obligatoirement.
+ *  - **Attribution obligatoire** : le passager est lié à un chauffeur précis
+ *    (via un voyage) et à un trajet précis.
+ *  - **Bagages** : compteur 1 à 10 sacs → une étiquette QR par sac (traçabilité,
+ *    **sans impact** sur le prix).
+ *  - **Tarif fixe** : 100 FCFA par passager/enfant, quel que soit le nombre de sacs.
  */
 import { useEffect, useMemo, useState } from "react";
 
@@ -25,7 +33,14 @@ import {
   type SuiviFamilialEnregistre,
   type Voyage,
 } from "@/services/logistique_api";
+import { ControleurBagages } from "./ControleurBagages";
+import { formaterFcfa } from "./format";
 import { TicketSuiviFamilialImprimable } from "./TicketSuiviFamilialImprimable";
+
+type TypePassager = "enfant" | "adulte";
+
+/** Frais de service fixe (doit refléter `frais_service_passager_fcfa` backend). */
+const FRAIS_SERVICE_PASSAGER_FCFA = 100;
 
 export function EnregistrementSuiviFamilial() {
   const { utilisateur } = useAuthentification();
@@ -37,11 +52,21 @@ export function EnregistrementSuiviFamilial() {
   const [gareGuichet, setGareGuichet] = useState<Gare | null>(null);
 
   // Formulaire
+  const [typePassager, setTypePassager] = useState<TypePassager>("enfant");
   const [enfantNom, setEnfantNom] = useState("");
   const [enfantAge, setEnfantAge] = useState("");
   const [enfantSexe, setEnfantSexe] = useState("");
   const [parentNom, setParentNom] = useState("");
-  const [telephoneParent, setTelephoneParent] = useState("");
+  // Enfant : acheteur du ticket. Adulte : numéro propre.
+  const [acheteurNom, setAcheteurNom] = useState("");
+  const [acheteurTel, setAcheteurTel] = useState("");
+  const [telephonePassager, setTelephonePassager] = useState("");
+  // Proche de confiance (obligatoire).
+  const [procheNom, setProcheNom] = useState("");
+  const [procheTelephone, setProcheTelephone] = useState("");
+  // Bagages (1 à 10).
+  const [nombreBagages, setNombreBagages] = useState(1);
+  // Attribution : gares + voyage (+ chauffeur déduit du voyage).
   const [gareDepartId, setGareDepartId] = useState("");
   const [gareArriveeId, setGareArriveeId] = useState("");
   const [voyageId, setVoyageId] = useState("");
@@ -87,32 +112,54 @@ export function EnregistrementSuiviFamilial() {
     };
   }, [utilisateur?.id]);
 
-  const gareParId = useMemo(() => {
-    const index = new Map<string, Gare>();
-    gares.forEach((g) => index.set(g.id, g));
-    return index;
-  }, [gares]);
+  // Voyage sélectionné et chauffeur associé (attribution obligatoire).
+  const voyageSelectionne = useMemo(
+    () => voyages.find((v) => v.id === voyageId) ?? null,
+    [voyages, voyageId],
+  );
+  const chauffeurId = voyageSelectionne?.chauffeur_id ?? null;
 
-  const nombreChiffresTel = telephoneParent.replace(/\D/g, "").length;
-  const ageNombre = enfantAge.trim() === "" ? null : Number(enfantAge.replace(/\D/g, ""));
+  const nombreChiffresTel = (v: string) => v.replace(/\D/g, "").length;
+  const telAcheteurOk = nombreChiffresTel(acheteurTel) >= 6;
+  const telPassagerOk = nombreChiffresTel(telephonePassager) >= 6;
+  const telProcheOk = nombreChiffresTel(procheTelephone) >= 6;
+
+  const ageNombre =
+    enfantAge.trim() === "" ? null : Number(enfantAge.replace(/\D/g, ""));
   const ageValide =
-    ageNombre === null || (Number.isInteger(ageNombre) && ageNombre >= 0 && ageNombre <= 120);
+    ageNombre === null ||
+    (Number.isInteger(ageNombre) && ageNombre >= 0 && ageNombre <= 120);
+
+  // Contacts obligatoires selon le type de passager.
+  const contactsValides =
+    typePassager === "enfant"
+      ? acheteurNom.trim().length >= 2 && telAcheteurOk
+      : telPassagerOk;
 
   const formulaireValide =
     enfantNom.trim().length >= 2 &&
-    nombreChiffresTel >= 6 &&
     ageValide &&
+    contactsValides &&
+    telProcheOk &&
     !!gareDepartId &&
     !!gareArriveeId &&
-    gareDepartId !== gareArriveeId;
+    gareDepartId !== gareArriveeId &&
+    !!voyageId &&
+    !!chauffeurId;
 
   function nouvelEnregistrement() {
     setResultat(null);
+    setTypePassager("enfant");
     setEnfantNom("");
     setEnfantAge("");
     setEnfantSexe("");
     setParentNom("");
-    setTelephoneParent("");
+    setAcheteurNom("");
+    setAcheteurTel("");
+    setTelephonePassager("");
+    setProcheNom("");
+    setProcheTelephone("");
+    setNombreBagages(1);
     setVoyageId("");
     setGareArriveeId("");
     setGareDepartId(gareGuichet?.id ?? "");
@@ -121,6 +168,12 @@ export function EnregistrementSuiviFamilial() {
 
   async function enregistrer() {
     setErreur(null);
+    if (!chauffeurId) {
+      setErreur(
+        "Sélectionnez un voyage affecté à un chauffeur : l'attribution du chauffeur est obligatoire.",
+      );
+      return;
+    }
     setEnregistrement(true);
     try {
       const reponse = await logistiqueAPI.suiviFamilial.creer({
@@ -128,10 +181,21 @@ export function EnregistrementSuiviFamilial() {
         enfant_age: ageNombre,
         enfant_sexe: enfantSexe || null,
         parent_nom: parentNom.trim() || null,
-        telephone_parent: telephoneParent.trim(),
+        telephone_parent:
+          (typePassager === "enfant" ? acheteurTel : telephonePassager).trim() ||
+          null,
+        type_passager: typePassager,
+        telephone_passager:
+          typePassager === "adulte" ? telephonePassager.trim() : null,
+        acheteur_nom: typePassager === "enfant" ? acheteurNom.trim() : null,
+        acheteur_tel: typePassager === "enfant" ? acheteurTel.trim() : null,
+        proche_nom: procheNom.trim() || null,
+        proche_telephone: procheTelephone.trim(),
+        nombre_bagages: nombreBagages,
         gare_depart_id: gareDepartId,
         gare_arrivee_id: gareArriveeId,
-        voyage_id: voyageId || null,
+        voyage_id: voyageId,
+        chauffeur_id: chauffeurId,
       });
       setResultat(reponse);
     } catch (e) {
@@ -145,16 +209,40 @@ export function EnregistrementSuiviFamilial() {
     }
   }
 
-  // ─── Écran de succès : ticket imprimable + lien de suivi ───────────
+  const libellePassager = typePassager === "enfant" ? "de l'enfant" : "du passager";
+
+  // ─── Écran de succès : ticket imprimable + étiquettes sacs + lien de suivi ───
   if (resultat) {
+    const bagages = resultat.suivi.bagages ?? [];
     return (
       <div className="space-y-5 apparition">
-        <Alerte variante="succes" titre="Enfant enregistré — suivi activé">
-          Un SMS de confirmation a été envoyé au parent
+        <Alerte variante="succes" titre="Passager enregistré — suivi activé">
+          Un SMS de confirmation a été envoyé ({resultat.suivi.telephone_parent}). La
+          famille sera prévenue par SMS au départ, à l&apos;approche puis à l&apos;arrivée.
           {" "}
-          ({resultat.suivi.telephone_parent}). Le parent sera prévenu par SMS
-          au départ puis à l&apos;arrivée de l&apos;enfant.
+          <strong>
+            Frais de service : {formaterFcfa(resultat.suivi.frais_service_fcfa)}.
+          </strong>
         </Alerte>
+
+        {bagages.length > 0 && (
+          <Carte
+            titre={`${bagages.length} étiquette(s) bagage`}
+            description="Une étiquette QR par sac — à imprimer et attacher à chaque sac (vérification anti-fraude à l'arrivée)."
+          >
+            <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {bagages.map((b) => (
+                <li
+                  key={b.id}
+                  className="flex items-center justify-between rounded-lg border border-ardoise-clair/30 px-3 py-2 text-sm"
+                >
+                  <span className="font-medium text-ardoise">{b.numero_serie}</span>
+                  <code className="text-xs text-ardoise-clair">{b.code_clair}</code>
+                </li>
+              ))}
+            </ul>
+          </Carte>
+        )}
 
         <TicketSuiviFamilialImprimable
           ticket={resultat.ticket}
@@ -163,7 +251,7 @@ export function EnregistrementSuiviFamilial() {
 
         <div className="no-print flex flex-wrap gap-3">
           <Bouton variante="primaire" onClick={nouvelEnregistrement}>
-            <IconeIdentite className="h-4 w-4" /> Enregistrer un autre enfant
+            <IconeIdentite className="h-4 w-4" /> Enregistrer un autre passager
           </Bouton>
           <a
             href={`/suivi/${encodeURIComponent(resultat.ticket.code_clair)}`}
@@ -190,150 +278,252 @@ export function EnregistrementSuiviFamilial() {
           <p className="italic text-ardoise-clair">Chargement des gares…</p>
         </Carte>
       ) : (
-        <Carte
-          titre="Enfant voyageant seul"
-          description="Renseignez l'enfant et le parent à prévenir. Un SMS partira au départ puis à l'arrivée."
-        >
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <ChampSaisie
-                libelle="Nom complet de l'enfant"
-                required
-                value={enfantNom}
-                onChange={(e) => setEnfantNom(e.target.value)}
-                placeholder="Ex : Awa Traoré"
-              />
-              <ChampSaisie
-                libelle="Âge de l'enfant (années)"
-                value={enfantAge}
-                onChange={(e) => setEnfantAge(e.target.value)}
-                inputMode="numeric"
-                placeholder="Ex : 9"
-                erreur={ageValide ? undefined : "Âge invalide (0 à 120)"}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-ardoise">
-                Sexe de l&apos;enfant
-              </label>
-              <select
-                className="champ-saisie"
-                value={enfantSexe}
-                onChange={(e) => setEnfantSexe(e.target.value)}
-              >
-                <option value="">— Non précisé —</option>
-                <option value="M">Garçon</option>
-                <option value="F">Fille</option>
-              </select>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <ChampSaisie
-                libelle="Nom du parent / tuteur"
-                value={parentNom}
-                onChange={(e) => setParentNom(e.target.value)}
-                placeholder="Ex : Ibrahim Traoré"
-              />
-              <ChampSaisie
-                libelle="Téléphone du parent"
-                required
-                value={telephoneParent}
-                onChange={(e) => setTelephoneParent(e.target.value)}
-                inputMode="tel"
-                placeholder="Ex : 77 123 45 67"
-                aide="Au moins 6 chiffres — c'est sur ce numéro que partent les SMS."
-                erreur={
-                  nombreChiffresTel >= 6 || nombreChiffresTel === 0
-                    ? undefined
-                    : "Au moins 6 chiffres"
-                }
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <>
+          <Carte
+            titre="Passager & contacts"
+            description="Renseignez le passager, l'acheteur du ticket (pour un enfant) et un proche de confiance à prévenir."
+          >
+            <div className="space-y-4">
+              {/* Type de passager */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-ardoise">
-                  Gare de départ <span className="text-terre">*</span>
+                  Type de passager <span className="text-terre">*</span>
                 </label>
-                <select
-                  className="champ-saisie"
-                  value={gareDepartId}
-                  onChange={(e) => setGareDepartId(e.target.value)}
-                >
-                  <option value="">— Choisir —</option>
-                  {gares.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.nom} ({g.ville})
-                    </option>
+                <div className="flex gap-2">
+                  {(["enfant", "adulte"] as TypePassager[]).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setTypePassager(t)}
+                      className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                        typePassager === t
+                          ? "border-lagune bg-lagune-teinte text-lagune"
+                          : "border-ardoise/20 bg-white text-ardoise hover:bg-lagune-teinte/40"
+                      }`}
+                    >
+                      {t === "enfant" ? "Enfant" : "Adulte"}
+                    </button>
                   ))}
-                </select>
-                {gareGuichet && gareDepartId === gareGuichet.id && (
-                  <p className="text-xs italic text-ardoise-clair">
-                    Pré-rempli avec votre gare de rattachement.
-                  </p>
-                )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <ChampSaisie
+                  libelle={
+                    typePassager === "enfant"
+                      ? "Nom complet de l'enfant"
+                      : "Nom complet du passager"
+                  }
+                  required
+                  value={enfantNom}
+                  onChange={(e) => setEnfantNom(e.target.value)}
+                  placeholder={
+                    typePassager === "enfant" ? "Ex : Awa Traoré" : "Ex : Moussa Diop"
+                  }
+                />
+                <ChampSaisie
+                  libelle="Âge (années)"
+                  value={enfantAge}
+                  onChange={(e) => setEnfantAge(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="Ex : 9"
+                  erreur={ageValide ? undefined : "Âge invalide (0 à 120)"}
+                />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-ardoise">
-                  Gare d&apos;arrivée <span className="text-terre">*</span>
-                </label>
+                <label className="text-sm font-medium text-ardoise">Sexe</label>
                 <select
                   className="champ-saisie"
-                  value={gareArriveeId}
-                  onChange={(e) => setGareArriveeId(e.target.value)}
+                  value={enfantSexe}
+                  onChange={(e) => setEnfantSexe(e.target.value)}
                 >
-                  <option value="">— Choisir —</option>
-                  {gares
-                    .filter((g) => g.id !== gareDepartId)
-                    .map((g) => (
+                  <option value="">— Non précisé —</option>
+                  <option value="M">Masculin</option>
+                  <option value="F">Féminin</option>
+                </select>
+              </div>
+
+              <ChampSaisie
+                libelle={
+                  typePassager === "enfant"
+                    ? "Nom du parent / tuteur (optionnel)"
+                    : "Nom du proche contacté (optionnel)"
+                }
+                value={parentNom}
+                onChange={(e) => setParentNom(e.target.value)}
+              />
+
+              {/* Contacts selon le type */}
+              {typePassager === "enfant" ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <ChampSaisie
+                    libelle="Nom de l'acheteur du ticket"
+                    required
+                    value={acheteurNom}
+                    onChange={(e) => setAcheteurNom(e.target.value)}
+                    placeholder="Ex : Ibrahim Traoré"
+                    aide="La personne qui a payé le voyage de l'enfant."
+                  />
+                  <ChampSaisie
+                    libelle="Téléphone de l'acheteur"
+                    required
+                    value={acheteurTel}
+                    onChange={(e) => setAcheteurTel(e.target.value)}
+                    inputMode="tel"
+                    placeholder="Ex : 77 123 45 67"
+                    erreur={
+                      telAcheteurOk || acheteurTel === "" ? undefined : "Au moins 6 chiffres"
+                    }
+                  />
+                </div>
+              ) : (
+                <ChampSaisie
+                  libelle="Téléphone du passager"
+                  required
+                  value={telephonePassager}
+                  onChange={(e) => setTelephonePassager(e.target.value)}
+                  inputMode="tel"
+                  placeholder="Ex : 77 123 45 67"
+                  erreur={
+                    telPassagerOk || telephonePassager === ""
+                      ? undefined
+                      : "Au moins 6 chiffres"
+                  }
+                />
+              )}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <ChampSaisie
+                  libelle="Nom du proche de confiance"
+                  value={procheNom}
+                  onChange={(e) => setProcheNom(e.target.value)}
+                  placeholder="Ex : Fatou Traoré"
+                />
+                <ChampSaisie
+                  libelle="Téléphone du proche de confiance"
+                  required
+                  value={procheTelephone}
+                  onChange={(e) => setProcheTelephone(e.target.value)}
+                  inputMode="tel"
+                  placeholder="Ex : 77 987 65 43"
+                  aide="Prévenu en plus du responsable (départ, approche, arrivée)."
+                  erreur={
+                    telProcheOk || procheTelephone === "" ? undefined : "Au moins 6 chiffres"
+                  }
+                />
+              </div>
+            </div>
+          </Carte>
+
+          <Carte
+            titre="Trajet & attribution"
+            description="Le passager doit être lié à un chauffeur précis et à un voyage précis."
+          >
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-ardoise">
+                    Gare de départ <span className="text-terre">*</span>
+                  </label>
+                  <select
+                    className="champ-saisie"
+                    value={gareDepartId}
+                    onChange={(e) => setGareDepartId(e.target.value)}
+                  >
+                    <option value="">— Choisir —</option>
+                    {gares.map((g) => (
                       <option key={g.id} value={g.id}>
                         {g.nom} ({g.ville})
                       </option>
                     ))}
-                </select>
-              </div>
-            </div>
+                  </select>
+                  {gareGuichet && gareDepartId === gareGuichet.id && (
+                    <p className="text-xs italic text-ardoise-clair">
+                      Pré-rempli avec votre gare de rattachement.
+                    </p>
+                  )}
+                </div>
 
-            {voyages.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-ardoise">
+                    Gare d&apos;arrivée <span className="text-terre">*</span>
+                  </label>
+                  <select
+                    className="champ-saisie"
+                    value={gareArriveeId}
+                    onChange={(e) => setGareArriveeId(e.target.value)}
+                  >
+                    <option value="">— Choisir —</option>
+                    {gares
+                      .filter((g) => g.id !== gareDepartId)
+                      .map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.nom} ({g.ville})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-ardoise">
-                  Voyage (optionnel)
+                  Voyage / chauffeur <span className="text-terre">*</span>
                 </label>
                 <select
                   className="champ-saisie"
                   value={voyageId}
                   onChange={(e) => setVoyageId(e.target.value)}
                 >
-                  <option value="">— Affectation ultérieure —</option>
+                  <option value="">— Choisir un voyage —</option>
                   {voyages.map((v) => (
-                    <option key={v.id} value={v.id}>
+                    <option key={v.id} value={v.id} disabled={!v.chauffeur_id}>
                       {new Intl.DateTimeFormat("fr-FR", {
                         dateStyle: "short",
                         timeStyle: "short",
                       }).format(new Date(v.date_depart))}
-                      {v.vehicule_immatriculation
-                        ? ` · ${v.vehicule_immatriculation}`
-                        : ""}
+                      {v.vehicule_immatriculation ? ` · ${v.vehicule_immatriculation}` : ""}
+                      {v.chauffeur_nom
+                        ? ` · chauffeur : ${v.chauffeur_nom}`
+                        : " · (aucun chauffeur affecté)"}
                     </option>
                   ))}
                 </select>
+                {voyageSelectionne && !chauffeurId && (
+                  <p className="text-xs font-medium text-terre">
+                    Ce voyage n&apos;a pas de chauffeur affecté — choisissez-en un autre.
+                  </p>
+                )}
+                <p className="text-xs italic text-ardoise-clair">
+                  Le chauffeur est attribué automatiquement d&apos;après le voyage sélectionné.
+                </p>
               </div>
-            )}
 
-            <div className="flex justify-end">
-              <Bouton
-                variante="succes"
-                chargement={enregistrement}
-                disabled={enregistrement || !formulaireValide}
-                onClick={enregistrer}
-              >
-                <IconeCheck className="h-4 w-4" /> Enregistrer &amp; activer le suivi
-              </Bouton>
+              <ControleurBagages valeur={nombreBagages} onChange={setNombreBagages} />
+
+              <div className="flex flex-col gap-3 border-t border-ardoise-clair/20 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-ardoise">
+                  Frais de service :{" "}
+                  <strong className="text-lagune">
+                    {formaterFcfa(FRAIS_SERVICE_PASSAGER_FCFA)}
+                  </strong>{" "}
+                  <span className="text-xs text-ardoise-clair">
+                    (fixe par passager, quel que soit le nombre de sacs)
+                  </span>
+                </p>
+                <Bouton
+                  variante="succes"
+                  chargement={enregistrement}
+                  disabled={enregistrement || !formulaireValide}
+                  onClick={enregistrer}
+                >
+                  <IconeCheck className="h-4 w-4" /> Enregistrer &amp; activer le suivi{" "}
+                  {libellePassager}
+                </Bouton>
+              </div>
             </div>
-          </div>
-        </Carte>
+          </Carte>
+        </>
       )}
     </div>
   );

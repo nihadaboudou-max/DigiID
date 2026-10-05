@@ -163,6 +163,12 @@ export default function PageSuiviPublic() {
                         : ""}
                     </p>
                   )}
+                  {suivi.type === "enfant" && suivi.enfant && (
+                    <p className="text-xs text-ardoise-clair">
+                      {suivi.enfant.nombre_bagages} sac
+                      {suivi.enfant.nombre_bagages > 1 ? "s" : ""}
+                    </p>
+                  )}
                 </div>
                 <Badge
                   variante={VARIANTES_STATUT[suivi.statut] ?? "neutre"}
@@ -195,6 +201,9 @@ export default function PageSuiviPublic() {
                 <p className="mt-2 text-xs text-ardoise-clair">
                   {suivi.colis.nombre_articles} article
                   {suivi.colis.nombre_articles > 1 ? "s" : ""}
+                  {" · "}
+                  {suivi.colis.nombre_bagages} sac
+                  {suivi.colis.nombre_bagages > 1 ? "s" : ""}
                   {suivi.colis.description ? ` · ${suivi.colis.description}` : ""}
                 </p>
               )}

@@ -28,6 +28,11 @@ configuration et se contente de les appliquer.
 
 Le frais n'est prélevé **qu'une seule fois par colis** : c'est le service
 paiement qui l'impose (contrôle applicatif + index unique partiel en base).
+
+**Tarification fixe passager/enfant (P0 ajusté)** : le service de traçabilité et
+de suivi familial est facturé **strictement 100 FCFA par passager/enfant**, quel
+que soit le nombre de bagages transportés (le nombre de sacs sert uniquement à
+la traçabilité et à la vérification anti-fraude à l'arrivée).
 """
 from dataclasses import dataclass
 
@@ -88,6 +93,14 @@ def frais_service(nombre_articles: int) -> FraisService:
         part_receveur_fcfa=part_receveur,
         part_plateforme_fcfa=frais - part_receveur,
     )
+
+
+def frais_service_passager() -> int:
+    """Frais de service **fixe** d'un passager/enfant : 100 FCFA par défaut.
+
+    Ce montant ne dépend **pas** du nombre de bagages (traçabilité seule).
+    """
+    return int(parametres.frais_service_passager_fcfa or 100)
 
 
 def bareme() -> list[dict]:

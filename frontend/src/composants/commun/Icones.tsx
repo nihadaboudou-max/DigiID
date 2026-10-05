@@ -119,6 +119,39 @@ export const IconeCheck = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+/** Plus (+) — compteur de sacs (P0 ajusté). */
+export const IconePlus = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...proprietesDefaut} {...p}>
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
+/** Moins (−) — compteur de sacs (P0 ajusté). */
+export const IconeMoins = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...proprietesDefaut} {...p}>
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
+/** Camion / véhicule — trajet et chauffeur (P0 ajusté). */
+export const IconeCamion = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...proprietesDefaut} {...p}>
+    <rect x="1" y="6" width="13" height="10" rx="1" />
+    <path d="M14 9h4l3 3v4h-7z" />
+    <circle cx="6" cy="18" r="2" />
+    <circle cx="18" cy="18" r="2" />
+  </svg>
+);
+
+/** Cloche / pré-alerte — « Prévenir de l'approche » (P0 ajusté). */
+export const IconeCloche = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...proprietesDefaut} {...p}>
+    <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+    <path d="M13.73 21a2 2 0 01-3.46 0" />
+  </svg>
+);
+
 export const IconeFlecheRetour = (p: SVGProps<SVGSVGElement>) => (
   <svg {...proprietesDefaut} {...p}>
     <line x1="19" y1="12" x2="5" y2="12" />

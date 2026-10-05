@@ -12,14 +12,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modeles import (
     Gare, Ligne, Vehicule, Voyage, ActeurLogistique, Domaine, Utilisateur,
     Ticket, Colis, ColisEvenement,
-    SuiviFamilial, SuiviFamilialEvenement, NotificationLogistique,
+    SuiviFamilial, SuiviFamilialEvenement, NotificationLogistique, Bagage,
 )
 from src.modules.logistique import schemas
-from src.modules.qr_dynamique.service import generer_token_durable
+from src.modules.qr_dynamique.service import (
+    generer_token_durable,
+    construire_url_qr_durable,
+)
 from src.noyau.notification import (
     envoyer_sms,
     construire_message_colis,
     construire_message_suivi_familial,
+    construire_message_pre_alerte,
     masquer_telephone,
 )
 
@@ -46,6 +50,46 @@ async def _paginer(session: AsyncSession, requete, page: int, par_page: int):
         requete.offset((page - 1) * par_page).limit(par_page)
     )
     return list(resultat.scalars().all()), total
+
+
+async def _creer_bagages(
+    session: AsyncSession,
+    nombre: int,
+    gare: Gare,
+    *,
+    suivi_familial_id: UUID | None = None,
+    colis_id: UUID | None = None,
+) -> list[Bagage]:
+    """Génère une **étiquette QR par sac** (1 à 10) en une seule fois.
+
+    Chaque sac reçoit un ``Ticket`` (``type=BAGAGE``) et un numéro de série
+    lisible « Sac i/N ». Le nombre de sacs n'a **aucun impact** sur le prix.
+    """
+    total = max(1, min(int(nombre), 10))
+    bagages: list[Bagage] = []
+    for position in range(1, total + 1):
+        bagage = Bagage(
+            suivi_familial_id=suivi_familial_id,
+            colis_id=colis_id,
+            numero_serie=f"Sac {position}/{total}",
+            position=position,
+            nombre_total=total,
+            statut="attendu",
+        )
+        session.add(bagage)
+        await session.flush()  # -> bagage.id
+        ticket = Ticket(
+            code_clair=await _generer_code_clair(session, gare, "SAC-"),
+            qr_token=generer_token_durable(str(bagage.id)),
+            type="BAGAGE",
+            reference_id=bagage.id,
+            statut="emis",
+        )
+        session.add(ticket)
+        await session.flush()
+        bagage.ticket_id = ticket.id
+        bagages.append(bagage)
+    return bagages
 
 
 async def _debiter_compte_prepaye_agent(
@@ -370,14 +414,18 @@ async def creer_colis(
                             detail="Les gares de départ et d'arrivée doivent être différentes")
     gare_depart = await _verifier_existe(session, Gare, donnees.gare_depart_id, "Gare de départ")
     await _verifier_existe(session, Gare, donnees.gare_arrivee_id, "Gare d'arrivée")
-    if donnees.voyage_id is not None:
-        await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
+    # Attribution obligatoire : chauffeur précis + voyage précis.
+    voyage = await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
+    chauffeur = await _verifier_existe(session, Utilisateur, donnees.chauffeur_id, "Chauffeur")
+    if voyage.chauffeur_id and voyage.chauffeur_id != chauffeur.id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Le chauffeur indiqué ne correspond pas au chauffeur du voyage",
+        )
     if donnees.expediteur_id is not None:
         await _verifier_existe(session, Utilisateur, donnees.expediteur_id, "Expéditeur")
     if donnees.receveur_id is not None:
         await _verifier_existe(session, Utilisateur, donnees.receveur_id, "Receveur")
-    if donnees.chauffeur_id is not None:
-        await _verifier_existe(session, Utilisateur, donnees.chauffeur_id, "Chauffeur")
 
     expediteur_id = donnees.expediteur_id or utilisateur.id
     receveur_id = donnees.receveur_id or utilisateur.id
@@ -392,6 +440,7 @@ async def creer_colis(
         poids_kg=donnees.poids_kg,
         valeur_fcfa=donnees.valeur_fcfa,
         nombre_articles=donnees.nombre_articles,
+        nombre_bagages=max(1, min(int(donnees.nombre_bagages or 1), 10)),
         gare_depart_id=donnees.gare_depart_id,
         gare_arrivee_id=donnees.gare_arrivee_id,
         voyage_id=donnees.voyage_id,
@@ -402,6 +451,11 @@ async def creer_colis(
     )
     session.add(colis)
     await session.flush()  # -> colis.id disponible
+
+    # Étiquettes QR : une par sac (traçabilité + anti-fraude à l'arrivée).
+    await _creer_bagages(
+        session, colis.nombre_bagages, gare_depart, colis_id=colis.id
+    )
 
     code_clair = await _generer_code_clair(session, gare_depart)
     ticket = Ticket(
@@ -449,6 +503,36 @@ async def obtenir_ticket_du_colis(
     if colis.ticket_id is not None:
         return await session.get(Ticket, colis.ticket_id)
     return await session.scalar(select(Ticket).where(Ticket.reference_id == colis.id))
+
+
+async def lister_bagages(
+    session: AsyncSession,
+    *,
+    suivi_familial_id: UUID | None = None,
+    colis_id: UUID | None = None,
+) -> list[Bagage]:
+    """Étiquettes QR des sacs d'un passager ou d'un colis (par position)."""
+    if suivi_familial_id is None and colis_id is None:
+        return []
+    requete = select(Bagage)
+    if suivi_familial_id is not None:
+        requete = requete.where(Bagage.suivi_familial_id == suivi_familial_id)
+    if colis_id is not None:
+        requete = requete.where(Bagage.colis_id == colis_id)
+    requete = requete.order_by(Bagage.position.asc())
+    bagages = list((await session.execute(requete)).scalars().all())
+    for bagage in bagages:
+        ticket = await session.get(Ticket, bagage.ticket_id) if bagage.ticket_id else None
+        bagage.code_clair = ticket.code_clair if ticket else None
+        bagage.qr_code_url = construire_url_qr_durable(ticket.qr_token) if ticket else None
+    return bagages
+
+
+async def obtenir_bagage_par_ticket(session: AsyncSession, ticket: Ticket) -> Bagage | None:
+    """Retrouve le sac porté par un ticket ``BAGAGE`` (pré-alerte / vérif)."""
+    if ticket.type != "BAGAGE" or ticket.reference_id is None:
+        return None
+    return await session.get(Bagage, ticket.reference_id)
 
 
 async def obtenir_colis_par_code(
@@ -767,8 +851,14 @@ async def creer_suivi_familial(
                             detail="Les gares de départ et d'arrivée doivent être différentes")
     gare_depart = await _verifier_existe(session, Gare, donnees.gare_depart_id, "Gare de départ")
     await _verifier_existe(session, Gare, donnees.gare_arrivee_id, "Gare d'arrivée")
-    if donnees.voyage_id is not None:
-        await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
+    # Attribution obligatoire : chauffeur précis + voyage précis.
+    voyage = await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
+    chauffeur = await _verifier_existe(session, Utilisateur, donnees.chauffeur_id, "Chauffeur")
+    if voyage.chauffeur_id and voyage.chauffeur_id != chauffeur.id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Le chauffeur indiqué ne correspond pas au chauffeur du voyage",
+        )
     if donnees.parent_id is not None:
         await _verifier_existe(session, Utilisateur, donnees.parent_id, "Parent")
 
@@ -778,15 +868,28 @@ async def creer_suivi_familial(
         enfant_sexe=donnees.enfant_sexe,
         parent_nom=(donnees.parent_nom or "").strip() or None,
         telephone_parent=donnees.telephone_parent.strip(),
+        type_passager=donnees.type_passager,
+        telephone_passager=(donnees.telephone_passager or "").strip() or None,
+        acheteur_nom=(donnees.acheteur_nom or "").strip() or None,
+        acheteur_tel=(donnees.acheteur_tel or "").strip() or None,
+        proche_nom=(donnees.proche_nom or "").strip() or None,
+        proche_telephone=(donnees.proche_telephone or "").strip() or None,
+        nombre_bagages=max(1, min(int(donnees.nombre_bagages or 1), 10)),
         parent_id=donnees.parent_id,
         gare_depart_id=donnees.gare_depart_id,
         gare_arrivee_id=donnees.gare_arrivee_id,
         voyage_id=donnees.voyage_id,
+        chauffeur_id=donnees.chauffeur_id,
         statut="enregistre",
         enregistre_par_id=utilisateur.id,
     )
     session.add(suivi)
     await session.flush()  # -> suivi.id disponible
+
+    # Étiquettes QR : une par sac (traçabilité + anti-fraude à l'arrivée).
+    await _creer_bagages(
+        session, suivi.nombre_bagages, gare_depart, suivi_familial_id=suivi.id
+    )
 
     code_clair = await _generer_code_clair(session, gare_depart, "ENF-")
     ticket = Ticket(
@@ -810,21 +913,30 @@ async def creer_suivi_familial(
     )
     session.add(evenement)
 
-    # SMS de confirmation : le parent reçoit le code de suivi public.
+    # SMS de confirmation : le responsable + le proche de confiance reçoivent le
+    # code de suivi public.
+    quoi = "l'enfant" if suivi.type_passager == "enfant" else "le passager"
     message = (
-        f"DigiID — Suivi activé pour {suivi.enfant_nom}. "
+        f"DigiID — Suivi activé pour {quoi} {suivi.enfant_nom}. "
         f"Code de suivi : {code_clair}. "
-        "Vous recevrez un SMS au départ puis à l'arrivée."
+        "Vous recevrez un SMS au départ, avant l'arrivée puis à l'arrivée."
     )
-    _ajouter_notification(
-        session,
-        type_cible="suivi_familial",
-        cible_id=suivi.id,
-        type_evenement="enregistrement",
-        destinataire_role="parent",
-        telephone=suivi.telephone_parent,
-        message=message,
-    )
+    for role, telephone in (
+        ("parent" if suivi.type_passager == "enfant" else "passager", suivi.telephone_parent),
+        ("acheteur", suivi.acheteur_tel),
+        ("proche", suivi.proche_telephone),
+    ):
+        if not telephone:
+            continue
+        _ajouter_notification(
+            session,
+            type_cible="suivi_familial",
+            cible_id=suivi.id,
+            type_evenement="enregistrement",
+            destinataire_role=role,
+            telephone=telephone,
+            message=message,
+        )
 
     await session.commit()
     await session.refresh(suivi)
@@ -1007,6 +1119,245 @@ async def enregistrer_evenement_suivi(
     }
 
 
+# ─── Actions groupées du chauffeur (passagers ET colis) ─────────────
+
+async def _colis_du_voyage(session: AsyncSession, voyage_id: UUID) -> list[Colis]:
+    resultat = await session.execute(select(Colis).where(Colis.voyage_id == voyage_id))
+    return list(resultat.scalars().all())
+
+
+async def _passagers_du_voyage(
+    session: AsyncSession, voyage_id: UUID
+) -> list[SuiviFamilial]:
+    resultat = await session.execute(
+        select(SuiviFamilial).where(SuiviFamilial.voyage_id == voyage_id)
+    )
+    return list(resultat.scalars().all())
+
+
+async def valider_depart_voyage(
+    session: AsyncSession, voyage_id: UUID, utilisateur: Utilisateur
+) -> dict:
+    """« Valider le Départ » : marque **tous** les passagers et colis d'un clic.
+
+    Un seul bouton côté chauffeur enregistre le départ de tous les colis du
+    voyage **et** fait passer tous les passagers en route (SMS au parent).
+    """
+    voyage = await obtenir_voyage(session, voyage_id)
+    maintenant = datetime.now(timezone.utc)
+
+    nb_colis = 0
+    for colis in await _colis_du_voyage(session, voyage_id):
+        if colis.statut != "enregistre":
+            continue
+        session.add(ColisEvenement(
+            colis_id=colis.id, type_evenement="depart", acteur_id=utilisateur.id,
+            gare_id=colis.gare_depart_id, horodatage=maintenant,
+        ))
+        colis.statut = "en_transit"
+        ticket = await obtenir_ticket_du_colis(session, colis)
+        if ticket is not None:
+            ticket.statut = "en_transit"
+        await _notifier_scan_colis(session, colis, ticket, "depart", colis.gare_depart_id)
+        nb_colis += 1
+
+    nb_passagers = 0
+    for suivi in await _passagers_du_voyage(session, voyage_id):
+        if suivi.statut != "enregistre":
+            continue
+        session.add(SuiviFamilialEvenement(
+            suivi_familial_id=suivi.id, type_evenement="depart",
+            acteur_id=utilisateur.id, gare_id=suivi.gare_depart_id,
+            horodatage=maintenant,
+        ))
+        suivi.statut = "en_route"
+        await _notifier_suivi(session, suivi, "depart", suivi.gare_depart_id)
+        nb_passagers += 1
+
+    if voyage.statut == "planifie":
+        voyage.statut = "en_cours"
+    await session.commit()
+    return {
+        "type_action": "depart",
+        "voyage_id": voyage_id,
+        "nb_colis": nb_colis,
+        "nb_passagers": nb_passagers,
+        "message": (
+            f"Départ validé : {nb_passagers} passager(s) et {nb_colis} colis en route."
+        ),
+    }
+
+
+async def marquer_arrivee_voyage(
+    session: AsyncSession,
+    voyage_id: UUID,
+    utilisateur: Utilisateur,
+    gare_id: UUID | None = None,
+    localisation: str | None = None,
+) -> dict:
+    """« Arrivés » en lot : tous les passagers et colis d'une même gare d'un clic.
+
+    Sans ``gare_id``, on marque arrivés tous les colis et passagers du voyage.
+    """
+    await obtenir_voyage(session, voyage_id)
+    maintenant = datetime.now(timezone.utc)
+    lieu = await _libelle_gare(session, gare_id)
+
+    nb_colis = 0
+    for colis in await _colis_du_voyage(session, voyage_id):
+        if colis.statut not in ("enregistre", "en_transit"):
+            continue
+        if gare_id is not None and colis.gare_arrivee_id != gare_id:
+            continue
+        session.add(ColisEvenement(
+            colis_id=colis.id, type_evenement="arrivee", acteur_id=utilisateur.id,
+            gare_id=gare_id or colis.gare_arrivee_id, localisation=localisation,
+            horodatage=maintenant,
+        ))
+        colis.statut = "arrive"
+        ticket = await obtenir_ticket_du_colis(session, colis)
+        await _notifier_scan_colis(
+            session, colis, ticket, "arrivee", gare_id or colis.gare_arrivee_id
+        )
+        nb_colis += 1
+
+    nb_passagers = 0
+    for suivi in await _passagers_du_voyage(session, voyage_id):
+        if suivi.statut not in ("enregistre", "en_route"):
+            continue
+        if gare_id is not None and suivi.gare_arrivee_id != gare_id:
+            continue
+        session.add(SuiviFamilialEvenement(
+            suivi_familial_id=suivi.id, type_evenement="arrivee",
+            acteur_id=utilisateur.id, gare_id=gare_id or suivi.gare_arrivee_id,
+            localisation=localisation, horodatage=maintenant,
+        ))
+        suivi.statut = "arrive"
+        await _notifier_suivi(
+            session, suivi, "arrivee", gare_id or suivi.gare_arrivee_id
+        )
+        nb_passagers += 1
+
+    await session.commit()
+    return {
+        "type_action": "arrivee",
+        "voyage_id": voyage_id,
+        "nb_colis": nb_colis,
+        "nb_passagers": nb_passagers,
+        "message": (
+            f"Arrivée enregistrée : {nb_passagers} passager(s) et {nb_colis} colis.{lieu and ' ' + lieu or ''}"
+        ),
+    }
+
+
+async def envoyer_pre_alerte_voyage(
+    session: AsyncSession,
+    voyage_id: UUID,
+    utilisateur: Utilisateur,
+    delai_minutes: int | None = None,
+) -> dict:
+    """« Prévenir de l'approche » : SMS de pré-alerte aux familles et destinataires.
+
+    ~45 min / 1h avant l'arrivée, un seul clic prévient : les passagers, leurs
+    proches de confiance (et l'acheteur pour un enfant) **ainsi que** les
+    destinataires des colis, pour qu'ils se rendent à la gare à temps.
+    """
+    await obtenir_voyage(session, voyage_id)
+    nb_sms = 0
+    nb_passagers = 0
+    nb_colis = 0
+
+    for colis in await _colis_du_voyage(session, voyage_id):
+        if colis.statut in ("livre", "annule"):
+            continue
+        ticket = await obtenir_ticket_du_colis(session, colis)
+        lieu = await _libelle_gare(session, colis.gare_arrivee_id)
+        message = construire_message_pre_alerte(
+            "colis", ticket.code_clair if ticket else "", lieu, delai_minutes
+        )
+        for role, telephone in (
+            ("destinataire", colis.destinataire_tel),
+            ("expediteur", colis.expediteur_tel),
+        ):
+            if not telephone:
+                continue
+            _ajouter_notification(
+                session, type_cible="colis", cible_id=colis.id,
+                type_evenement="pre_alerte", destinataire_role=role,
+                telephone=telephone, message=message,
+            )
+            nb_sms += 1
+        nb_colis += 1
+
+    for suivi in await _passagers_du_voyage(session, voyage_id):
+        if suivi.statut in ("arrive", "annule"):
+            continue
+        ticket = await obtenir_ticket_du_suivi(session, suivi)
+        lieu = await _libelle_gare(session, suivi.gare_arrivee_id)
+        message = construire_message_pre_alerte(
+            "passager", ticket.code_clair if ticket else "", lieu, delai_minutes
+        )
+        for role, telephone in (
+            ("parent" if suivi.type_passager == "enfant" else "passager", suivi.telephone_parent),
+            ("acheteur", suivi.acheteur_tel),
+            ("proche", suivi.proche_telephone),
+        ):
+            if not telephone:
+                continue
+            _ajouter_notification(
+                session, type_cible="suivi_familial", cible_id=suivi.id,
+                type_evenement="pre_alerte", destinataire_role=role,
+                telephone=telephone, message=message,
+            )
+            nb_sms += 1
+        suivi.pre_alerte_envoyee = True
+        nb_passagers += 1
+
+    await session.commit()
+    return {
+        "voyage_id": voyage_id,
+        "nb_sms": nb_sms,
+        "nb_passagers": nb_passagers,
+        "nb_colis": nb_colis,
+        "message": (
+            f"Pré-alerte envoyée : {nb_sms} SMS ({nb_passagers} passager(s), "
+            f"{nb_colis} colis)."
+        ),
+    }
+
+
+async def _notifier_suivi(
+    session: AsyncSession,
+    suivi: SuiviFamilial,
+    type_evenement: str,
+    gare_id: UUID | None,
+) -> None:
+    """Prévient par SMS le responsable ET le proche de confiance d'un passager."""
+    if type_evenement == "depart" and suivi.sms_depart_envoye:
+        return
+    if type_evenement == "arrivee" and suivi.sms_arrivee_envoye:
+        return
+    lieu = await _libelle_gare(session, gare_id)
+    message = construire_message_suivi_familial(
+        suivi.enfant_nom, type_evenement, lieu, suivi.enfant_age
+    )
+    for role, telephone in (
+        ("parent" if suivi.type_passager == "enfant" else "passager", suivi.telephone_parent),
+        ("proche", suivi.proche_telephone),
+    ):
+        if not telephone:
+            continue
+        _ajouter_notification(
+            session, type_cible="suivi_familial", cible_id=suivi.id,
+            type_evenement=type_evenement, destinataire_role=role,
+            telephone=telephone, message=message,
+        )
+    if type_evenement == "depart":
+        suivi.sms_depart_envoye = True
+    elif type_evenement == "arrivee":
+        suivi.sms_arrivee_envoye = True
+
+
 # ─── Suivi public (page /suivi/[code], sans connexion) ───────────────
 
 async def _noms_gares(
@@ -1084,6 +1435,7 @@ async def _suivi_public_colis(
             description=colis.description,
             poids_kg=colis.poids_kg,
             nombre_articles=colis.nombre_articles,
+            nombre_bagages=colis.nombre_bagages,
         ),
         evenements=_evenements_publics(evenements, noms),
         notifications=_notifications_publiques(notifications),
@@ -1119,6 +1471,8 @@ async def _suivi_public_enfant(
             enfant_age=suivi.enfant_age,
             enfant_sexe=suivi.enfant_sexe,
             parent_nom=suivi.parent_nom,
+            type_passager=suivi.type_passager,
+            nombre_bagages=suivi.nombre_bagages,
         ),
         evenements=_evenements_publics(evenements, noms),
         notifications=_notifications_publiques(notifications),

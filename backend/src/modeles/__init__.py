@@ -46,6 +46,7 @@ from src.modeles.logistique import (
     SuiviFamilial, STATUTS_SUIVI_FAMILIAL,
     SuiviFamilialEvenement, TYPES_EVENEMENT_SUIVI,
     NotificationLogistique, CANAUX_NOTIFICATION, TYPES_CIBLE_NOTIFICATION,
+    Bagage, STATUTS_BAGAGE,
 )
 from src.modeles.paiement import (
     Portefeuille, DEVISES,
@@ -126,6 +127,8 @@ __all__ = [
     "NotificationLogistique",
     "CANAUX_NOTIFICATION",
     "TYPES_CIBLE_NOTIFICATION",
+    "Bagage",
+    "STATUTS_BAGAGE",
     "Portefeuille",
     "DEVISES",
     "MouvementPortefeuille",

@@ -31,9 +31,10 @@
 | **S5** | Accessibilité v1 : sélecteur 4 langues + `BoutonVocal` + audios démo ✅ | 🔴 P0 | S3 | M |
 | **S6** | Paiement minimal : commission + wallet + espèces / 1 opérateur (mock) ✅ | 🔴 P0 | S2 | M |
 | **S7** | Suivi public (colis + familial) + SMS ✅ | 🔴 P0 | S2 | M |
+| **P0+** | Correctifs revue : passagers, bagages, attribution chauffeur, actions groupées ✅ | 🔴 P0 | S2, S7 | M |
 | | **➜ FIN PROTOTYPE MÉMOIRE (démontrable)** | | | |
 | **S8** | Refonte documents « 1 document = 1 table » | 🟠 P1 | — | L |
-| **S9** | Bagages passagers + voyageurs | 🟠 P1 | S2 | M |
+| **S9** | Bagages passagers + voyageurs ✅ (avancé en P0+) | 🟠 P1 | S2 | M |
 | **S10** | Score logistique chauffeur + avis + litiges | 🟠 P1 | S2 | M |
 | **S11** | Espace commerçant + abonnements e-commerce | 🟠 P1 | S6 | M |
 | **S12** | API certification VTC (facturation) | 🟠 P1 | S6, S8 | M |
@@ -160,6 +161,71 @@
 
 ---
 
+### Correctifs P0+ — Passagers, bagages & attribution (revue) ✅ (fait)
+
+> Ensemble d'ajustements demandés après revue, avant la bascule en P1. Ils renforcent le
+> réalisme terrain (anti‑fraude bagages, attribution obligatoire, gestes groupés du chauffeur)
+> sans changer l'architecture.
+
+#### 1. Passagers : enfant **ou** adulte
+- **But** : un même parcours gère un **enfant confié à un tiers** (fort impact social) et un
+  **adulte voyageant seul**.
+- **Contenu** : champ `suivi_familial.type_passager` (`enfant` | `adulte`) ; contacts adaptés :
+  - *enfant* → **acheteur du ticket** (nom + téléphone, obligatoires) ;
+  - *adulte* → **numéro du passager** (obligatoire).
+- **Champs** : `suivi_familial.acheteur_nom/acheteur_tel`, `telephone_passager` ; le champ
+  `telephone_parent` reste le « responsable principal » (rempli automatiquement).
+
+#### 2. Contacts : proche de confiance obligatoire
+- **But** : garantir qu'une **2ᵉ personne** est prévenue (numéro de secours).
+- **Contenu** : `suivi_familial.proche_nom` + `proche_telephone` (**obligatoire**, ≥ 6 chiffres).
+  Le proche reçoit les SMS de **confirmation**, **départ**, **pré‑alerte** et **arrivée**
+  (ajouté à `_notifier_suivi` et `envoyer_pre_alerte_voyage`).
+
+#### 3. Attribution obligatoire : trajet **+** voyage **+** chauffeur
+- **But** : on sait toujours **qui** transporte **qui**, **d'où** vers **où**.
+- **Contenu** : `voyage_id` **et** `chauffeur_id` rendus **obligatoires** sur `ColisCreate` et
+  `SuiviFamilialCreate` (nouvelles colonnes `colis.chauffeur_id`, `suivi_familial.chauffeur_id`) ;
+  contrôle de cohérence (le chauffeur fourni = chauffeur du voyage) → `400`.
+  Côté frontend, le chauffeur est **déduit du voyage sélectionné** (moins de saisie, moins d'erreur).
+
+#### 4. Bagages : 1 à 10 sacs, une étiquette QR par sac
+- **But** : traçabilité + **anti‑fraude** (le nombre de sacs annoncé est vérifié à l'arrivée),
+  **sans jamais impacter le prix**.
+- **Contenu** : nouveau modèle `bagages` (migration `20260817_1000_p0_passagers_bagages`) —
+  une ligne par sac + un `Ticket(type="BAGAGE")` (QR + code `SAC-…`) ; `colis.nombre_bagages` /
+  `suivi_familial.nombre_bagages` (1 à 10) ; `_creer_bagages()` à l'enregistrement ;
+  `lister_bagages()` (bagages embarqués dans les réponses colis/suivi).
+- **Frontend** : composant `ControleurBagages` (compteur tactile), impression d'**autant
+  d'étiquettes QR que de sacs** (tickets colis **et** passager), affichage du nombre de sacs
+  sur la page de suivi publique.
+
+#### 5. Tarif passager **fixe** : 100 FCFA (quel que soit le nombre de sacs)
+- **Contenu** : `paiement/tarification.frais_service_passager()` + config
+  `frais_service_passager_fcfa = 100` ; exposé par `SuiviFamilialResponse.frais_service_fcfa`.
+
+#### 6. Actions groupées du chauffeur (« un seul geste »)
+- **But** : un chauffeur ne peut pas scanner 40 QR un par un. On lui donne **un bouton par étape**,
+  qui traite **à la fois** les passagers **et** les colis du voyage.
+- **Contenu** (service + routes, permission `logistique.scan`) :
+  - `POST /voyages/{id}/depart` → « Valider le Départ » (passagers + colis en route, SMS).
+  - `POST /voyages/{id}/arrivee` → « Arrivés » (par gare ou tout le voyage, SMS).
+  - `POST /voyages/{id}/pre-alerte` → « Prévenir de l'approche » (SMS pré‑alerte familles,
+    proches, acheteurs, destinataires, expéditeurs).
+- **Schémas** : `ActionLotVoyageRequest/Response`, `PreAlerteRequest/Response` ;
+  helpers `_colis_du_voyage` / `_passagers_du_voyage`.
+- **Frontend** : composant `ActionsVoyageChauffeur` (3 boutons + confirmation) **et** liste des
+  passagers à bord ajoutés à `/chauffeur/voyages/[id]`.
+
+#### 7. Suivi public enrichi
+- `GET /public/suivi/{code}` expose désormais `type_passager` et `nombre_bagages`
+  (colis **et** passager) ; la page `/suivi/[code]` affiche le **nombre de sacs**.
+
+> **Vérifications** : `alembic heads` = `20260817_1000_p0_passagers_bagages` (tête unique) ;
+> imports backend + `tsc --noEmit` frontend verts.
+
+---
+
 ## 🟠 P1 — Renfort (si le temps permet, avant ou autour du mémoire)
 
 #### Étape S8 — Refonte documents « 1 document = 1 table »
@@ -168,8 +234,12 @@
 - **Intérêt** : qualité de code + cohérence (structure déjà décrite dans l'architecture).
 - **Dépendances** : aucune (peut se faire en parallèle).
 
-#### Étape S9 — Bagages passagers + voyageurs
+#### Étape S9 — Bagages passagers + voyageurs ✅ (avancé en P0+)
 - Bagages en soute, étiquettes, liste passagers d'un voyage, matching à l'arrivée.
+- **Réalisé (P0+)** : étiquettes QR **une par sac** (1 à 10, sans impact sur le prix),
+  **liste des passagers à bord** sur `/chauffeur/voyages/[id]`, actions groupées du chauffeur.
+- **Reste éventuel** : matching/validation anti‑fraude du nombre de sacs **à l'arrivée**
+  (scan des étiquettes `SAC-…` et rapprochement avec `nombre_bagages`).
 - **Dépendances** : S2.
 
 #### Étape S10 — Score logistique chauffeur + avis + litiges
@@ -202,19 +272,29 @@
 
 1. **Accueil** : choix de la langue **à l'oreille** (Dendi/Fon/Bariba/FR).
 2. **Guichet (receveur)** : enregistrer un colis (guidé par la voix) → **ticket QR + numéro en clair**.
+   Choisir **nombre d'articles** **et** **nombre de sacs (1‑10)** → **autant d'étiquettes QR que de sacs**.
 3. **Scan livraison** : QR ou **code clair** → livré ; re‑scan → **« DÉJÀ LIVRÉ »** (anti‑fraude).
 4. **Paiement** : frais de service **100 FCFA** (1-3 articles ; 200 F à 4-6, 350 F à 7-10,
    500 F au-delà) → **25 FCFA** (jusqu'à 150 F) créditent la cagnotte du receveur.
-5. **Chauffeur** : scan en route, liste des colis du voyage.
-6. **Famille** : ouvrir le lien de suivi `/suivi/[code]` + SMS reçu.
-7. **Voix** : chaque bouton parle dans la langue choisie (démonstration marquante).
+5. **Passager / suivi familial** : enregistrer un **enfant** (acheteur + **proche de confiance**)
+   ou un **adulte** (son numéro), avec **trajet + voyage + chauffeur obligatoires** → ticket `ENF-…`
+   (frais fixe **100 F**, quel que soit le nombre de sacs) + étiquettes sacs.
+6. **Chauffeur** : **actions groupées** — « Valider le Départ », « Prévenir de l'approche »,
+   « Arrivés » (passagers **et** colis en un clic) + liste des passagers à bord.
+7. **Famille** : ouvrir le lien de suivi `/suivi/[code]` (nombre de sacs inclus) + SMS reçu.
+8. **Voix** : chaque bouton parle dans la langue choisie (démonstration marquante).
 
 ---
 
 ## Prochaine action immédiate
 
-> **S1 → S7 livrées.** Le prototype de mémoire est **complet et démontrable**.
+> **S1 → S7 + correctifs P0+ livrés.** Le prototype de mémoire est **complet et démontrable**,
+> avec passagers enfant/adulte, proche de confiance obligatoire, attribution
+> (trajet + voyage + chauffeur) obligatoire, bagages traçables (1‑10 sacs) et actions
+> groupées du chauffeur.
 > Prochaine étape possible : **S8 — Refonte documents « 1 document = 1 table »** (P1).
+> *Reste optionnel sur S9* : validation anti‑fraude du **nombre de sacs à l'arrivée** par scan
+> des étiquettes `SAC-…`.
 
 Rappel de ce qui est en place côté logistique :
 - **S1** : référentiel (gares, lignes, véhicules, voyages, acteurs) + rôles.
@@ -230,6 +310,12 @@ Rappel de ce qui est en place côté logistique :
   étapes départ/arrivée idempotentes), `GET /public/suivi/{code}` (sans connexion), journal
   `notifications_logistique` (SMS mock visibles) ; pages `/suivi/[code]`,
   `/receveur/suivi-familial` (+ `/nouveau`), entrées de navigation guichet/chauffeur.
+- **P0+** : correctifs revue — passagers **enfant/adulte**, **proche de confiance** obligatoire,
+  **attribution obligatoire** (trajet + voyage + chauffeur), **bagages** `1‑10` sacs avec une
+  **étiquette QR par sac** (`bagages` + tickets `BAGAGE`, migration
+  `20260817_1000_p0_passagers_bagages`), tarif passager **fixe 100 FCFA**, **actions groupées**
+  du chauffeur (`POST /voyages/{id}/depart|arrivee|pre-alerte` + composant
+  `ActionsVoyageChauffeur`) et **liste des passagers** sur `/chauffeur/voyages/[id]`.
 
 **Prochaine étape proposée** : S8 — refonte documents « 1 document = 1 table ».
 

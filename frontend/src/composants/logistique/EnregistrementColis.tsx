@@ -35,6 +35,7 @@ import {
   type Gare,
   type Voyage,
 } from "@/services/logistique_api";
+import { ControleurBagages } from "./ControleurBagages";
 import { formaterFcfa } from "./format";
 import { TicketImprimable } from "./TicketImprimable";
 import { fraisServicePourArticles } from "@/types/paiement";
@@ -70,6 +71,8 @@ export function EnregistrementColis() {
   const [poidsKg, setPoidsKg] = useState("");
   const [valeurFcfa, setValeurFcfa] = useState("");
   const [nombreArticles, setNombreArticles] = useState("1");
+  // Nombre de sacs (1 à 10) — traçabilité, sans impact sur le prix.
+  const [nombreBagages, setNombreBagages] = useState(1);
   const [fraisFcfa, setFraisFcfa] = useState("");
   const [voyageId, setVoyageId] = useState("");
 
@@ -122,6 +125,13 @@ export function EnregistrementColis() {
     return index;
   }, [gares]);
 
+  // Voyage sélectionné → chauffeur associé (attribution obligatoire).
+  const voyageSelectionne = useMemo(
+    () => voyages.find((v) => v.id === voyageId) ?? null,
+    [voyages, voyageId],
+  );
+  const chauffeurId = voyageSelectionne?.chauffeur_id ?? null;
+
   const nombreChiffresTel = destinataireTel.replace(/\D/g, "").length;
   const nombreChiffresTelExpediteur = expediteurTel.replace(/\D/g, "").length;
 
@@ -146,7 +156,9 @@ export function EnregistrementColis() {
   const fraisService = fraisServicePourArticles(
     nombreArticlesValide ? nombreArticlesNombre : 1,
   );
-  const etapeDetailsValide = fraisValide && nombreArticlesValide;
+  // Attribution **obligatoire** : trajet + voyage + chauffeur précis.
+  const attributionValide = !!voyageId && !!chauffeurId;
+  const etapeDetailsValide = fraisValide && nombreArticlesValide && attributionValide;
 
   /** Réinitialise le formulaire pour un nouvel enregistrement. */
   function nouvelEnregistrement() {
@@ -160,6 +172,7 @@ export function EnregistrementColis() {
     setPoidsKg("");
     setValeurFcfa("");
     setNombreArticles("1");
+    setNombreBagages(1);
     setFraisFcfa("");
     setVoyageId("");
     setGareArriveeId("");
@@ -184,9 +197,11 @@ export function EnregistrementColis() {
         poids_kg: poids !== null && !Number.isNaN(poids) ? poids : null,
         valeur_fcfa: valeur !== null && !Number.isNaN(valeur) ? valeur : null,
         nombre_articles: nombreArticlesValide ? nombreArticlesNombre : 1,
+        nombre_bagages: nombreBagages,
         frais_fcfa:
           fraisNombre !== null && !Number.isNaN(fraisNombre) ? fraisNombre : null,
-        voyage_id: voyageId || null,
+        voyage_id: voyageId,
+        chauffeur_id: chauffeurId as string,
       });
       setResultat(reponse);
     } catch (e) {
@@ -472,32 +487,42 @@ export function EnregistrementColis() {
                   />
                 </div>
 
-                {voyages.length > 0 && (
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium text-ardoise">
-                      Voyage (optionnel)
-                    </label>
-                    <select
-                      className="champ-saisie"
-                      value={voyageId}
-                      onChange={(e) => setVoyageId(e.target.value)}
-                    >
-                      <option value="">— Affectation ultérieure —</option>
-                      {voyages.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {new Intl.DateTimeFormat("fr-FR", {
-                            dateStyle: "short",
-                            timeStyle: "short",
-                          }).format(new Date(v.date_depart))}
-                          {v.vehicule_immatriculation
-                            ? ` · ${v.vehicule_immatriculation}`
-                            : ""}
-                          {v.statut ? ` · ${v.statut}` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                <ControleurBagages valeur={nombreBagages} onChange={setNombreBagages} />
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-ardoise">
+                    Voyage / chauffeur <span className="text-terre">*</span>
+                  </label>
+                  <select
+                    className="champ-saisie"
+                    value={voyageId}
+                    onChange={(e) => setVoyageId(e.target.value)}
+                  >
+                    <option value="">— Choisir un voyage —</option>
+                    {voyages.map((v) => (
+                      <option key={v.id} value={v.id} disabled={!v.chauffeur_id}>
+                        {new Intl.DateTimeFormat("fr-FR", {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        }).format(new Date(v.date_depart))}
+                        {v.vehicule_immatriculation
+                          ? ` · ${v.vehicule_immatriculation}`
+                          : ""}
+                        {v.chauffeur_nom
+                          ? ` · chauffeur : ${v.chauffeur_nom}`
+                          : " · (aucun chauffeur affecté)"}
+                      </option>
+                    ))}
+                  </select>
+                  {voyageSelectionne && !chauffeurId && (
+                    <p className="text-xs font-medium text-terre">
+                      Ce voyage n&apos;a pas de chauffeur affecté — choisissez-en un autre.
+                    </p>
+                  )}
+                  <p className="text-xs italic text-ardoise-clair">
+                    Le chauffeur est attribué automatiquement d&apos;après le voyage sélectionné.
+                  </p>
+                </div>
 
                 <div className="flex justify-between">
                   <Bouton variante="ghost" onClick={() => setEtape(2)}>
@@ -552,6 +577,19 @@ export function EnregistrementColis() {
                 <Ligne
                   libelle="Nombre d'articles"
                   valeur={String(nombreArticlesValide ? nombreArticlesNombre : 1)}
+                />
+                <Ligne libelle="Nombre de sacs" valeur={String(nombreBagages)} />
+                <Ligne
+                  libelle="Voyage / chauffeur"
+                  valeur={
+                    voyageSelectionne
+                      ? `${voyageSelectionne.vehicule_immatriculation ?? "Voyage"}${
+                          voyageSelectionne.chauffeur_nom
+                            ? ` · ${voyageSelectionne.chauffeur_nom}`
+                            : ""
+                        }`
+                      : "—"
+                  }
                 />
                 <Ligne
                   libelle="Frais de service DigiID (estimé)"

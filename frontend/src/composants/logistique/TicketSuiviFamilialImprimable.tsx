@@ -43,7 +43,7 @@ export function TicketSuiviFamilialImprimable({
           </div>
           <div className="text-right">
             <p className="text-xs font-semibold uppercase tracking-wider text-ardoise-clair">
-              Ticket enfant
+              {suivi.type_passager === "adulte" ? "Ticket passager" : "Ticket enfant"}
             </p>
             <p className="text-xs text-ardoise-clair">
               Émis le {formaterDateHeure(ticket.cree_le)}
@@ -65,8 +65,14 @@ export function TicketSuiviFamilialImprimable({
 
             <dl className="grid grid-cols-1 gap-2">
               <div className="flex gap-2">
-                <dt className="min-w-[104px] text-ardoise-clair">Enfant</dt>
+                <dt className="min-w-[104px] text-ardoise-clair">Passager</dt>
                 <dd className="font-medium">{suivi.enfant_nom}</dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="min-w-[104px] text-ardoise-clair">Type</dt>
+                <dd className="font-medium">
+                  {suivi.type_passager === "adulte" ? "Adulte" : "Enfant"}
+                </dd>
               </div>
               {suivi.enfant_age != null && (
                 <div className="flex gap-2">
@@ -96,6 +102,19 @@ export function TicketSuiviFamilialImprimable({
               <div className="flex gap-2">
                 <dt className="min-w-[104px] text-ardoise-clair">Téléphone</dt>
                 <dd className="font-medium">{suivi.telephone_parent}</dd>
+              </div>
+              {suivi.proche_telephone && (
+                <div className="flex gap-2">
+                  <dt className="min-w-[104px] text-ardoise-clair">Proche</dt>
+                  <dd className="font-medium">
+                    {suivi.proche_nom ? `${suivi.proche_nom} · ` : ""}
+                    {suivi.proche_telephone}
+                  </dd>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <dt className="min-w-[104px] text-ardoise-clair">Sacs</dt>
+                <dd className="font-medium">{suivi.nombre_bagages}</dd>
               </div>
             </dl>
 
@@ -131,6 +150,51 @@ export function TicketSuiviFamilialImprimable({
           </span>
         </div>
       </div>
+
+      {/* Étiquettes bagages : une par sac (traçabilité + anti-fraude à l'arrivée) */}
+      {suivi.bagages && suivi.bagages.length > 0 && (
+        <div className="zone-impression rounded-xl border-2 border-ardoise/20 bg-white p-5 text-ardoise">
+          <p className="mb-3 text-sm font-bold uppercase tracking-wider text-lagune">
+            Étiquettes bagages ({suivi.bagages.length} sac
+            {suivi.bagages.length > 1 ? "s" : ""})
+          </p>
+          <p className="mb-3 text-[11px] text-ardoise-clair">
+            À attacher à chaque sac. Le nombre de sacs est vérifié à l&apos;arrivée
+            (anti-fraude) — il n&apos;affecte pas le prix.
+          </p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            {suivi.bagages.map((b) => {
+              const qrBagage = urlImageQR(b.qr_code_url);
+              return (
+                <div
+                  key={b.id}
+                  className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-ardoise-clair/40 p-3 text-center"
+                >
+                  <span className="text-xs font-bold text-ardoise">
+                    {b.numero_serie}
+                  </span>
+                  {qrBagage ? (
+                    <img
+                      src={qrBagage}
+                      alt={`QR du sac ${b.numero_serie}`}
+                      className="h-24 w-24 rounded border border-ardoise-clair/20 bg-white"
+                    />
+                  ) : (
+                    <div className="flex h-24 w-24 items-center justify-center rounded border-2 border-dashed border-ardoise-clair/30 text-center text-[10px] text-ardoise-clair">
+                      QR indisponible
+                    </div>
+                  )}
+                  {b.code_clair && (
+                    <code className="break-all text-[10px] text-ardoise-clair">
+                      {b.code_clair}
+                    </code>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {afficherImpression && (
         <div className="no-print flex flex-wrap gap-3">

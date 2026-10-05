@@ -65,6 +65,11 @@ class Colis(Base, MelangeTracabilite):
     nombre_articles: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
     )
+    # Nombre de sacs (1 à 10) — **traçabilité + vérification anti-fraude à
+    # l'arrivée** uniquement : cela n'impacte pas le prix (facturation fixe).
+    nombre_bagages: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
 
     gare_depart_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

@@ -20,6 +20,23 @@ export type TypeEvenementScan = "livraison" | "depart" | "mise_en_transit" | "ar
 /** Événements traçables d'un colis (le scan + l'enregistrement initial). */
 export type TypeEvenementColis = TypeEvenementScan | "enregistrement";
 
+/** Étiquette QR d'un sac (une par sac — traçabilité, sans impact sur le prix). */
+export interface Bagage {
+  id: string;
+  ticket_id: string | null;
+  suivi_familial_id: string | null;
+  colis_id: string | null;
+  /** Numéro lisible : « Sac 1/3 », « Sac 2/3 »… */
+  numero_serie: string;
+  position: number;
+  nombre_total: number;
+  statut: string;
+  /** Code clair de l'étiquette (ticket type=BAGAGE). */
+  code_clair: string | null;
+  qr_code_url: string | null;
+  cree_le: string;
+}
+
 /** Colis (vue enrichie : noms de gares, expéditeur, receveur, chauffeur, ticket). */
 export interface Colis {
   id: string;
@@ -35,6 +52,8 @@ export interface Colis {
   valeur_fcfa: number | null;
   /** Nombre d'articles — base du calcul du frais de service DigiID. */
   nombre_articles: number;
+  /** Nombre de sacs (1 à 10) — traçabilité, sans impact sur le prix. */
+  nombre_bagages: number;
   gare_depart_id: string;
   gare_arrivee_id: string;
   voyage_id: string | null;
@@ -54,6 +73,8 @@ export interface Colis {
   expediteur_tel: string | null;
   receveur_nom: string | null;
   chauffeur_nom: string | null;
+  /** Étiquettes QR générées (une par sac). */
+  bagages: Bagage[];
 }
 
 /** Ticket portant le QR dynamique + le numéro lisible en clair. */
@@ -106,15 +127,18 @@ export interface DonneesColis {
   description?: string | null;
   poids_kg?: number | null;
   valeur_fcfa?: number | null;
-  /** Nombre d'articles — détermine le frais de service DigiID (barème). */
+  /** Nombre d'articles — information libre du guichet. */
   nombre_articles: number;
+  /** Nombre de sacs (1 à 10) — traçabilité, sans impact sur le prix. */
+  nombre_bagages: number;
 
   /** Prix du transport — facultatif : nul si le guichet ne le renseigne pas. */
   frais_fcfa?: number | null;
   expediteur_id?: string | null;
   receveur_id?: string | null;
-  voyage_id?: string | null;
-  chauffeur_id?: string | null;
+  /** Attribution **obligatoire** : trajet + chauffeur précis. */
+  voyage_id: string;
+  chauffeur_id: string;
 }
 
 /** Payload d'un scan (QR ou repli code clair). */
@@ -226,20 +250,36 @@ export interface SuiviFamilial {
   enfant_sexe: string | null;
   parent_nom: string | null;
   telephone_parent: string;
+  /** « enfant » (responsabilité d'un tiers) ou « adulte » (voyageur autonome). */
+  type_passager: "enfant" | "adulte";
+  telephone_passager: string | null;
+  acheteur_nom: string | null;
+  acheteur_tel: string | null;
+  proche_nom: string | null;
+  proche_telephone: string | null;
+  /** Nombre de sacs (1 à 10) — traçabilité, sans impact sur le prix. */
+  nombre_bagages: number;
   parent_id: string | null;
   gare_depart_id: string;
   gare_arrivee_id: string;
   voyage_id: string | null;
+  chauffeur_id: string | null;
   statut: StatutSuiviFamilial;
   sms_depart_envoye: boolean;
   sms_arrivee_envoye: boolean;
+  pre_alerte_envoyee: boolean;
+  /** Frais de service **fixe** : 100 FCFA par passager/enfant. */
+  frais_service_fcfa: number;
   enregistre_par_id: string | null;
   cree_le: string;
   modifie_le: string | null;
   gare_depart_nom: string | null;
   gare_arrivee_nom: string | null;
   enregistre_par_nom: string | null;
+  chauffeur_nom: string | null;
   nb_evenements: number;
+  /** Étiquettes QR générées (une par sac). */
+  bagages: Bagage[];
 }
 
 /** Événement de la timeline d'un suivi familial. */
@@ -269,10 +309,59 @@ export interface DonneesSuiviFamilial {
   enfant_age?: number | null;
   enfant_sexe?: string | null;
   parent_nom?: string | null;
-  telephone_parent: string;
+  /** Rempli par le backend selon `type_passager` si omis. */
+  telephone_parent?: string | null;
+  type_passager: "enfant" | "adulte";
+  /** Adulte : son propre numéro. */
+  telephone_passager?: string | null;
+  /** Enfant : nom/numéro de l'acheteur du ticket. */
+  acheteur_nom?: string | null;
+  acheteur_tel?: string | null;
+  /** Proche de confiance à prévenir (obligatoire). */
+  proche_nom?: string | null;
+  proche_telephone: string;
+  /** Nombre de sacs (1 à 10). */
+  nombre_bagages: number;
   gare_depart_id: string;
   gare_arrivee_id: string;
-  voyage_id?: string | null;
+  /** Attribution **obligatoire** : trajet + chauffeur précis. */
+  voyage_id: string;
+  chauffeur_id: string;
+}
+
+// ─── Actions groupées du chauffeur (départ / arrivée / pré-alerte) ───
+
+/** Payload d'une action en lot (départ / arrivée). */
+export interface DonneesActionLot {
+  /** Gare ciblée (optionnelle) : pour « Arrivés », ne traiter qu'une gare. */
+  gare_id?: string | null;
+  localisation?: string | null;
+}
+
+/** Résultat d'une action en lot (départ / arrivée). */
+export interface ResultatActionLot {
+  succes: boolean;
+  message: string;
+  type_action: string;
+  voyage_id: string;
+  nb_passagers: number;
+  nb_colis: number;
+}
+
+/** Payload d'une pré-alerte d'arrivée (« Prévenir de l'approche »). */
+export interface DonneesPreAlerte {
+  delai_minutes?: number | null;
+  localisation?: string | null;
+}
+
+/** Résultat d'une pré-alerte (SMS émis). */
+export interface ResultatPreAlerte {
+  succes: boolean;
+  message: string;
+  voyage_id: string;
+  nb_sms: number;
+  nb_passagers: number;
+  nb_colis: number;
 }
 
 /** Payload d'une étape du voyage (départ / arrivée…). */
@@ -350,6 +439,7 @@ export interface ColisPublicInfo {
   description: string | null;
   poids_kg: number | null;
   nombre_articles: number;
+  nombre_bagages: number;
 }
 
 /** Informations publiques d'un enfant suivi. */
@@ -358,6 +448,8 @@ export interface EnfantPublicInfo {
   enfant_age: number | null;
   enfant_sexe: string | null;
   parent_nom: string | null;
+  type_passager: "enfant" | "adulte";
+  nombre_bagages: number;
 }
 
 /** Vue publique d'un suivi (colis **ou** enfant) renvoyée sans connexion. */

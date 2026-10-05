@@ -613,6 +613,31 @@ def envoyer_sms_suivi_familial(
     )
 
 
+def construire_message_pre_alerte(
+    type_cible: str,
+    code_clair: str,
+    gare_arrivee: Optional[str] = None,
+    delai_minutes: Optional[int] = None,
+) -> str:
+    """Compose le SMS de **pré-alerte** (« Prévenir de l'approche »).
+
+    Envoyé ~45 min / 1h avant l'arrivée finale aux passagers, à leurs proches
+    de confiance **et** aux destinataires de colis, pour qu'ils se préparent et
+    se rendent à la gare à temps.
+    """
+    delai = f" dans environ {delai_minutes} minutes" if delai_minutes else " bientôt"
+    destination = f" à {gare_arrivee}" if gare_arrivee else " à destination"
+    if type_cible == "colis":
+        return (
+            f"DigiID — Votre colis {code_clair} arrive{destination}{delai}."
+            " Préparez-vous à venir le retirer au guichet."
+        )
+    return (
+        f"DigiID — Votre passager {code_clair} arrive{destination}{delai}."
+        " Préparez-vous à venir le récupérer à la gare."
+    )
+
+
 def masquer_telephone(telephone: Optional[str]) -> Optional[str]:
     """Masque un numéro pour l'affichage public (ex. ``+229****233``)."""
     if not telephone:

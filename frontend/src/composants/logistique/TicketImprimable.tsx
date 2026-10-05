@@ -89,6 +89,10 @@ export function TicketImprimable({
                 <dd className="font-medium">{colis?.nombre_articles ?? 1}</dd>
               </div>
               <div className="flex gap-2">
+                <dt className="text-ardoise-clair min-w-[92px]">Sacs</dt>
+                <dd className="font-medium">{colis?.nombre_bagages ?? 1}</dd>
+              </div>
+              <div className="flex gap-2">
                 <dt className="text-ardoise-clair min-w-[92px]">Prix transport</dt>
                 <dd className="font-bold text-lagune">
                   {formaterFcfa(colis?.frais_fcfa)}
@@ -122,6 +126,51 @@ export function TicketImprimable({
           <span>Réf. {ticket.id.slice(0, 8)} · {formaterDate(ticket.cree_le)}</span>
         </div>
       </div>
+
+      {/* Étiquettes bagages : une par sac (traçabilité + anti-fraude à l'arrivée) */}
+      {colis && colis.bagages && colis.bagages.length > 0 && (
+        <div className="zone-impression bg-white border-2 border-ardoise/20 rounded-xl p-5 text-ardoise">
+          <p className="text-sm font-bold uppercase tracking-wider text-lagune mb-3">
+            Étiquettes bagages ({colis.bagages.length} sac
+            {colis.bagages.length > 1 ? "s" : ""})
+          </p>
+          <p className="mb-3 text-[11px] text-ardoise-clair">
+            À attacher à chaque sac. Le nombre de sacs est vérifié à l&apos;arrivée
+            (anti-fraude) — il n&apos;affecte pas le prix.
+          </p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            {colis.bagages.map((b) => {
+              const qrBagage = urlImageQR(b.qr_code_url);
+              return (
+                <div
+                  key={b.id}
+                  className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-ardoise-clair/40 p-3 text-center"
+                >
+                  <span className="text-xs font-bold text-ardoise">
+                    {b.numero_serie}
+                  </span>
+                  {qrBagage ? (
+                    <img
+                      src={qrBagage}
+                      alt={`QR du sac ${b.numero_serie}`}
+                      className="h-24 w-24 border border-ardoise-clair/20 rounded bg-white"
+                    />
+                  ) : (
+                    <div className="flex h-24 w-24 items-center justify-center border-2 border-dashed border-ardoise-clair/30 rounded text-center text-[10px] text-ardoise-clair">
+                      QR indisponible
+                    </div>
+                  )}
+                  {b.code_clair && (
+                    <code className="text-[10px] text-ardoise-clair break-all">
+                      {b.code_clair}
+                    </code>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {afficherImpression && (
         <div className="no-print flex flex-wrap gap-3">

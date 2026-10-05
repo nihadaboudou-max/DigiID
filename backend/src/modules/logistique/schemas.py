@@ -214,6 +214,24 @@ class TicketResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ─── Bagages (étiquettes QR par sac — traçabilité) ──────────────────
+
+class BagageResponse(BaseModel):
+    id: UUID
+    ticket_id: Optional[UUID] = None
+    suivi_familial_id: Optional[UUID] = None
+    colis_id: Optional[UUID] = None
+    numero_serie: str
+    position: int
+    nombre_total: int
+    statut: str
+    # Étiquette QR du sac (ticket type=BAGAGE).
+    code_clair: Optional[str] = None
+    qr_code_url: Optional[str] = None
+    cree_le: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ─── Colis ───────────────────────────────────────────────────────────
 
 class ColisCreate(BaseModel):
@@ -227,8 +245,10 @@ class ColisCreate(BaseModel):
     description: Optional[str] = Field(None, max_length=500)
     poids_kg: Optional[float] = Field(None, ge=0)
     valeur_fcfa: Optional[int] = Field(None, ge=0)
-    # Nombre d'articles dans le colis — base du **frais de service DigiID**
-    # (barème par tranches). Saisi au guichet ; 1 par défaut.
+    # Nombre de sacs (1 à 10) — **traçabilité + anti-fraude à l'arrivée**
+    # uniquement : cela n'impacte pas le prix.
+    nombre_bagages: int = Field(1, ge=1, le=10)
+    # Nombre d'articles dans le colis (information libre du guichet).
     nombre_articles: int = Field(1, ge=1, le=9999)
     # Prix du transport — **facultatif** : DigiID n'encaisse pas ce montant (les
     # frais de service sont payés séparément par le client).
@@ -236,8 +256,10 @@ class ColisCreate(BaseModel):
     # Si non fournis, l'expéditeur ET le receveur = utilisateur courant (guichet).
     expediteur_id: Optional[UUID] = None
     receveur_id: Optional[UUID] = None
-    voyage_id: Optional[UUID] = None
-    chauffeur_id: Optional[UUID] = None
+    # **Attribution obligatoire** : tout enregistrement est lié à un chauffeur
+    # précis et à un trajet précis (gare de départ → gare d'arrivée).
+    voyage_id: UUID
+    chauffeur_id: UUID
 
     @model_validator(mode="after")
     def _gares_distinctes(self):
@@ -259,6 +281,7 @@ class ColisResponse(BaseModel):
     poids_kg: Optional[float] = None
     valeur_fcfa: Optional[int] = None
     nombre_articles: int = 1
+    nombre_bagages: int = 1
     gare_depart_id: UUID
     gare_arrivee_id: UUID
     voyage_id: Optional[UUID] = None
@@ -276,6 +299,8 @@ class ColisResponse(BaseModel):
     expediteur_tel: Optional[str] = None
     receveur_nom: Optional[str] = None
     chauffeur_nom: Optional[str] = None
+    # Étiquettes QR générées (une par sac).
+    bagages: list[BagageResponse] = []
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -363,16 +388,46 @@ class SuiviFamilialCreate(BaseModel):
     enfant_age: Optional[int] = Field(None, ge=0, le=120)
     enfant_sexe: Optional[str] = Field(None, pattern=r"^[MF]$")
     parent_nom: Optional[str] = Field(None, max_length=150)
-    telephone_parent: str = Field(..., min_length=6, max_length=30)
+    # Téléphone du responsable principal (parent pour un enfant ; le passager
+    # lui-même pour un adulte). Rempli automatiquement selon ``type_passager``.
+    telephone_parent: Optional[str] = Field(None, min_length=6, max_length=30)
+    # ─── Enregistrement & contacts (P0 ajusté) ───────────────────────
+    # « enfant » : voyage sous la responsabilité d'un tiers (acheteur du ticket).
+    # « adulte » : voyageur autonome (son propre numéro est saisi).
+    type_passager: Literal["enfant", "adulte"] = "enfant"
+    # Adulte : son propre numéro.
+    telephone_passager: Optional[str] = Field(None, min_length=6, max_length=30)
+    # Enfant : nom/numéro de l'acheteur du ticket (celui qui a payé le voyage).
+    acheteur_nom: Optional[str] = Field(None, max_length=150)
+    acheteur_tel: Optional[str] = Field(None, min_length=6, max_length=30)
+    # Proche de confiance à prévenir (obligatoire dans les deux cas).
+    proche_nom: Optional[str] = Field(None, max_length=150)
+    proche_telephone: str = Field(..., min_length=6, max_length=30)
+    # Nombre de sacs (1 à 10) — traçabilité, **sans impact** sur le prix.
+    nombre_bagages: int = Field(1, ge=1, le=10)
     gare_depart_id: UUID
     gare_arrivee_id: UUID
-    voyage_id: Optional[UUID] = None
+    # **Attribution obligatoire** : chauffeur précis + voyage précis.
+    voyage_id: UUID
+    chauffeur_id: UUID
     parent_id: Optional[UUID] = None
 
     @model_validator(mode="after")
-    def _gares_distinctes(self):
+    def _valider_contacts(self):
         if self.gare_depart_id == self.gare_arrivee_id:
             raise ValueError("Les gares de départ et d'arrivée doivent être différentes")
+        if self.type_passager == "adulte":
+            if not self.telephone_passager:
+                raise ValueError("Le numéro du passager adulte est obligatoire")
+            if not self.telephone_parent:
+                self.telephone_parent = self.telephone_passager
+        else:  # enfant
+            if not self.acheteur_nom:
+                raise ValueError("Le nom de l'acheteur du ticket est obligatoire pour un enfant")
+            if not self.acheteur_tel:
+                raise ValueError("Le numéro de l'acheteur du ticket est obligatoire pour un enfant")
+            if not self.telephone_parent:
+                self.telephone_parent = self.acheteur_tel
         return self
 
 
@@ -411,13 +466,24 @@ class SuiviFamilialResponse(BaseModel):
     enfant_sexe: Optional[str] = None
     parent_nom: Optional[str] = None
     telephone_parent: str
+    type_passager: str = "enfant"
+    telephone_passager: Optional[str] = None
+    acheteur_nom: Optional[str] = None
+    acheteur_tel: Optional[str] = None
+    proche_nom: Optional[str] = None
+    proche_telephone: Optional[str] = None
+    nombre_bagages: int = 1
     parent_id: Optional[UUID] = None
     gare_depart_id: UUID
     gare_arrivee_id: UUID
     voyage_id: Optional[UUID] = None
+    chauffeur_id: Optional[UUID] = None
     statut: str
     sms_depart_envoye: bool
     sms_arrivee_envoye: bool
+    pre_alerte_envoyee: bool = False
+    # Frais de service **fixe** (100 FCFA, quel que soit le nombre de bagages).
+    frais_service_fcfa: int = 100
     enregistre_par_id: Optional[UUID] = None
     cree_le: datetime
     modifie_le: Optional[datetime] = None
@@ -425,7 +491,10 @@ class SuiviFamilialResponse(BaseModel):
     gare_depart_nom: Optional[str] = None
     gare_arrivee_nom: Optional[str] = None
     enregistre_par_nom: Optional[str] = None
+    chauffeur_nom: Optional[str] = None
     nb_evenements: int = 0
+    # Étiquettes QR générées (une par sac).
+    bagages: list[BagageResponse] = []
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -468,6 +537,7 @@ class ColisPublicInfo(BaseModel):
     description: Optional[str] = None
     poids_kg: Optional[float] = None
     nombre_articles: int = 1
+    nombre_bagages: int = 1
 
 
 class EnfantPublicInfo(BaseModel):
@@ -475,6 +545,8 @@ class EnfantPublicInfo(BaseModel):
     enfant_age: Optional[int] = None
     enfant_sexe: Optional[str] = None
     parent_nom: Optional[str] = None
+    type_passager: str = "enfant"
+    nombre_bagages: int = 1
 
 
 class SuiviPublicResponse(BaseModel):
@@ -491,3 +563,39 @@ class SuiviPublicResponse(BaseModel):
     enfant: Optional[EnfantPublicInfo] = None
     evenements: list[EvenementSuiviPublic] = []
     notifications: list[NotificationSuiviPublic] = []
+
+
+# ─── Actions groupées du chauffeur (départ / arrivée / pré-alerte) ───
+
+class ActionLotVoyageRequest(BaseModel):
+    """Action en lot du chauffeur sur un voyage (passagers ET colis à la fois)."""
+    # Gare ciblée (optionnelle) : pour « Arrivés », ne traiter que les colis et
+    # passagers destinés à cette gare d'arrivée. Par défaut, tous.
+    gare_id: Optional[UUID] = None
+    localisation: Optional[str] = Field(None, max_length=200)
+
+
+class ActionLotVoyageResponse(BaseModel):
+    """Résultat d'une action groupée (départ / arrivée)."""
+    succes: bool = True
+    message: str
+    type_action: str
+    voyage_id: UUID
+    nb_passagers: int = 0
+    nb_colis: int = 0
+
+
+class PreAlerteRequest(BaseModel):
+    """Pré-alerte d'arrivée imminente (« Prévenir de l'approche »)."""
+    delai_minutes: Optional[int] = Field(None, ge=1, le=600)
+    localisation: Optional[str] = Field(None, max_length=200)
+
+
+class PreAlerteResponse(BaseModel):
+    """SMS de pré-alerte émis (passagers, proches de confiance, destinataires)."""
+    succes: bool = True
+    message: str
+    voyage_id: UUID
+    nb_sms: int = 0
+    nb_passagers: int = 0
+    nb_colis: int = 0

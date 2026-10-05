@@ -13,8 +13,9 @@ import { Alerte } from "@/composants/commun/Alerte";
 import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
-import { IconeScan } from "@/composants/commun/Icones";
+import { IconeIdentite, IconeScan } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
+import { ActionsVoyageChauffeur } from "@/composants/logistique/ActionsVoyageChauffeur";
 import { formaterDate } from "@/composants/logistique/format";
 import { ROLES_CHAUFFEUR } from "@/composants/logistique/roles";
 import { TableauColis } from "@/composants/logistique/TableauColis";
@@ -23,9 +24,11 @@ import {
   libelleLigne,
   logistiqueAPI,
   type Ligne,
+  type SuiviFamilial,
   type Voyage,
 } from "@/services/logistique_api";
 import {
+  LIBELLES_STATUT_SUIVI,
   LIBELLES_STATUT_VOYAGE,
   VARIANTES_STATUT_VOYAGE,
   type Colis,
@@ -46,8 +49,10 @@ function Contenu() {
   const [voyage, setVoyage] = useState<Voyage | null>(null);
   const [ligne, setLigne] = useState<Ligne | null>(null);
   const [colis, setColis] = useState<Colis[]>([]);
+  const [passagers, setPassagers] = useState<SuiviFamilial[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [rafraichir, setRafraichir] = useState(0);
 
   useEffect(() => {
     if (!voyageId) return;
@@ -56,15 +61,19 @@ function Contenu() {
       setChargement(true);
       setErreur(null);
       try {
-        const [voyageCharge, repLignes, repColis] = await Promise.all([
+        const [voyageCharge, repLignes, repColis, repPassagers] = await Promise.all([
           logistiqueAPI.voyages.obtenir(voyageId),
           logistiqueAPI.lignes.lister(),
           logistiqueAPI.colis.lister({ voyage_id: voyageId, par_page: 100 }),
+          logistiqueAPI.suiviFamilial
+            .lister({ voyage_id: voyageId, par_page: 100 })
+            .catch(() => ({ elements: [] as SuiviFamilial[] })),
         ]);
         if (annule) return;
         setVoyage(voyageCharge);
         setLigne(repLignes.elements.find((l) => l.id === voyageCharge.ligne_id) ?? null);
         setColis(repColis.elements);
+        setPassagers(repPassagers.elements);
       } catch (e) {
         if (!annule) {
           setErreur(
@@ -80,7 +89,7 @@ function Contenu() {
     return () => {
       annule = true;
     };
-  }, [voyageId]);
+  }, [voyageId, rafraichir]);
 
   const compteurs = useMemo(() => {
     return {
@@ -175,6 +184,83 @@ function Contenu() {
         />
         <Compteur libelle="Livrés" valeur={compteurs.livres} couleur="text-green-700" />
       </div>
+
+      {/* Actions groupées : départ / pré-alerte / arrivée (passagers + colis) */}
+      <ActionsVoyageChauffeur
+        voyageId={voyage.id}
+        gares={
+          ligne
+            ? [
+                { id: ligne.gare_depart_id, nom: ligne.gare_depart_nom ?? "Départ" },
+                { id: ligne.gare_arrivee_id, nom: ligne.gare_arrivee_nom ?? "Arrivée" },
+              ]
+            : []
+        }
+        surSucces={() => setRafraichir((n) => n + 1)}
+      />
+
+      {/* Liste des passagers (suivi familial) */}
+      <Carte
+        titre="Passagers à bord"
+        description={`${passagers.length} passager(s) suivis pour ce voyage.`}
+      >
+        {passagers.length === 0 ? (
+          <p className="text-sm italic text-ardoise-clair">
+            Aucun passager suivi affecté à ce voyage pour le moment.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-ardoise-clair/20 text-left text-xs uppercase tracking-wider text-ardoise-clair">
+                  <th className="py-2 pr-3">Passager</th>
+                  <th className="py-2 pr-3">Type</th>
+                  <th className="py-2 pr-3">Sacs</th>
+                  <th className="py-2 pr-3">Responsable</th>
+                  <th className="py-2 pr-3">Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {passagers.map((p) => {
+                  const statutP = p.statut as keyof typeof LIBELLES_STATUT_SUIVI;
+                  return (
+                    <tr key={p.id} className="border-b border-ardoise-clair/10">
+                      <td className="py-2 pr-3 font-medium text-ardoise">
+                        <span className="inline-flex items-center gap-2">
+                          <IconeIdentite className="h-4 w-4 text-lagune" />
+                          {p.enfant_nom}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-3 text-ardoise-clair">
+                        {p.type_passager === "adulte" ? "Adulte" : "Enfant"}
+                      </td>
+                      <td className="py-2 pr-3 text-ardoise-clair">
+                        {p.nombre_bagages}
+                      </td>
+                      <td className="py-2 pr-3 text-ardoise-clair">
+                        {p.telephone_parent}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <Badge
+                          variante={
+                            p.statut === "arrive"
+                              ? "succes"
+                              : p.statut === "en_route"
+                                ? "ocre"
+                                : "info"
+                          }
+                        >
+                          {LIBELLES_STATUT_SUIVI[statutP] ?? p.statut}
+                        </Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Carte>
 
       {/* Liste des colis */}
       <Carte

@@ -14,6 +14,7 @@ from src.modeles import (
 )
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.logistique import service, schemas
+from src.modules.paiement.tarification import frais_service_passager
 from src.modules.qr_dynamique.service import construire_url_qr_durable
 from src.modules.logistique.dependances import (
     obtenir_gare_ou_404, obtenir_ligne_ou_404, obtenir_vehicule_ou_404,
@@ -67,6 +68,19 @@ async def _enrichir_acteur(session: AsyncSession, acteur: ActeurLogistique) -> A
     return acteur
 
 
+async def _bagages_enrichis(
+    session: AsyncSession,
+    *,
+    suivi_familial_id: UUID | None = None,
+    colis_id: UUID | None = None,
+) -> list[schemas.BagageResponse]:
+    """Étiquettes QR des sacs (une par sac) prêtes pour l'API."""
+    bagages = await service.lister_bagages(
+        session, suivi_familial_id=suivi_familial_id, colis_id=colis_id
+    )
+    return [schemas.BagageResponse.model_validate(b) for b in bagages]
+
+
 async def _enrichir_colis(session: AsyncSession, colis: Colis) -> Colis:
     colis.gare_depart_nom = await _nom_gare(session, colis.gare_depart_id)
     colis.gare_arrivee_nom = await _nom_gare(session, colis.gare_arrivee_id)
@@ -79,6 +93,7 @@ async def _enrichir_colis(session: AsyncSession, colis: Colis) -> Colis:
     colis.code_clair = ticket.code_clair if ticket else None
     colis.qr_token = ticket.qr_token if ticket else None
     colis.qr_code_url = construire_url_qr_durable(ticket.qr_token) if ticket else None
+    colis.bagages = await _bagages_enrichis(session, colis_id=colis.id)
     return colis
 
 
@@ -95,11 +110,14 @@ async def _enrichir_suivi_familial(
     suivi.gare_depart_nom = await _nom_gare(session, suivi.gare_depart_id)
     suivi.gare_arrivee_nom = await _nom_gare(session, suivi.gare_arrivee_id)
     suivi.enregistre_par_nom = await _nom_utilisateur(session, suivi.enregistre_par_id)
+    suivi.chauffeur_nom = await _nom_utilisateur(session, suivi.chauffeur_id)
     ticket = await service.obtenir_ticket_du_suivi(session, suivi)
     suivi.code_clair = ticket.code_clair if ticket else None
     suivi.qr_token = ticket.qr_token if ticket else None
     suivi.qr_code_url = construire_url_qr_durable(ticket.qr_token) if ticket else None
     suivi.nb_evenements = await service._compter_evenements_suivi(session, suivi.id)
+    suivi.frais_service_fcfa = frais_service_passager()
+    suivi.bagages = await _bagages_enrichis(session, suivi_familial_id=suivi.id)
     return suivi
 
 
@@ -375,6 +393,54 @@ async def supprimer_voyage(
     session: AsyncSession = Depends(obtenir_session),
 ):
     await service.supprimer_voyage(session, voyage.id)
+
+
+# ─── Actions groupées du chauffeur (passagers ET colis) ──────────────
+
+@routeur_voyages.post("/{voyage_id}/depart",
+                      response_model=schemas.ActionLotVoyageResponse,
+                      summary="Valider le départ (tous les passagers + colis en 1 clic)")
+@require_permission("logistique.scan")
+async def valider_depart_voyage(
+    voyage_id: UUID,
+    donnees: schemas.ActionLotVoyageRequest | None = None,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    return await service.valider_depart_voyage(session, voyage_id, utilisateur_courant)
+
+
+@routeur_voyages.post("/{voyage_id}/arrivee",
+                      response_model=schemas.ActionLotVoyageResponse,
+                      summary="Marquer arrivés (passagers + colis d'une même gare)")
+@require_permission("logistique.scan")
+async def marquer_arrivee_voyage(
+    voyage_id: UUID,
+    donnees: schemas.ActionLotVoyageRequest | None = None,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    donnees = donnees or schemas.ActionLotVoyageRequest()
+    return await service.marquer_arrivee_voyage(
+        session, voyage_id, utilisateur_courant,
+        gare_id=donnees.gare_id, localisation=donnees.localisation,
+    )
+
+
+@routeur_voyages.post("/{voyage_id}/pre-alerte",
+                      response_model=schemas.PreAlerteResponse,
+                      summary="Prévenir de l'approche (SMS passagers + proches + destinataires)")
+@require_permission("logistique.scan")
+async def pre_alerte_voyage(
+    voyage_id: UUID,
+    donnees: schemas.PreAlerteRequest | None = None,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    donnees = donnees or schemas.PreAlerteRequest()
+    return await service.envoyer_pre_alerte_voyage(
+        session, voyage_id, utilisateur_courant, delai_minutes=donnees.delai_minutes
+    )
 
 
 # ─── Acteurs logistiques ─────────────────────────────────────────────

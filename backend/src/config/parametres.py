@@ -121,6 +121,11 @@ class ParametresApplication(BaseSettings):
     # Compte prépayé de l'agent : montant débité **automatiquement** du compte
     # de l'agent à chaque scan d'un colis réglé en espèces (0 pour désactiver).
     frais_scan_agent_fcfa: int = 100
+    # Tarification **fixe** du service de traçabilité et de suivi familial :
+    # strictement 100 FCFA par passager/enfant, **quel que soit** le nombre de
+    # bagages transportés (le nombre de sacs sert à la traçabilité et à la
+    # vérification anti-fraude à l'arrivée, il n'impacte jamais le prix).
+    frais_service_passager_fcfa: int = 100
     # Opérateur mobile money activé (mode mock en développement) : "wave".
     operateur_mobile_money: str = "wave"
 

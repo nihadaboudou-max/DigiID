@@ -8,14 +8,16 @@ import type {
   Colis, ColisEnregistre, ColisEvenement, DonneesColis, DonneesScan, ResultatScan,
   SuiviFamilial, SuiviFamilialEnregistre, SuiviFamilialEvenement,
   DonneesSuiviFamilial, DonneesEvenementSuivi, ResultatEvenementSuivi,
-  NotificationLogistique, SuiviPublic,
+  NotificationLogistique, SuiviPublic, Bagage,
+  DonneesActionLot, ResultatActionLot, DonneesPreAlerte, ResultatPreAlerte,
 } from "@/types/logistique";
 
 export type {
   Colis, ColisEnregistre, ColisEvenement, DonneesColis, DonneesScan, ResultatScan,
   SuiviFamilial, SuiviFamilialEnregistre, SuiviFamilialEvenement,
   DonneesSuiviFamilial, DonneesEvenementSuivi, ResultatEvenementSuivi,
-  NotificationLogistique, SuiviPublic,
+  NotificationLogistique, SuiviPublic, Bagage,
+  DonneesActionLot, ResultatActionLot, DonneesPreAlerte, ResultatPreAlerte,
 } from "@/types/logistique";
 
 export interface ReponseListe<T> {
@@ -112,6 +114,17 @@ export const logistiqueAPI = {
     obtenir: (id: string) => clientAPI.get<Voyage>(`${BASE}/voyages/${id}`, opts),
     creer: (d: Record<string, unknown>) => clientAPI.post<Voyage>(`${BASE}/voyages`, d, opts),
     supprimer: (id: string) => clientAPI.delete(`${BASE}/voyages/${id}`, opts),
+
+    // ── Actions groupées du chauffeur (passagers ET colis) ──
+    /** « Valider le Départ » : tous les passagers + colis en 1 clic. */
+    validerDepart: (id: string, d?: DonneesActionLot) =>
+      clientAPI.post<ResultatActionLot>(`${BASE}/voyages/${id}/depart`, d ?? {}, opts),
+    /** « Arrivés » en lot (passagers + colis d'une même gare). */
+    marquerArrivee: (id: string, d?: DonneesActionLot) =>
+      clientAPI.post<ResultatActionLot>(`${BASE}/voyages/${id}/arrivee`, d ?? {}, opts),
+    /** « Prévenir de l'approche » : SMS pré-alerte (passagers, proches, destinataires). */
+    preAlerte: (id: string, d?: DonneesPreAlerte) =>
+      clientAPI.post<ResultatPreAlerte>(`${BASE}/voyages/${id}/pre-alerte`, d ?? {}, opts),
   },
   acteurs: {
     lister: () => clientAPI.get<ReponseListe<Acteur>>(`${BASE}/acteurs?par_page=100`, opts),

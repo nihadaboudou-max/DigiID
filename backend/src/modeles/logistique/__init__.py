@@ -24,6 +24,7 @@ from src.modeles.logistique.notification_logistique import (
     CANAUX_NOTIFICATION,
     TYPES_CIBLE_NOTIFICATION,
 )
+from src.modeles.logistique.bagage import Bagage, STATUTS_BAGAGE
 
 __all__ = [
     "Gare",
@@ -47,4 +48,6 @@ __all__ = [
     "NotificationLogistique",
     "CANAUX_NOTIFICATION",
     "TYPES_CIBLE_NOTIFICATION",
+    "Bagage",
+    "STATUTS_BAGAGE",
 ]
