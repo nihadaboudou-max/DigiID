@@ -11,7 +11,9 @@ import Link from "next/link";
 import { Alerte } from "@/composants/commun/Alerte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
-import { IconeColis, IconePortefeuille, IconeScan, IconeTicket } from "@/composants/commun/Icones";
+import {
+  IconeColis, IconeIdentite, IconePortefeuille, IconeScan, IconeTicket,
+} from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { ROLES_GUICHET } from "@/composants/logistique/roles";
 import { TableauColis } from "@/composants/logistique/TableauColis";
@@ -103,6 +105,13 @@ function Contenu() {
           titre={t("receveur.action.enregistrer")}
           description={t("receveur.action.enregistrer_desc")}
           onClick={() => jouer("btn.enregistrer_colis")}
+        />
+        {/* S7 — suivi familial : enfants voyageant seuls (SMS au départ/arrivée) */}
+        <ActionRapide
+          href="/receveur/suivi-familial"
+          icone={<IconeIdentite className="w-6 h-6" />}
+          titre="Suivi familial"
+          description="Enfants voyageant seuls : SMS au parent au départ et à l'arrivée."
         />
         <ActionRapide
           href="/receveur/scan"

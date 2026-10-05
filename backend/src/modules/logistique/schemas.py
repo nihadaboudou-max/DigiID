@@ -334,3 +334,160 @@ class ScanResponse(BaseModel):
     colis: Optional[ColisResponse] = None
     ticket: Optional[TicketResponse] = None
     evenement: Optional[ColisEvenementResponse] = None
+
+
+# ─── Notifications logistiques (SMS départ/arrivée) ──────────────────
+
+class NotificationLogistiqueResponse(BaseModel):
+    id: UUID
+    canal: str
+    type_cible: str
+    cible_id: Optional[UUID] = None
+    type_evenement: str
+    destinataire_role: Optional[str] = None
+    telephone: Optional[str] = None
+    message: str
+    envoye: bool
+    cree_le: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ─── Suivi familial (enfants seuls) ──────────────────────────────────
+
+StatutSuiviFamilial = Literal["enregistre", "en_route", "arrive", "annule"]
+TypeEvenementSuivi = Literal["depart", "arrivee", "livraison", "incident"]
+
+
+class SuiviFamilialCreate(BaseModel):
+    enfant_nom: str = Field(..., min_length=2, max_length=150)
+    enfant_age: Optional[int] = Field(None, ge=0, le=120)
+    enfant_sexe: Optional[str] = Field(None, pattern=r"^[MF]$")
+    parent_nom: Optional[str] = Field(None, max_length=150)
+    telephone_parent: str = Field(..., min_length=6, max_length=30)
+    gare_depart_id: UUID
+    gare_arrivee_id: UUID
+    voyage_id: Optional[UUID] = None
+    parent_id: Optional[UUID] = None
+
+    @model_validator(mode="after")
+    def _gares_distinctes(self):
+        if self.gare_depart_id == self.gare_arrivee_id:
+            raise ValueError("Les gares de départ et d'arrivée doivent être différentes")
+        return self
+
+
+class SuiviFamilialEvenementCreate(BaseModel):
+    """Marque une étape du voyage d'un enfant (départ, arrivée, remise)."""
+    type_evenement: TypeEvenementSuivi
+    gare_id: Optional[UUID] = None
+    localisation: Optional[str] = Field(None, max_length=200)
+    idempotency_key: Optional[str] = Field(None, max_length=120)
+    horodatage: Optional[datetime] = None
+
+
+class SuiviFamilialEvenementResponse(BaseModel):
+    id: UUID
+    suivi_familial_id: UUID
+    type_evenement: str
+    acteur_id: Optional[UUID] = None
+    acteur_nom: Optional[str] = None
+    gare_id: Optional[UUID] = None
+    localisation: Optional[str] = None
+    horodatage: datetime
+    idempotency_key: Optional[str] = None
+    synchro_le: Optional[datetime] = None
+    cree_le: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SuiviFamilialResponse(BaseModel):
+    id: UUID
+    ticket_id: Optional[UUID] = None
+    code_clair: Optional[str] = None
+    qr_token: Optional[str] = None
+    qr_code_url: Optional[str] = None
+    enfant_nom: str
+    enfant_age: Optional[int] = None
+    enfant_sexe: Optional[str] = None
+    parent_nom: Optional[str] = None
+    telephone_parent: str
+    parent_id: Optional[UUID] = None
+    gare_depart_id: UUID
+    gare_arrivee_id: UUID
+    voyage_id: Optional[UUID] = None
+    statut: str
+    sms_depart_envoye: bool
+    sms_arrivee_envoye: bool
+    enregistre_par_id: Optional[UUID] = None
+    cree_le: datetime
+    modifie_le: Optional[datetime] = None
+    # Champs enrichis (noms lisibles + ticket)
+    gare_depart_nom: Optional[str] = None
+    gare_arrivee_nom: Optional[str] = None
+    enregistre_par_nom: Optional[str] = None
+    nb_evenements: int = 0
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SuiviFamilialEnregistre(BaseModel):
+    """Réponse d'enregistrement : le suivi + son ticket (QR + code)."""
+    suivi: SuiviFamilialResponse
+    ticket: TicketResponse
+
+
+class SuiviFamilialEvenementResultat(BaseModel):
+    """Résultat d'un événement de suivi (idempotent)."""
+    succes: bool = True
+    deja_enregistre: bool = False
+    message: str
+    statut_suivi: Optional[str] = None
+    suivi: Optional[SuiviFamilialResponse] = None
+    evenement: Optional[SuiviFamilialEvenementResponse] = None
+
+
+# ─── Suivi public (sans connexion) ───────────────────────────────────
+
+class EvenementSuiviPublic(BaseModel):
+    type_evenement: str
+    horodatage: datetime
+    localisation: Optional[str] = None
+    gare_nom: Optional[str] = None
+
+
+class NotificationSuiviPublic(BaseModel):
+    type_evenement: str
+    destinataire_role: Optional[str] = None
+    telephone_masque: Optional[str] = None
+    message: str
+    envoye: bool
+    cree_le: datetime
+
+
+class ColisPublicInfo(BaseModel):
+    destinataire_nom: str
+    description: Optional[str] = None
+    poids_kg: Optional[float] = None
+    nombre_articles: int = 1
+
+
+class EnfantPublicInfo(BaseModel):
+    enfant_nom: str
+    enfant_age: Optional[int] = None
+    enfant_sexe: Optional[str] = None
+    parent_nom: Optional[str] = None
+
+
+class SuiviPublicResponse(BaseModel):
+    """Vue publique d'un suivi (colis ou enfant) — sans données sensibles."""
+    type: Literal["colis", "enfant"]
+    code: str
+    statut: str
+    gare_depart_nom: Optional[str] = None
+    gare_arrivee_nom: Optional[str] = None
+    date_depart: Optional[datetime] = None
+    vehicule_immatriculation: Optional[str] = None
+    nb_personnes_notifiees: int = 0
+    colis: Optional[ColisPublicInfo] = None
+    enfant: Optional[EnfantPublicInfo] = None
+    evenements: list[EvenementSuiviPublic] = []
+    notifications: list[NotificationSuiviPublic] = []

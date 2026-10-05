@@ -196,3 +196,182 @@ export const VARIANTES_STATUT_VOYAGE: Record<
   termine: "succes",
   annule: "terre",
 };
+
+// ─── Suivi familial (enfants voyageant seuls — S7) ────────────────────
+
+/** Cycle de vie d'un suivi familial. */
+export type StatutSuiviFamilial =
+  | "enregistre"
+  | "en_route"
+  | "arrive"
+  | "annule";
+
+/** Événements traçables du voyage d'un enfant. */
+export type TypeEvenementSuivi =
+  | "enregistrement"
+  | "depart"
+  | "arrivee"
+  | "livraison"
+  | "incident";
+
+/** Enfant suivi (vue enrichie : noms de gares, agent, ticket). */
+export interface SuiviFamilial {
+  id: string;
+  ticket_id: string | null;
+  code_clair: string | null;
+  qr_token: string | null;
+  qr_code_url: string | null;
+  enfant_nom: string;
+  enfant_age: number | null;
+  enfant_sexe: string | null;
+  parent_nom: string | null;
+  telephone_parent: string;
+  parent_id: string | null;
+  gare_depart_id: string;
+  gare_arrivee_id: string;
+  voyage_id: string | null;
+  statut: StatutSuiviFamilial;
+  sms_depart_envoye: boolean;
+  sms_arrivee_envoye: boolean;
+  enregistre_par_id: string | null;
+  cree_le: string;
+  modifie_le: string | null;
+  gare_depart_nom: string | null;
+  gare_arrivee_nom: string | null;
+  enregistre_par_nom: string | null;
+  nb_evenements: number;
+}
+
+/** Événement de la timeline d'un suivi familial. */
+export interface SuiviFamilialEvenement {
+  id: string;
+  suivi_familial_id: string;
+  type_evenement: TypeEvenementSuivi;
+  acteur_id: string | null;
+  acteur_nom: string | null;
+  gare_id: string | null;
+  localisation: string | null;
+  horodatage: string;
+  idempotency_key: string | null;
+  synchro_le: string | null;
+  cree_le: string;
+}
+
+/** Réponse d'enregistrement : le suivi + son ticket (ENFANT). */
+export interface SuiviFamilialEnregistre {
+  suivi: SuiviFamilial;
+  ticket: Ticket;
+}
+
+/** Payload d'enregistrement d'un enfant au guichet. */
+export interface DonneesSuiviFamilial {
+  enfant_nom: string;
+  enfant_age?: number | null;
+  enfant_sexe?: string | null;
+  parent_nom?: string | null;
+  telephone_parent: string;
+  gare_depart_id: string;
+  gare_arrivee_id: string;
+  voyage_id?: string | null;
+}
+
+/** Payload d'une étape du voyage (départ / arrivée…). */
+export interface DonneesEvenementSuivi {
+  type_evenement: "depart" | "arrivee" | "livraison" | "incident";
+  gare_id?: string | null;
+  localisation?: string | null;
+  idempotency_key?: string | null;
+}
+
+/** Résultat d'un événement de suivi (idempotent). */
+export interface ResultatEvenementSuivi {
+  succes: boolean;
+  deja_enregistre: boolean;
+  message: string;
+  statut_suivi: StatutSuiviFamilial | null;
+  suivi: SuiviFamilial | null;
+  evenement: SuiviFamilialEvenement | null;
+}
+
+/** Trace d'un SMS/alerte logistique (rendu visible en mode mock). */
+export interface NotificationLogistique {
+  id: string;
+  canal: string;
+  type_cible: string;
+  cible_id: string | null;
+  type_evenement: string;
+  destinataire_role: string | null;
+  telephone: string | null;
+  message: string;
+  envoye: boolean;
+  cree_le: string;
+}
+
+/** Libellé lisible d'un statut de suivi familial. */
+export const LIBELLES_STATUT_SUIVI: Record<StatutSuiviFamilial, string> = {
+  enregistre: "Enregistré",
+  en_route: "En route",
+  arrive: "Arrivé",
+  annule: "Annulé",
+};
+
+/** Libellé lisible d'un type d'événement de suivi. */
+export const LIBELLES_EVENEMENT_SUIVI: Record<string, string> = {
+  enregistrement: "Enregistrement de l'enfant",
+  depart: "Départ",
+  arrivee: "Arrivée à destination",
+  livraison: "Remis à la personne désignée",
+  incident: "Incident signalé",
+};
+
+// ─── Suivi public (page /suivi/[code] — S7) ──────────────────────────
+
+/** Événement de la timeline publique. */
+export interface EvenementSuiviPublic {
+  type_evenement: string;
+  horodatage: string;
+  localisation: string | null;
+  gare_nom: string | null;
+}
+
+/** SMS visible par la famille (numéro masqué). */
+export interface NotificationSuiviPublic {
+  type_evenement: string;
+  destinataire_role: string | null;
+  telephone_masque: string | null;
+  message: string;
+  envoye: boolean;
+  cree_le: string;
+}
+
+/** Informations publiques d'un colis (sans données sensibles). */
+export interface ColisPublicInfo {
+  destinataire_nom: string;
+  description: string | null;
+  poids_kg: number | null;
+  nombre_articles: number;
+}
+
+/** Informations publiques d'un enfant suivi. */
+export interface EnfantPublicInfo {
+  enfant_nom: string;
+  enfant_age: number | null;
+  enfant_sexe: string | null;
+  parent_nom: string | null;
+}
+
+/** Vue publique d'un suivi (colis **ou** enfant) renvoyée sans connexion. */
+export interface SuiviPublic {
+  type: "colis" | "enfant";
+  code: string;
+  statut: string;
+  gare_depart_nom: string | null;
+  gare_arrivee_nom: string | null;
+  date_depart: string | null;
+  vehicule_immatriculation: string | null;
+  nb_personnes_notifiees: number;
+  colis: ColisPublicInfo | null;
+  enfant: EnfantPublicInfo | null;
+  evenements: EvenementSuiviPublic[];
+  notifications: NotificationSuiviPublic[];
+}

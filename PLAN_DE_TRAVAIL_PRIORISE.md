@@ -30,7 +30,7 @@
 | **S4** | Interface chauffeur (scan en route) ✅ | 🔴 P0 | S2 | S |
 | **S5** | Accessibilité v1 : sélecteur 4 langues + `BoutonVocal` + audios démo ✅ | 🔴 P0 | S3 | M |
 | **S6** | Paiement minimal : commission + wallet + espèces / 1 opérateur (mock) ✅ | 🔴 P0 | S2 | M |
-| **S7** | Suivi public (colis + familial) + SMS | 🔴 P0 | S2 | M |
+| **S7** | Suivi public (colis + familial) + SMS ✅ | 🔴 P0 | S2 | M |
 | | **➜ FIN PROTOTYPE MÉMOIRE (démontrable)** | | | |
 | **S8** | Refonte documents « 1 document = 1 table » | 🟠 P1 | — | L |
 | **S9** | Bagages passagers + voyageurs | 🟠 P1 | S2 | M |
@@ -127,14 +127,36 @@
   → **25 à 150 FCFA** créditent la cagnotte du receveur (visible sur `/receveur/cagnotte`).
 - **Dépendances** : S2.
 
-#### Étape S7 — Suivi public + SMS
+#### Étape S7 — Suivi public + SMS ✅ (fait)
 - **Objectif** : inclure les familles (fort impact social pour le mémoire).
 - **Contenu** : page publique `/suivi/[code]` (colis **et** suivi familial enfant) ;
   SMS départ/arrivée (via `noyau/notification`, mode mock puis réel).
-- **Livrable démontrable** : ouvrir un lien de suivi + recevoir/voir un SMS simulé.
+- **Réalisé** :
+  - **Suivi familial** : modèles `suivi_familial`, `suivi_familial_evenements`,
+    `notifications_logistique` + migration Alembic (`20260816_1000_suivi_familial_sms`) ;
+    routes `/api/v1/logistique/suivi-familial` (créer un enfant → ticket ``ENFANT``
+    `ENF-<gare>-<année>-NNNNNN` + QR, lister, détail, timeline, notifications) ;
+    étapes **départ** / **arrivée** idempotentes (`idempotency_key`) déclenchant le SMS
+    au parent **une seule fois** (garde-fous `sms_depart_envoye` / `sms_arrivee_envoye`).
+  - **SMS (mock)** : `noyau/notification.construire_message_colis` /
+    `construire_message_suivi_familial` + journal `notifications_logistique` (le SMS
+    simulé devient **visible** dans l'interface : destinataire masqué, message, horodatage).
+    Les scans de colis (départ / transit / arrivée / livraison) notifient aussi
+    destinataire **et** expéditeur.
+  - **Suivi public sans connexion** : `GET /api/v1/logistique/public/suivi/{code}`
+    (code clair **ou** token QR) → page `/suivi/[code]` (timeline, gares, véhicule,
+    SMS émis) — accessible à la famille sans compte.
+  - **Frontend guichet** : `/receveur/suivi-familial` (liste + filtres + compteurs,
+    boutons « Marquer le départ / l'arrivée »), `/receveur/suivi-familial/nouveau`
+    (assistant d'enregistrement + ticket imprimable `ENF-…` + lien de suivi),
+    entrée « Suivi familial » dans la navigation 
+    (barre latérale, menu mobile, tableau de bord receveur/chauffeur).
+- **Livrable démontrable** : enregistrer un enfant au guichet → imprimer son ticket
+  `ENF-…` → marquer le départ puis l'arrivée (SMS journalisés) → ouvrir le lien de suivi
+  `/suivi/ENF-…` depuis un navigateur **sans connexion**.
 - **Dépendances** : S2.
 
-> ✅ **À la fin de S7 : le prototype de mémoire est complet et démontrable.**
+> ✅ **S1 → S7 livrées : le prototype de mémoire est complet et démontrable.**
 
 ---
 
@@ -191,7 +213,8 @@
 
 ## Prochaine action immédiate
 
-> **S1 → S6 livrées.** Démarrer l'**Étape S7 — Suivi public + SMS**.
+> **S1 → S7 livrées.** Le prototype de mémoire est **complet et démontrable**.
+> Prochaine étape possible : **S8 — Refonte documents « 1 document = 1 table »** (P1).
 
 Rappel de ce qui est en place côté logistique :
 - **S1** : référentiel (gares, lignes, véhicules, voyages, acteurs) + rôles.
@@ -203,8 +226,12 @@ Rappel de ce qui est en place côté logistique :
   `GET /tarifs`), **frais de service par nombre d'articles** 100/200/350/500 FCFA dont
   **25 à 150 FCFA** au receveur (espèces / Wave mock), compte prépayé de l'agent débité
   de 100 FCFA par scan en espèces, un seul prélèvement par colis, page `/receveur/cagnotte`.
+- **S7** : suivi public + SMS — API `/api/v1/logistique/suivi-familial` (ticket ``ENFANT`` +
+  étapes départ/arrivée idempotentes), `GET /public/suivi/{code}` (sans connexion), journal
+  `notifications_logistique` (SMS mock visibles) ; pages `/suivi/[code]`,
+  `/receveur/suivi-familial` (+ `/nouveau`), entrées de navigation guichet/chauffeur.
 
-Prochaine étape S7 : suivi public `/suivi/[code]` (colis + familial) et SMS départ/arrivée (mock).
+**Prochaine étape proposée** : S8 — refonte documents « 1 document = 1 table ».
 
 ---
 

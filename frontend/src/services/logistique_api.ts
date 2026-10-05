@@ -6,10 +6,16 @@
 import { clientAPI } from "@/services/client_api";
 import type {
   Colis, ColisEnregistre, ColisEvenement, DonneesColis, DonneesScan, ResultatScan,
+  SuiviFamilial, SuiviFamilialEnregistre, SuiviFamilialEvenement,
+  DonneesSuiviFamilial, DonneesEvenementSuivi, ResultatEvenementSuivi,
+  NotificationLogistique, SuiviPublic,
 } from "@/types/logistique";
 
 export type {
   Colis, ColisEnregistre, ColisEvenement, DonneesColis, DonneesScan, ResultatScan,
+  SuiviFamilial, SuiviFamilialEnregistre, SuiviFamilialEvenement,
+  DonneesSuiviFamilial, DonneesEvenementSuivi, ResultatEvenementSuivi,
+  NotificationLogistique, SuiviPublic,
 } from "@/types/logistique";
 
 export interface ReponseListe<T> {
@@ -145,10 +151,72 @@ export const logistiqueAPI = {
       clientAPI.get<ColisEvenement[]>(`${BASE}/colis/${colisId}/evenements`, opts),
   },
 
+  // ─── Suivi familial (enfants voyageant seuls — S7) ────────────────
+  suiviFamilial: {
+    /** Enregistre un enfant suivi : ticket ``ENFANT`` + SMS au parent. */
+    creer: (d: DonneesSuiviFamilial) =>
+      clientAPI.post<SuiviFamilialEnregistre>(`${BASE}/suivi-familial`, d, opts),
+
+    /** Liste paginée des enfants suivis. */
+    lister: (filtres?: {
+      statut?: string;
+      voyage_id?: string;
+      recherche?: string;
+      page?: number;
+      par_page?: number;
+    }) => {
+      const qs = new URLSearchParams();
+      qs.set("par_page", String(filtres?.par_page ?? 100));
+      qs.set("page", String(filtres?.page ?? 1));
+      if (filtres?.statut) qs.set("statut", filtres.statut);
+      if (filtres?.voyage_id) qs.set("voyage_id", filtres.voyage_id);
+      if (filtres?.recherche) qs.set("recherche", filtres.recherche);
+      return clientAPI.get<ReponseListe<SuiviFamilial>>(
+        `${BASE}/suivi-familial?${qs.toString()}`,
+        opts,
+      );
+    },
+
+    /** Détail d'un suivi (nom de la gare, agent, ticket). */
+    obtenir: (id: string) =>
+      clientAPI.get<SuiviFamilial>(`${BASE}/suivi-familial/${id}`, opts),
+
+    /** Marque une étape (départ / arrivée) et déclenche le SMS au parent. */
+    enregistrerEvenement: (id: string, d: DonneesEvenementSuivi) =>
+      clientAPI.post<ResultatEvenementSuivi>(
+        `${BASE}/suivi-familial/${id}/evenement`,
+        d,
+        opts,
+      ),
+
+    /** Timeline d'un suivi familial. */
+    evenements: (id: string) =>
+      clientAPI.get<SuiviFamilialEvenement[]>(
+        `${BASE}/suivi-familial/${id}/evenements`,
+        opts,
+      ),
+
+    /** SMS émis pour un suivi familial (départ / arrivée). */
+    notifications: (id: string) =>
+      clientAPI.get<NotificationLogistique[]>(
+        `${BASE}/suivi-familial/${id}/notifications`,
+        opts,
+      ),
+  },
+
   // ─── Scans (départ / transit / arrivée / livraison) ────────────────
   scans: {
     scanner: (d: DonneesScan) =>
       clientAPI.post<ResultatScan>(`${BASE}/scans`, d, opts),
+  },
+
+  // ─── Suivi public (sans connexion — page famille) ─────────────────
+  suiviPublic: {
+    /** Suivi d'un colis **ou** d'un enfant depuis son code (QR ou clair). */
+    parCode: (code: string) =>
+      clientAPI.get<SuiviPublic>(
+        `${BASE}/public/suivi/${encodeURIComponent(code)}`,
+      ),
   },
 };
 

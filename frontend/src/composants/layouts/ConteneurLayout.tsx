@@ -15,6 +15,8 @@ const PAGES_SANS_LAYOUT = [
   "/inscription",
   "/mot-de-passe-oublie",
   "/accepter-invitation",
+  // Suivi public (familles) — accessible sans connexion, étape S7.
+  "/suivi",
 ];
 
 export function ConteneurLayout({ children }: { children: React.ReactNode }) {

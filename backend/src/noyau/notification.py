@@ -531,6 +531,101 @@ def envoyer_sms_verification(telephone: str, code: str) -> bool:
 
 
 # =============================================================================
+# SMS logistique (Plan B — étape S7) : départ / arrivée / livraison
+# =============================================================================
+
+def construire_message_colis(
+    code_clair: str, type_evenement: str, lieu: Optional[str] = None
+) -> str:
+    """Compose le SMS d'information du destinataire/expéditeur d'un colis."""
+    suffixe = f" {lieu}" if lieu else ""
+    if type_evenement == "livraison":
+        return (
+            f"DigiID — Votre colis {code_clair} a été REMIS au destinataire."
+            " Merci d'avoir choisi DigiID."
+        )
+    if type_evenement == "arrivee":
+        return (
+            f"DigiID — Votre colis {code_clair} est ARRIVÉ{suffixe}."
+            " Vous pouvez venir le retirer au guichet."
+        )
+    if type_evenement == "depart":
+        return (
+            f"DigiID — Votre colis {code_clair} a QUITTÉ{suffixe}."
+            " Vous serez prévenu(e) de son arrivée."
+        )
+    if type_evenement == "mise_en_transit":
+        return (
+            f"DigiID — Votre colis {code_clair} est EN ROUTE{suffixe}."
+        )
+    return f"DigiID — Mise à jour du colis {code_clair} : {type_evenement}{suffixe}."
+
+
+def envoyer_sms_colis(
+    telephone: str,
+    code_clair: str,
+    type_evenement: str,
+    lieu: Optional[str] = None,
+) -> bool:
+    """Envoie un SMS de suivi de colis (départ / arrivée / livraison)."""
+    return envoyer_sms(telephone, construire_message_colis(code_clair, type_evenement, lieu))
+
+
+def construire_message_suivi_familial(
+    enfant_nom: str,
+    type_evenement: str,
+    lieu: Optional[str] = None,
+    enfant_age: Optional[int] = None,
+) -> str:
+    """Compose le SMS rassurant adressé au parent d'un enfant voyageant seul."""
+    age = f" ({enfant_age} ans)" if enfant_age else ""
+    suffixe = f" {lieu}" if lieu else ""
+    if type_evenement == "depart":
+        return (
+            f"DigiID — {enfant_nom}{age} a bien PRIS LE DÉPART{suffixe}."
+            " Bon voyage ! Vous serez prévenu(e) à l'arrivée."
+        )
+    if type_evenement == "arrivee":
+        return (
+            f"DigiID — {enfant_nom}{age} est BIEN ARRIVÉ(E){suffixe}."
+            " Vous pouvez venir le/la récupérer au guichet."
+        )
+    if type_evenement == "livraison":
+        return (
+            f"DigiID — {enfant_nom}{age} a été REMIS(E) à la personne désignée{suffixe}."
+        )
+    return (
+        f"DigiID — Suivi de {enfant_nom}{age} : {type_evenement}{suffixe}."
+    )
+
+
+def envoyer_sms_suivi_familial(
+    telephone: str,
+    enfant_nom: str,
+    type_evenement: str,
+    lieu: Optional[str] = None,
+    enfant_age: Optional[int] = None,
+) -> bool:
+    """Envoie au parent le SMS d'un enfant suivi (départ / arrivée)."""
+    return envoyer_sms(
+        telephone,
+        construire_message_suivi_familial(enfant_nom, type_evenement, lieu, enfant_age),
+    )
+
+
+def masquer_telephone(telephone: Optional[str]) -> Optional[str]:
+    """Masque un numéro pour l'affichage public (ex. ``+229****233``)."""
+    if not telephone:
+        return None
+    valeur = telephone.strip()
+    if len(valeur) <= 4:
+        return "*" * len(valeur)
+    fin = valeur[-3:]
+    debut = valeur[:4]
+    return f"{debut}{'*' * (len(valeur) - len(debut) - len(fin))}{fin}"
+
+
+# =============================================================================
 # Appel vocal
 # =============================================================================
 

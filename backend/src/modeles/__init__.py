@@ -43,6 +43,9 @@ from src.modeles.logistique import (
     Ticket, STATUTS_TICKET, TYPES_TICKET,
     Colis, STATUTS_COLIS,
     ColisEvenement, TYPES_EVENEMENT_COLIS,
+    SuiviFamilial, STATUTS_SUIVI_FAMILIAL,
+    SuiviFamilialEvenement, TYPES_EVENEMENT_SUIVI,
+    NotificationLogistique, CANAUX_NOTIFICATION, TYPES_CIBLE_NOTIFICATION,
 )
 from src.modeles.paiement import (
     Portefeuille, DEVISES,
@@ -116,6 +119,13 @@ __all__ = [
     "STATUTS_COLIS",
     "ColisEvenement",
     "TYPES_EVENEMENT_COLIS",
+    "SuiviFamilial",
+    "STATUTS_SUIVI_FAMILIAL",
+    "SuiviFamilialEvenement",
+    "TYPES_EVENEMENT_SUIVI",
+    "NotificationLogistique",
+    "CANAUX_NOTIFICATION",
+    "TYPES_CIBLE_NOTIFICATION",
     "Portefeuille",
     "DEVISES",
     "MouvementPortefeuille",

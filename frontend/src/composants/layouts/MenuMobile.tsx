@@ -116,6 +116,7 @@ const LIENS_RECEVEUR: Lien[] = [
   { href: "/receveur/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
   { href: "/receveur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
   { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
+  { href: "/receveur/suivi-familial", libelle: "Suivi familial", Icone: IconeIdentite },
   { href: "/receveur/scan", libelle: "Scanner / Livrer", Icone: IconeScan },
   { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
 ];
@@ -124,6 +125,7 @@ const LIENS_CHAUFFEUR: Lien[] = [
   { href: "/chauffeur/dashboard", libelle: "Mes voyages", Icone: IconeColis },
   { href: "/chauffeur/scan", libelle: "Scanner un colis", Icone: IconeScan },
   { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
+  { href: "/receveur/suivi-familial", libelle: "Suivi familial", Icone: IconeIdentite },
   { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
 ];
 

@@ -10,6 +10,7 @@ from src.base_donnees.session import obtenir_session
 from src.modeles import (
     Gare, Ligne, Vehicule, Voyage, ActeurLogistique, Utilisateur,
     Ticket, Colis, ColisEvenement,
+    SuiviFamilial, SuiviFamilialEvenement,
 )
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.logistique import service, schemas
@@ -84,6 +85,27 @@ async def _enrichir_colis(session: AsyncSession, colis: Colis) -> Colis:
 async def _enrichir_evenement(
     session: AsyncSession, evenement: ColisEvenement
 ) -> ColisEvenement:
+    evenement.acteur_nom = await _nom_utilisateur(session, evenement.acteur_id)
+    return evenement
+
+
+async def _enrichir_suivi_familial(
+    session: AsyncSession, suivi: SuiviFamilial
+) -> SuiviFamilial:
+    suivi.gare_depart_nom = await _nom_gare(session, suivi.gare_depart_id)
+    suivi.gare_arrivee_nom = await _nom_gare(session, suivi.gare_arrivee_id)
+    suivi.enregistre_par_nom = await _nom_utilisateur(session, suivi.enregistre_par_id)
+    ticket = await service.obtenir_ticket_du_suivi(session, suivi)
+    suivi.code_clair = ticket.code_clair if ticket else None
+    suivi.qr_token = ticket.qr_token if ticket else None
+    suivi.qr_code_url = construire_url_qr_durable(ticket.qr_token) if ticket else None
+    suivi.nb_evenements = await service._compter_evenements_suivi(session, suivi.id)
+    return suivi
+
+
+async def _enrichir_evenement_suivi(
+    session: AsyncSession, evenement: SuiviFamilialEvenement
+) -> SuiviFamilialEvenement:
     evenement.acteur_nom = await _nom_utilisateur(session, evenement.acteur_id)
     return evenement
 
@@ -479,6 +501,19 @@ async def lister_evenements_colis(
     return evenements
 
 
+@routeur_colis.get("/{colis_id}/notifications",
+                   response_model=list[schemas.NotificationLogistiqueResponse],
+                   summary="SMS envoyés pour un colis (S7)")
+@require_permission("logistique.lire")
+async def lister_notifications_colis(
+    colis_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    await service.obtenir_colis(session, colis_id)
+    return await service.lister_notifications(session, "colis", colis_id)
+
+
 @routeur_colis.get("/{code}", response_model=schemas.ColisResponse,
                    summary="Obtenir un colis par code clair (ou token QR)")
 @require_permission("logistique.lire")
@@ -518,6 +553,127 @@ async def scanner_ticket(
     return resultat
 
 
+# ─── Suivi familial (enfants voyageant seuls) ───────────────────────
+
+routeur_suivi_familial = APIRouter(
+    prefix="/suivi-familial", tags=["Logistique — Suivi familial"]
+)
+
+
+@routeur_suivi_familial.post("", response_model=schemas.SuiviFamilialEnregistre,
+                             status_code=status.HTTP_201_CREATED,
+                             summary="Enregistrer un enfant suivi (ticket ENFANT + SMS parent)")
+@require_permission("logistique.colis.creer")
+async def enregistrer_suivi_familial(
+    donnees: schemas.SuiviFamilialCreate,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    suivi, ticket = await service.creer_suivi_familial(session, donnees, utilisateur_courant)
+    await _enrichir_suivi_familial(session, suivi)
+    ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
+    return {"suivi": suivi, "ticket": ticket}
+
+
+@routeur_suivi_familial.get("",
+                            response_model=schemas.ReponseListe[schemas.SuiviFamilialResponse],
+                            summary="Lister les suivis familiaux")
+@require_permission("logistique.lire")
+async def lister_suivi_familial(
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    page: int = Query(1, ge=1),
+    par_page: int = Query(20, ge=1, le=100),
+    statut: str | None = Query(None),
+    voyage_id: UUID | None = Query(None),
+    recherche: str | None = Query(None),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    suivis, total = await service.lister_suivi_familial(
+        session, page, par_page, statut, voyage_id, recherche
+    )
+    for suivi in suivis:
+        await _enrichir_suivi_familial(session, suivi)
+    return schemas.ReponseListe(elements=suivis, total=total, page=page, par_page=par_page)
+
+
+@routeur_suivi_familial.get("/{suivi_id}",
+                            response_model=schemas.SuiviFamilialResponse,
+                            summary="Obtenir un suivi familial")
+@require_permission("logistique.lire")
+async def obtenir_suivi_familial(
+    suivi_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    suivi = await service.obtenir_suivi_familial(session, suivi_id)
+    return await _enrichir_suivi_familial(session, suivi)
+
+
+@routeur_suivi_familial.get("/{suivi_id}/evenements",
+                            response_model=list[schemas.SuiviFamilialEvenementResponse],
+                            summary="Timeline d'un suivi familial")
+@require_permission("logistique.lire")
+async def lister_evenements_suivi(
+    suivi_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    evenements = await service.lister_evenements_suivi(session, suivi_id)
+    for evenement in evenements:
+        await _enrichir_evenement_suivi(session, evenement)
+    return evenements
+
+
+@routeur_suivi_familial.get("/{suivi_id}/notifications",
+                            response_model=list[schemas.NotificationLogistiqueResponse],
+                            summary="SMS envoyés pour un suivi familial")
+@require_permission("logistique.lire")
+async def lister_notifications_suivi(
+    suivi_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    await service.obtenir_suivi_familial(session, suivi_id)
+    return await service.lister_notifications(session, "suivi_familial", suivi_id)
+
+
+@routeur_suivi_familial.post("/{suivi_id}/evenement",
+                             response_model=schemas.SuiviFamilialEvenementResultat,
+                             summary="Marquer une étape (départ / arrivée) + SMS au parent")
+@require_permission("logistique.scan")
+async def enregistrer_evenement_suivi(
+    suivi_id: UUID,
+    donnees: schemas.SuiviFamilialEvenementCreate,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    resultat = await service.enregistrer_evenement_suivi(
+        session, suivi_id, donnees, utilisateur_courant
+    )
+    suivi = resultat.get("suivi")
+    if suivi is not None:
+        resultat["suivi"] = await _enrichir_suivi_familial(session, suivi)
+    evenement = resultat.get("evenement")
+    if evenement is not None:
+        resultat["evenement"] = await _enrichir_evenement_suivi(session, evenement)
+    return resultat
+
+
+# ─── Suivi public (sans connexion) ───────────────────────────────────
+
+routeur_public = APIRouter(prefix="/public", tags=["Logistique — Suivi public"])
+
+
+@routeur_public.get("/suivi/{code}", response_model=schemas.SuiviPublicResponse,
+                    summary="Suivi public d'un colis ou d'un enfant (page famille)")
+async def suivi_public(
+    code: str,
+    session: AsyncSession = Depends(obtenir_session),
+):
+    """Suivi accessible **sans authentification** depuis le code clair (ou le QR)."""
+    return await service.construire_suivi_public(session, code)
+
+
 # ─── Agrégation ──────────────────────────────────────────────────────
 
 routeur_logistique = APIRouter(prefix="/api/v1/logistique")
@@ -527,4 +683,6 @@ routeur_logistique.include_router(routeur_vehicules)
 routeur_logistique.include_router(routeur_voyages)
 routeur_logistique.include_router(routeur_acteurs)
 routeur_logistique.include_router(routeur_colis)
+routeur_logistique.include_router(routeur_suivi_familial)
+routeur_logistique.include_router(routeur_public)
 routeur_logistique.include_router(routeur_scans)

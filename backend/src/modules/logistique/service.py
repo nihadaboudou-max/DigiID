@@ -12,9 +12,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modeles import (
     Gare, Ligne, Vehicule, Voyage, ActeurLogistique, Domaine, Utilisateur,
     Ticket, Colis, ColisEvenement,
+    SuiviFamilial, SuiviFamilialEvenement, NotificationLogistique,
 )
 from src.modules.logistique import schemas
 from src.modules.qr_dynamique.service import generer_token_durable
+from src.noyau.notification import (
+    envoyer_sms,
+    construire_message_colis,
+    construire_message_suivi_familial,
+    masquer_telephone,
+)
 
 
 # ─── Utilitaires ─────────────────────────────────────────────────────
@@ -330,10 +337,16 @@ async def supprimer_acteur(session: AsyncSession, acteur_id: UUID) -> None:
 
 # ─── Colis / Ticket : enregistrement ─────────────────────────────────
 
-async def _generer_code_clair(session: AsyncSession, gare: Gare) -> str:
-    """Génère un numéro de ticket lisible, unique : ``<CODE_GARE>-<ANNEE>-NNNNNN``."""
+async def _generer_code_clair(
+    session: AsyncSession, gare: Gare, prefixe_extra: str = ""
+) -> str:
+    """Génère un numéro de ticket lisible, unique : ``<CODE_GARE>-<ANNEE>-NNNNNN``.
+
+    ``prefixe_extra`` permet de distinguer les familles de tickets (ex. ``ENF-``
+    pour un suivi familial) tout en gardant un format homogène.
+    """
     annee = datetime.now(timezone.utc).year
-    prefixe = f"{(gare.code or 'GS').upper()}-{annee}-"
+    prefixe = f"{prefixe_extra}{(gare.code or 'GS').upper()}-{annee}-"
     total = await session.scalar(
         select(func.count()).select_from(Ticket).where(
             Ticket.code_clair.like(f"{prefixe}%")
@@ -591,7 +604,13 @@ async def enregistrer_scan(
     if ticket.premier_scan_le is None:
         ticket.premier_scan_le = maintenant
 
-    # 5. Compte prépayé de l'agent : sur un colis réglé **en espèces**, 100 FCFA
+    # 5. SMS d'information au destinataire / expéditeur (S7) : départ, mise en
+    #    transit, arrivée, livraison. Traçé dans ``notifications_logistique``.
+    await _notifier_scan_colis(
+        session, colis, ticket, donnees.type_evenement, donnees.gare_id
+    )
+
+    # 6. Compte prépayé de l'agent : sur un colis réglé **en espèces**, 100 FCFA
     #    sont débités automatiquement à chaque scan réellement enregistré.
     debit_agent = await _debiter_compte_prepaye_agent(session, colis, utilisateur.id)
 
@@ -643,3 +662,482 @@ async def enregistrer_scan(
         "ticket": ticket,
         "evenement": evenement,
     }
+
+
+# ─── Notifications SMS (S7) ──────────────────────────────────────────
+
+async def _libelle_gare(session: AsyncSession, gare_id: UUID | None) -> str | None:
+    """Nom lisible d'une gare (pour composer le SMS : « a quitté Cotonou »)."""
+    if gare_id is None:
+        return None
+    gare = await session.get(Gare, gare_id)
+    if gare is None:
+        return None
+    return f"{gare.nom} ({gare.ville})" if gare.ville else gare.nom
+
+
+def _ajouter_notification(
+    session: AsyncSession,
+    *,
+    type_cible: str,
+    cible_id: UUID,
+    type_evenement: str,
+    destinataire_role: str,
+    telephone: str,
+    message: str,
+) -> NotificationLogistique:
+    """Envoie (mock) le SMS et journalise la notification dans la transaction."""
+    envoye = envoyer_sms(telephone, message)
+    notification = NotificationLogistique(
+        canal="sms",
+        type_cible=type_cible,
+        cible_id=cible_id,
+        type_evenement=type_evenement,
+        destinataire_role=destinataire_role,
+        telephone=telephone,
+        message=message,
+        envoye=envoye,
+    )
+    session.add(notification)
+    return notification
+
+
+async def _notifier_scan_colis(
+    session: AsyncSession,
+    colis: Colis,
+    ticket: Ticket,
+    type_evenement: str,
+    gare_id: UUID | None,
+) -> None:
+    """Alerte par SMS le destinataire (et l'expéditeur) lors d'un scan de colis.
+
+    Seuls les événements porteurs de sens pour la famille déclenchent un SMS
+    (départ, mise en transit, arrivée, livraison) — pas l'enregistrement initial
+    (le client est au guichet).
+    """
+    if type_evenement not in ("depart", "mise_en_transit", "arrivee", "livraison"):
+        return
+    lieu = await _libelle_gare(session, gare_id)
+    message = construire_message_colis(ticket.code_clair, type_evenement, lieu)
+    destinataires: list[tuple[str, str | None]] = [
+        ("destinataire", colis.destinataire_tel),
+        ("expediteur", colis.expediteur_tel),
+    ]
+    vus: set[str] = set()
+    for role, telephone in destinataires:
+        if not telephone or telephone in vus:
+            continue
+        vus.add(telephone)
+        _ajouter_notification(
+            session,
+            type_cible="colis",
+            cible_id=colis.id,
+            type_evenement=type_evenement,
+            destinataire_role=role,
+            telephone=telephone,
+            message=message,
+        )
+
+
+async def lister_notifications(
+    session: AsyncSession, type_cible: str, cible_id: UUID
+) -> list[NotificationLogistique]:
+    """Notifications (SMS) déjà émises pour une cible (colis ou suivi familial)."""
+    resultat = await session.execute(
+        select(NotificationLogistique)
+        .where(
+            NotificationLogistique.type_cible == type_cible,
+            NotificationLogistique.cible_id == cible_id,
+        )
+        .order_by(NotificationLogistique.cree_le.asc())
+    )
+    return list(resultat.scalars().all())
+
+
+# ─── Suivi familial (enfants voyageant seuls) ───────────────────────
+
+async def creer_suivi_familial(
+    session: AsyncSession,
+    donnees: schemas.SuiviFamilialCreate,
+    utilisateur: Utilisateur,
+) -> tuple[SuiviFamilial, Ticket]:
+    """Enregistre un enfant suivi et génère son ticket (QR + code ``ENF-…``)."""
+    if donnees.gare_depart_id == donnees.gare_arrivee_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            detail="Les gares de départ et d'arrivée doivent être différentes")
+    gare_depart = await _verifier_existe(session, Gare, donnees.gare_depart_id, "Gare de départ")
+    await _verifier_existe(session, Gare, donnees.gare_arrivee_id, "Gare d'arrivée")
+    if donnees.voyage_id is not None:
+        await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
+    if donnees.parent_id is not None:
+        await _verifier_existe(session, Utilisateur, donnees.parent_id, "Parent")
+
+    suivi = SuiviFamilial(
+        enfant_nom=donnees.enfant_nom.strip(),
+        enfant_age=donnees.enfant_age,
+        enfant_sexe=donnees.enfant_sexe,
+        parent_nom=(donnees.parent_nom or "").strip() or None,
+        telephone_parent=donnees.telephone_parent.strip(),
+        parent_id=donnees.parent_id,
+        gare_depart_id=donnees.gare_depart_id,
+        gare_arrivee_id=donnees.gare_arrivee_id,
+        voyage_id=donnees.voyage_id,
+        statut="enregistre",
+        enregistre_par_id=utilisateur.id,
+    )
+    session.add(suivi)
+    await session.flush()  # -> suivi.id disponible
+
+    code_clair = await _generer_code_clair(session, gare_depart, "ENF-")
+    ticket = Ticket(
+        code_clair=code_clair,
+        qr_token=generer_token_durable(str(suivi.id)),
+        type="ENFANT",
+        reference_id=suivi.id,
+        voyage_id=donnees.voyage_id,
+        statut="emis",
+    )
+    session.add(ticket)
+    await session.flush()  # -> ticket.id disponible
+    suivi.ticket_id = ticket.id
+
+    evenement = SuiviFamilialEvenement(
+        suivi_familial_id=suivi.id,
+        type_evenement="enregistrement",
+        acteur_id=utilisateur.id,
+        gare_id=donnees.gare_depart_id,
+        horodatage=datetime.now(timezone.utc),
+    )
+    session.add(evenement)
+
+    # SMS de confirmation : le parent reçoit le code de suivi public.
+    message = (
+        f"DigiID — Suivi activé pour {suivi.enfant_nom}. "
+        f"Code de suivi : {code_clair}. "
+        "Vous recevrez un SMS au départ puis à l'arrivée."
+    )
+    _ajouter_notification(
+        session,
+        type_cible="suivi_familial",
+        cible_id=suivi.id,
+        type_evenement="enregistrement",
+        destinataire_role="parent",
+        telephone=suivi.telephone_parent,
+        message=message,
+    )
+
+    await session.commit()
+    await session.refresh(suivi)
+    await session.refresh(ticket)
+    return suivi, ticket
+
+
+async def obtenir_suivi_familial(
+    session: AsyncSession, suivi_id: UUID
+) -> SuiviFamilial:
+    suivi = await session.get(SuiviFamilial, suivi_id)
+    if suivi is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Suivi familial introuvable")
+    return suivi
+
+
+async def obtenir_ticket_du_suivi(
+    session: AsyncSession, suivi: SuiviFamilial | None
+) -> Ticket | None:
+    if suivi is None:
+        return None
+    if suivi.ticket_id is not None:
+        return await session.get(Ticket, suivi.ticket_id)
+    return await session.scalar(
+        select(Ticket).where(
+            Ticket.reference_id == suivi.id, Ticket.type == "ENFANT"
+        )
+    )
+
+
+async def lister_suivi_familial(
+    session: AsyncSession,
+    page: int,
+    par_page: int,
+    statut: str | None = None,
+    voyage_id: UUID | None = None,
+    recherche: str | None = None,
+):
+    requete = select(SuiviFamilial)
+    if statut is not None:
+        requete = requete.where(SuiviFamilial.statut == statut)
+    if voyage_id is not None:
+        requete = requete.where(SuiviFamilial.voyage_id == voyage_id)
+    if recherche:
+        requete = requete.where(SuiviFamilial.enfant_nom.ilike(f"%{recherche.strip()}%"))
+    requete = requete.order_by(SuiviFamilial.cree_le.desc())
+    return await _paginer(session, requete, page, par_page)
+
+
+async def _compter_evenements_suivi(session: AsyncSession, suivi_id: UUID) -> int:
+    return await session.scalar(
+        select(func.count()).select_from(SuiviFamilialEvenement).where(
+            SuiviFamilialEvenement.suivi_familial_id == suivi_id
+        )
+    ) or 0
+
+
+async def lister_evenements_suivi(
+    session: AsyncSession, suivi_id: UUID
+) -> list[SuiviFamilialEvenement]:
+    await obtenir_suivi_familial(session, suivi_id)  # 404 si absent
+    resultat = await session.execute(
+        select(SuiviFamilialEvenement)
+        .where(SuiviFamilialEvenement.suivi_familial_id == suivi_id)
+        .order_by(
+            SuiviFamilialEvenement.horodatage.asc(),
+            SuiviFamilialEvenement.cree_le.asc(),
+        )
+    )
+    return list(resultat.scalars().all())
+
+
+async def enregistrer_evenement_suivi(
+    session: AsyncSession,
+    suivi_id: UUID,
+    donnees: schemas.SuiviFamilialEvenementCreate,
+    utilisateur: Utilisateur,
+) -> dict:
+    """Marque une étape du voyage d'un enfant et prévient le parent par SMS.
+
+    Idempotent (``idempotency_key``) : un même événement n'est jamais dupliqué et
+    le SMS de départ / d'arrivée ne part qu'une seule fois (flags ``sms_*_envoye``).
+    """
+    suivi = await obtenir_suivi_familial(session, suivi_id)
+
+    if donnees.idempotency_key:
+        existant = await session.scalar(
+            select(SuiviFamilialEvenement).where(
+                SuiviFamilialEvenement.idempotency_key == donnees.idempotency_key
+            )
+        )
+        if existant is not None:
+            return {
+                "succes": True,
+                "deja_enregistre": True,
+                "message": "Événement déjà enregistré (idempotent).",
+                "statut_suivi": suivi.statut,
+                "suivi": suivi,
+                "evenement": existant,
+            }
+
+    maintenant = donnees.horodatage or datetime.now(timezone.utc)
+    evenement = SuiviFamilialEvenement(
+        suivi_familial_id=suivi.id,
+        type_evenement=donnees.type_evenement,
+        acteur_id=utilisateur.id,
+        gare_id=donnees.gare_id,
+        localisation=donnees.localisation,
+        horodatage=maintenant,
+        idempotency_key=donnees.idempotency_key,
+    )
+    session.add(evenement)
+
+    gare_id_lieu = donnees.gare_id or (
+        suivi.gare_arrivee_id if donnees.type_evenement == "arrivee" else suivi.gare_depart_id
+    )
+    lieu = await _libelle_gare(session, gare_id_lieu)
+
+    if donnees.type_evenement == "depart":
+        if suivi.statut == "enregistre":
+            suivi.statut = "en_route"
+        if not suivi.sms_depart_envoye:
+            _ajouter_notification(
+                session,
+                type_cible="suivi_familial",
+                cible_id=suivi.id,
+                type_evenement="depart",
+                destinataire_role="parent",
+                telephone=suivi.telephone_parent,
+                message=construire_message_suivi_familial(
+                    suivi.enfant_nom, "depart", lieu, suivi.enfant_age
+                ),
+            )
+            suivi.sms_depart_envoye = True
+    elif donnees.type_evenement == "arrivee":
+        suivi.statut = "arrive"
+        if not suivi.sms_arrivee_envoye:
+            _ajouter_notification(
+                session,
+                type_cible="suivi_familial",
+                cible_id=suivi.id,
+                type_evenement="arrivee",
+                destinataire_role="parent",
+                telephone=suivi.telephone_parent,
+                message=construire_message_suivi_familial(
+                    suivi.enfant_nom, "arrivee", lieu, suivi.enfant_age
+                ),
+            )
+            suivi.sms_arrivee_envoye = True
+    elif donnees.type_evenement == "livraison":
+        suivi.statut = "arrive"
+    # « incident » : on trace sans changer le statut.
+
+    # Le ticket suit le voyage (transit dès le départ).
+    ticket = await obtenir_ticket_du_suivi(session, suivi)
+    if ticket is not None:
+        if donnees.type_evenement in ("depart", "arrivee"):
+            ticket.statut = "en_transit"
+        ticket.nb_scans = (ticket.nb_scans or 0) + 1
+        if ticket.premier_scan_le is None:
+            ticket.premier_scan_le = maintenant
+
+    await session.commit()
+    await session.refresh(suivi)
+    await session.refresh(evenement)
+
+    libelles = {
+        "depart": "Départ enregistré.",
+        "arrivee": "Arrivée enregistrée. Le parent a été prévenu.",
+        "livraison": "Remise de l'enfant enregistrée.",
+        "incident": "Incident signalé.",
+    }
+    return {
+        "succes": True,
+        "deja_enregistre": False,
+        "message": libelles.get(donnees.type_evenement, "Événement enregistré."),
+        "statut_suivi": suivi.statut,
+        "suivi": suivi,
+        "evenement": evenement,
+    }
+
+
+# ─── Suivi public (page /suivi/[code], sans connexion) ───────────────
+
+async def _noms_gares(
+    session: AsyncSession, ids: list[UUID | None]
+) -> dict[UUID, str]:
+    """Table ``{gare_id: « Nom (Ville) »}`` pour enrichir une timeline."""
+    uniques = {i for i in ids if i is not None}
+    if not uniques:
+        return {}
+    resultat = await session.execute(
+        select(Gare.id, Gare.nom, Gare.ville).where(Gare.id.in_(uniques))
+    )
+    noms: dict[UUID, str] = {}
+    for gare_id, nom, ville in resultat.all():
+        noms[gare_id] = f"{nom} ({ville})" if ville else nom
+    return noms
+
+
+def _evenements_publics(evenements, noms: dict[UUID, str]):
+    return [
+        schemas.EvenementSuiviPublic(
+            type_evenement=e.type_evenement,
+            horodatage=e.horodatage,
+            localisation=e.localisation,
+            gare_nom=noms.get(e.gare_id),
+        )
+        for e in evenements
+    ]
+
+
+def _notifications_publiques(notifications: list[NotificationLogistique]):
+    return [
+        schemas.NotificationSuiviPublic(
+            type_evenement=n.type_evenement,
+            destinataire_role=n.destinataire_role,
+            telephone_masque=masquer_telephone(n.telephone),
+            message=n.message,
+            envoye=n.envoye,
+            cree_le=n.cree_le,
+        )
+        for n in notifications
+    ]
+
+
+def _nb_personnes_notifiees(notifications: list[NotificationLogistique]) -> int:
+    return len({n.telephone for n in notifications if n.telephone and n.envoye})
+
+
+async def _suivi_public_colis(
+    session: AsyncSession, ticket: Ticket
+) -> schemas.SuiviPublicResponse:
+    colis = await session.get(Colis, ticket.reference_id) if ticket.reference_id else None
+    if colis is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            detail="Aucun suivi trouvé pour ce code")
+    evenements = await lister_evenements(session, colis.id)
+    notifications = await lister_notifications(session, "colis", colis.id)
+    noms = await _noms_gares(
+        session,
+        [colis.gare_depart_id, colis.gare_arrivee_id, *[e.gare_id for e in evenements]],
+    )
+    voyage = await session.get(Voyage, colis.voyage_id) if colis.voyage_id else None
+    vehicule = await session.get(Vehicule, voyage.vehicule_id) if voyage else None
+    return schemas.SuiviPublicResponse(
+        type="colis",
+        code=ticket.code_clair,
+        statut=colis.statut,
+        gare_depart_nom=noms.get(colis.gare_depart_id),
+        gare_arrivee_nom=noms.get(colis.gare_arrivee_id),
+        date_depart=voyage.date_depart if voyage else None,
+        vehicule_immatriculation=vehicule.immatriculation if vehicule else None,
+        nb_personnes_notifiees=_nb_personnes_notifiees(notifications),
+        colis=schemas.ColisPublicInfo(
+            destinataire_nom=colis.destinataire_nom,
+            description=colis.description,
+            poids_kg=colis.poids_kg,
+            nombre_articles=colis.nombre_articles,
+        ),
+        evenements=_evenements_publics(evenements, noms),
+        notifications=_notifications_publiques(notifications),
+    )
+
+
+async def _suivi_public_enfant(
+    session: AsyncSession, ticket: Ticket
+) -> schemas.SuiviPublicResponse:
+    suivi = await session.get(SuiviFamilial, ticket.reference_id) if ticket.reference_id else None
+    if suivi is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            detail="Aucun suivi trouvé pour ce code")
+    evenements = await lister_evenements_suivi(session, suivi.id)
+    notifications = await lister_notifications(session, "suivi_familial", suivi.id)
+    noms = await _noms_gares(
+        session,
+        [suivi.gare_depart_id, suivi.gare_arrivee_id, *[e.gare_id for e in evenements]],
+    )
+    voyage = await session.get(Voyage, suivi.voyage_id) if suivi.voyage_id else None
+    vehicule = await session.get(Vehicule, voyage.vehicule_id) if voyage else None
+    return schemas.SuiviPublicResponse(
+        type="enfant",
+        code=ticket.code_clair,
+        statut=suivi.statut,
+        gare_depart_nom=noms.get(suivi.gare_depart_id),
+        gare_arrivee_nom=noms.get(suivi.gare_arrivee_id),
+        date_depart=voyage.date_depart if voyage else None,
+        vehicule_immatriculation=vehicule.immatriculation if vehicule else None,
+        nb_personnes_notifiees=_nb_personnes_notifiees(notifications),
+        enfant=schemas.EnfantPublicInfo(
+            enfant_nom=suivi.enfant_nom,
+            enfant_age=suivi.enfant_age,
+            enfant_sexe=suivi.enfant_sexe,
+            parent_nom=suivi.parent_nom,
+        ),
+        evenements=_evenements_publics(evenements, noms),
+        notifications=_notifications_publiques(notifications),
+    )
+
+
+async def construire_suivi_public(
+    session: AsyncSession, code: str
+) -> schemas.SuiviPublicResponse:
+    """Vue publique d'un suivi (colis **ou** enfant) à partir de son code."""
+    valeur = code.strip()
+    ticket = await session.scalar(
+        select(Ticket).where(Ticket.code_clair == valeur.upper())
+    )
+    if ticket is None:
+        ticket = await session.scalar(select(Ticket).where(Ticket.qr_token == valeur))
+    if ticket is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            detail="Aucun suivi trouvé pour ce code")
+    if ticket.type == "ENFANT":
+        return await _suivi_public_enfant(session, ticket)
+    return await _suivi_public_colis(session, ticket)

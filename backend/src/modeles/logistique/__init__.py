@@ -11,6 +11,19 @@ from src.modeles.logistique.colis_evenement import (
     ColisEvenement,
     TYPES_EVENEMENT_COLIS,
 )
+from src.modeles.logistique.suivi_familial import (
+    SuiviFamilial,
+    STATUTS_SUIVI_FAMILIAL,
+)
+from src.modeles.logistique.suivi_familial_evenement import (
+    SuiviFamilialEvenement,
+    TYPES_EVENEMENT_SUIVI,
+)
+from src.modeles.logistique.notification_logistique import (
+    NotificationLogistique,
+    CANAUX_NOTIFICATION,
+    TYPES_CIBLE_NOTIFICATION,
+)
 
 __all__ = [
     "Gare",
@@ -27,4 +40,11 @@ __all__ = [
     "STATUTS_COLIS",
     "ColisEvenement",
     "TYPES_EVENEMENT_COLIS",
+    "SuiviFamilial",
+    "STATUTS_SUIVI_FAMILIAL",
+    "SuiviFamilialEvenement",
+    "TYPES_EVENEMENT_SUIVI",
+    "NotificationLogistique",
+    "CANAUX_NOTIFICATION",
+    "TYPES_CIBLE_NOTIFICATION",
 ]
