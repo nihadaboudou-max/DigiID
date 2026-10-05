@@ -101,10 +101,20 @@ class ParametresApplication(BaseSettings):
     seuil_score_risque_blocage: int = 80
     seuil_tentatives_connexion_echec: int = 5
 
-    # --- Paiement & commissions (Plan B — S6) ---
-    # Micro-commission reversée au receveur (crédit automatique de sa cagnotte)
-    # sur l'enregistrement d'un colis. Modifiable via l'environnement.
-    commission_receveur_fcfa: int = 25
+    # --- Paiement & frais de service colis (Plan B — S6) ---
+    # Le CLIENT paie un **frais de service par colis**, indépendant du prix de
+    # transport du colis. Ce prix reste une information **facultative** du
+    # guichet : il n'est jamais encaissé par DigiID (on évite ainsi de donner
+    # l'impression de surveiller les revenus du transporteur).
+    #
+    # Barème **dégressif** selon le nombre de colis suivis par le client :
+    # « 1:100,4:75,8:50 » = 100 F/colis jusqu'à 3 colis suivis, 75 F/colis à
+    # partir du 4e, 50 F/colis à partir du 8e. Le compteur utilisé est le nombre
+    # de colis déjà réglés par ce client sur le **mois en cours**.
+    palier_frais_service_colis: str = "1:100,4:75,8:50"
+    # Part reversée au receveur — constante (c'est son incitation), quel que soit
+    # le palier ; le reste du frais de service constitue notre part.
+    part_receveur_colis_fcfa: int = 25
     # Opérateur mobile money activé (mode mock en développement) : "wave".
     operateur_mobile_money: str = "wave"
 
@@ -191,6 +201,30 @@ class ParametresApplication(BaseSettings):
                 "Générer une vraie clé : python -c \"import secrets; print(secrets.token_urlsafe(64))\""
             )
         return valeur
+
+    @property
+    def paliers_frais_service_colis(self) -> tuple[tuple[int, int], ...]:
+        """
+        Barème dégressif : ``((nb_colis_min, frais_fcfa), …)`` trié par seuil.
+
+        Tolérant à une saisie invalide dans le ``.env`` : on ignore les entrées
+        mal formées et on retombe sur le premier palier valide (jamais de barème
+        vide, jamais d'exception au démarrage).
+        """
+        paliers: list[tuple[int, int]] = []
+        for morceau in (self.palier_frais_service_colis or "").split(","):
+            if ":" not in morceau:
+                continue
+            seuil_brut, prix_brut = morceau.split(":", 1)
+            try:
+                seuil, prix = int(seuil_brut.strip()), int(prix_brut.strip())
+            except ValueError:
+                continue
+            if seuil >= 1 and prix >= 0:
+                paliers.append((seuil, prix))
+        if not paliers:
+            paliers = [(1, 100)]
+        return tuple(sorted(paliers))
 
     @property
     def url_base_donnees(self) -> str:

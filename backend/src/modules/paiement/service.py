@@ -2,14 +2,28 @@
 """
 Service paiement — wallet, transactions et commissions (S6).
 
-Flux d'un paiement de colis (100 FCFA, dont 25 FCFA au receveur) :
+Deux montants distincts (voir ``tarification.py``) :
+
+- le **prix de transport** du colis (``colis.frais_fcfa``, facultatif) est le
+  revenu du transporteur — DigiID ne l'encaisse **jamais** ;
+- le **frais de service DigiID**, payé par le client, suit un barème dégressif
+  (100 F/colis, 75 F à partir du 4e colis suivi, 50 F à partir du 8e) réparti
+  entre notre part et la commission du receveur (25 F constants).
+
+Flux d'un paiement de colis :
 
 1. ``creer_transaction`` : on ordonne le paiement auprès du fournisseur
    (espèces → réussi immédiatement ; mobile money → en attente).
 2. Au passage à « réussi », ``_verser_commission`` **crédite la cagnotte du
-   receveur** de 25 FCFA et inscrit un mouvement dans son portefeuille.
+   receveur** et inscrit un mouvement dans son portefeuille.
 3. ``confirmer_transaction`` : pour le mobile money, la validation (webhook ou
    simulation) déclenche l'étape 2 — de façon **idempotente**.
+
+Deux règles de sécurité :
+
+- les frais de service d'un colis ne sont prélevés **qu'une seule fois**
+  (contrôle applicatif + index unique partiel en base) ;
+- ``idempotency_key`` protège du double débit en cas de rejeu réseau.
 
 Toute opération suit la règle : *pas de variation de solde sans mouvement*.
 """
@@ -21,7 +35,6 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.config import parametres
 from src.modeles import (
     Colis,
     Commission,
@@ -30,7 +43,8 @@ from src.modeles import (
     TransactionPaiement,
     Utilisateur,
 )
-from src.modules.paiement import schemas
+from src.modeles.paiement import STATUTS_TRANSACTION_ACTIFS
+from src.modules.paiement import schemas, tarification
 from src.modules.paiement.mobile_money import (
     MoyenPaiementInconnu,
     obtenir_fournisseur,
@@ -48,6 +62,61 @@ async def _paginer(session: AsyncSession, requete, page: int, par_page: int):
         requete.offset((page - 1) * par_page).limit(par_page)
     )
     return list(resultat.scalars().all()), total
+
+
+def _debut_du_mois() -> datetime:
+    """Premier instant du mois courant (UTC) — fenêtre du barème dégressif."""
+    maintenant = datetime.now(timezone.utc)
+    return maintenant.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+async def _compter_colis_suivis(session: AsyncSession, payeur_id: UUID) -> int:
+    """
+    Nombre de colis déjà réglés par ce client **ce mois-ci**.
+
+    C'est le compteur du barème dégressif : au 4e colis du mois, le client passe
+    automatiquement au tarif suivant (75 F puis 50 F).
+    """
+    return await session.scalar(
+        select(func.count()).select_from(TransactionPaiement).where(
+            TransactionPaiement.type == "COLIS",
+            TransactionPaiement.payeur_id == payeur_id,
+            TransactionPaiement.statut.in_(STATUTS_TRANSACTION_ACTIFS),
+            TransactionPaiement.cree_le >= _debut_du_mois(),
+        )
+    ) or 0
+
+
+async def _transaction_active_du_colis(
+    session: AsyncSession, colis_id: UUID
+) -> TransactionPaiement | None:
+    """
+    Paiement (en attente ou réussi) déjà existant pour ce colis, s'il y en a un.
+
+    Garantit la règle : les frais de service d'un colis ne sont prélevés qu'une
+    seule fois, même si le guichet reclique plusieurs fois.
+    """
+    return await session.scalar(
+        select(TransactionPaiement)
+        .where(
+            TransactionPaiement.colis_id == colis_id,
+            TransactionPaiement.statut.in_(STATUTS_TRANSACTION_ACTIFS),
+        )
+        .order_by(TransactionPaiement.cree_le.desc())
+    )
+
+
+async def tarifs_pour(session: AsyncSession, utilisateur: Utilisateur) -> dict:
+    """Tarif applicable au client + barème complet (affichage guichet)."""
+    nb_colis_suivis = await _compter_colis_suivis(session, utilisateur.id)
+    frais = tarification.frais_service(nb_colis_suivis + 1)
+    suivant = tarification.prochain_palier(nb_colis_suivis + 1)
+    return {
+        **frais.as_dict(),
+        "prochain_palier_nb_colis": suivant[0] if suivant else None,
+        "prochain_palier_frais_fcfa": suivant[1] if suivant else None,
+        "bareme": tarification.bareme(),
+    }
 
 
 async def _generer_reference(session: AsyncSession) -> str:
@@ -183,7 +252,7 @@ async def _verser_commission(
     if (
         transaction.type != "COLIS"
         or transaction.beneficiaire_id is None
-        or (transaction.frais_plateforme or 0) <= 0
+        or (transaction.commission_receveur or 0) <= 0
     ):
         return None, None
 
@@ -206,14 +275,14 @@ async def _verser_commission(
         session,
         portefeuille,
         "CREDIT",
-        transaction.frais_plateforme,
+        transaction.commission_receveur,
         "commission_colis",
         transaction.id,
     )
     commission = Commission(
         transaction_id=transaction.id,
         receveur_id=transaction.beneficiaire_id,
-        montant_fcfa=transaction.frais_plateforme,
+        montant_fcfa=transaction.commission_receveur,
         statut="verse",
         portefeuille_id=portefeuille.id,
         verse_le=datetime.now(timezone.utc),
@@ -302,6 +371,8 @@ async def creer_transaction(
                 session, existante, "Paiement déjà enregistré (idempotent)."
             )
 
+    payeur_id = donnees.payeur_id or utilisateur.id
+
     # 2. Résolution de l'objet payé (colis).
     colis = None
     if donnees.colis_id is not None:
@@ -311,24 +382,44 @@ async def creer_transaction(
                 status.HTTP_404_NOT_FOUND, detail="Colis introuvable"
             )
 
-    montant = donnees.montant_fcfa
-    if montant is None:
-        montant = colis.frais_fcfa if colis is not None else 0
-    montant = int(montant)
+    # 3. Montant : frais de service issu du barème (COLIS) ou montant libre.
+    #    ⚠️ Pour un COLIS, ``donnees.montant_fcfa`` est ignoré : seul le barème
+    #    fait foi, et le prix de transport du colis n'est jamais encaissé.
+    frais_plateforme = 0
+    commission_receveur = 0
+    beneficiaire_id = None
+
+    if donnees.type == "COLIS":
+        if colis is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Un paiement de type COLIS doit référencer 'colis_id'",
+            )
+        # Règle métier : les frais de service d'un colis ne sont prélevés
+        # **qu'une seule fois**. On renvoie le paiement existant (idempotent).
+        deja = await _transaction_active_du_colis(session, colis.id)
+        if deja is not None:
+            return await _resultat(
+                session, deja, "Frais de service déjà réglés pour ce colis."
+            )
+        # Barème dégressif : le prix baisse dès le 4e colis suivi ce mois-ci.
+        nb_colis_suivis = await _compter_colis_suivis(session, payeur_id) + 1
+        frais = tarification.frais_service(nb_colis_suivis)
+        montant = frais.frais_fcfa
+        frais_plateforme = frais.part_plateforme_fcfa
+        commission_receveur = frais.part_receveur_fcfa
+        beneficiaire_id = colis.receveur_id
+    else:
+        montant = int(donnees.montant_fcfa or 0)
+
     if montant <= 0:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail="Le montant doit être supérieur à 0"
         )
 
-    # 3. Commission reversée au receveur (uniquement pour un colis).
-    frais_plateforme = 0
-    beneficiaire_id = None
-    if donnees.type == "COLIS" and colis is not None:
-        frais_plateforme = min(int(parametres.commission_receveur_fcfa), montant)
-        beneficiaire_id = colis.receveur_id
-    montant_net = montant - frais_plateforme
-
-    payeur_id = donnees.payeur_id or utilisateur.id
+    # Reste éventuel à reverser au transporteur : 0 pour un frais de service
+    # (notre part + celle du receveur épuisent le montant encaissé).
+    montant_net = montant - frais_plateforme - commission_receveur
 
     # 4. Ordonnancement auprès du fournisseur.
     try:
@@ -348,6 +439,7 @@ async def creer_transaction(
         colis_id=colis.id if colis is not None else None,
         montant_fcfa=montant,
         frais_plateforme=frais_plateforme,
+        commission_receveur=commission_receveur,
         montant_net=montant_net,
         statut=resultat.statut,
         moyen=donnees.moyen,
@@ -358,7 +450,9 @@ async def creer_transaction(
     try:
         await session.flush()
     except IntegrityError:
-        # Concurrence sur la clé d'idempotence : on renvoie l'existante.
+        # Concurrence : clé d'idempotence rejouée, ou double paiement du même
+        # colis (index unique partiel). Dans les deux cas on renvoie la
+        # transaction déjà en base plutôt que d'échouer.
         await session.rollback()
         if donnees.idempotency_key:
             existante = await session.scalar(
@@ -370,6 +464,12 @@ async def creer_transaction(
                 return await _resultat(
                     session, existante, "Paiement déjà enregistré (idempotent)."
                 )
+        if colis is not None:
+            deja = await _transaction_active_du_colis(session, colis.id)
+            if deja is not None:
+                return await _resultat(
+                    session, deja, "Frais de service déjà réglés pour ce colis."
+                )
         raise
 
     # 5. Crédit immédiat de la cagnotte si le paiement a réussi (espèces).
@@ -378,11 +478,15 @@ async def creer_transaction(
 
     await session.commit()
     await session.refresh(transaction)
-    message = resultat.instruction or (
-        "Paiement encaissé, cagnotte du receveur créditée."
-        if resultat.statut == "reussi"
-        else "Paiement enregistré, en attente de validation."
-    )
+    if resultat.instruction:
+        message = resultat.instruction
+    elif resultat.statut == "reussi":
+        message = (
+            f"Frais de service {montant} FCFA encaissés "
+            f"(dont {commission_receveur} FCFA pour le receveur)."
+        )
+    else:
+        message = "Paiement enregistré, en attente de validation."
     return await _resultat(session, transaction, message)
 
 

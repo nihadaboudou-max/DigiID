@@ -1,33 +1,46 @@
 "use client";
 /**
- * Panneau de paiement d'un colis (S6).
+ * Encaissement des **frais de service** d'un colis (S6).
  *
- * Affiche le montant à encaisser, le moyen de paiement (espèces au guichet ou
- * Wave en mode mock) et — une fois le paiement réussi — le reçu avec la
- * **commission de 25 FCFA créditée sur la cagnotte du receveur**.
+ * ⚠️ À ne pas confondre avec le **prix de transport** du colis : ce dernier est
+ * un montant facultatif saisi au guichet, c'est le revenu du transporteur et
+ * DigiID ne l'encaisse jamais. Ici on encaisse le frais de service payé par le
+ * client, selon un **barème dégressif** :
  *
- * Sécurité : `idempotency_key` généré côté client pour qu'un double clic ou un
- * rejeu réseau ne débite jamais deux fois.
+ * | Colis suivis ce mois | Frais/colis | dont receveur | dont DigiID |
+ * |----------------------|-------------|---------------|-------------|
+ * | 1 à 3                | 100 FCFA    | 25 FCFA       | 75 FCFA     |
+ * | 4 à 7                | 75 FCFA     | 25 FCFA       | 50 FCFA     |
+ * | 8 et plus            | 50 FCFA     | 25 FCFA       | 25 FCFA     |
+ *
+ * Le montant n'est donc **pas saisi** : il vient du serveur (`GET /paiement/tarifs`).
+ *
+ * Deux garde-fous contre le double prélèvement :
+ *  1. le serveur n'accepte qu'**un seul** paiement actif par colis — on affiche
+ *     donc l'état existant (« déjà réglé ») au lieu du bouton ;
+ *  2. `idempotency_key` généré côté client pour un double clic / rejeu réseau.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Alerte } from "@/composants/commun/Alerte";
+import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { IconeCheck, IconePortefeuille } from "@/composants/commun/Icones";
-import { Badge } from "@/composants/commun/Badge";
 import { formaterFcfa } from "@/composants/logistique/format";
 import { ErreurAPI } from "@/services/client_api";
 import { cleIdempotence, paiementAPI } from "@/services/paiement_api";
 import {
-  FRAIS_COLIS_DEFAUT_FCFA,
+  FRAIS_SERVICE_REPLI_FCFA,
   LIBELLES_MOYEN,
   LIBELLES_STATUT_TRANSACTION,
   VARIANTES_STATUT_TRANSACTION,
   type MoyenPaiement,
   type MoyenPaiementInfo,
   type ResultatPaiement,
+  type TarifsColis,
+  type TransactionPaiement,
 } from "@/types/paiement";
 import type { Colis } from "@/types/logistique";
 
@@ -41,55 +54,71 @@ const MOYENS_PAR_DEFAUT: MoyenPaiementInfo[] = [
   { code: "wave", libelle: "Wave (mobile money)", immediat: false },
 ];
 
-export function PaiementColis({ colis, onPaiementEffectue }: Proprietes) {
-  const montantInitial =
-    colis.frais_fcfa && colis.frais_fcfa > 0
-      ? colis.frais_fcfa
-      : FRAIS_COLIS_DEFAUT_FCFA;
+/** Statuts pour lesquels un paiement occupe déjà le colis. */
+const STATUTS_ACTIFS: string[] = ["en_attente", "reussi"];
 
+export function PaiementColis({ colis, onPaiementEffectue }: Proprietes) {
+  const [tarifs, setTarifs] = useState<TarifsColis | null>(null);
   const [moyens, setMoyens] = useState<MoyenPaiementInfo[]>(MOYENS_PAR_DEFAUT);
   const [moyen, setMoyen] = useState<MoyenPaiement>("especes");
-  const [montant, setMontant] = useState(String(montantInitial));
   const [telephone, setTelephone] = useState(colis.destinataire_tel || "");
   const [cle, setCle] = useState<string | null>(null);
 
   const [chargement, setChargement] = useState(false);
+  const [verification, setVerification] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [resultat, setResultat] = useState<ResultatPaiement | null>(null);
+  /** Paiement déjà existant pour ce colis (le cas échéant). */
+  const [existant, setExistant] = useState<TransactionPaiement | null>(null);
 
-  // Catalogue des moyens (repli local si l'API ne répond pas).
+  // ─── État initial : tarif, moyens et éventuel paiement déjà fait ────
+  const initialiser = useCallback(async () => {
+    const [resTarifs, resMoyens, resTransactions] = await Promise.allSettled([
+      paiementAPI.tarifs(),
+      paiementAPI.moyens(),
+      paiementAPI.transactions.lister({ colis_id: colis.id, par_page: 10 }),
+    ]);
+
+    if (resTarifs.status === "fulfilled") setTarifs(resTarifs.value);
+    if (resMoyens.status === "fulfilled" && resMoyens.value.length > 0) {
+      setMoyens(resMoyens.value);
+    }
+    if (resTransactions.status === "fulfilled") {
+      const dejaPaye = resTransactions.value.elements.find((t) =>
+        STATUTS_ACTIFS.includes(t.statut),
+      );
+      setExistant(dejaPaye ?? null);
+    }
+  }, [colis.id]);
+
   useEffect(() => {
     let annule = false;
     (async () => {
-      try {
-        const catalogue = await paiementAPI.moyens();
-        if (!annule && catalogue.length > 0) setMoyens(catalogue);
-      } catch {
-        /* repli : liste locale */
-      }
+      await initialiser();
+      if (!annule) setVerification(false);
     })();
     return () => {
       annule = true;
     };
-  }, []);
+  }, [initialiser]);
 
-  const montantNombre = Number(montant.replace(/\s/g, ""));
-  const montantValide = !Number.isNaN(montantNombre) && montantNombre > 0;
-  const telephoneValide = moyen !== "wave" || telephone.replace(/\D/g, "").length >= 6;
-  const dejaReussi = resultat?.transaction.statut === "reussi";
+  const fraisFcfa = tarifs?.frais_fcfa ?? FRAIS_SERVICE_REPLI_FCFA;
+  const partReceveur = tarifs?.part_receveur_fcfa ?? 25;
+  const telephoneValide =
+    moyen !== "wave" || telephone.replace(/\D/g, "").length >= 6;
 
-  async function payer() {
-    if (!montantValide || !telephoneValide) return;
+  async function regler() {
+    if (!telephoneValide) return;
     setErreur(null);
     setChargement(true);
-    // On conserve la même clé après un échec : le rejeu reste idempotent.
-    const cleUtilisee = cle ?? cleIdempotence(`colis-${colis.id}`);
+    // Même clé conservée après un échec : le rejeu reste idempotent.
+    const cleUtilisee = cle ?? cleIdempotence(`frais-colis-${colis.id}`);
     if (!cle) setCle(cleUtilisee);
     try {
+      // Le montant n'est pas envoyé : le serveur applique son barème.
       const reponse = await paiementAPI.transactions.payer({
         type: "COLIS",
         colis_id: colis.id,
-        montant_fcfa: montantNombre,
         moyen,
         telephone: moyen === "wave" ? telephone.trim() : null,
         idempotency_key: cleUtilisee,
@@ -102,20 +131,20 @@ export function PaiementColis({ colis, onPaiementEffectue }: Proprietes) {
           ? e.message_utilisateur
           : "Le paiement a échoué. Vérifiez la connexion puis réessayez.",
       );
+      // Un paiement a peut-être été créé entre-temps : on rafraîchit l'état.
+      await initialiser();
     } finally {
       setChargement(false);
     }
   }
 
-  async function confirmer() {
-    if (!resultat) return;
+  async function confirmer(reference: string) {
     setErreur(null);
     setChargement(true);
     try {
-      const reponse = await paiementAPI.transactions.confirmer(
-        resultat.transaction.reference,
-      );
+      const reponse = await paiementAPI.transactions.confirmer(reference);
       setResultat(reponse);
+      setExistant(null);
       onPaiementEffectue?.(reponse);
     } catch (e) {
       setErreur(
@@ -128,18 +157,24 @@ export function PaiementColis({ colis, onPaiementEffectue }: Proprietes) {
     }
   }
 
-  // ─── Reçu après paiement ───────────────────────────────────────────
+  const blocErreur = erreur ? (
+    <div className="mt-3">
+      <Alerte variante="erreur" titre="Erreur">
+        {erreur}
+      </Alerte>
+    </div>
+  ) : null;
+
+  // ─── 1. Reçu après paiement ────────────────────────────────────────
   if (resultat) {
     const { transaction, commission, portefeuille_beneficiaire, message } =
       resultat;
     return (
-      <Carte titre="Paiement du colis">
+      <Carte titre="Frais de service du colis">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <Badge
-              variante={
-                VARIANTES_STATUT_TRANSACTION[transaction.statut] ?? "info"
-              }
+              variante={VARIANTES_STATUT_TRANSACTION[transaction.statut] ?? "info"}
             >
               {LIBELLES_STATUT_TRANSACTION[transaction.statut] ?? transaction.statut}
             </Badge>
@@ -162,9 +197,9 @@ export function PaiementColis({ colis, onPaiementEffectue }: Proprietes) {
             </dd>
           </div>
           <div className="flex justify-between border-b border-ardoise-clair/10 pb-1.5">
-            <dt className="text-ardoise-clair">Commission receveur</dt>
+            <dt className="text-ardoise-clair">Part du receveur</dt>
             <dd className="font-medium text-green-700">
-              {formaterFcfa(transaction.frais_plateforme)}
+              {formaterFcfa(transaction.commission_receveur)}
             </dd>
           </div>
           {portefeuille_beneficiaire && (
@@ -190,7 +225,7 @@ export function PaiementColis({ colis, onPaiementEffectue }: Proprietes) {
             <Bouton
               variante="primaire"
               chargement={chargement}
-              onClick={confirmer}
+              onClick={() => confirmer(transaction.reference)}
             >
               <IconeCheck className="w-4 h-4" /> Confirmer (démo)
             </Bouton>
@@ -200,31 +235,112 @@ export function PaiementColis({ colis, onPaiementEffectue }: Proprietes) {
           </div>
         )}
 
-        {erreur && (
-          <div className="mt-3">
-            <Alerte variante="erreur" titre="Erreur">{erreur}</Alerte>
-          </div>
-        )}
+        {blocErreur}
       </Carte>
     );
   }
 
-  // ─── Formulaire d'encaissement ─────────────────────────────────────
+  // ─── 2. Vérification du paiement existant ──────────────────────────
+  if (verification) {
+    return (
+      <Carte titre="Frais de service du colis">
+        <p className="text-sm text-ardoise-clair italic">
+          Vérification des frais de ce colis…
+        </p>
+      </Carte>
+    );
+  }
+
+  // ─── 3. Frais déjà prélevés : on ne redemande jamais ───────────────
+  if (existant) {
+    const reussi = existant.statut === "reussi";
+    return (
+      <Carte titre="Frais de service du colis">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Badge variante={reussi ? "succes" : "ocre"}>
+              {reussi ? "Déjà réglé" : "En attente"}
+            </Badge>
+            <span className="text-xs text-ardoise-clair font-mono">
+              {existant.reference}
+            </span>
+          </div>
+          <span className="text-lg font-bold text-lagune">
+            {formaterFcfa(existant.montant_fcfa)}
+          </span>
+        </div>
+
+        <p className="text-sm text-ardoise mt-3">
+          {reussi
+            ? "Les frais de service de ce colis ont déjà été réglés : ils ne seront pas prélevés une seconde fois."
+            : "Un paiement est déjà en cours pour ce colis. Confirmez-le (ou attendez le retour de l'opérateur) : inutile de repayer."}
+        </p>
+
+        <dl className="mt-4 space-y-2 text-sm">
+          <div className="flex justify-between border-b border-ardoise-clair/10 pb-1.5">
+            <dt className="text-ardoise-clair">Moyen de paiement</dt>
+            <dd className="font-medium">
+              {LIBELLES_MOYEN[existant.moyen] ?? existant.moyen}
+            </dd>
+          </div>
+          <div className="flex justify-between border-b border-ardoise-clair/10 pb-1.5">
+            <dt className="text-ardoise-clair">Part du receveur</dt>
+            <dd className="font-medium text-green-700">
+              {formaterFcfa(existant.commission_receveur)}
+            </dd>
+          </div>
+        </dl>
+
+        {!reussi && (
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Bouton
+              variante="primaire"
+              chargement={chargement}
+              onClick={() => confirmer(existant.reference)}
+            >
+              <IconeCheck className="w-4 h-4" /> Confirmer (démo)
+            </Bouton>
+          </div>
+        )}
+
+        {blocErreur}
+      </Carte>
+    );
+  }
+
+  // ─── 4. Formulaire d'encaissement (montant imposé par le barème) ────
   return (
     <Carte
-      titre="Encaisser les frais du colis"
-      description="Le ticket est généré : encaissez maintenant les frais. 25 FCFA sont reversés au receveur."
+      titre="Frais de service du colis"
+      description="Payés par le client. Ils ne sont prélevés qu'une seule fois par colis."
     >
       <div className="space-y-4">
-        <ChampSaisie
-          libelle="Montant à encaisser (FCFA)"
-          value={montant}
-          onChange={(e) => setMontant(e.target.value)}
-          inputMode="numeric"
-          placeholder={String(FRAIS_COLIS_DEFAUT_FCFA)}
-          disabled={dejaReussi}
-          erreur={montantValide ? undefined : "Montant invalide"}
-        />
+        <div className="rounded-xl bg-sable-clair/60 px-4 py-3">
+          <div className="flex items-baseline justify-between gap-3 flex-wrap">
+            <span className="text-sm text-ardoise-clair">
+              Frais de service à encaisser
+            </span>
+            <span className="text-2xl font-bold text-lagune">
+              {formaterFcfa(fraisFcfa)}
+            </span>
+          </div>
+          <p className="text-xs text-ardoise-clair mt-1">
+            dont {formaterFcfa(partReceveur)} pour la cagnotte du receveur.
+            {colis.frais_fcfa
+              ? ` Prix du transport indiqué : ${formaterFcfa(
+                  colis.frais_fcfa,
+                )} (hors frais DigiID, non encaissé ici).`
+              : ""}
+          </p>
+          {tarifs?.prochain_palier_nb_colis != null &&
+            tarifs.prochain_palier_frais_fcfa != null && (
+              <p className="text-xs text-ocre mt-1">
+                Tarif dégressif : dès le {tarifs.prochain_palier_nb_colis}
+                <sup>e</sup> colis suivi ce mois-ci,{" "}
+                {formaterFcfa(tarifs.prochain_palier_frais_fcfa)} par colis.
+              </p>
+            )}
+        </div>
 
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-medium text-ardoise">
@@ -277,11 +393,11 @@ export function PaiementColis({ colis, onPaiementEffectue }: Proprietes) {
           <Bouton
             variante="succes"
             chargement={chargement}
-            disabled={!montantValide || !telephoneValide || chargement}
-            onClick={payer}
+            disabled={!telephoneValide || chargement}
+            onClick={regler}
           >
             <IconeCheck className="w-4 h-4" /> Encaisser{" "}
-            {formaterFcfa(montantValide ? montantNombre : 0)}
+            {formaterFcfa(fraisFcfa)}
           </Bouton>
         </div>
       </div>

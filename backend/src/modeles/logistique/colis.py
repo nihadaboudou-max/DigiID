@@ -89,9 +89,11 @@ class Colis(Base, MelangeTracabilite):
     statut: Mapped[str] = mapped_column(
         String(30), nullable=False, default="enregistre", server_default="enregistre"
     )
-    frais_fcfa: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=100, server_default="100"
-    )
+    # Prix du transport du colis — **information facultative du guichet**.
+    # DigiID ne l'encaisse pas : les frais de service (100 FCFA, barème
+    # dégressif) sont payés séparément par le client. Laisser ce champ vide est
+    # donc normal et volontaire (aucune surveillance du revenu du transporteur).
+    frais_fcfa: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     livre_le: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

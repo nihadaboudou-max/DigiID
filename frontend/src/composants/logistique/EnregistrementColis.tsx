@@ -5,8 +5,13 @@
  * Parcours en 4 étapes pensé pour un agent peu à l'aise avec l'informatique :
  *   1. Expéditeur (qui dépose le colis ?)
  *   2. Destinataire (qui reçoit ? d'où vers où ?)
- *   3. Détails & frais (optionnels sauf les frais)
+ *   3. Détails (poids, description… **tous facultatifs**)
  *   4. Récapitulatif → enregistrement (net) → impression du ticket
+ *
+ * ⚠️ Le **prix du transport** est facultatif et n'est pas encaissé par DigiID :
+ * il ne sert qu'à l'information du guichet (on ne veut pas donner l'impression
+ * de surveiller les recettes du transporteur). Les **frais de service DigiID**
+ * (100 FCFA, barème dégressif) sont encaissés séparément, après le ticket.
  *
  * À l'enregistrement, le backend génère le ticket (numéro en clair + QR durable).
  */
@@ -62,7 +67,7 @@ export function EnregistrementColis() {
   const [description, setDescription] = useState("");
   const [poidsKg, setPoidsKg] = useState("");
   const [valeurFcfa, setValeurFcfa] = useState("");
-  const [fraisFcfa, setFraisFcfa] = useState("100");
+  const [fraisFcfa, setFraisFcfa] = useState("");
   const [voyageId, setVoyageId] = useState("");
 
   // État d'envoi
@@ -127,8 +132,9 @@ export function EnregistrementColis() {
     !!gareArriveeId &&
     gareDepartId !== gareArriveeId;
 
-  const fraisNombre = Number(fraisFcfa || 0);
-  const fraisValide = !Number.isNaN(fraisNombre) && fraisNombre >= 0;
+  // Prix du transport : **facultatif** (vide = non renseigné).
+  const fraisNombre = fraisFcfa.trim() === "" ? null : Number(fraisFcfa);
+  const fraisValide = fraisNombre === null || (!Number.isNaN(fraisNombre) && fraisNombre >= 0);
 
   /** Réinitialise le formulaire pour un nouvel enregistrement. */
   function nouvelEnregistrement() {
@@ -141,7 +147,7 @@ export function EnregistrementColis() {
     setDescription("");
     setPoidsKg("");
     setValeurFcfa("");
-    setFraisFcfa("100");
+    setFraisFcfa("");
     setVoyageId("");
     setGareArriveeId("");
     setGareDepartId(gareGuichet?.id ?? "");
@@ -164,7 +170,8 @@ export function EnregistrementColis() {
         description: description.trim() || null,
         poids_kg: poids !== null && !Number.isNaN(poids) ? poids : null,
         valeur_fcfa: valeur !== null && !Number.isNaN(valeur) ? valeur : null,
-        frais_fcfa: Number.isNaN(fraisNombre) ? 0 : fraisNombre,
+        frais_fcfa:
+          fraisNombre !== null && !Number.isNaN(fraisNombre) ? fraisNombre : null,
         voyage_id: voyageId || null,
       });
       setResultat(reponse);
@@ -415,11 +422,12 @@ export function EnregistrementColis() {
                     placeholder="Ex : 50000"
                   />
                   <ChampSaisie
-                    libelle="Frais à encaisser (FCFA)"
+                    libelle="Prix du transport (FCFA)"
                     value={fraisFcfa}
                     onChange={(e) => setFraisFcfa(e.target.value)}
                     inputMode="numeric"
-                    placeholder="Ex : 100"
+                    placeholder="Facultatif"
+                    aide="Facultatif — votre prix, purement indicatif. Il n'est pas encaissé par DigiID."
                     erreur={fraisValide ? undefined : "Montant invalide"}
                   />
                 </div>
@@ -493,9 +501,17 @@ export function EnregistrementColis() {
                     valeur={`${valeurFcfa} FCFA`}
                   />
                 )}
+                {fraisNombre !== null && (
+                  <Ligne
+                    libelle="Prix du transport (facultatif)"
+                    valeur={formaterFcfa(
+                      Number.isNaN(fraisNombre) ? 0 : fraisNombre,
+                    )}
+                  />
+                )}
                 <Ligne
-                  libelle="Frais à encaisser"
-                  valeur={formaterFcfa(Number.isNaN(fraisNombre) ? 0 : fraisNombre)}
+                  libelle="Frais de service DigiID"
+                  valeur="À encaisser après le ticket"
                 />
               </dl>
 

@@ -303,7 +303,7 @@ Le paiement est **livré en v1** (plateforme complète).
 |--------|----------------|
 | `portefeuille` | Wallet receveur/chauffeur/commerçant, solde, mouvements |
 | `transactions` | Ordonnancement d'un paiement (frais colis, abonnement, API) |
-| `commissions` | Micro-commission 100 FCFA → **25 FCFA reversés au receveur** |
+| `commissions` | Frais de service (barème **dégressif** 100/75/50 FCFA) → **25 FCFA reversés au receveur** |
 | `mobile_money` | Adaptateurs Wave / Orange Money / MTN MoMo / Moov Money |
 | `abonnements` | Packs e-commerce (Starter 5 000 FCFA/50 colis, Premium 15 000 FCFA illimité) |
 | `api_certification` | Facturation API VTC (150 FCFA/vérification) + gestion des clés partenaires |
@@ -334,10 +334,18 @@ mouvements_portefeuille(id, portefeuille_id, sens(CREDIT|DEBIT), montant,
 
 transactions_paiement(id, reference UNIQUE, payeur_id, beneficiaire_id,
       type(COLIS|BAGAGE|ABONNEMENT|API|REVERSEMENT), montant_fcfa,
-      frais_plateforme, montant_net, statut, moyen, telephone, cree_le, maj_le)
+      frais_plateforme, commission_receveur, montant_net, statut, moyen,
+      telephone, cree_le, maj_le)
+      -- index unique partiel : au plus UNE transaction active (en_attente|reussi)
+      -- par colis → les frais de service ne sont prélevés qu'une seule fois
 
 commissions(id, transaction_id, receveur_id, montant_fcfa, statut,
       portefeuille_id, verse_le)
+
+> Deux montants **distincts** : le **prix du transport** (`colis.frais_fcfa`) est
+> saisi — ou pas — au guichet, c'est le revenu du transporteur, DigiID ne l'encaisse
+> **jamais** ; les **frais de service** (barème dégressif selon le nombre de colis
+> suivis : 100 F, puis 75 F dès le 4ᵉ colis, 50 F dès le 8ᵉ) sont payés par le client.
 
 plans_abonnement(id, code(STARTER|PREMIUM), libelle, prix_fcfa, quota_colis,
       illimite, actif)
@@ -355,10 +363,12 @@ webhooks_paiement(id, fournisseur, reference, payload JSON, signature_valide,
 
 ### 5.4 Flux principaux
 
-1. **Enregistrement d'un colis (100 FCFA)** :
+1. **Enregistrement d'un colis** :
    commerçant/receveur → `transactions` → `mobile_money.initier` (ou espèces wallet) →
    à confirmation webhook → **crédit wallet receveur de 25 FCFA** (`commissions` +
-   `mouvements_portefeuille`) → génération du **ticket**.
+   `mouvements_portefeuille`) → génération du **ticket**. Le montant est le **frais de
+   service** issu du barème dégressif (100/75/50 FCFA) ; le prix du transport du colis,
+   facultatif, n'est pas encaissé par la plateforme.
 2. **Abonnement e-commerce** : souscription → `abonnements` → décompte automatique des
    colis ; au-delà du quota → facturation à l'unité.
 3. **API de certification (VTC)** : appel authentifié par `cles_api` → vérification
@@ -528,7 +538,7 @@ On ajoute des blocs de liens `{ href, libelle, Icone }` exactement sur le modèl
 | **L3 — Bagages & voyageurs** | Bagages soute, étiquettes, matching à l'arrivée | Embarquement rapide |
 | **L4 — Suivi familial + SMS** | Enfants seuls, SMS départ/arrivée, page de suivi | Sérénité familles |
 | **L5 — Score logistique** | 40/30/20/10, couleur, avis, litiges | Confiance chauffeurs |
-| **L6 — Paiement** | Wallet, commissions (25 FCFA), mobile money, webhooks | Flux financier complet |
+| **L6 — Paiement** | Wallet, frais de service dégressif (100/75/50 FCFA dont 25 FCFA au receveur), mobile money, webhooks | Flux financier complet |
 | **L7 — Abonnements & API** | Packs e-commerce, API certification VTC (150 FCFA) | Monétisation |
 | **L8 — Offline & impression** | PWA, Dexie, sync idempotente, WebBluetooth | Terrain sans réseau |
 | **L9 — Frontend complet** | Espaces receveur/chauffeur/commerçant/gare/famille + dashboards admin | Plateforme complète |

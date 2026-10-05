@@ -53,7 +53,9 @@ class TransactionCreate(BaseModel):
     """Demande de paiement (S6 : un colis)."""
     type: TypeTransaction = "COLIS"
     colis_id: Optional[UUID] = None
-    # Si absent, on reprend les frais du colis (`colis.frais_fcfa`).
+    # ⚠️ Pour un COLIS, ce montant est **ignoré** : le prix est le frais de
+    # service issu du barème dégressif (100 / 75 / 50 F selon le nombre de colis
+    # suivis). Il ne sert qu'aux autres types de transaction (abonnement, API…).
     montant_fcfa: Optional[int] = Field(None, ge=0)
     moyen: MoyenPaiement = "especes"
     telephone: Optional[str] = Field(None, max_length=30)
@@ -76,7 +78,9 @@ class TransactionResponse(BaseModel):
     payeur_id: Optional[UUID] = None
     beneficiaire_id: Optional[UUID] = None
     montant_fcfa: int
+    # Répartition du frais de service : notre part, puis celle du receveur.
     frais_plateforme: int
+    commission_receveur: int = 0
     montant_net: int
     statut: str
     moyen: str
@@ -114,3 +118,22 @@ class MoyenPaiementInfo(BaseModel):
     code: str
     libelle: str
     immediat: bool
+
+
+# ─── Tarifs (barème dégressif) ──────────────
+
+class PalierTarifaire(BaseModel):
+    nb_colis_min: int
+    frais_fcfa: int
+    part_receveur_fcfa: int
+
+
+class TarifsColisResponse(BaseModel):
+    """Tarif applicable au client + barème complet (affichage guichet)."""
+    nb_colis_suivis: int
+    frais_fcfa: int
+    part_receveur_fcfa: int
+    part_plateforme_fcfa: int
+    prochain_palier_nb_colis: Optional[int] = None
+    prochain_palier_frais_fcfa: Optional[int] = None
+    bareme: list[PalierTarifaire]

@@ -9,12 +9,13 @@ import type {
   MouvementPortefeuille,
   Portefeuille,
   ResultatPaiement,
+  TarifsColis,
   TransactionPaiement,
 } from "@/types/paiement";
 
 export type {
   Commission, DonneesPaiement, MoyenPaiementInfo, MouvementPortefeuille,
-  Portefeuille, ResultatPaiement, TransactionPaiement,
+  Portefeuille, ResultatPaiement, TarifsColis, TransactionPaiement,
 } from "@/types/paiement";
 
 export interface ReponseListe<T> {
@@ -40,6 +41,13 @@ function construireQuery(filtres?: Record<string, unknown>): string {
 export const paiementAPI = {
   /** Catalogue des moyens de paiement (espèces, mobile money mock). */
   moyens: () => clientAPI.get<MoyenPaiementInfo[]>(`${BASE}/moyens`, opts),
+
+  /**
+   * Frais de service applicables **maintenant** pour ce client, d'après le
+   * barème dégressif (100 F jusqu'au 3e colis du mois, 75 F dès le 4e, 50 F dès
+   * le 8e) + le barème complet pour l'affichage guichet.
+   */
+  tarifs: () => clientAPI.get<TarifsColis>(`${BASE}/tarifs`, opts),
 
   portefeuilles: {
     /** Ma cagnotte (créée à solde nul à la première consultation). */

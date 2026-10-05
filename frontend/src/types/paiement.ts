@@ -55,7 +55,10 @@ export interface TransactionPaiement {
   payeur_id: string | null;
   beneficiaire_id: string | null;
   montant_fcfa: number;
+  /** Notre part du frais de service. */
   frais_plateforme: number;
+  /** Part reversée au receveur (créditée sur sa cagnotte). */
+  commission_receveur: number;
   montant_net: number;
   statut: StatutTransaction;
   moyen: MoyenPaiement | string;
@@ -89,7 +92,10 @@ export interface ResultatPaiement {
 export interface DonneesPaiement {
   type?: TypeTransaction;
   colis_id?: string | null;
-  /** Si absent, le backend reprend les frais du colis. */
+  /**
+   * Ignoré pour un COLIS : le backend applique le barème dégressif
+   * (100 / 75 / 50 FCFA selon le nombre de colis suivis ce mois-ci).
+   */
   montant_fcfa?: number | null;
   moyen: MoyenPaiement;
   telephone?: string | null;
@@ -102,6 +108,25 @@ export interface MoyenPaiementInfo {
   code: MoyenPaiement | string;
   libelle: string;
   immediat: boolean;
+}
+
+// ─── Barème dégressif des frais de service ───────────────────────────
+
+export interface PalierTarifaire {
+  nb_colis_min: number;
+  frais_fcfa: number;
+  part_receveur_fcfa: number;
+}
+
+/** Tarif applicable au client + barème complet (`GET /paiement/tarifs`). */
+export interface TarifsColis {
+  nb_colis_suivis: number;
+  frais_fcfa: number;
+  part_receveur_fcfa: number;
+  part_plateforme_fcfa: number;
+  prochain_palier_nb_colis: number | null;
+  prochain_palier_frais_fcfa: number | null;
+  bareme: PalierTarifaire[];
 }
 
 // ─── Libellés & couleurs (UI) ────────────────────────────────────────
@@ -137,5 +162,8 @@ export const LIBELLES_MOTIF: Record<string, string> = {
   paiement: "Paiement",
 };
 
-/** Montant par défaut d'un enregistrement de colis (démo) en FCFA. */
-export const FRAIS_COLIS_DEFAUT_FCFA = 100;
+/**
+ * Frais de service de repli, si `GET /paiement/tarifs` est injoignable.
+ * Le barème du serveur fait toujours foi au moment du paiement.
+ */
+export const FRAIS_SERVICE_REPLI_FCFA = 100;

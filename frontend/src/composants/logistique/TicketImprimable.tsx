@@ -4,7 +4,7 @@
  *
  * Affiche l'étiquette à coller sur le colis : QR Code durable (scannable par
  * la caméra native d'un téléphone), numéro en clair (repli saisie manuelle),
- * gares de départ/arrivée, destinataire et frais.
+ * gares de départ/arrivée, destinataire et prix du transport (facultatif).
  *
  * Le bouton « Imprimer » est masqué à l'impression (`.no-print`) et seule la
  * zone `.zone-impression` est imprimée (voir `styles/globaux.css`).
@@ -85,7 +85,7 @@ export function TicketImprimable({
                 <dd className="font-medium">{colis?.destinataire_tel || "—"}</dd>
               </div>
               <div className="flex gap-2">
-                <dt className="text-ardoise-clair min-w-[92px]">Frais</dt>
+                <dt className="text-ardoise-clair min-w-[92px]">Prix transport</dt>
                 <dd className="font-bold text-lagune">
                   {formaterFcfa(colis?.frais_fcfa)}
                 </dd>

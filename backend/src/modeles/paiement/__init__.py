@@ -10,6 +10,7 @@ from src.modeles.paiement.transaction_paiement import (
     TransactionPaiement,
     TYPES_TRANSACTION,
     STATUTS_TRANSACTION,
+    STATUTS_TRANSACTION_ACTIFS,
     MOYENS_PAIEMENT,
 )
 from src.modeles.paiement.commission import Commission, STATUTS_COMMISSION
@@ -23,6 +24,7 @@ __all__ = [
     "TransactionPaiement",
     "TYPES_TRANSACTION",
     "STATUTS_TRANSACTION",
+    "STATUTS_TRANSACTION_ACTIFS",
     "MOYENS_PAIEMENT",
     "Commission",
     "STATUTS_COMMISSION",

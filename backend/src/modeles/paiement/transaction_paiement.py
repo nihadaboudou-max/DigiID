@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,6 +24,9 @@ TYPES_TRANSACTION = ("COLIS", "BAGAGE", "ABONNEMENT", "API", "REVERSEMENT")
 
 # Statuts d'une transaction
 STATUTS_TRANSACTION = ("en_attente", "reussi", "echoue", "rembourse")
+
+# Statuts « actifs » : un paiement dans cet état existe bel et bien pour l'objet.
+STATUTS_TRANSACTION_ACTIFS = ("en_attente", "reussi")
 
 # Moyens de paiement : espèces au guichet + 1 opérateur mobile money (mock).
 MOYENS_PAIEMENT = ("especes", "wave")
@@ -46,6 +49,17 @@ class TransactionPaiement(Base, MelangeTracabilite):
         Index("ix_transactions_paiement_statut", "statut"),
         Index("ix_transactions_paiement_type", "type"),
         Index("ix_transactions_paiement_moyen", "moyen"),
+        # ⚠️ Règle métier : les frais de service d'un colis ne sont prélevés
+        # QU'UNE SEULE FOIS. Garde-fou en base (en plus du contrôle applicatif) :
+        # au plus une transaction active (en attente ou réussie) par colis.
+        Index(
+            "ix_transactions_paiement_colis_actif_unique",
+            "colis_id",
+            unique=True,
+            postgresql_where=text(
+                "colis_id IS NOT NULL AND statut IN ('en_attente', 'reussi')"
+            ),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -70,10 +84,16 @@ class TransactionPaiement(Base, MelangeTracabilite):
         UUID(as_uuid=True), ForeignKey("colis.id", ondelete="SET NULL"), nullable=True
     )
     montant_fcfa: Mapped[int] = mapped_column(Integer, nullable=False)
-    # Part plateforme = micro-commission reversée au receveur.
+    # Répartition du frais de service : NOTRE part (75 FCFA par défaut).
     frais_plateforme: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
+    # Part reversée au receveur (25 FCFA par défaut) — créditée sur sa cagnotte.
+    commission_receveur: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # Reste éventuel du montant encaissé (0 pour un frais de service : la part
+    # plateforme + la part receveur épuisent le montant).
     montant_net: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )

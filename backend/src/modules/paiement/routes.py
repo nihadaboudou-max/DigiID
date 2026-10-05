@@ -30,6 +30,21 @@ async def lister_moyens_paiement(
     return lister_moyens()
 
 
+# ─── Tarifs (barème dégressif) ─────────────────────────────────────
+
+@routeur_paiement.get(
+    "/tarifs",
+    response_model=schemas.TarifsColisResponse,
+    summary="Tarif de service applicable + barème dégressif du moment",
+)
+@require_permission("paiement.lire")
+async def tarifs_courants(
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    return await service.tarifs_pour(session, utilisateur_courant)
+
+
 # ─── Portefeuille : le mien ──────────────────────────────────────────
 
 @routeur_paiement.get(

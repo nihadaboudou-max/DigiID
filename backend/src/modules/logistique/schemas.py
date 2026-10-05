@@ -227,7 +227,9 @@ class ColisCreate(BaseModel):
     description: Optional[str] = Field(None, max_length=500)
     poids_kg: Optional[float] = Field(None, ge=0)
     valeur_fcfa: Optional[int] = Field(None, ge=0)
-    frais_fcfa: int = Field(100, ge=0)
+    # Prix du transport — **facultatif** : DigiID n'encaisse pas ce montant (les
+    # frais de service sont payés séparément par le client).
+    frais_fcfa: Optional[int] = Field(None, ge=0)
     # Si non fournis, l'expéditeur ET le receveur = utilisateur courant (guichet).
     expediteur_id: Optional[UUID] = None
     receveur_id: Optional[UUID] = None
@@ -259,7 +261,7 @@ class ColisResponse(BaseModel):
     receveur_id: Optional[UUID] = None
     chauffeur_id: Optional[UUID] = None
     statut: str
-    frais_fcfa: int
+    frais_fcfa: Optional[int] = None
     livre_le: Optional[datetime] = None
     cree_le: datetime
     modifie_le: Optional[datetime] = None

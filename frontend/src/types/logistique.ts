@@ -39,7 +39,9 @@ export interface Colis {
   receveur_id: string | null;
   chauffeur_id: string | null;
   statut: StatutColis;
-  frais_fcfa: number;
+
+  /** Prix du transport — facultatif (DigiID ne l'encaisse pas). */
+  frais_fcfa: number | null;
   livre_le: string | null;
   cree_le: string;
   modifie_le: string | null;
@@ -102,7 +104,9 @@ export interface DonneesColis {
   description?: string | null;
   poids_kg?: number | null;
   valeur_fcfa?: number | null;
-  frais_fcfa?: number;
+
+  /** Prix du transport — facultatif : nul si le guichet ne le renseigne pas. */
+  frais_fcfa?: number | null;
   expediteur_id?: string | null;
   receveur_id?: string | null;
   voyage_id?: string | null;

@@ -355,7 +355,7 @@ function ResultatScanAffichage({ resultat }: { resultat: ResultatScan }) {
               <Ligne libelle="Téléphone" valeur={colis.destinataire_tel} />
               <Ligne libelle="Départ" valeur={colis.gare_depart_nom || "—"} />
               <Ligne libelle="Arrivée" valeur={colis.gare_arrivee_nom || "—"} />
-              <Ligne libelle="Frais" valeur={formaterFcfa(colis.frais_fcfa)} />
+              <Ligne libelle="Prix transport" valeur={formaterFcfa(colis.frais_fcfa)} />
               {colis.livre_le && (
                 <Ligne libelle="Livré le" valeur={formaterDateHeure(colis.livre_le)} />
               )}

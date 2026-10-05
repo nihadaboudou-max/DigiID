@@ -157,7 +157,7 @@ function Contenu() {
         <div className="space-y-6">
           <TicketImprimable ticket={ticket} colis={colis} />
 
-          {/* S6 — encaissement des frais (si pas encore payé) */}
+          {/* S6 — frais de service DigiID (le colis n'est prélevé qu'une fois) */}
           <div className="no-print">
             <PaiementColis colis={colis} />
           </div>
@@ -171,7 +171,7 @@ function Contenu() {
               <Ligne libelle="Téléphone" valeur={colis.destinataire_tel} />
               <Ligne libelle="Départ" valeur={colis.gare_depart_nom || "—"} />
               <Ligne libelle="Arrivée" valeur={colis.gare_arrivee_nom || "—"} />
-              <Ligne libelle="Frais" valeur={formaterFcfa(colis.frais_fcfa)} />
+              <Ligne libelle="Prix transport" valeur={formaterFcfa(colis.frais_fcfa)} />
               <Ligne
                 libelle="Poids"
                 valeur={colis.poids_kg != null ? `${colis.poids_kg} kg` : "—"}
