@@ -5,13 +5,14 @@
  * Parcours en 4 étapes pensé pour un agent peu à l'aise avec l'informatique :
  *   1. Expéditeur (qui dépose le colis ?)
  *   2. Destinataire (qui reçoit ? d'où vers où ?)
- *   3. Détails (poids, description… **tous facultatifs**)
+ *   3. Détails (nombre d'articles, poids, description…)
  *   4. Récapitulatif → enregistrement (net) → impression du ticket
  *
  * ⚠️ Le **prix du transport** est facultatif et n'est pas encaissé par DigiID :
  * il ne sert qu'à l'information du guichet (on ne veut pas donner l'impression
  * de surveiller les recettes du transporteur). Les **frais de service DigiID**
- * (100 FCFA, barème dégressif) sont encaissés séparément, après le ticket.
+ * dépendent du **nombre d'articles** (100 / 200 / 350 / 500 FCFA) et sont
+ * encaissés séparément, après le ticket.
  *
  * À l'enregistrement, le backend génère le ticket (numéro en clair + QR durable).
  */
@@ -36,6 +37,7 @@ import {
 } from "@/services/logistique_api";
 import { formaterFcfa } from "./format";
 import { TicketImprimable } from "./TicketImprimable";
+import { fraisServicePourArticles } from "@/types/paiement";
 
 type Etape = 1 | 2 | 3 | 4;
 
@@ -67,6 +69,7 @@ export function EnregistrementColis() {
   const [description, setDescription] = useState("");
   const [poidsKg, setPoidsKg] = useState("");
   const [valeurFcfa, setValeurFcfa] = useState("");
+  const [nombreArticles, setNombreArticles] = useState("1");
   const [fraisFcfa, setFraisFcfa] = useState("");
   const [voyageId, setVoyageId] = useState("");
 
@@ -136,6 +139,15 @@ export function EnregistrementColis() {
   const fraisNombre = fraisFcfa.trim() === "" ? null : Number(fraisFcfa);
   const fraisValide = fraisNombre === null || (!Number.isNaN(fraisNombre) && fraisNombre >= 0);
 
+  // Nombre d'articles : détermine le frais de service DigiID (barème par tranches).
+  const nombreArticlesNombre = Number(nombreArticles.replace(/\D/g, ""));
+  const nombreArticlesValide =
+    Number.isInteger(nombreArticlesNombre) && nombreArticlesNombre >= 1;
+  const fraisService = fraisServicePourArticles(
+    nombreArticlesValide ? nombreArticlesNombre : 1,
+  );
+  const etapeDetailsValide = fraisValide && nombreArticlesValide;
+
   /** Réinitialise le formulaire pour un nouvel enregistrement. */
   function nouvelEnregistrement() {
     setResultat(null);
@@ -147,6 +159,7 @@ export function EnregistrementColis() {
     setDescription("");
     setPoidsKg("");
     setValeurFcfa("");
+    setNombreArticles("1");
     setFraisFcfa("");
     setVoyageId("");
     setGareArriveeId("");
@@ -170,6 +183,7 @@ export function EnregistrementColis() {
         description: description.trim() || null,
         poids_kg: poids !== null && !Number.isNaN(poids) ? poids : null,
         valeur_fcfa: valeur !== null && !Number.isNaN(valeur) ? valeur : null,
+        nombre_articles: nombreArticlesValide ? nombreArticlesNombre : 1,
         frais_fcfa:
           fraisNombre !== null && !Number.isNaN(fraisNombre) ? fraisNombre : null,
         voyage_id: voyageId || null,
@@ -399,6 +413,32 @@ export function EnregistrementColis() {
               description={t("colis.details.desc")}
             >
               <div className="space-y-4">
+                <div className="rounded-xl border border-lagune/20 bg-lagune/5 px-4 py-3 space-y-3">
+                  <ChampSaisie
+                    libelle="Nombre d'articles dans le colis"
+                    required
+                    value={nombreArticles}
+                    onChange={(e) => setNombreArticles(e.target.value)}
+                    inputMode="numeric"
+                    placeholder="Ex : 3"
+                    aide="Détermine le frais de service DigiID : 100 F (1-3 articles), 200 F (4-6), 350 F (7-10), 500 F (plus de 10)."
+                    erreur={nombreArticlesValide ? undefined : "Entrez un nombre entier ≥ 1"}
+                  />
+                  <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                    <span className="text-sm text-ardoise-clair">
+                      Frais de service DigiID estimés
+                    </span>
+                    <span className="text-xl font-bold text-lagune">
+                      {formaterFcfa(fraisService.frais_fcfa)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-ardoise-clair">
+                    dont {formaterFcfa(fraisService.part_receveur_fcfa)} pour la
+                    cagnotte du receveur. Le montant définitif est confirmé au
+                    moment de l&apos;encaissement.
+                  </p>
+                </div>
+
                 <ChampSaisie
                   libelle="Description du colis"
                   value={description}
@@ -465,7 +505,7 @@ export function EnregistrementColis() {
                   </Bouton>
                   <Bouton
                     variante="primaire"
-                    disabled={!fraisValide}
+                    disabled={!etapeDetailsValide}
                     onClick={() => setEtape(4)}
                   >
                     Récapitulatif
@@ -510,8 +550,14 @@ export function EnregistrementColis() {
                   />
                 )}
                 <Ligne
-                  libelle="Frais de service DigiID"
-                  valeur="À encaisser après le ticket"
+                  libelle="Nombre d'articles"
+                  valeur={String(nombreArticlesValide ? nombreArticlesNombre : 1)}
+                />
+                <Ligne
+                  libelle="Frais de service DigiID (estimé)"
+                  valeur={`${formaterFcfa(
+                    fraisService.frais_fcfa,
+                  )} (dont ${formaterFcfa(fraisService.part_receveur_fcfa)} receveur)`}
                 />
               </dl>
 
@@ -532,7 +578,8 @@ export function EnregistrementColis() {
                   disabled={
                     enregistrement ||
                     !etapeExpediteurValide ||
-                    !etapeDestinataireValide
+                    !etapeDestinataireValide ||
+                    !etapeDetailsValide
                   }
                   onClick={enregistrer}
                 >

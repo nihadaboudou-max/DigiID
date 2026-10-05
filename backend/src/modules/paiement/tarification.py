@@ -6,19 +6,25 @@ Deux montants **distincts** sont manipulés :
 
 - le **prix du transport** du colis (``colis.frais_fcfa``) : saisi — ou pas — au
   guichet, c'est le revenu du transporteur. **DigiID ne l'encaisse jamais** ;
-- le **frais de service DigiID**, payé par le client, barème **dégressif** selon
-  le nombre de colis que ce client suit :
+- le **frais de service DigiID**, payé par le client, calculé selon le **nombre
+  d'articles** contenus dans le colis (et non plus selon un décompte mensuel
+  cumulatif de colis suivis) :
 
-  | Colis suivis (mois en cours) | Frais/colis | dont receveur | dont DigiID |
-  |------------------------------|-------------|---------------|-------------|
-  | 1 à 3                        | 100 FCFA    | 25 FCFA       | 75 FCFA     |
-  | 4 à 7                        | 75 FCFA     | 25 FCFA       | 50 FCFA     |
-  | 8 et plus                    | 50 FCFA     | 25 FCFA       | 25 FCFA     |
+  | Articles dans le colis | Frais/colis | dont receveur | dont DigiID |
+  |------------------------|-------------|---------------|-------------|
+  | 1 à 3                  | 100 FCFA    | 25 FCFA       | 75 FCFA     |
+  | 4 à 6                  | 200 FCFA    | 50 FCFA       | 150 FCFA    |
+  | 7 à 10                 | 350 FCFA    | 80 FCFA       | 270 FCFA    |
+  | plus de 10             | 500 FCFA    | 150 FCFA      | 350 FCFA    |
 
-Le barème est **configurable** (``PALIER_FRAIS_SERVICE_COLIS`` dans le ``.env``) :
-il suffit d'y écrire ``1:100,4:75,8:50``. Ce module ne contient donc aucune
-valeur métier en dur : il lit les paliers de la configuration et se contente de
-les appliquer.
+La **commission du receveur** est elle aussi progressive (25 / 50 / 80 / 150) :
+plus le colis contient d'articles, plus sa rétribution augmente.
+
+Le barème est **configurable** (``BAREME_FRAIS_SERVICE_COLIS`` dans le ``.env``)
+sous la forme ``min-max:frais:commission`` (paliers séparés par des virgules ;
+une borne max vide ou suffixée « + » désigne un palier ouvert). Ce module ne
+contient donc aucune valeur métier « en dur » : il lit les paliers de la
+configuration et se contente de les appliquer.
 
 Le frais n'est prélevé **qu'une seule fois par colis** : c'est le service
 paiement qui l'impose (contrôle applicatif + index unique partiel en base).
@@ -32,82 +38,66 @@ from src.config import parametres
 class FraisService:
     """Frais de service d'un colis et sa répartition."""
 
-    nb_colis_suivis: int
+    nombre_articles: int
     frais_fcfa: int
     part_receveur_fcfa: int
     part_plateforme_fcfa: int
 
     def as_dict(self) -> dict:
         return {
-            "nb_colis_suivis": self.nb_colis_suivis,
+            "nombre_articles": self.nombre_articles,
             "frais_fcfa": self.frais_fcfa,
             "part_receveur_fcfa": self.part_receveur_fcfa,
             "part_plateforme_fcfa": self.part_plateforme_fcfa,
         }
 
 
-def _paliers() -> tuple[tuple[int, int], ...]:
+def _paliers() -> tuple[tuple[int, int | None, int, int], ...]:
     return parametres.paliers_frais_service_colis
 
 
-def palier_pour(nb_colis_suivis: int) -> tuple[int, int]:
+def palier_pour(nombre_articles: int) -> tuple[int, int | None, int, int]:
     """
-    Palier applicable : ``(nb_colis_min, frais_fcfa)``.
+    Palier applicable : ``(nb_articles_min, nb_articles_max, frais, commission)``.
 
-    ``nb_colis_suivis`` est le rang du colis (1 pour le premier colis du client,
-    4 pour le quatrième…).
+    ``nb_articles_max`` vaut ``None`` pour le dernier palier (« plus de 10 »).
     """
-    rang = max(int(nb_colis_suivis), 1)
+    n = max(int(nombre_articles), 1)
     retenu = _paliers()[0]
-    for seuil, prix in _paliers():
-        if rang >= seuil:
-            retenu = (seuil, prix)
-        else:
-            break
+    for mini, maxi, frais, commission in _paliers():
+        if n >= mini and (maxi is None or n <= maxi):
+            return mini, maxi, frais, commission
+        if n >= mini:
+            retenu = (mini, maxi, frais, commission)
     return retenu
 
 
-def frais_service(nb_colis_suivis: int) -> FraisService:
+def frais_service(nombre_articles: int) -> FraisService:
     """
-    Calcule le frais de service du colis de rang ``nb_colis_suivis``.
+    Calcule le frais de service d'un colis contenant ``nombre_articles``.
 
-    La part receveur est **constante** : c'est l'incitation du guichet, elle ne
-    baisse pas avec le volume. Notre part absorbe donc la remise commerciale.
+    La part du receveur est **progressive** (25 / 50 / 80 / 150 FCFA selon le
+    palier) ; le reste du frais constitue notre part (frais de plateforme).
     """
-    rang = max(int(nb_colis_suivis), 1)
-    _, frais = palier_pour(rang)
-    part_receveur = min(max(int(parametres.part_receveur_colis_fcfa), 0), frais)
+    n = max(int(nombre_articles), 1)
+    _, _, frais, commission = palier_pour(n)
+    part_receveur = min(max(int(commission), 0), frais)
     return FraisService(
-        nb_colis_suivis=rang,
+        nombre_articles=n,
         frais_fcfa=frais,
         part_receveur_fcfa=part_receveur,
         part_plateforme_fcfa=frais - part_receveur,
     )
 
 
-def prochain_palier(nb_colis_suivis: int) -> tuple[int, int] | None:
-    """
-    Palier suivant, pour informer le guichet (« dès le 4e colis : 75 F »).
-
-    Retourne ``(nb_colis_min, frais_fcfa)`` ou ``None`` si déjà au dernier palier.
-    """
-    rang = max(int(nb_colis_suivis), 1)
-    seuil_actuel, _ = palier_pour(rang)
-    for seuil, prix in _paliers():
-        if seuil > seuil_actuel:
-            return seuil, prix
-    return None
-
-
 def bareme() -> list[dict]:
     """Barème complet (affichage côté guichet / documentation)."""
     return [
         {
-            "nb_colis_min": seuil,
-            "frais_fcfa": prix,
-            "part_receveur_fcfa": min(
-                max(int(parametres.part_receveur_colis_fcfa), 0), prix
-            ),
+            "nb_articles_min": mini,
+            "nb_articles_max": maxi,
+            "frais_fcfa": frais,
+            "part_receveur_fcfa": min(max(int(commission), 0), frais),
         }
-        for seuil, prix in _paliers()
+        for mini, maxi, frais, commission in _paliers()
     ]

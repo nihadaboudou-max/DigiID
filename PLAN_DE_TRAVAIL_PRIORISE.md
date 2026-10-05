@@ -104,25 +104,27 @@
 ### Sprint 3 — Argent + suivi (clôt le prototype)
 
 #### Étape S6 — Paiement minimal ✅ (fait)
-- **Objectif** : montrer le modèle économique (**frais de service dégressif** : 100 FCFA,
-  puis 75 FCFA dès le 4e colis suivi, 50 FCFA dès le 8e — dont **25 FCFA constants
-  au receveur**). Le **prix du transport** du colis reste une information facultative
-  du guichet : il n'est jamais encaissé par DigiID.
+- **Objectif** : montrer le modèle économique (**frais de service par nombre d'articles du
+  colis** : 100 FCFA (1-3 articles), 200 FCFA (4-6), 350 FCFA (7-10), 500 FCFA (au-delà) —
+  dont une commission **progressive** au receveur : 25 / 50 / 80 / 150 FCFA). Le **prix du
+  transport** du colis reste une information facultative du guichet : il n'est jamais
+  encaissé par DigiID.
 - **Contenu** : `transactions_paiement`, `commissions`, `portefeuilles`, `mouvements_portefeuille` ;
   moyen **espèces** (wallet interne) + **1 opérateur mobile money en mode mock** ;
   crédit automatique de la cagnotte du receveur.
 - **Réalisé** : modèles + migration Alembic (`portefeuilles`, `mouvements_portefeuille`,
   `transactions_paiement`, `commissions`) ; module `src/modules/paiement/` (schemas, service,
-  `tarification.py` = barème dégressif, routes, `mobile_money/` mock Wave + espèces) ;
-  permissions `paiement.lire` / `paiement.payer` ; config
-  `palier_frais_service_colis="1:100,4:75,8:50"` + `part_receveur_colis_fcfa=25`.
+  `tarification.py` = barème par nombre d'articles, routes, `mobile_money/` mock Wave +
+  espèces) ; permissions `paiement.lire` / `paiement.payer` ; config
+  `bareme_frais_service_colis="1-3:100:25,4-6:200:50,7-10:350:80,11+:500:150"` +
+  `frais_scan_agent_fcfa=100` (compte prépayé de l'agent) ; colonne `colis.nombre_articles`.
   Garanties : **un seul prélèvement par colis** (contrôle applicatif + index unique partiel)
   et idempotence (`idempotency_key`). Frontend : `PortefeuilleCarte`, `PaiementColis`
   (montant imposé par le barème, plus de saisie libre), page `/receveur/cagnotte`,
   encaissement intégré au ticket (enregistrement + fiche colis), navigation « Ma cagnotte ».
 - **Livrable démontrable** : enregistrer un colis → encaisser le **frais de service**
-  (100 FCFA aux premiers colis, 75 FCFA au 4e, 50 FCFA au 8e — espèces ou Wave mock)
-  → **25 FCFA** créditent la cagnotte du receveur (visible sur `/receveur/cagnotte`).
+  (100 / 200 / 350 / 500 FCFA selon le nombre d'articles — espèces ou Wave mock)
+  → **25 à 150 FCFA** créditent la cagnotte du receveur (visible sur `/receveur/cagnotte`).
 - **Dépendances** : S2.
 
 #### Étape S7 — Suivi public + SMS
@@ -179,8 +181,8 @@
 1. **Accueil** : choix de la langue **à l'oreille** (Dendi/Fon/Bariba/FR).
 2. **Guichet (receveur)** : enregistrer un colis (guidé par la voix) → **ticket QR + numéro en clair**.
 3. **Scan livraison** : QR ou **code clair** → livré ; re‑scan → **« DÉJÀ LIVRÉ »** (anti‑fraude).
-4. **Paiement** : frais de service **100 FCFA** (puis 75 F au 4e colis, 50 F au 8e) →
-   **25 FCFA** créditent la cagnotte du receveur.
+4. **Paiement** : frais de service **100 FCFA** (1-3 articles ; 200 F à 4-6, 350 F à 7-10,
+   500 F au-delà) → **25 FCFA** (jusqu'à 150 F) créditent la cagnotte du receveur.
 5. **Chauffeur** : scan en route, liste des colis du voyage.
 6. **Famille** : ouvrir le lien de suivi `/suivi/[code]` + SMS reçu.
 7. **Voix** : chaque bouton parle dans la langue choisie (démonstration marquante).
@@ -198,8 +200,9 @@ Rappel de ce qui est en place côté logistique :
 - **S5** : accessibilité v1 — sélecteur 4 langues (Dendi/Bariba/Fon/FR), `BoutonVocal`,
   `GestionnaireAudio` (repli TTS), bouton muet ; audios à déposer dans `public/audios/`.
 - **S6** : paiement minimal — API `/api/v1/paiement` (wallet, transactions, commissions,
-  `GET /tarifs`), **frais de service dégressif** 100/75/50 FCFA dont **25 FCFA** au receveur
-  (espèces / Wave mock), un seul prélèvement par colis, page `/receveur/cagnotte`.
+  `GET /tarifs`), **frais de service par nombre d'articles** 100/200/350/500 FCFA dont
+  **25 à 150 FCFA** au receveur (espèces / Wave mock), compte prépayé de l'agent débité
+  de 100 FCFA par scan en espèces, un seul prélèvement par colis, page `/receveur/cagnotte`.
 
 Prochaine étape S7 : suivi public `/suivi/[code]` (colis + familial) et SMS départ/arrivée (mock).
 

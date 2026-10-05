@@ -28,7 +28,8 @@ export type MotifMouvement =
   | "reversement"
   | "abonnement"
   | "ajustement"
-  | "paiement";
+  | "paiement"
+  | "frais_scan_agent";
 
 export interface MouvementPortefeuille {
   id: string;
@@ -93,8 +94,8 @@ export interface DonneesPaiement {
   type?: TypeTransaction;
   colis_id?: string | null;
   /**
-   * Ignoré pour un COLIS : le backend applique le barème dégressif
-   * (100 / 75 / 50 FCFA selon le nombre de colis suivis ce mois-ci).
+   * Ignoré pour un COLIS : le backend applique le barème par nombre d'articles
+   * (100 / 200 / 350 / 500 FCFA selon le contenu du colis).
    */
   montant_fcfa?: number | null;
   moyen: MoyenPaiement;
@@ -110,23 +111,45 @@ export interface MoyenPaiementInfo {
   immediat: boolean;
 }
 
-// ─── Barème dégressif des frais de service ───────────────────────────
+// ─── Barème des frais de service (par nombre d'articles) ─────────────
 
 export interface PalierTarifaire {
-  nb_colis_min: number;
+  nb_articles_min: number;
+  /** `null` = palier ouvert (« plus de N articles »). */
+  nb_articles_max: number | null;
   frais_fcfa: number;
   part_receveur_fcfa: number;
 }
 
-/** Tarif applicable au client + barème complet (`GET /paiement/tarifs`). */
+/** Tarif applicable à un colis + barème complet (`GET /paiement/tarifs`). */
 export interface TarifsColis {
-  nb_colis_suivis: number;
+  nombre_articles: number;
   frais_fcfa: number;
   part_receveur_fcfa: number;
   part_plateforme_fcfa: number;
-  prochain_palier_nb_colis: number | null;
-  prochain_palier_frais_fcfa: number | null;
   bareme: PalierTarifaire[];
+}
+
+/**
+ * Barème local (miroir du back-end) pour afficher le frais **dès la saisie** du
+ * nombre d'articles, sans aller-retour réseau. Le barème serveur reste
+ * néanmoins la seule référence au moment du paiement.
+ */
+export const BAREME_FRAIS_SERVICE: PalierTarifaire[] = [
+  { nb_articles_min: 1, nb_articles_max: 3, frais_fcfa: 100, part_receveur_fcfa: 25 },
+  { nb_articles_min: 4, nb_articles_max: 6, frais_fcfa: 200, part_receveur_fcfa: 50 },
+  { nb_articles_min: 7, nb_articles_max: 10, frais_fcfa: 350, part_receveur_fcfa: 80 },
+  { nb_articles_min: 11, nb_articles_max: null, frais_fcfa: 500, part_receveur_fcfa: 150 },
+];
+
+/** Frais de service (et part receveur) pour un colis de `nombreArticles`. */
+export function fraisServicePourArticles(nombreArticles: number): PalierTarifaire {
+  const n = Math.max(Math.floor(nombreArticles) || 1, 1);
+  return (
+    BAREME_FRAIS_SERVICE.find(
+      (p) => n >= p.nb_articles_min && (p.nb_articles_max === null || n <= p.nb_articles_max),
+    ) ?? BAREME_FRAIS_SERVICE[BAREME_FRAIS_SERVICE.length - 1]
+  );
 }
 
 // ─── Libellés & couleurs (UI) ────────────────────────────────────────
@@ -160,10 +183,5 @@ export const LIBELLES_MOTIF: Record<string, string> = {
   abonnement: "Abonnement",
   ajustement: "Ajustement",
   paiement: "Paiement",
+  frais_scan_agent: "Frais de scan (compte prépayé)",
 };
-
-/**
- * Frais de service de repli, si `GET /paiement/tarifs` est injoignable.
- * Le barème du serveur fait toujours foi au moment du paiement.
- */
-export const FRAIS_SERVICE_REPLI_FCFA = 100;

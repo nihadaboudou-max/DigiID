@@ -102,19 +102,25 @@ class ParametresApplication(BaseSettings):
     seuil_tentatives_connexion_echec: int = 5
 
     # --- Paiement & frais de service colis (Plan B — S6) ---
-    # Le CLIENT paie un **frais de service par colis**, indépendant du prix de
-    # transport du colis. Ce prix reste une information **facultative** du
-    # guichet : il n'est jamais encaissé par DigiID (on évite ainsi de donner
-    # l'impression de surveiller les revenus du transporteur).
+    # Le CLIENT paie un **frais de service par colis**, calculé désormais selon le
+    # **nombre d'articles** contenus dans ce colis (et non plus selon un décompte
+    # mensuel cumulatif de colis suivis). Le prix de transport du colis reste une
+    # information **facultative** du guichet : il n'est jamais encaissé par DigiID
+    # (on évite ainsi de donner l'impression de surveiller les revenus du
+    # transporteur).
     #
-    # Barème **dégressif** selon le nombre de colis suivis par le client :
-    # « 1:100,4:75,8:50 » = 100 F/colis jusqu'à 3 colis suivis, 75 F/colis à
-    # partir du 4e, 50 F/colis à partir du 8e. Le compteur utilisé est le nombre
-    # de colis déjà réglés par ce client sur le **mois en cours**.
-    palier_frais_service_colis: str = "1:100,4:75,8:50"
-    # Part reversée au receveur — constante (c'est son incitation), quel que soit
-    # le palier ; le reste du frais de service constitue notre part.
-    part_receveur_colis_fcfa: int = 25
+    # Barème par paliers d'articles : « min-max:frais:commission » par palier,
+    # séparés par des virgules. Une borne max vide (ou suffixée « + ») désigne un
+    # palier **ouvert** (« plus de 10 articles »).
+    #   « 1-3:100:25,4-6:200:50,7-10:350:80,11+:500:150 »
+    # = 100 F (commission 25 F) pour 1-3 articles, 200 F (50 F) pour 4-6,
+    #   350 F (80 F) pour 7-10, et 500 F (150 F) au-delà de 10 articles.
+    bareme_frais_service_colis: str = (
+        "1-3:100:25,4-6:200:50,7-10:350:80,11+:500:150"
+    )
+    # Compte prépayé de l'agent : montant débité **automatiquement** du compte
+    # de l'agent à chaque scan d'un colis réglé en espèces (0 pour désactiver).
+    frais_scan_agent_fcfa: int = 100
     # Opérateur mobile money activé (mode mock en développement) : "wave".
     operateur_mobile_money: str = "wave"
 
@@ -203,28 +209,51 @@ class ParametresApplication(BaseSettings):
         return valeur
 
     @property
-    def paliers_frais_service_colis(self) -> tuple[tuple[int, int], ...]:
+    def paliers_frais_service_colis(
+        self,
+    ) -> tuple[tuple[int, int | None, int, int], ...]:
         """
-        Barème dégressif : ``((nb_colis_min, frais_fcfa), …)`` trié par seuil.
+        Barème : ``((nb_articles_min, nb_articles_max | None, frais, commission), …)``.
+
+        ``nb_articles_max`` vaut ``None`` pour le palier ouvert (« plus de N »).
 
         Tolérant à une saisie invalide dans le ``.env`` : on ignore les entrées
-        mal formées et on retombe sur le premier palier valide (jamais de barème
-        vide, jamais d'exception au démarrage).
+        mal formées et on retombe sur le barème par défaut (jamais de barème vide,
+        jamais d'exception au démarrage).
         """
-        paliers: list[tuple[int, int]] = []
-        for morceau in (self.palier_frais_service_colis or "").split(","):
-            if ":" not in morceau:
+        defauts: tuple[tuple[int, int | None, int, int], ...] = (
+            (1, 3, 100, 25),
+            (4, 6, 200, 50),
+            (7, 10, 350, 80),
+            (11, None, 500, 150),
+        )
+        paliers: list[tuple[int, int | None, int, int]] = []
+        for morceau in (self.bareme_frais_service_colis or "").split(","):
+            morceau = morceau.strip()
+            if not morceau or ":" not in morceau:
                 continue
-            seuil_brut, prix_brut = morceau.split(":", 1)
+            morceaux = morceau.split(":")
+            bornes = morceaux[0].strip()
             try:
-                seuil, prix = int(seuil_brut.strip()), int(prix_brut.strip())
+                if "+" in bornes:
+                    mini: int = int(bornes.replace("+", "").strip())
+                    maxi: int | None = None
+                elif "-" in bornes:
+                    mini_brut, maxi_brut = bornes.split("-", 1)
+                    mini = int(mini_brut.strip())
+                    maxi = int(maxi_brut.strip())
+                else:
+                    mini = int(bornes)
+                    maxi = None
+                frais = int(morceaux[1].strip())
+                commission = int(morceaux[2].strip()) if len(morceaux) > 2 else 0
             except ValueError:
                 continue
-            if seuil >= 1 and prix >= 0:
-                paliers.append((seuil, prix))
+            if mini >= 1 and frais >= 0 and commission >= 0:
+                paliers.append((mini, maxi, frais, commission))
         if not paliers:
-            paliers = [(1, 100)]
-        return tuple(sorted(paliers))
+            paliers = list(defauts)
+        return tuple(sorted(paliers, key=lambda palier: palier[0]))
 
     @property
     def url_base_donnees(self) -> str:

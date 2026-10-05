@@ -43,11 +43,15 @@ export const paiementAPI = {
   moyens: () => clientAPI.get<MoyenPaiementInfo[]>(`${BASE}/moyens`, opts),
 
   /**
-   * Frais de service applicables **maintenant** pour ce client, d'après le
-   * barème dégressif (100 F jusqu'au 3e colis du mois, 75 F dès le 4e, 50 F dès
-   * le 8e) + le barème complet pour l'affichage guichet.
+   * Frais de service applicables à un colis contenant `nombreArticles`
+   * (100 F pour 1-3 articles, 200 F pour 4-6, 350 F pour 7-10, 500 F au-delà)
+   * + le barème complet pour l'affichage guichet.
    */
-  tarifs: () => clientAPI.get<TarifsColis>(`${BASE}/tarifs`, opts),
+  tarifs: (nombreArticles = 1) =>
+    clientAPI.get<TarifsColis>(
+      `${BASE}/tarifs?${construireQuery({ nombre_articles: nombreArticles })}`,
+      opts,
+    ),
 
   portefeuilles: {
     /** Ma cagnotte (créée à solde nul à la première consultation). */

@@ -51,8 +51,8 @@ export const ROLES_CHAUFFEUR: string[] = [
  * Paiement / cagnotte (S6) — permission `paiement.lire`.
  *
  * Tous les acteurs du pivot logistique disposent d'une cagnotte (le receveur
- * est crédité de 25 FCFA par colis enregistré) ; les admins peuvent consulter
- * pour le support.
+ * est crédité de 25 à 150 FCFA par colis selon son nombre d'articles) ; les
+ * admins peuvent consulter pour le support.
  */
 export const ROLES_CAGNOTTE: string[] = [
   "receveur",

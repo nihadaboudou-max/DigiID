@@ -59,6 +59,12 @@ class Colis(Base, MelangeTracabilite):
     description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     poids_kg: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     valeur_fcfa: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Nombre d'articles contenus dans le colis — base de calcul du **frais de
+    # service DigiID** (barème par tranches : 1-3 → 100 F, 4-6 → 200 F, etc.).
+    # Saisi au guichet par le receveur ; vaut 1 par défaut.
+    nombre_articles: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
 
     gare_depart_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -90,9 +96,10 @@ class Colis(Base, MelangeTracabilite):
         String(30), nullable=False, default="enregistre", server_default="enregistre"
     )
     # Prix du transport du colis — **information facultative du guichet**.
-    # DigiID ne l'encaisse pas : les frais de service (100 FCFA, barème
-    # dégressif) sont payés séparément par le client. Laisser ce champ vide est
-    # donc normal et volontaire (aucune surveillance du revenu du transporteur).
+    # DigiID ne l'encaisse pas : les frais de service (100 à 500 FCFA selon le
+    # nombre d'articles) sont payés séparément par le client. Laisser ce champ
+    # vide est donc normal et volontaire (aucune surveillance du revenu du
+    # transporteur).
     frais_fcfa: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     livre_le: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True

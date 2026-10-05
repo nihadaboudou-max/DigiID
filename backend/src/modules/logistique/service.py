@@ -41,6 +41,22 @@ async def _paginer(session: AsyncSession, requete, page: int, par_page: int):
     return list(resultat.scalars().all()), total
 
 
+async def _debiter_compte_prepaye_agent(
+    session: AsyncSession, colis: Colis, agent_id: UUID
+):
+    """
+    Débite le compte prépayé de l'agent pour un scan (règle « Si espèces », S6).
+
+    Import **tardif** du service paiement pour éviter toute dépendance circulaire
+    entre les modules logistique et paiement.
+    """
+    from src.modules.paiement import service as service_paiement
+
+    return await service_paiement.appliquer_frais_scan_agent(
+        session, colis, agent_id
+    )
+
+
 # ─── Gares ───────────────────────────────────────────────────────────
 
 async def creer_gare(session: AsyncSession, donnees: schemas.GareCreate) -> Gare:
@@ -362,6 +378,7 @@ async def creer_colis(
         description=donnees.description,
         poids_kg=donnees.poids_kg,
         valeur_fcfa=donnees.valeur_fcfa,
+        nombre_articles=donnees.nombre_articles,
         gare_depart_id=donnees.gare_depart_id,
         gare_arrivee_id=donnees.gare_arrivee_id,
         voyage_id=donnees.voyage_id,
@@ -574,6 +591,10 @@ async def enregistrer_scan(
     if ticket.premier_scan_le is None:
         ticket.premier_scan_le = maintenant
 
+    # 5. Compte prépayé de l'agent : sur un colis réglé **en espèces**, 100 FCFA
+    #    sont débités automatiquement à chaque scan réellement enregistré.
+    debit_agent = await _debiter_compte_prepaye_agent(session, colis, utilisateur.id)
+
     try:
         await session.commit()
     except IntegrityError:
@@ -602,12 +623,21 @@ async def enregistrer_scan(
     await session.refresh(colis)
     await session.refresh(ticket)
     await session.refresh(evenement)
+    message = (
+        "Scan enregistré."
+        if donnees.type_evenement != "livraison"
+        else "Colis livré avec succès."
+    )
+    if debit_agent is not None:
+        message += (
+            f" Compte prépayé : {debit_agent.montant_fcfa} FCFA débités"
+            f" (solde {debit_agent.solde_apres} FCFA)."
+        )
     return {
         "succes": True,
         "deja_livre": False,
         "deja_scanne": False,
-        "message": "Scan enregistré." if donnees.type_evenement != "livraison"
-                   else "Colis livré avec succès.",
+        "message": message,
         "statut_colis": colis.statut,
         "colis": colis,
         "ticket": ticket,

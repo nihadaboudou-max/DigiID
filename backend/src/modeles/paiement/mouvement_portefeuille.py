@@ -20,12 +20,13 @@ SENS_MOUVEMENT = ("CREDIT", "DEBIT")
 
 # Motifs métier (facilite les rapports et les reçus)
 MOTIFS_MOUVEMENT = (
-    "commission_colis",   # 25 FCFA reversés au receveur sur un colis
+    "commission_colis",   # part du receveur sur un colis (25 à 150 FCFA)
     "commission_api",     # reversement sur l'API de certification
     "reversement",        # virement de la cagnotte vers mobile money
     "abonnement",         # paiement d'un pack e-commerçant
     "ajustement",         # correction manuelle (administration)
     "paiement",           # paiement direct depuis le solde du wallet
+    "frais_scan_agent",   # 100 FCFA débités du compte prépayé (scan espèces)
 )
 
 

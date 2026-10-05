@@ -33,6 +33,8 @@ export interface Colis {
   description: string | null;
   poids_kg: number | null;
   valeur_fcfa: number | null;
+  /** Nombre d'articles — base du calcul du frais de service DigiID. */
+  nombre_articles: number;
   gare_depart_id: string;
   gare_arrivee_id: string;
   voyage_id: string | null;
@@ -104,6 +106,8 @@ export interface DonneesColis {
   description?: string | null;
   poids_kg?: number | null;
   valeur_fcfa?: number | null;
+  /** Nombre d'articles — détermine le frais de service DigiID (barème). */
+  nombre_articles: number;
 
   /** Prix du transport — facultatif : nul si le guichet ne le renseigne pas. */
   frais_fcfa?: number | null;

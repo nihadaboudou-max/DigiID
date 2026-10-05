@@ -85,6 +85,10 @@ export function TicketImprimable({
                 <dd className="font-medium">{colis?.destinataire_tel || "—"}</dd>
               </div>
               <div className="flex gap-2">
+                <dt className="text-ardoise-clair min-w-[92px]">Articles</dt>
+                <dd className="font-medium">{colis?.nombre_articles ?? 1}</dd>
+              </div>
+              <div className="flex gap-2">
                 <dt className="text-ardoise-clair min-w-[92px]">Prix transport</dt>
                 <dd className="font-bold text-lagune">
                   {formaterFcfa(colis?.frais_fcfa)}

@@ -180,6 +180,10 @@ function Contenu() {
                 libelle="Valeur déclarée"
                 valeur={colis.valeur_fcfa != null ? formaterFcfa(colis.valeur_fcfa) : "—"}
               />
+              <Ligne
+                libelle="Nombre d'articles"
+                valeur={String(colis.nombre_articles ?? 1)}
+              />
               <Ligne libelle="Enregistré par" valeur={colis.receveur_nom || "—"} />
               {colis.description && (
                 <div className="sm:col-span-2">

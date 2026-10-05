@@ -3,8 +3,8 @@
  * Page « Ma cagnotte » — espace receveur/chauffeur/commerçant (S6).
  *
  * Affiche le solde du portefeuille, l'historique de tous les mouvements
- * (crédits de commission, reversements…) et la liste des commissions reçues
- * (25 FCFA par colis enregistré).
+ * (crédits de commission, débits de frais de scan…) et la liste des commissions
+ * reçues (25 à 150 FCFA selon le nombre d'articles du colis).
  */
 import { useCallback, useEffect, useState } from "react";
 
@@ -126,7 +126,7 @@ function Contenu() {
       {/* Mouvements */}
       <Carte
         titre="Historique des mouvements"
-        description="Chaque crédit de commission (25 FCFA par colis) et chaque débit."
+        description="Chaque crédit de commission (25 à 150 FCFA par colis) et chaque débit (dont les frais de scan du compte prépayé)."
       >
         {chargement ? (
           <p className="text-sm text-ardoise-clair italic py-6 text-center">
@@ -183,7 +183,7 @@ function Contenu() {
       {/* Commissions */}
       <Carte
         titre="Mes commissions"
-        description="Micro-commission reversée sur chaque colis enregistré."
+        description="Commission reversée sur chaque colis réglé (25 à 150 FCFA selon son nombre d'articles)."
       >
         {chargement ? (
           <p className="text-sm text-ardoise-clair italic py-6 text-center">

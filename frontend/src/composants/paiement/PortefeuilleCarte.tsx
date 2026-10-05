@@ -4,7 +4,7 @@
  *
  * Réutilisée sur les tableaux de bord (receveur, chauffeur, commerçant) et sur
  * la page dédiée `/receveur/cagnotte`. Le receveur y voit les commissions
- * (25 FCFA) créditées à chaque colis enregistré.
+ * (25 à 150 FCFA selon le nombre d'articles) créditées à chaque colis réglé.
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";

@@ -6,9 +6,12 @@ Deux montants distincts (voir ``tarification.py``) :
 
 - le **prix de transport** du colis (``colis.frais_fcfa``, facultatif) est le
   revenu du transporteur — DigiID ne l'encaisse **jamais** ;
-- le **frais de service DigiID**, payé par le client, suit un barème dégressif
-  (100 F/colis, 75 F à partir du 4e colis suivi, 50 F à partir du 8e) réparti
-  entre notre part et la commission du receveur (25 F constants).
+- le **frais de service DigiID**, payé par le client, suit un barème calculé
+  selon le **nombre d'articles** du colis (100 / 200 / 350 / 500 F) réparti entre
+  notre part et la commission **progressive** du receveur (25 / 50 / 80 / 150 F).
+
+Enfin, le **compte prépayé de l'agent** est débité automatiquement (100 FCFA par
+scan) lorsqu'il scanne un colis réglé en espèces (``appliquer_frais_scan_agent``).
 
 Flux d'un paiement de colis :
 
@@ -43,6 +46,7 @@ from src.modeles import (
     TransactionPaiement,
     Utilisateur,
 )
+from src.config import parametres
 from src.modeles.paiement import STATUTS_TRANSACTION_ACTIFS
 from src.modules.paiement import schemas, tarification
 from src.modules.paiement.mobile_money import (
@@ -64,29 +68,6 @@ async def _paginer(session: AsyncSession, requete, page: int, par_page: int):
     return list(resultat.scalars().all()), total
 
 
-def _debut_du_mois() -> datetime:
-    """Premier instant du mois courant (UTC) — fenêtre du barème dégressif."""
-    maintenant = datetime.now(timezone.utc)
-    return maintenant.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
-
-async def _compter_colis_suivis(session: AsyncSession, payeur_id: UUID) -> int:
-    """
-    Nombre de colis déjà réglés par ce client **ce mois-ci**.
-
-    C'est le compteur du barème dégressif : au 4e colis du mois, le client passe
-    automatiquement au tarif suivant (75 F puis 50 F).
-    """
-    return await session.scalar(
-        select(func.count()).select_from(TransactionPaiement).where(
-            TransactionPaiement.type == "COLIS",
-            TransactionPaiement.payeur_id == payeur_id,
-            TransactionPaiement.statut.in_(STATUTS_TRANSACTION_ACTIFS),
-            TransactionPaiement.cree_le >= _debut_du_mois(),
-        )
-    ) or 0
-
-
 async def _transaction_active_du_colis(
     session: AsyncSession, colis_id: UUID
 ) -> TransactionPaiement | None:
@@ -106,15 +87,49 @@ async def _transaction_active_du_colis(
     )
 
 
-async def tarifs_pour(session: AsyncSession, utilisateur: Utilisateur) -> dict:
-    """Tarif applicable au client + barème complet (affichage guichet)."""
-    nb_colis_suivis = await _compter_colis_suivis(session, utilisateur.id)
-    frais = tarification.frais_service(nb_colis_suivis + 1)
-    suivant = tarification.prochain_palier(nb_colis_suivis + 1)
+async def appliquer_frais_scan_agent(
+    session: AsyncSession, colis: Colis, agent_id: UUID
+) -> MouvementPortefeuille | None:
+    """
+    Débite le **compte prépayé de l'agent** (100 FCFA par scan, configurable).
+
+    Règle métier (S6) : « Si espèces : le compte prépayé de l'agent sur
+    l'application est automatiquement débité de 100 FCFA à chaque scan
+    effectué. » Le débit ne s'applique donc **qu'aux colis réglés en espèces** :
+    pour un paiement mobile money, c'est l'opérateur qui encaisse. Un colis pas
+    encore réglé est traité comme « espèces » (modèle guichet par défaut).
+
+    Idempotence : appelée uniquement lorsqu'un **nouvel** événement de scan est
+    réellement enregistré (les rejeux idempotents et l'anti-« DÉJÀ LIVRÉ » ne
+    passent pas par ici). Renvoie le mouvement créé, ou ``None`` si désactivé.
+    """
+    montant = int(parametres.frais_scan_agent_fcfa or 0)
+    if montant <= 0 or agent_id is None:
+        return None
+
+    transaction = await _transaction_active_du_colis(session, colis.id)
+    if transaction is not None and transaction.moyen != "especes":
+        return None
+
+    portefeuille = await obtenir_ou_creer_portefeuille(
+        session, agent_id, commit=False
+    )
+    return await _appliquer_mouvement(
+        session,
+        portefeuille,
+        "DEBIT",
+        montant,
+        "frais_scan_agent",
+        reference_id=colis.id,
+        autoriser_negatif=True,
+    )
+
+
+async def tarifs_pour(nombre_articles: int = 1) -> dict:
+    """Tarif applicable à un colis de ``nombre_articles`` + barème complet."""
+    frais = tarification.frais_service(nombre_articles)
     return {
         **frais.as_dict(),
-        "prochain_palier_nb_colis": suivant[0] if suivant else None,
-        "prochain_palier_frais_fcfa": suivant[1] if suivant else None,
         "bareme": tarification.bareme(),
     }
 
@@ -183,13 +198,21 @@ async def _appliquer_mouvement(
     montant: int,
     motif: str,
     reference_id: UUID | None = None,
+    *,
+    autoriser_negatif: bool = False,
 ) -> MouvementPortefeuille:
-    """Crée un mouvement et met à jour le solde (jamais l'un sans l'autre)."""
+    """
+    Crée un mouvement et met à jour le solde (jamais l'un sans l'autre).
+
+    ``autoriser_negatif`` : pour le compte **prépayé** de l'agent, on tolère un
+    solde négatif (crédit consenti) afin qu'un scan ne soit jamais bloqué ;
+    l'agent régularise ensuite sa cagnotte.
+    """
     solde = portefeuille.solde_fcfa or 0
     if sens == "CREDIT":
         solde += montant
     elif sens == "DEBIT":
-        if montant > solde:
+        if montant > solde and not autoriser_negatif:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST, detail="Solde insuffisant"
             )
@@ -402,9 +425,8 @@ async def creer_transaction(
             return await _resultat(
                 session, deja, "Frais de service déjà réglés pour ce colis."
             )
-        # Barème dégressif : le prix baisse dès le 4e colis suivi ce mois-ci.
-        nb_colis_suivis = await _compter_colis_suivis(session, payeur_id) + 1
-        frais = tarification.frais_service(nb_colis_suivis)
+        # Barème par nombre d'articles : le frais dépend du **contenu** du colis.
+        frais = tarification.frais_service(colis.nombre_articles or 1)
         montant = frais.frais_fcfa
         frais_plateforme = frais.part_plateforme_fcfa
         commission_receveur = frais.part_receveur_fcfa

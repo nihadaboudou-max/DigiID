@@ -5,15 +5,17 @@
  * ⚠️ À ne pas confondre avec le **prix de transport** du colis : ce dernier est
  * un montant facultatif saisi au guichet, c'est le revenu du transporteur et
  * DigiID ne l'encaisse jamais. Ici on encaisse le frais de service payé par le
- * client, selon un **barème dégressif** :
+ * client, selon un **barème par nombre d'articles** :
  *
- * | Colis suivis ce mois | Frais/colis | dont receveur | dont DigiID |
- * |----------------------|-------------|---------------|-------------|
- * | 1 à 3                | 100 FCFA    | 25 FCFA       | 75 FCFA     |
- * | 4 à 7                | 75 FCFA     | 25 FCFA       | 50 FCFA     |
- * | 8 et plus            | 50 FCFA     | 25 FCFA       | 25 FCFA     |
+ * | Articles dans le colis | Frais/colis | dont receveur | dont DigiID |
+ * |------------------------|-------------|---------------|-------------|
+ * | 1 à 3                  | 100 FCFA    | 25 FCFA       | 75 FCFA     |
+ * | 4 à 6                  | 200 FCFA    | 50 FCFA       | 150 FCFA    |
+ * | 7 à 10                 | 350 FCFA    | 80 FCFA       | 270 FCFA    |
+ * | plus de 10             | 500 FCFA    | 150 FCFA      | 350 FCFA    |
  *
- * Le montant n'est donc **pas saisi** : il vient du serveur (`GET /paiement/tarifs`).
+ * Le montant n'est donc **pas saisi** : il vient du serveur
+ * (`GET /paiement/tarifs?nombre_articles=N`).
  *
  * Deux garde-fous contre le double prélèvement :
  *  1. le serveur n'accepte qu'**un seul** paiement actif par colis — on affiche
@@ -32,7 +34,7 @@ import { formaterFcfa } from "@/composants/logistique/format";
 import { ErreurAPI } from "@/services/client_api";
 import { cleIdempotence, paiementAPI } from "@/services/paiement_api";
 import {
-  FRAIS_SERVICE_REPLI_FCFA,
+  fraisServicePourArticles,
   LIBELLES_MOYEN,
   LIBELLES_STATUT_TRANSACTION,
   VARIANTES_STATUT_TRANSACTION,
@@ -74,7 +76,7 @@ export function PaiementColis({ colis, onPaiementEffectue }: Proprietes) {
   // ─── État initial : tarif, moyens et éventuel paiement déjà fait ────
   const initialiser = useCallback(async () => {
     const [resTarifs, resMoyens, resTransactions] = await Promise.allSettled([
-      paiementAPI.tarifs(),
+      paiementAPI.tarifs(colis.nombre_articles || 1),
       paiementAPI.moyens(),
       paiementAPI.transactions.lister({ colis_id: colis.id, par_page: 10 }),
     ]);
@@ -89,7 +91,7 @@ export function PaiementColis({ colis, onPaiementEffectue }: Proprietes) {
       );
       setExistant(dejaPaye ?? null);
     }
-  }, [colis.id]);
+  }, [colis.id, colis.nombre_articles]);
 
   useEffect(() => {
     let annule = false;
@@ -102,8 +104,10 @@ export function PaiementColis({ colis, onPaiementEffectue }: Proprietes) {
     };
   }, [initialiser]);
 
-  const fraisFcfa = tarifs?.frais_fcfa ?? FRAIS_SERVICE_REPLI_FCFA;
-  const partReceveur = tarifs?.part_receveur_fcfa ?? 25;
+  // Repli local (barème miroir) si `GET /paiement/tarifs` est injoignable.
+  const fraisLocal = fraisServicePourArticles(colis.nombre_articles || 1);
+  const fraisFcfa = tarifs?.frais_fcfa ?? fraisLocal.frais_fcfa;
+  const partReceveur = tarifs?.part_receveur_fcfa ?? fraisLocal.part_receveur_fcfa;
   const telephoneValide =
     moyen !== "wave" || telephone.replace(/\D/g, "").length >= 6;
 
@@ -325,21 +329,19 @@ export function PaiementColis({ colis, onPaiementEffectue }: Proprietes) {
             </span>
           </div>
           <p className="text-xs text-ardoise-clair mt-1">
-            dont {formaterFcfa(partReceveur)} pour la cagnotte du receveur.
+            Colis de {colis.nombre_articles || 1} article
+            {(colis.nombre_articles || 1) > 1 ? "s" : ""} — dont{" "}
+            {formaterFcfa(partReceveur)} pour la cagnotte du receveur.
             {colis.frais_fcfa
               ? ` Prix du transport indiqué : ${formaterFcfa(
                   colis.frais_fcfa,
                 )} (hors frais DigiID, non encaissé ici).`
               : ""}
           </p>
-          {tarifs?.prochain_palier_nb_colis != null &&
-            tarifs.prochain_palier_frais_fcfa != null && (
-              <p className="text-xs text-ocre mt-1">
-                Tarif dégressif : dès le {tarifs.prochain_palier_nb_colis}
-                <sup>e</sup> colis suivi ce mois-ci,{" "}
-                {formaterFcfa(tarifs.prochain_palier_frais_fcfa)} par colis.
-              </p>
-            )}
+          <p className="text-xs text-ocre mt-1">
+            Barème : 100 F (1-3 articles) · 200 F (4-6) · 350 F (7-10) · 500 F
+            (plus de 10).
+          </p>
         </div>
 
         <div className="flex flex-col gap-1.5">

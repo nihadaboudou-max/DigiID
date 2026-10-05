@@ -48,6 +48,7 @@ export function TableauColis({
             <th className="py-2 pr-3 font-semibold">Destinataire</th>
             <th className="py-2 pr-3 font-semibold">Trajet</th>
             <th className="py-2 pr-3 font-semibold">Statut</th>
+            <th className="py-2 pr-3 font-semibold text-center">Articles</th>
             <th className="py-2 pr-3 font-semibold text-right">Frais</th>
             <th className="py-2 pr-3 font-semibold">Enregistré</th>
             <th className="py-2 font-semibold text-right">Suivi</th>
@@ -78,6 +79,9 @@ export function TableauColis({
                 <Badge variante={VARIANTES_STATUT_COLIS[c.statut] ?? "neutre"}>
                   {LIBELLES_STATUT_COLIS[c.statut] ?? c.statut}
                 </Badge>
+              </td>
+              <td className="py-2.5 pr-3 text-center font-medium text-ardoise">
+                {c.nombre_articles ?? 1}
               </td>
               <td className="py-2.5 pr-3 text-right font-medium text-ardoise">
                 {formaterFcfa(c.frais_fcfa)}

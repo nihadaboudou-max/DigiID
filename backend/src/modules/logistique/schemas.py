@@ -227,6 +227,9 @@ class ColisCreate(BaseModel):
     description: Optional[str] = Field(None, max_length=500)
     poids_kg: Optional[float] = Field(None, ge=0)
     valeur_fcfa: Optional[int] = Field(None, ge=0)
+    # Nombre d'articles dans le colis — base du **frais de service DigiID**
+    # (barème par tranches). Saisi au guichet ; 1 par défaut.
+    nombre_articles: int = Field(1, ge=1, le=9999)
     # Prix du transport — **facultatif** : DigiID n'encaisse pas ce montant (les
     # frais de service sont payés séparément par le client).
     frais_fcfa: Optional[int] = Field(None, ge=0)
@@ -255,6 +258,7 @@ class ColisResponse(BaseModel):
     description: Optional[str] = None
     poids_kg: Optional[float] = None
     valeur_fcfa: Optional[int] = None
+    nombre_articles: int = 1
     gare_depart_id: UUID
     gare_arrivee_id: UUID
     voyage_id: Optional[UUID] = None
