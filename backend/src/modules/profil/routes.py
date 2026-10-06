@@ -19,6 +19,7 @@ from src.modules.profil import service
 from src.modules.profil.schemas import (
     ProfilDetail, ProfilModification, ExportDonnees, ReponseSuppression,
     Code2FARequete, Preparation2FAReponse, Activation2FAReponse,
+    ChangementMotDePasseRequete, ChangementMotDePasseReponse,
 )
 from src.modules.scoring import declencher_recalcul_score
 from src.noyau import journal as journal_module
@@ -89,6 +90,27 @@ async def modifier_mon_profil(
         session, utilisateur, "modification_profil", obtenir_ip_client(requete),
     )
     return resultat
+
+
+@routeur_profil.patch(
+    "/mot-de-passe",
+    response_model=ChangementMotDePasseReponse,
+    summary="Changer mon mot de passe",
+)
+async def changer_mon_mot_de_passe(
+    requete: Request,
+    donnees: ChangementMotDePasseRequete,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+):
+    """Change le mot de passe de l'utilisateur connecté (ancien mot de passe requis)."""
+    return await service.changer_mot_de_passe(
+        session=session,
+        utilisateur=utilisateur,
+        ancien_mot_de_passe=donnees.ancien_mot_de_passe,
+        nouveau_mot_de_passe=donnees.nouveau_mot_de_passe,
+        adresse_ip=obtenir_ip_client(requete),
+    )
 
 
 @routeur_profil.get(

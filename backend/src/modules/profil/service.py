@@ -28,8 +28,12 @@ from src.modules.profil.schemas import (
     ProfilDetail, ProfilModification, ExportDonnees,
     Preparation2FAReponse, Activation2FAReponse,
     AttestationRecue, AttestationEmise,
+    ChangementMotDePasseReponse,
 )
-from src.noyau import chiffrer_donnee, dechiffrer_donnee, journal
+from src.noyau import (
+    chiffrer_donnee, dechiffrer_donnee,
+    hacher_mot_de_passe, verifier_mot_de_passe, journal,
+)
 from src.noyau.exceptions import (
     ErreurAutorisation,
     ErreurConflit,
@@ -210,6 +214,60 @@ async def modifier_profil(
     await session.commit()
     journal.info(f"Profil modifié : utilisateur={utilisateur.id} champs={list(modifications.keys())}")
     return _utilisateur_vers_profil(utilisateur)
+
+
+async def changer_mot_de_passe(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    ancien_mot_de_passe: str,
+    nouveau_mot_de_passe: str,
+    adresse_ip: Optional[str] = None,
+) -> ChangementMotDePasseReponse:
+    """
+    Change le mot de passe de l'utilisateur connecté.
+
+    On vérifie d'abord l'ancien mot de passe : ainsi, même si quelqu'un vole
+    une session ouverte, il ne peut pas verrouiller le compte en changeant le
+    mot de passe sans le connaître. Le nouveau mot de passe est ensuite haché
+    (Argon2id) — il n'est jamais stocké en clair.
+    """
+    if not verifier_mot_de_passe(ancien_mot_de_passe, utilisateur.mot_de_passe_hash):
+        await _enregistrer_audit(
+            session,
+            utilisateur_id=utilisateur.id,
+            role_acteur=utilisateur.role,
+            type_evenement=TypesEvenementAudit.CHANGEMENT_MOT_DE_PASSE.value,
+            description="Échec de changement de mot de passe — ancien mot de passe incorrect",
+            adresse_ip=adresse_ip,
+        )
+        await session.commit()
+        raise ErreurValidation(
+            "Ancien mot de passe incorrect",
+            message_utilisateur="Ton mot de passe actuel n'est pas correct.",
+        )
+
+    if verifier_mot_de_passe(nouveau_mot_de_passe, utilisateur.mot_de_passe_hash):
+        raise ErreurValidation(
+            "Mot de passe identique à l'ancien",
+            message_utilisateur="Le nouveau mot de passe doit être différent de l'ancien.",
+        )
+
+    utilisateur.mot_de_passe_hash = hacher_mot_de_passe(nouveau_mot_de_passe)
+
+    await _enregistrer_audit(
+        session,
+        utilisateur_id=utilisateur.id,
+        role_acteur=utilisateur.role,
+        type_evenement=TypesEvenementAudit.CHANGEMENT_MOT_DE_PASSE.value,
+        description="Mot de passe modifié par l'utilisateur",
+        adresse_ip=adresse_ip,
+    )
+    await session.commit()
+    journal.info(f"Mot de passe modifié : utilisateur={utilisateur.id}")
+
+    return ChangementMotDePasseReponse(
+        message="Ton mot de passe a été changé avec succès.",
+    )
 
 
 async def supprimer_compte(

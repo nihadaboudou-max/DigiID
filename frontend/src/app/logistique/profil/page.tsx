@@ -9,8 +9,13 @@
  *
  * Règle importante : **modifier un élément contrôlé remet le dossier en attente**.
  * On ne peut pas se faire valider puis changer discrètement d'immatriculation.
+ *
+ * L'OCR passe par l'**extraction universelle** (interface unique
+ * `POST /api/v1/inspection-documents/upload`) : une seule route et une seule
+ * réponse (`ReponseDocumentUnifie`) pour le permis comme pour la carte verte,
+ * au lieu des endpoints individuels `/permis/upload` et `/assurance/upload`.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 import { Alerte } from "@/composants/commun/Alerte";
@@ -20,9 +25,11 @@ import { Carte } from "@/composants/commun/Carte";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { ChampOCR } from "@/composants/logistique/ChampOCR";
-import { ErreurAPI } from "@/services/client_api";
-import { uploaderAssurance } from "@/services/assurance_auto";
-import { uploaderPermis } from "@/services/permis_conduire";
+import { StatutVerification, UploadPhoto } from "@/composants/verification-visuelle";
+import { clientAPI, ErreurAPI } from "@/services/client_api";
+import { uploadDocument } from "@/services/inspectionApi";
+import { obtenirStatutVerification, type VerificationDetail } from "@/services/verification_visuelle";
+import { TypeDocument } from "@/types/inspection";
 import {
   identiteAPI,
   LIBELLES_CHAMPS_PROFIL,
@@ -145,26 +152,31 @@ function Contenu() {
     setSucces(null);
   }
 
-  /** Permis de conduire : lit la photo et remplit numéro, catégories, expiration. */
+  /**
+   * Permis de conduire : envoie la photo à l'**extraction universelle** (type
+   * forcé au permis) puis remplit numéro, catégories et expiration.
+   */
   async function analyserPermis(fichier: File) {
     setErreurOCR(null);
     setMessageOCR(null);
     try {
-      const reponse = await uploaderPermis(fichier);
-      const donnees = reponse.resultat_ocr.donnees ?? {};
+      const reponse = await uploadDocument(
+        fichier,
+        TypeDocument.PERMIS_CONDUIRE,
+        "unique",
+      );
+      const donnees = reponse.donnees ?? {};
       const expiration = versDateISO(donnees.date_expiration);
+      const categories = Array.isArray(donnees.categories)
+        ? donnees.categories.join(", ")
+        : (donnees.categories ?? "");
       fusionner({
-        permis_numero: donnees.numero_permis ?? formulaire.permis_numero ?? "",
-        permis_categorie:
-          (donnees.categories ?? []).join(", ") || formulaire.permis_categorie || "",
+        permis_numero: donnees.numero_document ?? formulaire.permis_numero ?? "",
+        permis_categorie: categories || formulaire.permis_categorie || "",
         permis_expiration: expiration ?? formulaire.permis_expiration,
       });
       setMessageOCR(
-        `Permis lu : ${reponse.resultat_ocr.champs_extraits ?? 0} champ(s) extrait(s)${
-          donnees.taux_confiance_moyen
-            ? ` · confiance ${Math.round(donnees.taux_confiance_moyen)} %`
-            : ""
-        }. Vérifiez les valeurs ci-dessous avant d'enregistrer (elles restent modifiables).`,
+        `Permis lu : ${reponse.champs_extraits ?? 0} champ(s) extrait(s). Vérifiez les valeurs ci-dessous avant d'enregistrer (elles restent modifiables).`,
       );
       if (!expiration && donnees.date_expiration) {
         setErreurOCR(
@@ -178,16 +190,23 @@ function Contenu() {
     }
   }
 
-  /** Carte verte d'assurance : renseigne le véhicule et la validité du contrat. */
+  /**
+   * Carte verte d'assurance : passe par la même **extraction universelle**
+   * (type forcé à l'assurance) et renseigne le véhicule + la validité du contrat.
+   */
   async function analyserAssurance(fichier: File) {
     setErreurOCR(null);
     setMessageOCR(null);
     try {
-      const reponse = await uploaderAssurance(fichier);
-      const donnees = reponse.resultat_ocr.donnees ?? {};
+      const reponse = await uploadDocument(
+        fichier,
+        TypeDocument.CARTE_ASSURANCE,
+        "unique",
+      );
+      const donnees = reponse.donnees ?? {};
       fusionner({
         vehicule_immatriculation:
-          donnees.immatriculation_vehicule ?? formulaire.vehicule_immatriculation ?? "",
+          donnees.immatriculation ?? formulaire.vehicule_immatriculation ?? "",
         vehicule_marque: donnees.marque_vehicule ?? formulaire.vehicule_marque ?? "",
         vehicule_modele: donnees.modele_vehicule ?? formulaire.vehicule_modele ?? "",
       });
@@ -195,7 +214,7 @@ function Contenu() {
         ? ` Contrat valable jusqu'au ${donnees.date_expiration}${donnees.compagnie_assurance ? ` (${donnees.compagnie_assurance})` : ""}.`
         : "";
       setMessageOCR(
-        `Assurance lue : ${reponse.resultat_ocr.champs_extraits ?? 0} champ(s) extrait(s).${validite} Vérifiez le véhicule ci-dessous avant d'enregistrer.`,
+        `Assurance lue : ${reponse.champs_extraits ?? 0} champ(s) extrait(s).${validite} Vérifiez le véhicule ci-dessous avant d'enregistrer.`,
       );
     } catch (e) {
       setErreurOCR(
@@ -421,6 +440,16 @@ function Contenu() {
           </div>
         </div>
       </Carte>
+
+      {/*
+       * Sécurité personnelle, en deux cartes compactes :
+       * changer son mot de passe et montrer son visage. Texte court et
+       * boutons simples pour rester compréhensible par tout le monde.
+       */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <CarteMotDePasse />
+        <CarteVisage />
+      </div>
     </div>
   );
 }
@@ -501,5 +530,138 @@ function Element({ valide, libelle }: { valide: boolean; libelle: string }) {
       </span>
       <span className={valide ? "text-ardoise" : "text-ardoise-clair"}>{libelle}</span>
     </li>
+  );
+}
+
+/**
+ * Changer son mot de passe — version simple et compacte.
+ *
+ * Phrase courte, trois cases, un seul bouton. On explique ce qu'on fait
+ * plutôt que d'utiliser du vocabulaire technique.
+ */
+function CarteMotDePasse() {
+  const [ancien, setAncien] = useState("");
+  const [nouveau, setNouveau] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [enregistrement, setEnregistrement] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [succes, setSucces] = useState<string | null>(null);
+
+  async function changer() {
+    setErreur(null);
+    setSucces(null);
+    if (!ancien || !nouveau || !confirmation) {
+      setErreur("Remplis les 3 cases.");
+      return;
+    }
+    if (nouveau !== confirmation) {
+      setErreur("Les deux nouveaux mots de passe ne sont pas les mêmes.");
+      return;
+    }
+    if (nouveau.length < 8) {
+      setErreur("Le nouveau mot de passe doit avoir au moins 8 signes.");
+      return;
+    }
+    setEnregistrement(true);
+    try {
+      await clientAPI.patch<{ message: string }>(
+        "/api/v1/utilisateur/profil/mot-de-passe",
+        { ancien_mot_de_passe: ancien, nouveau_mot_de_passe: nouveau },
+        { authentifie: true },
+      );
+      setSucces("Mot de passe changé. Garde-le secret !");
+      setAncien("");
+      setNouveau("");
+      setConfirmation("");
+    } catch (e) {
+      setErreur(
+        e instanceof ErreurAPI
+          ? e.message_utilisateur
+          : "Impossible de changer le mot de passe.",
+      );
+    } finally {
+      setEnregistrement(false);
+    }
+  }
+
+  return (
+    <Carte
+      titre="🔑 Mon mot de passe"
+      description="Change ton mot de passe pour protéger ton compte."
+    >
+      <div className="space-y-3">
+        <ChampSaisie
+          libelle="Mot de passe d'aujourd'hui"
+          type="password"
+          value={ancien}
+          onChange={(e) => setAncien(e.target.value)}
+          autoComplete="current-password"
+        />
+        <ChampSaisie
+          libelle="Nouveau mot de passe"
+          type="password"
+          value={nouveau}
+          onChange={(e) => setNouveau(e.target.value)}
+          autoComplete="new-password"
+          aide="Au moins 8 signes (lettres ou chiffres)."
+        />
+        <ChampSaisie
+          libelle="Répète le nouveau mot de passe"
+          type="password"
+          value={confirmation}
+          onChange={(e) => setConfirmation(e.target.value)}
+          autoComplete="new-password"
+        />
+        {erreur && <p className="text-sm font-medium text-terre">{erreur}</p>}
+        {succes && <p className="text-sm font-medium text-green-700">✓ {succes}</p>}
+        <Bouton
+          variante="primaire"
+          taille="petit"
+          chargement={enregistrement}
+          onClick={() => void changer()}
+        >
+          Changer mon mot de passe
+        </Bouton>
+      </div>
+    </Carte>
+  );
+}
+
+/**
+ * Vérification du visage — version simple et compacte.
+ *
+ * On prend une photo, on voit le résultat. Pas d'historique ni de réglages
+ * pour ne pas surcharger la page.
+ */
+function CarteVisage() {
+  const [statut, setStatut] = useState<VerificationDetail | null>(null);
+  const [chargement, setChargement] = useState(true);
+
+  const charger = useCallback(async () => {
+    setChargement(true);
+    try {
+      const resultat = await obtenirStatutVerification();
+      setStatut(resultat ?? null);
+    } catch {
+      setStatut(null);
+    } finally {
+      setChargement(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void charger();
+  }, [charger]);
+
+  return (
+    <Carte
+      titre="🙂 Mon visage"
+      description="Prends une photo de ton visage pour prouver que c'est bien toi."
+    >
+      <div className="space-y-3">
+        <UploadPhoto onSucces={charger} />
+        <StatutVerification verification={statut} chargement={chargement} />
+      </div>
+    </Carte>
   );
 }

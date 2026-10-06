@@ -79,6 +79,17 @@ class ProfilModification(BaseModel):
     pays: Optional[str] = Field(default=None, max_length=50)
 
 
+class ChangementMotDePasseRequete(BaseModel):
+    """Données pour changer le mot de passe de l'utilisateur connecté."""
+    ancien_mot_de_passe: str = Field(..., min_length=1, max_length=128)
+    nouveau_mot_de_passe: str = Field(..., min_length=8, max_length=128)
+
+
+class ChangementMotDePasseReponse(BaseModel):
+    """Confirmation après changement de mot de passe."""
+    message: str
+
+
 class ExportDonnees(BaseModel):
     """Export complet RGPD — portabilité des données personnelles."""
     utilisateur: ProfilDetail
