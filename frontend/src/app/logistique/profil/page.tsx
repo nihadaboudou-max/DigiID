@@ -11,9 +11,11 @@
  * On ne peut pas se faire valider puis changer discrètement d'immatriculation.
  *
  * L'OCR passe par l'**extraction universelle** (interface unique
- * `POST /api/v1/inspection-documents/upload`) : une seule route et une seule
- * réponse (`ReponseDocumentUnifie`) pour le permis comme pour la carte verte,
- * au lieu des endpoints individuels `/permis/upload` et `/assurance/upload`.
+ * `POST /api/v1/inspection-documents/upload`) : une seule route, une seule
+ * réponse (`ReponseDocumentUnifie`) et **le type de document est détecté
+ * automatiquement**. Une seule photo suffit pour le permis comme pour la carte
+ * verte — au lieu des endpoints individuels `/permis/upload` et
+ * `/assurance/upload` qui obligeaient à choisir le document à l'avance.
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -153,68 +155,60 @@ function Contenu() {
   }
 
   /**
-   * Permis de conduire : envoie la photo à l'**extraction universelle** (type
-   * forcé au permis) puis remplit numéro, catégories et expiration.
+   * Extraction **universelle** : une seule photo, un seul appel à l'interface
+   * unique (`POST /api/v1/inspection-documents/upload`). On ne force plus le type
+   * du document : **le backend le détecte tout seul** (permis, carte verte…).
+   * On route ensuite les données lues vers la bonne partie du dossier.
    */
-  async function analyserPermis(fichier: File) {
+  async function analyserDocument(fichier: File) {
     setErreurOCR(null);
     setMessageOCR(null);
     try {
-      const reponse = await uploadDocument(
-        fichier,
-        TypeDocument.PERMIS_CONDUIRE,
-        "unique",
-      );
+      // Aucun type transmis : c'est l'extraction universelle qui reconnaît le document.
+      const reponse = await uploadDocument(fichier);
       const donnees = reponse.donnees ?? {};
-      const expiration = versDateISO(donnees.date_expiration);
-      const categories = Array.isArray(donnees.categories)
-        ? donnees.categories.join(", ")
-        : (donnees.categories ?? "");
-      fusionner({
-        permis_numero: donnees.numero_document ?? formulaire.permis_numero ?? "",
-        permis_categorie: categories || formulaire.permis_categorie || "",
-        permis_expiration: expiration ?? formulaire.permis_expiration,
-      });
-      setMessageOCR(
-        `Permis lu : ${reponse.champs_extraits ?? 0} champ(s) extrait(s). Vérifiez les valeurs ci-dessous avant d'enregistrer (elles restent modifiables).`,
-      );
-      if (!expiration && donnees.date_expiration) {
-        setErreurOCR(
-          `Date d'expiration lue « ${donnees.date_expiration} » : saisissez-la à la main, elle n'a pas pu être convertie.`,
-        );
-      }
-    } catch (e) {
-      setErreurOCR(
-        e instanceof Error ? e.message : "Lecture impossible. Reprenez la photo de plus près.",
-      );
-    }
-  }
+      const extraits = reponse.champs_extraits ?? 0;
 
-  /**
-   * Carte verte d'assurance : passe par la même **extraction universelle**
-   * (type forcé à l'assurance) et renseigne le véhicule + la validité du contrat.
-   */
-  async function analyserAssurance(fichier: File) {
-    setErreurOCR(null);
-    setMessageOCR(null);
-    try {
-      const reponse = await uploadDocument(
-        fichier,
-        TypeDocument.CARTE_ASSURANCE,
-        "unique",
-      );
-      const donnees = reponse.donnees ?? {};
-      fusionner({
-        vehicule_immatriculation:
-          donnees.immatriculation ?? formulaire.vehicule_immatriculation ?? "",
-        vehicule_marque: donnees.marque_vehicule ?? formulaire.vehicule_marque ?? "",
-        vehicule_modele: donnees.modele_vehicule ?? formulaire.vehicule_modele ?? "",
-      });
-      const validite = donnees.date_expiration
-        ? ` Contrat valable jusqu'au ${donnees.date_expiration}${donnees.compagnie_assurance ? ` (${donnees.compagnie_assurance})` : ""}.`
-        : "";
-      setMessageOCR(
-        `Assurance lue : ${reponse.champs_extraits ?? 0} champ(s) extrait(s).${validite} Vérifiez le véhicule ci-dessous avant d'enregistrer.`,
+      if (reponse.type_document === TypeDocument.PERMIS_CONDUIRE) {
+        const expiration = versDateISO(donnees.date_expiration);
+        const categories = Array.isArray(donnees.categories)
+          ? donnees.categories.join(", ")
+          : (donnees.categories ?? "");
+        fusionner({
+          permis_numero: donnees.numero_document ?? formulaire.permis_numero ?? "",
+          permis_categorie: categories || formulaire.permis_categorie || "",
+          permis_expiration: expiration ?? formulaire.permis_expiration,
+        });
+        setMessageOCR(
+          `Permis reconnu : ${extraits} champ(s) lu(s). Vérifiez les valeurs ci-dessous avant d'enregistrer (elles restent modifiables).`,
+        );
+        if (!expiration && donnees.date_expiration) {
+          setErreurOCR(
+            `Date d'expiration lue « ${donnees.date_expiration} » : saisissez-la à la main, elle n'a pas pu être convertie.`,
+          );
+        }
+        return;
+      }
+
+      if (reponse.type_document === TypeDocument.CARTE_ASSURANCE) {
+        fusionner({
+          vehicule_immatriculation:
+            donnees.immatriculation ?? formulaire.vehicule_immatriculation ?? "",
+          vehicule_marque: donnees.marque_vehicule ?? formulaire.vehicule_marque ?? "",
+          vehicule_modele: donnees.modele_vehicule ?? formulaire.vehicule_modele ?? "",
+        });
+        const validite = donnees.date_expiration
+          ? ` Contrat valable jusqu'au ${donnees.date_expiration}${donnees.compagnie_assurance ? ` (${donnees.compagnie_assurance})` : ""}.`
+          : "";
+        setMessageOCR(
+          `Assurance reconnue : ${extraits} champ(s) lu(s).${validite} Vérifiez le véhicule ci-dessous avant d'enregistrer.`,
+        );
+        return;
+      }
+
+      // Document reconnu mais hors périmètre de ce dossier (ex. CNI).
+      setErreurOCR(
+        "Document reconnu, mais ce dossier attend un permis de conduire ou une carte verte. Reprenez la photo du bon document.",
       );
     } catch (e) {
       setErreurOCR(
@@ -334,26 +328,32 @@ function Contenu() {
             <>
               <div className="rounded-xl border border-lagune/20 bg-lagune/5 px-4 py-3">
                 <p className="text-sm font-bold text-ardoise">
-                  Scanner mes documents (OCR)
+                  Scanner un document (OCR)
                 </p>
                 <p className="mt-0.5 text-xs text-ardoise-clair">
-                  Prenez la photo de votre permis ou de votre carte verte : les champs
-                  ci-dessous se remplissent tout seuls. Vous gardez la main — rien
-                  n&apos;est enregistré avant que vous ne validiez.
+                  Prenez une seule photo : le système reconnaît tout seul votre permis
+                  ou votre carte verte, puis remplit les bons champs ci-dessous. Vous
+                  gardez la main — rien n&apos;est enregistré avant que vous ne validiez.
                 </p>
 
-                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="mt-3">
                   <ChampOCR
-                    libelle="Permis de conduire"
-                    description="Numéro, catégories (C, D…) et date d'expiration du permis."
-                    surFichier={analyserPermis}
-                  />
-                  <ChampOCR
-                    libelle="Assurance (carte verte)"
-                    description="Immatriculation, marque, modèle du véhicule et validité du contrat."
-                    surFichier={analyserAssurance}
+                    libelle="Permis de conduire ou carte verte"
+                    description="Une photo suffit : le type de document est détecté automatiquement (extraction universelle)."
+                    surFichier={analyserDocument}
                   />
                 </div>
+
+                <p className="mt-2 text-xs text-ardoise-clair">
+                  Retrouvez tous vos documents scannés dans{" "}
+                  <Link
+                    href="/documents-identite"
+                    className="font-medium text-lagune hover:underline"
+                  >
+                    Mes documents d&apos;identité
+                  </Link>
+                  .
+                </p>
 
                 {messageOCR && (
                   <p className="mt-3 rounded-lg bg-white px-3 py-2 text-xs text-ardoise">
