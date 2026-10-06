@@ -16,7 +16,9 @@ import { Carte } from "@/composants/commun/Carte";
 import { IconeIdentite, IconeScan } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { ActionsVoyageChauffeur } from "@/composants/logistique/ActionsVoyageChauffeur";
+import { EnregistrementDirectChauffeur } from "@/composants/logistique/EnregistrementDirectChauffeur";
 import { formaterDate } from "@/composants/logistique/format";
+import { ManifesteVoyage } from "@/composants/logistique/ManifesteVoyage";
 import { ROLES_CHAUFFEUR } from "@/composants/logistique/roles";
 import { TableauColis } from "@/composants/logistique/TableauColis";
 import { ErreurAPI } from "@/services/client_api";
@@ -198,6 +200,17 @@ function Contenu() {
         }
         surSucces={() => setRafraichir((n) => n + 1)}
       />
+
+      {/* Enregistrer un client monté en route (« je n'étais pas au guichet ») */}
+      <EnregistrementDirectChauffeur
+        voyageId={voyage.id}
+        gareDepartId={ligne?.gare_depart_id ?? null}
+        gareArriveeId={ligne?.gare_arrivee_id ?? null}
+        surSucces={() => setRafraichir((n) => n + 1)}
+      />
+
+      {/* Manifeste : tout ce qui est à bord, en une feuille imprimable */}
+      <ManifesteVoyage voyageId={voyage.id} rafraichir={rafraichir} />
 
       {/* Liste des passagers (suivi familial) */}
       <Carte

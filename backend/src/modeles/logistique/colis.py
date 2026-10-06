@@ -17,7 +17,15 @@ from sqlalchemy.orm import Mapped, mapped_column
 from src.base_donnees.base import Base, MelangeTracabilite
 
 # Statuts du cycle de vie d'un colis
-STATUTS_COLIS = ("enregistre", "en_transit", "arrive", "livre", "annule")
+# « enregistre_direct » : colis enregistré **par le chauffeur en route** (un client
+# qui monte en cours de trajet). Il entre dans le même flux que les autres colis
+# (départ/arrivée en lot) et reste traçable via le ticket QR.
+STATUTS_COLIS = (
+    "enregistre", "enregistre_direct", "en_transit", "arrive", "livre", "annule"
+)
+
+# Origine d'un colis : guichet (receveur/commerçant) ou chauffeur directement.
+MODES_ENREGISTREMENT_COLIS = ("guichet", "chauffeur_direct")
 
 
 class Colis(Base, MelangeTracabilite):
@@ -33,6 +41,8 @@ class Colis(Base, MelangeTracabilite):
         Index("ix_colis_receveur", "receveur_id"),
         Index("ix_colis_chauffeur", "chauffeur_id"),
         Index("ix_colis_statut", "statut"),
+        Index("ix_colis_enregistre_par", "enregistre_par_id"),
+        Index("ix_colis_mode_enregistrement", "mode_enregistrement"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -99,6 +109,18 @@ class Colis(Base, MelangeTracabilite):
 
     statut: Mapped[str] = mapped_column(
         String(30), nullable=False, default="enregistre", server_default="enregistre"
+    )
+    # Origine de l'enregistrement : « guichet » (receveur/commerçant) ou
+    # « chauffeur_direct » (client monté en route). Permet de distinguer, dans
+    # les manifestes et statistiques, les colis pris par le chauffeur lui-même.
+    mode_enregistrement: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="guichet", server_default="guichet"
+    )
+    # Agent ayant matériellement enregistré le colis (receveur **ou** chauffeur).
+    enregistre_par_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("utilisateur.id", ondelete="SET NULL"),
+        nullable=True,
     )
     # Prix du transport du colis — **information facultative du guichet**.
     # DigiID ne l'encaisse pas : les frais de service (100 à 500 FCFA selon le

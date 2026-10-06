@@ -175,7 +175,57 @@ COLONNES_A_VERIFIER = [
     # ─── Module Enrôlement : Cloisonnement ──────────────────────────
     ("enrolements", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
     ("enrolements", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+
+    # ─── Pivot logistique : identité DigiID + enregistrement direct ────
+    # ⚠️ CRITIQUE : `create_all` ne crée QUE les tables manquantes, jamais les
+    # colonnes → ces colonnes doivent impérativement être listées ici, sinon
+    # l'application démarre mais toute requête sur ces colonnes échoue.
+    ("utilisateur", "adresse", "VARCHAR(255)"),
+    ("utilisateur", "qr_token_digiid", "VARCHAR(64)"),
+    ("colis", "mode_enregistrement", "VARCHAR(20) NOT NULL DEFAULT 'guichet'"),
+    ("colis", "enregistre_par_id", "UUID REFERENCES utilisateur(id) ON DELETE SET NULL"),
+    ("suivi_familial", "mode_enregistrement", "VARCHAR(20) NOT NULL DEFAULT 'guichet'"),
 ]
+
+
+def _creer_index_uniques_logistique(engine):
+    """Index uniques des nouvelles colonnes (create_all ne modifie pas l'existant).
+
+    Idempotent : chaque index est créé avec ``IF NOT EXISTS`` et une erreur
+    (index déjà présent, données dupliquées préexistantes) est ignorée — jamais
+    bloquante au démarrage.
+    """
+    with engine.connect() as conn:
+        tables_presentes = set(inspect(conn).get_table_names())
+
+    index_a_creer = [
+        (
+            "utilisateur",
+            "ix_utilisateur_qr_token_digiid",
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_utilisateur_qr_token_digiid "
+            "ON utilisateur(qr_token_digiid) WHERE qr_token_digiid IS NOT NULL",
+        ),
+        (
+            "colis",
+            "ix_colis_enregistre_par",
+            "CREATE INDEX IF NOT EXISTS ix_colis_enregistre_par "
+            "ON colis(enregistre_par_id)",
+        ),
+        (
+            "colis",
+            "ix_colis_mode_enregistrement",
+            "CREATE INDEX IF NOT EXISTS ix_colis_mode_enregistrement "
+            "ON colis(mode_enregistrement)",
+        ),
+    ]
+    for table, nom_index, sql in index_a_creer:
+        if table not in tables_presentes:
+            continue
+        try:
+            with engine.begin() as conn:
+                conn.execute(sa_text(sql))
+        except Exception as exc:  # pragma: no cover — jamais bloquant
+            logger.warning("⚠️  Index %s non créé (%s)", nom_index, str(exc)[:160])
 
 
 def _corriger_colonnes_manquantes(engine):
@@ -461,6 +511,13 @@ def executer_migrations():
             moteur = create_engine(url_sync)
             try:
                 _corriger_colonnes_manquantes(moteur)
+            finally:
+                moteur.dispose()
+
+            # 3b-bis. Index uniques des nouvelles colonnes (non gérés par create_all)
+            moteur = create_engine(url_sync)
+            try:
+                _creer_index_uniques_logistique(moteur)
             finally:
                 moteur.dispose()
 

@@ -41,12 +41,15 @@ from src.modeles.inspection_document import InspectionDocument
 from src.modeles.logistique import (
     Gare, Ligne, Vehicule, Voyage, ActeurLogistique, STATUTS_VOYAGE, ROLES_ACTEUR,
     Ticket, STATUTS_TICKET, TYPES_TICKET,
-    Colis, STATUTS_COLIS,
+
+    Colis, STATUTS_COLIS, MODES_ENREGISTREMENT_COLIS,
     ColisEvenement, TYPES_EVENEMENT_COLIS,
-    SuiviFamilial, STATUTS_SUIVI_FAMILIAL,
+
+    SuiviFamilial, STATUTS_SUIVI_FAMILIAL, MODES_ENREGISTREMENT_SUIVI,
     SuiviFamilialEvenement, TYPES_EVENEMENT_SUIVI,
     NotificationLogistique, CANAUX_NOTIFICATION, TYPES_CIBLE_NOTIFICATION,
     Bagage, STATUTS_BAGAGE,
+    ProfilLogistique, TYPES_PROFIL_LOGISTIQUE, STATUTS_VERIFICATION_PROFIL,
 )
 from src.modeles.paiement import (
     Portefeuille, DEVISES,
@@ -118,10 +121,12 @@ __all__ = [
     "TYPES_TICKET",
     "Colis",
     "STATUTS_COLIS",
+    "MODES_ENREGISTREMENT_COLIS",
     "ColisEvenement",
     "TYPES_EVENEMENT_COLIS",
     "SuiviFamilial",
     "STATUTS_SUIVI_FAMILIAL",
+    "MODES_ENREGISTREMENT_SUIVI",
     "SuiviFamilialEvenement",
     "TYPES_EVENEMENT_SUIVI",
     "NotificationLogistique",
@@ -129,6 +134,9 @@ __all__ = [
     "TYPES_CIBLE_NOTIFICATION",
     "Bagage",
     "STATUTS_BAGAGE",
+    "ProfilLogistique",
+    "TYPES_PROFIL_LOGISTIQUE",
+    "STATUTS_VERIFICATION_PROFIL",
     "Portefeuille",
     "DEVISES",
     "MouvementPortefeuille",

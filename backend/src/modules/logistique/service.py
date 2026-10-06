@@ -416,7 +416,31 @@ async def creer_colis(
     await _verifier_existe(session, Gare, donnees.gare_arrivee_id, "Gare d'arrivée")
     # Attribution obligatoire : chauffeur précis + voyage précis.
     voyage = await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
-    chauffeur = await _verifier_existe(session, Utilisateur, donnees.chauffeur_id, "Chauffeur")
+
+    # ─── Enregistrement direct (le chauffeur inscrit son client en route) ──
+    # Sécurité : seul le chauffeur réellement affecté au voyage (ou désigné) peut
+    # déclarer un enregistrement « direct » — un receveur ne peut pas se faire
+    # passer pour le chauffeur pour s'attribuer un colis.
+    if donnees.enregistrement_direct:
+        if voyage.chauffeur_id is not None and voyage.chauffeur_id != utilisateur.id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail="Seul le chauffeur du voyage peut enregistrer un client en direct",
+            )
+        chauffeur_id = utilisateur.id
+        mode_enregistrement = "chauffeur_direct"
+        statut_initial = "enregistre_direct"
+    else:
+        if donnees.chauffeur_id is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Chauffeur obligatoire (ou enregistrement direct par le chauffeur)",
+            )
+        chauffeur_id = donnees.chauffeur_id
+        mode_enregistrement = "guichet"
+        statut_initial = "enregistre"
+
+    chauffeur = await _verifier_existe(session, Utilisateur, chauffeur_id, "Chauffeur")
     if voyage.chauffeur_id and voyage.chauffeur_id != chauffeur.id:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -445,8 +469,10 @@ async def creer_colis(
         gare_arrivee_id=donnees.gare_arrivee_id,
         voyage_id=donnees.voyage_id,
         receveur_id=receveur_id,
-        chauffeur_id=donnees.chauffeur_id,
-        statut="enregistre",
+        chauffeur_id=chauffeur_id,
+        statut=statut_initial,
+        mode_enregistrement=mode_enregistrement,
+        enregistre_par_id=utilisateur.id,
         frais_fcfa=donnees.frais_fcfa,
     )
     session.add(colis)
@@ -677,7 +703,7 @@ async def enregistrer_scan(
         colis.livre_le = maintenant
         ticket.statut = "livre"
     elif donnees.type_evenement in ("depart", "mise_en_transit"):
-        if colis.statut == "enregistre":
+        if colis.statut in ("enregistre", "enregistre_direct"):
             colis.statut = "en_transit"
         ticket.statut = "en_transit"
     elif donnees.type_evenement == "arrivee":
@@ -853,7 +879,28 @@ async def creer_suivi_familial(
     await _verifier_existe(session, Gare, donnees.gare_arrivee_id, "Gare d'arrivée")
     # Attribution obligatoire : chauffeur précis + voyage précis.
     voyage = await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
-    chauffeur = await _verifier_existe(session, Utilisateur, donnees.chauffeur_id, "Chauffeur")
+
+    # ─── Enregistrement direct (le chauffeur inscrit son client en route) ──
+    if donnees.enregistrement_direct:
+        if voyage.chauffeur_id is not None and voyage.chauffeur_id != utilisateur.id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail="Seul le chauffeur du voyage peut enregistrer un passager en direct",
+            )
+        chauffeur_id = utilisateur.id
+        mode_enregistrement = "chauffeur_direct"
+        statut_initial = "enregistre_direct"
+    else:
+        if donnees.chauffeur_id is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Chauffeur obligatoire (ou enregistrement direct par le chauffeur)",
+            )
+        chauffeur_id = donnees.chauffeur_id
+        mode_enregistrement = "guichet"
+        statut_initial = "enregistre"
+
+    chauffeur = await _verifier_existe(session, Utilisateur, chauffeur_id, "Chauffeur")
     if voyage.chauffeur_id and voyage.chauffeur_id != chauffeur.id:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -879,8 +926,9 @@ async def creer_suivi_familial(
         gare_depart_id=donnees.gare_depart_id,
         gare_arrivee_id=donnees.gare_arrivee_id,
         voyage_id=donnees.voyage_id,
-        chauffeur_id=donnees.chauffeur_id,
-        statut="enregistre",
+        chauffeur_id=chauffeur_id,
+        statut=statut_initial,
+        mode_enregistrement=mode_enregistrement,
         enregistre_par_id=utilisateur.id,
     )
     session.add(suivi)
@@ -1148,7 +1196,7 @@ async def valider_depart_voyage(
 
     nb_colis = 0
     for colis in await _colis_du_voyage(session, voyage_id):
-        if colis.statut != "enregistre":
+        if colis.statut not in ("enregistre", "enregistre_direct"):
             continue
         session.add(ColisEvenement(
             colis_id=colis.id, type_evenement="depart", acteur_id=utilisateur.id,
@@ -1163,7 +1211,7 @@ async def valider_depart_voyage(
 
     nb_passagers = 0
     for suivi in await _passagers_du_voyage(session, voyage_id):
-        if suivi.statut != "enregistre":
+        if suivi.statut not in ("enregistre", "enregistre_direct"):
             continue
         session.add(SuiviFamilialEvenement(
             suivi_familial_id=suivi.id, type_evenement="depart",
@@ -1205,7 +1253,7 @@ async def marquer_arrivee_voyage(
 
     nb_colis = 0
     for colis in await _colis_du_voyage(session, voyage_id):
-        if colis.statut not in ("enregistre", "en_transit"):
+        if colis.statut not in ("enregistre", "enregistre_direct", "en_transit"):
             continue
         if gare_id is not None and colis.gare_arrivee_id != gare_id:
             continue
@@ -1223,7 +1271,7 @@ async def marquer_arrivee_voyage(
 
     nb_passagers = 0
     for suivi in await _passagers_du_voyage(session, voyage_id):
-        if suivi.statut not in ("enregistre", "en_route"):
+        if suivi.statut not in ("enregistre", "enregistre_direct", "en_route"):
             continue
         if gare_id is not None and suivi.gare_arrivee_id != gare_id:
             continue

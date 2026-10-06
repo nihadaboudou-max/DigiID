@@ -18,6 +18,7 @@ import { Badge, type BadgeVariante } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import { formaterDateHeure } from "@/composants/logistique/format";
+import { CarteTrajet } from "@/composants/logistique/CarteTrajet";
 import { ErreurAPI } from "@/services/client_api";
 import { logistiqueAPI } from "@/services/logistique_api";
 import {
@@ -29,6 +30,7 @@ import {
 /** Libellé lisible d'un statut, commun aux colis et aux enfants. */
 const LIBELLES_STATUT: Record<string, string> = {
   enregistre: "Enregistré",
+  enregistre_direct: "Enregistré en route",
   en_transit: "En transit",
   en_route: "En route",
   arrive: "Arrivé",
@@ -39,6 +41,7 @@ const LIBELLES_STATUT: Record<string, string> = {
 /** Variante de badge par statut. */
 const VARIANTES_STATUT: Record<string, BadgeVariante> = {
   enregistre: "info",
+  enregistre_direct: "ocre",
   en_transit: "ocre",
   en_route: "ocre",
   arrive: "lagune",
@@ -196,6 +199,16 @@ export default function PageSuiviPublic() {
                     ` · Véhicule ${suivi.vehicule_immatriculation}`}
                 </p>
               )}
+
+              {/* Schéma du trajet : où en est l'envoi, sans carte externe. */}
+              <div className="mt-4 border-t border-ardoise-clair/10 pt-4">
+                <CarteTrajet
+                  gareDepart={suivi.gare_depart_nom}
+                  gareArrivee={suivi.gare_arrivee_nom}
+                  statut={suivi.statut}
+                  evenements={suivi.evenements}
+                />
+              </div>
 
               {suivi.type === "colis" && suivi.colis && (
                 <p className="mt-2 text-xs text-ardoise-clair">

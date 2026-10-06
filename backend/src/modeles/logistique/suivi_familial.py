@@ -17,7 +17,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 from src.base_donnees.base import Base, MelangeTracabilite
 
 # Cycle de vie d'un suivi familial
-STATUTS_SUIVI_FAMILIAL = ("enregistre", "en_route", "arrive", "annule")
+# « enregistre_direct » : passager enregistré **par le chauffeur en route**
+# (client monté en cours de trajet) — même flux de suivi que les autres.
+STATUTS_SUIVI_FAMILIAL = (
+    "enregistre", "enregistre_direct", "en_route", "arrive", "annule"
+)
+
+# Origine de l'enregistrement : guichet (receveur) ou chauffeur directement.
+MODES_ENREGISTREMENT_SUIVI = ("guichet", "chauffeur_direct")
 
 
 class SuiviFamilial(Base, MelangeTracabilite):
@@ -100,6 +107,11 @@ class SuiviFamilial(Base, MelangeTracabilite):
     )
     statut: Mapped[str] = mapped_column(
         String(30), nullable=False, default="enregistre", server_default="enregistre"
+    )
+    # Origine de l'enregistrement : « guichet » (receveur) ou « chauffeur_direct »
+    # (passager monté en route, enregistré par le chauffeur).
+    mode_enregistrement: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="guichet", server_default="guichet"
     )
     # Garde-fous : un SMS de départ / d'arrivée ne part qu'une seule fois.
     sms_depart_envoye: Mapped[bool] = mapped_column(

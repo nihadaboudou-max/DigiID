@@ -25,6 +25,7 @@ interface Lien {
 
 const LIENS_UTILISATEUR: Lien[] = [
   { href: "/citoyen/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+  { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
   { href: "/profil", libelle: "Mon profil", Icone: IconeUtilisateur },
   { href: "/score", libelle: "Mon score", Icone: IconeScore },
   { href: "/chatbot", libelle: "Assistant", Icone: IconeChat },
@@ -118,6 +119,8 @@ const LIENS_RECEVEUR: Lien[] = [
   { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
   { href: "/receveur/suivi-familial", libelle: "Suivi familial", Icone: IconeIdentite },
   { href: "/receveur/scan", libelle: "Scanner / Livrer", Icone: IconeScan },
+  { href: "/guichet/carte", libelle: "Carte client (scan)", Icone: IconeIdentite },
+  { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
   { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
 ];
 
@@ -126,12 +129,16 @@ const LIENS_CHAUFFEUR: Lien[] = [
   { href: "/chauffeur/scan", libelle: "Scanner un colis", Icone: IconeScan },
   { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
   { href: "/receveur/suivi-familial", libelle: "Suivi familial", Icone: IconeIdentite },
+  { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
+  { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
   { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
 ];
 
 const LIENS_COMMERCANT: Lien[] = [
   { href: "/receveur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
   { href: "/receveur/tickets", libelle: "Mes colis", Icone: IconeTicket },
+  { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
+  { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
   { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
 ];
 
@@ -896,6 +903,7 @@ export function BoutonMenuMobile() {
                     <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
                       {[
                         { href: "/identite", libelle: "Tableau de bord identité", Icone: IconeAccueil },
+                        { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
                         { href: "/identite/verification-visuelle", libelle: "Reconnaissance faciale", Icone: IconeVisage },
                         { href: "/identite/verification-cni", libelle: "Scan CNI", Icone: IconeScan },
                         { href: "/identite/email", libelle: "Vérification email", Icone: IconeEmail },
@@ -943,6 +951,7 @@ function MenuCitoyenComplet({
         </p>
         {[
           { href: "/citoyen/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+          { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
           { href: "/profil", libelle: "Mon profil", Icone: IconeUtilisateur },
           { href: "/citoyen/qr-code", libelle: "Mon DigiID", Icone: IconeIdentite },
           { href: "/chatbot", libelle: "Assistant", Icone: IconeChat },
@@ -1010,6 +1019,7 @@ function MenuCitoyenComplet({
         <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
           {[
             { href: "/identite", libelle: "Tableau de bord identité", Icone: IconeAccueil },
+            { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
             { href: "/identite/verification-visuelle", libelle: "Reconnaissance faciale", Icone: IconeVisage },
             { href: "/identite/verification-cni", libelle: "Scan CNI", Icone: IconeScan },
             { href: "/identite/email", libelle: "Vérification email", Icone: IconeEmail },

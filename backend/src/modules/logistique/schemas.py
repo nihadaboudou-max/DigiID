@@ -259,12 +259,26 @@ class ColisCreate(BaseModel):
     # **Attribution obligatoire** : tout enregistrement est lié à un chauffeur
     # précis et à un trajet précis (gare de départ → gare d'arrivée).
     voyage_id: UUID
-    chauffeur_id: UUID
+    # **Obligatoire** hors enregistrement direct. En mode ``enregistrement_direct``
+    # (le chauffeur inscrit son client en route), le champ peut Ǧtre omis : le
+    # backend force alors le chauffeur = utilisateur connecté.
+    chauffeur_id: Optional[UUID] = None
+    # **Enregistrement direct par le chauffeur** : le client monte en route, le
+    # chauffeur crée le colis lui-même depuis son téléphone. Le backend force
+    # alors ``mode_enregistrement="chauffeur_direct"``, le chauffeur du colis =
+    # utilisateur courant et le statut initial = ``enregistre_direct``.
+    enregistrement_direct: bool = False
 
     @model_validator(mode="after")
     def _gares_distinctes(self):
         if self.gare_depart_id == self.gare_arrivee_id:
             raise ValueError("Les gares de départ et d'arrivée doivent être différentes")
+        # Hors enregistrement direct, l'attribution à un chauffeur reste
+        # **obligatoire** : on refuse la requête dès la validation.
+        if not self.enregistrement_direct and self.chauffeur_id is None:
+            raise ValueError(
+                "chauffeur_id est obligatoire (ou passer enregistrement_direct=true)"
+            )
         return self
 
 
@@ -299,6 +313,10 @@ class ColisResponse(BaseModel):
     expediteur_tel: Optional[str] = None
     receveur_nom: Optional[str] = None
     chauffeur_nom: Optional[str] = None
+    # Origine de l'enregistrement : « guichet » ou « chauffeur_direct ».
+    mode_enregistrement: str = "guichet"
+    enregistre_par_id: Optional[UUID] = None
+    enregistre_par_nom: Optional[str] = None
     # Étiquettes QR générées (une par sac).
     bagages: list[BagageResponse] = []
     model_config = ConfigDict(from_attributes=True)
@@ -379,7 +397,7 @@ class NotificationLogistiqueResponse(BaseModel):
 
 # ─── Suivi familial (enfants seuls) ──────────────────────────────────
 
-StatutSuiviFamilial = Literal["enregistre", "en_route", "arrive", "annule"]
+StatutSuiviFamilial = Literal["enregistre", "enregistre_direct", "en_route", "arrive", "annule"]
 TypeEvenementSuivi = Literal["depart", "arrivee", "livraison", "incident"]
 
 
@@ -409,8 +427,12 @@ class SuiviFamilialCreate(BaseModel):
     gare_arrivee_id: UUID
     # **Attribution obligatoire** : chauffeur précis + voyage précis.
     voyage_id: UUID
-    chauffeur_id: UUID
+    # **Obligatoire** hors enregistrement direct (voir ``enregistrement_direct``).
+    chauffeur_id: Optional[UUID] = None
     parent_id: Optional[UUID] = None
+    # **Enregistrement direct par le chauffeur** : passager monté en route,
+    # enregistré par le chauffeur lui-même (statut ``enregistre_direct``).
+    enregistrement_direct: bool = False
 
     @model_validator(mode="after")
     def _valider_contacts(self):
@@ -428,6 +450,12 @@ class SuiviFamilialCreate(BaseModel):
                 raise ValueError("Le numéro de l'acheteur du ticket est obligatoire pour un enfant")
             if not self.telephone_parent:
                 self.telephone_parent = self.acheteur_tel
+        # Hors enregistrement direct, l'attribution à un chauffeur reste
+        # **obligatoire** : on refuse la requête dès la validation.
+        if not self.enregistrement_direct and self.chauffeur_id is None:
+            raise ValueError(
+                "chauffeur_id est obligatoire (ou passer enregistrement_direct=true)"
+            )
         return self
 
 
@@ -482,6 +510,8 @@ class SuiviFamilialResponse(BaseModel):
     sms_depart_envoye: bool
     sms_arrivee_envoye: bool
     pre_alerte_envoyee: bool = False
+    # Origine de l'enregistrement : « guichet » ou « chauffeur_direct ».
+    mode_enregistrement: str = "guichet"
     # Frais de service **fixe** (100 FCFA, quel que soit le nombre de bagages).
     frais_service_fcfa: int = 100
     enregistre_par_id: Optional[UUID] = None

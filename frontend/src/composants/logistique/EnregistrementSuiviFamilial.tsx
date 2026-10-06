@@ -35,6 +35,7 @@ import {
 } from "@/services/logistique_api";
 import { ControleurBagages } from "./ControleurBagages";
 import { formaterFcfa } from "./format";
+import { RechercheCarteDigiID } from "./RechercheCarteDigiID";
 import { TicketSuiviFamilialImprimable } from "./TicketSuiviFamilialImprimable";
 
 type TypePassager = "enfant" | "adulte";
@@ -42,7 +43,12 @@ type TypePassager = "enfant" | "adulte";
 /** Frais de service fixe (doit refléter `frais_service_passager_fcfa` backend). */
 const FRAIS_SERVICE_PASSAGER_FCFA = 100;
 
-export function EnregistrementSuiviFamilial() {
+export function EnregistrementSuiviFamilial({
+  digiidInitial,
+}: {
+  /** DigiID / lien de QR du client, quand l'agent arrive depuis /guichet/carte. */
+  digiidInitial?: string;
+} = {}) {
   const { utilisateur } = useAuthentification();
 
   // Référentiel
@@ -284,6 +290,30 @@ export function EnregistrementSuiviFamilial() {
             description="Renseignez le passager, l'acheteur du ticket (pour un enfant) et un proche de confiance à prévenir."
           >
             <div className="space-y-4">
+              {/* La personne au guichet présente sa carte : le nom et le téléphone du
+                  responsable sont remplis exactement — c'est ce qui garantit que les
+                  SMS de suivi partiront au bon numéro. */}
+              <RechercheCarteDigiID
+                libelle="DigiID du responsable (facultatif)"
+                titre="La personne au guichet a une carte DigiID ?"
+                rechercheInitiale={digiidInitial}
+                description={
+                  typePassager === "enfant"
+                    ? "Présentez sa carte : le nom et le téléphone de l'acheteur du ticket seront pré-remplis."
+                    : "Présentez sa carte : le nom et le téléphone du passager seront pré-remplis."
+                }
+                surSelection={(contact) => {
+                  if (!contact) return;
+                  if (typePassager === "enfant") {
+                    setAcheteurNom(contact.nom_complet);
+                    if (contact.telephone) setAcheteurTel(contact.telephone);
+                    if (!procheNom) setProcheNom(contact.nom_complet);
+                  } else {
+                    setEnfantNom(contact.nom_complet);
+                    if (contact.telephone) setTelephonePassager(contact.telephone);
+                  }
+                }}
+              />
               {/* Type de passager */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-ardoise">

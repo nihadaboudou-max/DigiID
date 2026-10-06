@@ -9,10 +9,19 @@
 /** Cycle de vie d'un colis. */
 export type StatutColis =
   | "enregistre"
+  /** Enregistré **par le chauffeur en route** (client monté en cours de trajet). */
+  | "enregistre_direct"
   | "en_transit"
   | "arrive"
   | "livre"
   | "annule";
+
+/**
+ * Origine de l'enregistrement d'un colis / d'un passager.
+ *  - `guichet` : enregistré au guichet par un receveur ou un commerçant.
+ *  - `chauffeur_direct` : enregistré par le chauffeur lui-même, en route.
+ */
+export type ModeEnregistrement = "guichet" | "chauffeur_direct";
 
 /** Événements de scan supportés par l'API. */
 export type TypeEvenementScan = "livraison" | "depart" | "mise_en_transit" | "arrivee";
@@ -60,6 +69,12 @@ export interface Colis {
   receveur_id: string | null;
   chauffeur_id: string | null;
   statut: StatutColis;
+
+  /** Origine de l'enregistrement : guichet ou chauffeur en route. */
+  mode_enregistrement: ModeEnregistrement;
+  /** Qui a matériellement créé le colis (receveur ou chauffeur). */
+  enregistre_par_id: string | null;
+  enregistre_par_nom: string | null;
 
   /** Prix du transport — facultatif (DigiID ne l'encaisse pas). */
   frais_fcfa: number | null;
@@ -136,9 +151,21 @@ export interface DonneesColis {
   frais_fcfa?: number | null;
   expediteur_id?: string | null;
   receveur_id?: string | null;
-  /** Attribution **obligatoire** : trajet + chauffeur précis. */
+
+  /** Attribution **obligatoire** : trajet + chauffeur précis.
+   *  Peut être omis en **enregistrement direct** : le backend force alors le
+   *  chauffeur = utilisateur connecté (et vérifie qu'il conduit bien ce voyage).
+   */
   voyage_id: string;
-  chauffeur_id: string;
+
+  chauffeur_id?: string;
+  /**
+   * **Enregistrement direct** : le client monte en route et le chauffeur crée
+   * lui-même la fiche depuis son téléphone. Le backend force alors le chauffeur
+   * = utilisateur courant, le mode « chauffeur_direct » et le statut initial
+   * « enregistre_direct ».
+   */
+  enregistrement_direct?: boolean;
 }
 
 /** Payload d'un scan (QR ou repli code clair). */
@@ -170,6 +197,7 @@ export interface ResultatScan {
 /** Libellé lisible d'un statut de colis. */
 export const LIBELLES_STATUT_COLIS: Record<StatutColis, string> = {
   enregistre: "Enregistré",
+  enregistre_direct: "Enregistré en route",
   en_transit: "En transit",
   arrive: "Arrivé",
   livre: "Livré",
@@ -182,10 +210,17 @@ export const VARIANTES_STATUT_COLIS: Record<
   "lagune" | "ocre" | "terre" | "neutre" | "succes" | "info"
 > = {
   enregistre: "info",
+  enregistre_direct: "ocre",
   en_transit: "ocre",
   arrive: "lagune",
   livre: "succes",
   annule: "terre",
+};
+
+/** Libellé lisible de l'origine d'un enregistrement. */
+export const LIBELLES_MODE_ENREGISTREMENT: Record<ModeEnregistrement, string> = {
+  guichet: "Guichet",
+  chauffeur_direct: "Chauffeur (en route)",
 };
 
 /** Libellé lisible d'un type d'événement. */
@@ -226,6 +261,8 @@ export const VARIANTES_STATUT_VOYAGE: Record<
 /** Cycle de vie d'un suivi familial. */
 export type StatutSuiviFamilial =
   | "enregistre"
+  /** Passager enregistré **par le chauffeur en route**. */
+  | "enregistre_direct"
   | "en_route"
   | "arrive"
   | "annule";
@@ -265,6 +302,8 @@ export interface SuiviFamilial {
   voyage_id: string | null;
   chauffeur_id: string | null;
   statut: StatutSuiviFamilial;
+  /** Origine de l'enregistrement : guichet ou chauffeur en route. */
+  mode_enregistrement: ModeEnregistrement;
   sms_depart_envoye: boolean;
   sms_arrivee_envoye: boolean;
   pre_alerte_envoyee: boolean;
@@ -324,9 +363,17 @@ export interface DonneesSuiviFamilial {
   nombre_bagages: number;
   gare_depart_id: string;
   gare_arrivee_id: string;
-  /** Attribution **obligatoire** : trajet + chauffeur précis. */
+
+  /** Attribution **obligatoire** : trajet + chauffeur précis.
+   *  Peut être omis en **enregistrement direct** : le backend force alors le
+   *  chauffeur = utilisateur connecté (et vérifie qu'il conduit bien ce voyage).
+   */
   voyage_id: string;
-  chauffeur_id: string;
+
+  chauffeur_id?: string;
+  /** Enregistrement direct par le chauffeur (client monté en route). */
+  enregistrement_direct?: boolean;
+  parent_id?: string | null;
 }
 
 // ─── Actions groupées du chauffeur (départ / arrivée / pré-alerte) ───
@@ -399,6 +446,7 @@ export interface NotificationLogistique {
 /** Libellé lisible d'un statut de suivi familial. */
 export const LIBELLES_STATUT_SUIVI: Record<StatutSuiviFamilial, string> = {
   enregistre: "Enregistré",
+  enregistre_direct: "Enregistré en route",
   en_route: "En route",
   arrive: "Arrivé",
   annule: "Annulé",

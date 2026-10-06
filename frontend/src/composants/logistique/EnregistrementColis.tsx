@@ -37,6 +37,7 @@ import {
 } from "@/services/logistique_api";
 import { ControleurBagages } from "./ControleurBagages";
 import { formaterFcfa } from "./format";
+import { RechercheCarteDigiID } from "./RechercheCarteDigiID";
 import { TicketImprimable } from "./TicketImprimable";
 import { fraisServicePourArticles } from "@/types/paiement";
 
@@ -49,7 +50,12 @@ const ETAPES: { numero: Etape; cleTitre: string }[] = [
   { numero: 4, cleTitre: "colis.etape.recap" },
 ];
 
-export function EnregistrementColis() {
+export function EnregistrementColis({
+  digiidInitial,
+}: {
+  /** DigiID / lien de QR du client, quand l'agent arrive depuis /guichet/carte. */
+  digiidInitial?: string;
+} = {}) {
   const { utilisateur } = useAuthentification();
   const { t } = useLangue();
 
@@ -298,6 +304,19 @@ export function EnregistrementColis() {
               description={t("colis.expediteur.desc")}
             >
               <div className="space-y-4">
+                {/* Le client présente sa carte : nom et téléphone remplis d'exactitude,
+                    sans ressaisie — et les SMS partiront vers le bon numéro. */}
+                <RechercheCarteDigiID
+                  libelle="DigiID de l'expéditeur (facultatif)"
+                  titre="L'expéditeur a une carte DigiID ?"
+                  description="Présentez sa carte (ou saisissez son DigiID) : le nom et le téléphone ci-dessous se remplissent automatiquement."
+                  rechercheInitiale={digiidInitial}
+                  surSelection={(contact) => {
+                    if (!contact) return;
+                    setExpediteurNom(contact.nom_complet);
+                    if (contact.telephone) setExpediteurTel(contact.telephone);
+                  }}
+                />
                 <ChampSaisie
                   libelle="Nom de l'expéditeur"
                   required

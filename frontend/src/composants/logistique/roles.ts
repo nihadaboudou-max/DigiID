@@ -71,3 +71,30 @@ export const ROLES_PAIEMENT: string[] = [
   "super_administrateur",
   "super_admin",
 ];
+
+/**
+ * Carte DigiID (module identité) — **tout compte authentifié** y a droit.
+ *
+ * La carte est le socle de DigiID : un citoyen, un policier ou un chauffeur
+ * présentent la même carte ; seule la finalité du scan change. La page elle-même
+ * n'affiche que les données de la personne connectée.
+ */
+export const TOUS_LES_ROLES: string[] = [
+  "super_admin",
+  "super_administrateur",
+  "administrateur",
+  "admin_domaine",
+  "chef_police",
+  "chef_medical",
+  "chef_ong",
+  "chef_agent",
+  "agent_police",
+  "agent_medical",
+  "agent_ong",
+  "agent_terrain",
+  "gerant_gare",
+  "receveur",
+  "chauffeur",
+  "commercant",
+  "citoyen",
+];

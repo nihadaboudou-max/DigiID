@@ -294,6 +294,8 @@ export function BarreLaterale() {
       { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
       { href: "/receveur/suivi-familial", libelle: "Suivi familial", Icone: IconeIdentite },
       { href: "/receveur/scan", libelle: "Scanner / Livrer", Icone: IconeScan },
+      { href: "/guichet/carte", libelle: "Carte client (scan)", Icone: IconeIdentite },
+      { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
       { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
     ];
     titreSection =
@@ -309,6 +311,8 @@ export function BarreLaterale() {
       { href: "/chauffeur/scan", libelle: "Scanner un colis", Icone: IconeScan },
       { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
       { href: "/receveur/suivi-familial", libelle: "Suivi familial", Icone: IconeIdentite },
+      { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
+      { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
       { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
     ];
     titreSection = "Chauffeur";
@@ -321,6 +325,8 @@ export function BarreLaterale() {
     liens = [
       { href: "/receveur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
       { href: "/receveur/tickets", libelle: "Mes colis", Icone: IconeTicket },
+      { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
+      { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
       { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
     ];
     titreSection = "Commerçant";
@@ -413,6 +419,7 @@ export function BarreLaterale() {
     "/profil": IconeUtilisateur,
     "/documents-identite": IconeIdentite,
     "/identite": IconeScan,
+    "/identite/carte": IconeIdentite,
     "/identite/email": IconeEmail,
     "/identite/2fa": IconeCadenas,
     "/identite/mot-de-passe": IconeCle,
@@ -434,7 +441,7 @@ export function BarreLaterale() {
   const cbLienSousMenu = (href: string, libelle: string) => {
     const Icone = iconesRoutes[href] || IconeAccueil;
     const actif = pathname === href ||
-      (href === "/identite" && pathname.startsWith("/identite")) ||
+      (href === "/identite" && pathname.startsWith("/identite") && !pathname.startsWith("/identite/carte")) ||
       (href === "/partage" && (pathname.startsWith("/autorisations") || pathname.startsWith("/consentements")));
     return (
       <Link
@@ -579,6 +586,14 @@ export function BarreLaterale() {
               libelle="Mon DigiID"
               Icone={IconeIdentite}
               actif={pathname === "/citoyen/qr-code"}
+            />
+
+            {/* Ma carte DigiID — QR durable, scannable par le guichet */}
+            <LienNav
+              href="/identite/carte"
+              libelle="Ma carte DigiID"
+              Icone={IconeIdentite}
+              actif={pathname === "/identite/carte"}
             />
 
             {/* Notifications — lien simple */}

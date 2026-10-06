@@ -112,6 +112,9 @@ from src.modules.logistique import routeur_logistique
 # --- Pivot logistique (Plan B) — paiement (wallet, transactions, commissions) ---
 from src.modules.paiement import routeur_paiement
 
+# --- Identité DigiID — carte citoyenne (QR durable), profils logistiques, manifestes ---
+from src.modules.identite_digiid import routeur_identite
+
 
 # Routeur racine — préfixe et tag globaux gérés au montage
 routeur_v1 = APIRouter()
@@ -218,3 +221,6 @@ routeur_v1.include_router(routeur_logistique)
 
 # Pivot logistique (Plan B) — paiement / cagnotte
 routeur_v1.include_router(routeur_paiement)
+
+# Identité DigiID — carte citoyenne, pré-remplissage guichet, profils logistiques
+routeur_v1.include_router(routeur_identite)

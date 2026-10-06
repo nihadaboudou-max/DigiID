@@ -74,6 +74,23 @@ class Utilisateur(Base, MelangeTracabilite):
     photo_profil_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True, doc="URL de la photo de profil (stockée sur S3/MinIO)")
     ville: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     pays: Mapped[Optional[str]] = mapped_column(String(50), default="Sénégal")
+    adresse: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+        doc="Adresse déclarée — sert au pré-remplissage des fiches guichet (colis/passager)"
+    )
+
+    # --- Carte DigiID (QR personnel durable) ---
+    # Jeton opaque encodé dans le QR de la carte citoyenne. Contrairement au QR
+    # dynamique (30 s, Redis), ce jeton est **persisté** : il reste scannable par
+    # le guichet (colis/passager) ou par la police pendant toute la vie du compte.
+    qr_token_digiid: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        unique=True,
+        index=True,
+        nullable=True,
+        doc="Jeton durable encodé dans le QR personnel de la carte DigiID"
+    )
 
     # --- Rôle et permissions ---
     role: Mapped[str] = mapped_column(

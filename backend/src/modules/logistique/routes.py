@@ -89,6 +89,8 @@ async def _enrichir_colis(session: AsyncSession, colis: Colis) -> Colis:
         colis.expediteur_nom = await _nom_utilisateur(session, colis.expediteur_id)
     colis.receveur_nom = await _nom_utilisateur(session, colis.receveur_id)
     colis.chauffeur_nom = await _nom_utilisateur(session, colis.chauffeur_id)
+    # Qui a matériellement créé le colis (receveur au guichet OU chauffeur en route).
+    colis.enregistre_par_nom = await _nom_utilisateur(session, colis.enregistre_par_id)
     ticket = await service.obtenir_ticket_du_colis(session, colis)
     colis.code_clair = ticket.code_clair if ticket else None
     colis.qr_token = ticket.qr_token if ticket else None

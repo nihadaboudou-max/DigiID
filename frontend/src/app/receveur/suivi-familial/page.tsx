@@ -28,6 +28,9 @@ import {
 
 const VARIANTES_STATUT: Record<StatutSuiviFamilial, BadgeVariante> = {
   enregistre: "info",
+  // Enregistré par le chauffeur en route : même couleur que « Enregistré »,
+  // le badge de provenance (mode_enregistrement) porte l'information.
+  enregistre_direct: "info",
   en_route: "ocre",
   arrive: "succes",
   annule: "terre",
