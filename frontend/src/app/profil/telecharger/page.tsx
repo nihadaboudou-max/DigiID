@@ -277,7 +277,7 @@ function genererHTMLProfil(donnees: Record<string, unknown>, utilisateur: any): 
 
   <h2>Informations légales</h2>
   <p>Ce document est un export de vos données personnelles stockées sur DigiID.</p>
-  <p>Conformément à la loi 2008-12 du Sénégal relative à la protection des données à caractère personnel.</p>
+  <p>Conformément au Code numérique du Bénin (loi 2017-20) relatif à la protection des données à caractère personnel.</p>
 
   <div class="footer">
     <p>DigiID — Identité Numérique Africaine</p>

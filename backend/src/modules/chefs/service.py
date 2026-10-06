@@ -102,7 +102,7 @@ async def creer_agent_police(
         nom_chiffre=chiffrer_donnee(data["nom"]),
         telephone_chiffre=chiffrer_donnee(data.get("telephone", "")),
         ville=data.get("ville"),
-        pays=data.get("pays", "Sénégal"),
+        pays=data.get("pays", "Bénin"),
         role=RoleUtilisateur.AGENT_POLICE,
         domaine_id=chef.domaine_id,
         departement_id=chef.departement_id,
@@ -157,7 +157,7 @@ async def creer_medecin(
         nom_chiffre=chiffrer_donnee(data["nom"]),
         telephone_chiffre=chiffrer_donnee(data.get("telephone", "")),
         ville=data.get("ville"),
-        pays=data.get("pays", "Sénégal"),
+        pays=data.get("pays", "Bénin"),
         role=RoleUtilisateur.AGENT_MEDICAL,
         domaine_id=chef.domaine_id,
         departement_id=chef.departement_id,
@@ -212,7 +212,7 @@ async def creer_agent_ong(
         nom_chiffre=chiffrer_donnee(data["nom"]),
         telephone_chiffre=chiffrer_donnee(data.get("telephone", "")),
         ville=data.get("ville"),
-        pays=data.get("pays", "Sénégal"),
+        pays=data.get("pays", "Bénin"),
         role=RoleUtilisateur.AGENT_ONG,
         domaine_id=chef.domaine_id,
         departement_id=chef.departement_id,
@@ -267,7 +267,7 @@ async def creer_agent_enrolement(
         nom_chiffre=chiffrer_donnee(data["nom"]),
         telephone_chiffre=chiffrer_donnee(data.get("telephone", "")),
         ville=data.get("ville"),
-        pays=data.get("pays", "Sénégal"),
+        pays=data.get("pays", "Bénin"),
         role=RoleUtilisateur.AGENT_TERRAIN,
         domaine_id=chef.domaine_id,
         departement_id=chef.departement_id,
@@ -487,4 +487,5 @@ async def obtenir_audit_chef(
             "donnees_supplementaires": audit.donnees_supplementaires,
         })
         
+    return logs, total
     return logs, total

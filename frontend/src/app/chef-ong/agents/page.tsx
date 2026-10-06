@@ -343,14 +343,14 @@ function Contenu() {
                 libelle="Téléphone" 
                 value={formData.telephone} 
                 onChange={(e) => setFormData({ ...formData, telephone: e.target.value })} 
-                placeholder="+221 77 123 45 67" 
+                placeholder="+229 97 12 34 56" 
               />
               
               <ChampSaisie 
                 libelle="Ville" 
                 value={formData.ville} 
                 onChange={(e) => setFormData({ ...formData, ville: e.target.value })} 
-                placeholder="Dakar" 
+                placeholder="Cotonou" 
               />
 
               <div className="flex gap-3 pt-4 border-t border-ardoise-clair/10">
@@ -375,6 +375,6 @@ function Contenu() {
       <Link href="/chef-ong">
         <Bouton variante="ghost">← Retour au tableau de bord</Bouton>
       </Link>
-    </div>
+        </div>
   );
 }

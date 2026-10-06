@@ -6,9 +6,10 @@
  * haute dans cette langue : l'utilisateur choisit donc en ÉCOUTANT, sans lire.
  * Un petit haut-parleur, bouton distinct, permet de réécouter l'échantillon.
  *
- * Deux présentations :
- *   - `cartes`   : grille 2×2, pour l'onboarding / l'accueil ;
- *   - `compacte` : liste verticale, pour la page Paramètres.
+ * Trois présentations :
+ *   - `cartes`   : grille 2×2, pour l'onboarding ;
+ *   - `compacte` : liste verticale, pour la page Paramètres ;
+ *   - `ligne`    : les 4 langues sur UNE ligne, format réduit (accueil).
  */
 import clsx from "clsx";
 
@@ -16,7 +17,7 @@ import { useLangue } from "@/i18n/useLangue";
 import type { MetaLangue } from "@/i18n/langues";
 
 interface Proprietes {
-  variante?: "cartes" | "compacte";
+  variante?: "cartes" | "compacte" | "ligne";
   className?: string;
 }
 
@@ -34,19 +35,53 @@ export function SelecteurLangue({
 
   return (
     <div className={className}>
-      <div className="mb-4">
-        <h2 className="text-lg font-bold text-ardoise">{t("langue.titre")}</h2>
-        <p className="text-sm text-ardoise-clair mt-0.5">{t("langue.description")}</p>
-      </div>
+      {variante === "ligne" ? (
+        <p className="text-[11px] font-semibold text-ardoise-clair uppercase tracking-wider mb-1.5">
+          {t("langue.titre")}
+        </p>
+      ) : (
+        <div className="mb-4">
+          <h2 className="text-lg font-bold text-ardoise">{t("langue.titre")}</h2>
+          <p className="text-sm text-ardoise-clair mt-0.5">{t("langue.description")}</p>
+        </div>
+      )}
 
       <div
         className={clsx(
-          "gap-3",
-          variante === "cartes" ? "grid grid-cols-2 sm:grid-cols-2" : "flex flex-col",
+          variante === "cartes" && "grid grid-cols-2 gap-3",
+          variante === "compacte" && "flex flex-col gap-3",
+          variante === "ligne" && "grid grid-cols-2 sm:grid-cols-4 gap-2",
         )}
       >
         {langues.map((meta) => {
           const actif = meta.code === langue;
+
+          /* Variante « ligne » : une puce compacte par langue. Cliquer sur la
+             langue déjà active la ré-annonce (même effet que le haut-parleur
+             des autres variantes). */
+          if (variante === "ligne") {
+            return (
+              <button
+                key={meta.code}
+                type="button"
+                onClick={() => choisir(meta)}
+                aria-pressed={actif}
+                title={`${t("langue.ecouter")} — ${meta.libelle}`}
+                className={clsx(
+                  "flex items-center justify-center gap-1.5 min-w-0 px-2 py-1.5 rounded-xl border-2 text-sm transition-all duration-200",
+                  actif
+                    ? "border-lagune bg-lagune/5 text-lagune font-semibold"
+                    : "border-ardoise-clair/15 bg-white text-ardoise hover:border-ocre/40",
+                )}
+              >
+                <span className="text-base leading-none" aria-hidden="true">
+                  {meta.emoji}
+                </span>
+                <span className="truncate">{meta.natif}</span>
+              </button>
+            );
+          }
+
           return (
             <div
               key={meta.code}

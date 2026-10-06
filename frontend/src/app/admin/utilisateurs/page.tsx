@@ -583,7 +583,7 @@ function EditionSimple({
       <div>
         <label className="text-xs uppercase text-ardoise-clair font-semibold">Ville</label>
         <input type="text" value={nouvelleVille} onChange={(e) => setNouvelleVille(e.target.value)}
-          className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:border-lagune focus:ring-1 focus:ring-lagune/30" placeholder="Dakar" />
+          className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:border-lagune focus:ring-1 focus:ring-lagune/30" placeholder="Cotonou" />
       </div>
       <div className="flex justify-end gap-3 pt-4 border-t border-ardoise-clair/10">
         <Bouton variante="ghost" onClick={onAnnuler}>Annuler</Bouton>

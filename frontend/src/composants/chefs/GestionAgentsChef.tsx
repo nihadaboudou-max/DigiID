@@ -36,8 +36,8 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
     prenom: "",
     nom: "",
     telephone: "",
-    ville: "",
-    pays: "Sénégal",
+        ville: "",
+    pays: "Bénin",
     mission: "", // Spécifique à ONG
     specialite: "", // Spécifique à Médical
     message: "", // Pour l'invitation
@@ -101,7 +101,7 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
       nom: "", 
       telephone: "", 
       ville: "", 
-      pays: "Sénégal", 
+      pays: "Bénin", 
       mission: "", 
       specialite: "", 
       message: "" 
@@ -130,7 +130,7 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
           nom: formData.nom,
           telephone: formData.telephone || undefined,
           ville: formData.ville || undefined,
-          pays: formData.pays || "Sénégal",
+          pays: formData.pays || "Bénin",
         };
         
         if (typeAgent === "ong") {
@@ -337,8 +337,8 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
                 <ChampSaisie libelle="Nom *" value={formData.nom} onChange={(e) => setFormData({ ...formData, nom: e.target.value })} placeholder="Nom" required />
               </div>
               
-              <ChampSaisie libelle="Téléphone" value={formData.telephone} onChange={(e) => setFormData({ ...formData, telephone: e.target.value })} placeholder="+221 77 123 45 67" />
-              <ChampSaisie libelle="Ville" value={formData.ville} onChange={(e) => setFormData({ ...formData, ville: e.target.value })} placeholder="Dakar" />
+              <ChampSaisie libelle="Téléphone" value={formData.telephone} onChange={(e) => setFormData({ ...formData, telephone: e.target.value })} placeholder="+229 97 12 34 56" />
+              <ChampSaisie libelle="Ville" value={formData.ville} onChange={(e) => setFormData({ ...formData, ville: e.target.value })} placeholder="Cotonou" />
               
               {typeAgent === "ong" && modeCreation === "direct" && (
                 <ChampSaisie libelle="Mission (optionnel)" value={formData.mission} onChange={(e) => setFormData({ ...formData, mission: e.target.value })} placeholder="Ex: Distribution alimentaire" />
@@ -371,6 +371,6 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
           </div>
         </div>
       )}
-    </div>
+        </div>
   );
 }

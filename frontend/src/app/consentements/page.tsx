@@ -164,7 +164,7 @@ function Contenu() {
             {details?.texte_legal}
           </p>
           <p className="text-xs text-ardoise-clair italic">
-            Référence légale : loi 2008-12 du Sénégal (art. 33), Code numérique du Bénin (loi 2017-20).
+            Référence légale : Code numérique du Bénin (loi 2017-20) et Convention de Malabo (UA).
             Version du texte : {details?.version}
           </p>
           <div className="flex justify-end gap-3 pt-2">

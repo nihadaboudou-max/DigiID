@@ -2,8 +2,8 @@
 """
 Modèle Consentement — chaque consentement de l'utilisateur est tracé.
 
-Conformité légale : la loi 2008-12 sénégalaise et le Code numérique
-béninois imposent que chaque consentement soit :
+Conformité légale : le Code numérique béninois (loi 2017-20) et la
+Convention de Malabo imposent que chaque consentement soit :
   - Spécifique (par finalité)
   - Éclairé (explication fournie)
   - Libre (refus possible sans pénalité)

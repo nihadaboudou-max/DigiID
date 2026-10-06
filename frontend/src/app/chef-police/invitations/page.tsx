@@ -257,7 +257,7 @@ function Contenu() {
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="agent@police.sn"
+                placeholder="agent@police.bj"
                 required
               />
               

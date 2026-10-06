@@ -529,7 +529,7 @@ export default function GestionMissionsChef({
                 libelle="Zone d'intervention"
                 value={formData.zone}
                 onChange={(e) => setFormData({ ...formData, zone: e.target.value })}
-                placeholder="Ex: Dakar, Thiès..."
+                placeholder="Ex: Cotonou, Parakou..."
               />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

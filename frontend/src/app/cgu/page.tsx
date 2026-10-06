@@ -93,9 +93,9 @@ export default function PageCGU() {
 
           <Section titre="Article 9 — Droit applicable">
             <p>
-              Les présentes CGU sont soumises au droit sénégalais. En cas de litige,
+              Les présentes CGU sont soumises au droit béninois. En cas de litige,
               les parties chercheront d'abord une résolution amiable. À défaut, les
-              tribunaux compétents de Dakar seront seuls compétents.
+              tribunaux compétents de Cotonou seront seuls compétents.
             </p>
           </Section>
 
@@ -106,14 +106,14 @@ export default function PageCGU() {
               de contact rendue disponible en version production.
             </p>
             <p>
-              En cas de litige non résolu, tu peux saisir la Commission de Protection
-              des Données Personnelles (CDP) du Sénégal ou son équivalent dans ton pays.
+              En cas de litige non résolu, tu peux saisir l'Autorité de Protection
+              des Données à Caractère Personnel (APDP) du Bénin.
             </p>
           </Section>
 
           <p className="text-xs text-ardoise-clair italic pt-8 border-t border-ardoise-clair/10">
-            Conditions conformes à la loi 2008-12 du Sénégal, au Code numérique du Bénin
-            (loi 2017-20), à la Convention de Malabo et inspirées des principes du RGPD européen.
+            Conditions conformes au Code numérique du Bénin (loi 2017-20), à la
+            Convention de Malabo et inspirées des principes du RGPD européen.
           </p>
         </article>
       </main>

@@ -911,16 +911,15 @@ export function BoutonMenuMobile() {
                     initialOuvert={pathname.startsWith("/identite")}>
                     <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
                       {[
-                        { href: "/identite", libelle: "Tableau de bord identité", Icone: IconeAccueil },
-                        { href: "/inspection", libelle: "Inspection (extraction de documents)", Icone: IconeCheck },
-                        { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
+                        //{ href: "/identite", libelle: "Tableau de bord identité", Icone: IconeAccueil },
+                        { href: "/inspection", libelle: "Document d'identité)", Icone: IconeCheck },
+                        //{ href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
                         { href: "/identite/verification-visuelle", libelle: "Reconnaissance faciale", Icone: IconeVisage },
                         // Menu masqué (simplification) — dé-commenter pour le réafficher :
                         // { href: "/identite/verification-cni", libelle: "Scan CNI", Icone: IconeScan },
                         { href: "/identite/email", libelle: "Vérification email", Icone: IconeEmail },
                         { href: "/identite/2fa", libelle: "Double authentification", Icone: IconeCadenas },
                         { href: "/identite/mot-de-passe", libelle: "Mot de passe", Icone: IconeCle },
-                        { href: "/identite/role", libelle: "Rôle & permissions", Icone: IconeBouclier },
                       ].map(({ href, libelle, Icone }) => {
                         const actif = pathname === href || pathname.startsWith(href);
                         return (

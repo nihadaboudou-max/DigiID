@@ -27,7 +27,7 @@ export default function PageInscription() {
     prenom: "",
     nom: "",
     telephone: "",
-    ville: "Dakar",
+    ville: "Cotonou",
     code_parrainage: "",
   });
   const [accepteCgu, setAccepteCgu] = useState(false);
@@ -201,7 +201,7 @@ export default function PageInscription() {
               type="tel"
               value={donnees.telephone}
               onChange={modifierChamp("telephone")}
-              placeholder="+221 77 123 45 67"
+              placeholder="+229 97 12 34 56"
               autoComplete="tel"
               aide="Numéro au format international. Facultatif mais améliore ton score."
             />
@@ -221,7 +221,7 @@ export default function PageInscription() {
               libelle="Ville"
               value={donnees.ville}
               onChange={modifierChamp("ville")}
-              placeholder="Dakar"
+              placeholder="Cotonou"
             />
 
             <ChampSaisie
@@ -242,7 +242,7 @@ export default function PageInscription() {
               />
               <span className="text-sm text-ardoise-clair leading-relaxed">
                 J'accepte les <a href="#" className="font-medium">conditions générales d'utilisation</a> et la{" "}
-                <a href="#" className="font-medium">politique de confidentialité</a> conformes à la loi sénégalaise 2008-12.
+                <a href="#" className="font-medium">politique de confidentialité</a> conformes au Code numérique du Bénin (loi 2017-20).
               </span>
             </label>
 

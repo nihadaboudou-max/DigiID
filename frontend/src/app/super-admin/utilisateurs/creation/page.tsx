@@ -107,7 +107,7 @@ export default function PageCreationProfil() {
   const [prenom, setPrenom] = useState("");
   const [nom, setNom] = useState("");
   const [role, setRole] = useState<TypeRole>("agent_terrain");
-  const [ville, setVille] = useState("Dakar");
+  const [ville, setVille] = useState("Cotonou");
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [succes, setSucces] = useState<{ email: string; prenom: string; nom: string } | null>(null);
@@ -164,7 +164,7 @@ export default function PageCreationProfil() {
               <Bouton variante="primaire" taille="petit" onClick={() => router.push("/super-admin/utilisateurs")}>
                 ← Retour à la liste
               </Bouton>
-              <Bouton variante="secondaire" taille="petit" onClick={() => { setSucces(null); setEmail(""); setMotDePasse(""); setPrenom(""); setNom(""); setRole("agent_terrain"); setVille("Dakar"); }}>
+              <Bouton variante="secondaire" taille="petit" onClick={() => { setSucces(null); setEmail(""); setMotDePasse(""); setPrenom(""); setNom(""); setRole("agent_terrain"); setVille("Cotonou"); }}>
                 + Créer un autre
               </Bouton>
             </div>
@@ -267,7 +267,7 @@ export default function PageCreationProfil() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ocre/30 focus:border-ocre transition-all"
-                placeholder="agent@mairie-dakar.sn"
+                placeholder="agent@mairie-cotonou.bj"
               />
             </div>
 
@@ -298,7 +298,7 @@ export default function PageCreationProfil() {
                 value={ville}
                 onChange={(e) => setVille(e.target.value)}
                 className="w-full mt-1 px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ocre/30 focus:border-ocre transition-all"
-                placeholder="Dakar"
+                placeholder="Cotonou"
               />
             </div>
           </Carte>

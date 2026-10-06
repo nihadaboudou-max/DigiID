@@ -33,8 +33,8 @@ function Contenu() {
     prenom: "",
     nom: "",
     ville: "",
-    pays: "Sénégal",
-  });
+    pays: "Bénin",
+    });
   const [enEdition, setEnEdition] = useState(false);
   const [chargement, setChargement] = useState(false);
   const [modaleExportOuverte, setModaleExportOuverte] = useState(false);
@@ -55,7 +55,7 @@ function Contenu() {
         prenom: utilisateur.prenom || "",
         nom: utilisateur.nom || "",
         ville: (utilisateur as any).ville || "",
-        pays: (utilisateur as any).pays || "Sénégal",
+        pays: (utilisateur as any).pays || "Bénin",
       });
     }
   }, [utilisateur]);
@@ -96,7 +96,7 @@ function Contenu() {
         prenom: utilisateur.prenom || "",
         nom: utilisateur.nom || "",
         ville: (utilisateur as any).ville || "",
-        pays: (utilisateur as any).pays || "Sénégal",
+        pays: (utilisateur as any).pays || "Bénin",
       });
     }
     setEnEdition(false);

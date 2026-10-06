@@ -25,7 +25,7 @@ export default function PageConfidentialite() {
               DigiID est un prototype académique développé dans le cadre du Mémoire de fin
               d'études de Madame ABOUDOU TRAORE Nihad, en Mastère Stratégie Digitale à
               l'ISM Dakar (2025-2026). En production, l'entité juridique sera DigiID SARL,
-              immatriculée au RCCM de Dakar.
+              immatriculée au RCCM de Cotonou (Bénin).
             </p>
           </Section>
 
@@ -54,7 +54,7 @@ export default function PageConfidentialite() {
               Toutes les données personnelles sont chiffrées au repos en AES-256-GCM, et
               en transit en TLS 1.3. Ton mot de passe est haché avec Argon2id et n'est
               jamais stocké en clair. Les serveurs sont hébergés en priorité chez un
-              prestataire africain (Orange Cloud Sénégal), avec un plan de reprise sur
+              prestataire africain basé au Bénin, avec un plan de reprise sur
               AWS Cape Town. L'accès aux données est journalisé immuablement et limité
               strictement aux personnes habilitées.
             </p>
@@ -99,7 +99,7 @@ export default function PageConfidentialite() {
           </Section>
 
           <p className="text-xs text-ardoise-clair italic pt-8 border-t border-ardoise-clair/10">
-            Politique conforme à la loi 2008-12 du Sénégal, au Code numérique du Bénin (loi 2017-20),
+            Politique conforme au Code numérique du Bénin (loi 2017-20),
             à la Convention de Malabo et inspirée des principes du RGPD européen.
           </p>
         </article>

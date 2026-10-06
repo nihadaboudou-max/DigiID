@@ -61,7 +61,7 @@ export function PiedDePage() {
           <ul className="space-y-2.5 text-sm text-white/70">
             <li className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-succes"></span>
-              Loi 2008-12 SN
+              Convention de Malabo (UA)
             </li>
             <li className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-succes"></span>
@@ -80,8 +80,8 @@ export function PiedDePage() {
         <div className="max-w-contenu mx-auto px-6 py-4 text-xs text-white/50 flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>© 2025-2026 DigiID — Tous droits réservés.</span>
           <span className="flex items-center gap-1">
-            Fait avec soin à Dakar 
-            <span className="text-lg">🇸🇳</span>
+            Fait avec soin au Bénin
+            <span className="text-lg">🇧🇯</span>
           </span>
         </div>
       </div>

@@ -149,7 +149,7 @@ function Contenu() {
                 libelle="Hôpital / Clinique (optionnel)" 
                 value={hopital}
                 onChange={(e) => setHopital(e.target.value)}
-                placeholder="Ex: Hôpital Principal de Dakar" 
+                placeholder="Ex: CNHU-HKM Cotonou" 
               />
               <ChampSaisie 
                 libelle="Motif de la consultation *" 

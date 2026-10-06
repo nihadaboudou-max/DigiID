@@ -249,7 +249,7 @@ function Contenu() {
                   libelle="Zone" 
                   value={zone} 
                   onChange={(e) => setZone(e.target.value)} 
-                  placeholder="Ex: Dakar" 
+                  placeholder="Ex: Cotonou" 
                 />
                 <ChampSaisie 
                   libelle="Budget (FCFA)" 

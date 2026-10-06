@@ -11,9 +11,9 @@ export default function PageAccueil() {
   return (
     <main className="flex-grow">
       {/* ─── SÉLECTEUR DE LANGUE (accessibilité — choix à l'oreille) ─── */}
-      <section className="bg-white border-b border-ardoise-clair/10 py-8 px-6">
-        <div className="max-w-contenu mx-auto">
-          <SelecteurLangue />
+      <section className="bg-white border-b border-ardoise-clair/10 py-3 px-6">
+        <div className="max-w-3xl mx-auto">
+          <SelecteurLangue variante="ligne" />
         </div>
       </section>
 
@@ -34,7 +34,7 @@ export default function PageAccueil() {
             </h1>
             
             <p className="text-lg text-ardoise-clair max-w-lg mx-auto md:mx-0 leading-relaxed">
-              DigiID combine <strong className="text-ardoise">vérification biométrique</strong> (CNI + reconnaissance faciale) et <strong className="text-ardoise">attestations humaines</strong> pour créer un identifiant numérique fiable, reconnu par les hôpitaux, la police et les services essentiels.
+              DigiID combine <strong className="text-ardoise">vérification biométrique</strong> (CNI + visage) et <strong className="text-ardoise">attestations humaines</strong> : une identité fiable, reconnue par les hôpitaux, la police et les services essentiels.
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
@@ -110,39 +110,39 @@ export default function PageAccueil() {
       </section>
 
       {/* ─── SECTION CAS D'USAGE ─── */}
-      <section className="py-16 bg-white border-y border-ardoise-clair/10">
+      <section className="py-12 bg-white border-y border-ardoise-clair/10">
         <div className="max-w-contenu mx-auto px-6">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-ardoise mb-4">Un identifiant, mille usages</h2>
-            <p className="text-ardoise-clair max-w-2xl mx-auto">DigiID te suit partout : à l'hôpital, au commissariat, sur le terrain ou à la banque.</p>
+            <p className="text-ardoise-clair max-w-2xl mx-auto">Hôpital, commissariat, terrain, banque : un seul identifiant.</p>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             <CasUsage 
               icone={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>}
               titre="Santé d'urgence"
-              detail="En cas d'accident, le médecin accède instantanément à ton groupe sanguin, tes allergies et tes contacts d'urgence via ton QR code."
+              detail="Groupe sanguin, allergies et contacts d'urgence via ton QR code."
               couleur="text-succes"
               bgCouleur="bg-succes/10"
             />
             <CasUsage 
               icone={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>}
               titre="Police & Sécurité"
-              detail="QR code dynamique anti-fraude. Les forces de l'ordre vérifient ton identité en temps réel, sans contact physique."
+              detail="QR code dynamique anti-fraude : identité vérifiée en temps réel."
               couleur="text-terre"
               bgCouleur="bg-terre/10"
             />
             <CasUsage 
               icone={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>}
               titre="ONG & Humanitaire"
-              detail="Les ONG identifient rapidement leurs bénéficiaires sur le terrain, même sans papiers, grâce aux attestations communautaires."
+              detail="Bénéficiaires identifiés vite sur le terrain, même sans papiers."
               couleur="text-ocre"
               bgCouleur="bg-ocre/10"
             />
             <CasUsage 
               icone={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>}
               titre="Services financiers"
-              detail="Ouvre un compte bancaire, obtiens un microcrédit ou accède aux aides sociales avec ton DigiID reconnu."
+              detail="Compte bancaire, microcrédit ou aides sociales avec ton DigiID."
               couleur="text-lagune"
               bgCouleur="bg-lagune/10"
             />
@@ -151,43 +151,43 @@ export default function PageAccueil() {
       </section>
 
       {/* ── SECTION COMMENT ÇA MARCHE ─── */}
-      <section className="py-16 bg-sable px-6">
+      <section className="py-12 bg-sable px-6">
         <div className="max-w-contenu mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-ardoise mb-4">Comment obtenir ton DigiID</h2>
-            <p className="text-ardoise-clair max-w-2xl mx-auto">Un processus sécurisé en 4 étapes, conçu pour l'inclusion et la protection de tes données.</p>
+            <p className="text-ardoise-clair max-w-2xl mx-auto">Un processus sécurisé en 4 étapes.</p>
           </div>
 
           <div className="grid md:grid-cols-4 gap-6">
-            <Etape numero="01" titre="Inscription" detail="Ton numéro, ta ville et ta photo. Tes données sont chiffrées immédiatement." />
-            <Etape numero="02" titre="Vérification CNI" detail="Scanne ta Carte Nationale d'Identité. Notre OCR extrait et vérifie les informations." />
-            <Etape numero="03" titre="Biométrie faciale" detail="Reconnaissance faciale pour garantir que tu es bien la personne sur la CNI." />
-            <Etape numero="04" titre="Attestations" detail="Ton réseau de confiance (proches, collègues) atteste te connaître. Ton score grimpe." />
+            <Etape numero="01" titre="Inscription" detail="Numéro, ville, photo — chiffrés immédiatement." />
+            <Etape numero="02" titre="Vérification CNI" detail="Scan de ta CNI : l'OCR extrait et vérifie les données." />
+            <Etape numero="03" titre="Biométrie faciale" detail="Tu es bien la personne de la CNI." />
+            <Etape numero="04" titre="Attestations" detail="Tes proches attestent te connaître : ton score grimpe." />
           </div>
         </div>
       </section>
 
       {/* ─── SECTION CONFIANCE COMMUNAUTAIRE ─── */}
-      <section className="py-16 bg-white px-6">
+      <section className="py-12 bg-white px-6">
         <div className="max-w-contenu mx-auto grid md:grid-cols-2 gap-12 items-center">
           <div>
             <p className="text-ocre text-xs uppercase font-semibold tracking-wider mb-2">Notre innovation</p>
             <h2 className="text-3xl font-bold text-ardoise mb-4">La confiance humaine, numérisée</h2>
             <p className="text-ardoise-clair mb-6 leading-relaxed">
-              Contrairement aux systèmes classiques basés uniquement sur des documents, DigiID intègre le <strong className="text-ardoise">réseau social réel</strong> de chaque utilisateur.
+              DigiID intègre le <strong className="text-ardoise">réseau social réel</strong> : chaque attestation renforce la crédibilité de tous.
             </p>
             <div className="space-y-4">
               <PointFort 
                 titre="Attestations pair-à-pair" 
-                detail="Des personnes qui te connaissent réellement certifient ton identité, ta moralité ou tes compétences."
+                detail="Des personnes qui te connaissent certifient ton identité."
               />
               <PointFort 
                 titre="Score de confiance transparent" 
-                detail="Tu vois exactement pourquoi tu as tel score et comment l'améliorer. Pas d'algorithme opaque."
+                detail="Tu vois comment ton score évolue. Pas d'algorithme opaque."
               />
               <PointFort 
                 titre="Protection contre l'usurpation" 
-                detail="Un criminel ne peut pas s'inscrire sous une fausse identité : il lui faudrait complice + CNI + visage + attestations."
+                detail="Fausse identité : il faudrait complice + CNI + visage + attestations."
               />
             </div>
           </div>
@@ -199,14 +199,14 @@ export default function PageAccueil() {
                 <div className="w-8 h-8 rounded-full bg-lagune/20 flex items-center justify-center text-lagune font-bold text-sm flex-shrink-0">A</div>
                 <div>
                   <p className="text-sm font-semibold text-ardoise">Amadou demande une attestation</p>
-                  <p className="text-xs text-ardoise-clair">"Je confirme connaître Moussa depuis 5 ans, c'est un voisin de confiance."</p>
+                  <p className="text-xs text-ardoise-clair">Moussa confirme le connaître depuis 5 ans.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 rounded-full bg-ocre/20 flex items-center justify-center text-ocre font-bold text-sm flex-shrink-0">M</div>
                 <div>
                   <p className="text-sm font-semibold text-ardoise">Moussa atteste pour Aminata</p>
-                  <p className="text-xs text-ardoise-clair">"Aminata est ma collègue depuis 3 ans, je certifie ses compétences."</p>
+                  <p className="text-xs text-ardoise-clair">Aminata est sa collègue depuis 3 ans.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
@@ -222,10 +222,10 @@ export default function PageAccueil() {
       </section>
 
       {/* ─── SECTION CTA FINALE ─── */}
-      <section className="py-16 px-6 bg-ardoise text-white">
+      <section className="py-12 px-6 bg-ardoise text-white">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Prêt à reprendre le contrôle de ton identité ?</h2>
-          <p className="text-lg text-ardoise-clair mb-8">Rejoins les milliers d'utilisateurs qui utilisent déjà DigiID pour simplifier leurs démarches et protéger leur identité.</p>
+          <p className="text-lg text-ardoise-clair mb-8">Crée ton DigiID en quelques minutes — gratuit et sécurisé.</p>
           <Link href="/inscription">
             <Bouton variante="primaire" taille="grand" className="bg-ocre text-ardoise hover:bg-ocre/90 border-none font-bold">
               Obtenir mon DigiID gratuitement

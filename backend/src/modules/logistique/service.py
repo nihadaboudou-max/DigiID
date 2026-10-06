@@ -50,8 +50,8 @@ async def _verifier_trajet_du_voyage(
 ) -> None:
     """Refuse un voyage dont la ligne ne dessert pas le trajet déclaré.
 
-    Sans ce garde-fou, on pouvait affecter un colis Dakar → Thiès à un car
-    Thiès → Dakar : le destinataire aurait attendu un colis parti à l'opposé.
+    Sans ce garde-fou, on pouvait affecter un colis Cotonou → Parakou à un car
+    Parakou → Cotonou : le destinataire aurait attendu un colis parti à l'opposé.
     """
     ligne = await session.get(Ligne, voyage.ligne_id)
     if ligne is None:

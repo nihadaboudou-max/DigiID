@@ -52,7 +52,7 @@ function Contenu() {
   const [modaleOuverte, setModaleOuverte] = useState(false);
   const [creationEnCours, setCreationEnCours] = useState(false);
   const [formCreation, setFormCreation] = useState({
-    email: "", mot_de_passe: "", prenom: "", nom: "", ville: "Dakar",
+    email: "", mot_de_passe: "", prenom: "", nom: "", ville: "Cotonou",
     role: "admin_domaine", // NOUVEAU : rôle sélectionnable
   });
   const [erreurCreation, setErreurCreation] = useState<string | null>(null);
@@ -96,7 +96,7 @@ function Contenu() {
         "succes",
       );
       setAdmins((liste) => [nouveau, ...liste]);
-      setFormCreation({ email: "", mot_de_passe: "", prenom: "", nom: "", ville: "Dakar", role: "admin_domaine" });
+      setFormCreation({ email: "", mot_de_passe: "", prenom: "", nom: "", ville: "Cotonou", role: "admin_domaine" });
       setModaleOuverte(false);
     } catch (e) {
       const msg = e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de création";
@@ -391,7 +391,7 @@ function Contenu() {
             libelle="Ville"
             value={formCreation.ville}
             onChange={modifierChamp("ville")}
-            placeholder="Dakar"
+            placeholder="Cotonou"
           />
           <div className="flex justify-end gap-2 pt-2">
             <Bouton

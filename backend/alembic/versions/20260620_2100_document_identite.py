@@ -33,12 +33,12 @@ def upgrade() -> None:
         sa.Column("nom_complet", sa.String(255), nullable=True),
         sa.Column("date_naissance", sa.Date(), nullable=True),
         sa.Column("lieu_naissance", sa.String(255), nullable=True),
-        sa.Column("nationalite", sa.String(100), nullable=True, server_default="Sénégalaise"),
+        sa.Column("nationalite", sa.String(100), nullable=True, server_default="Béninoise"),
         sa.Column("sexe", sa.String(1), nullable=True),
         sa.Column("adresse", sa.String(500), nullable=True),
         sa.Column("date_delivrance", sa.Date(), nullable=True),
         sa.Column("date_expiration", sa.Date(), nullable=True),
-        sa.Column("pays_emetteur", sa.String(100), nullable=True, server_default="Sénégal"),
+        sa.Column("pays_emetteur", sa.String(100), nullable=True, server_default="Bénin"),
 
         # CNI
         sa.Column("autorite_delivrance", sa.String(255), nullable=True),

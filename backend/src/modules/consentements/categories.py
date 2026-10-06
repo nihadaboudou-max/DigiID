@@ -47,8 +47,8 @@ CATALOGUE: Dict[str, DefinitionConsentement] = {
         description="Cadre juridique global de l'utilisation de DigiID.",
         texte_legal=(
             "En utilisant DigiID, l'Utilisateur accepte les conditions générales conformes "
-            "à la loi 2008-12 du Sénégal sur la protection des données à caractère personnel "
-            "et au Code numérique du Bénin (loi 2017-20). L'Utilisateur reconnaît avoir lu "
+            "au Code numérique du Bénin (loi 2017-20) sur la protection des données à "
+            "caractère personnel. L'Utilisateur reconnaît avoir lu "
             "et compris l'intégralité des CGU disponibles à l'adresse /cgu."
         ),
         obligatoire=True,

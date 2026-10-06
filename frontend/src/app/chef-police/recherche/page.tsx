@@ -208,7 +208,7 @@ function Contenu() {
             <ul className="list-disc list-inside space-y-1">
               <li>Nom complet : "Amadou Diallo"</li>
               <li>Matricule : "POL-2026-001"</li>
-              <li>Email : "amadou@police.sn"</li>
+              <li>Email : "amadou@police.bj"</li>
               <li>DigiID : "A3F7K9M2X4B8P1Q6"</li>
             </ul>
           </div>

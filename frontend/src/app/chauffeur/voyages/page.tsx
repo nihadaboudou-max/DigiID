@@ -3,7 +3,7 @@
  * Chauffeur — « Choisir mes voyages » (flexibilité multi-lignes).
  *
  * Un chauffeur indépendant ne travaille pas sur une seule ligne : le matin il
- * peut être sur Dakar → Thiès, l'après-midi sur Thiès → Mbour, avec un autre
+ * peut être sur Cotonou → Porto-Novo, l'après-midi sur Cotonou → Parakou, avec un autre
  * car. Cette page lui donne les **départs libres** à venir et lui permet de
  * s'engager lui-même — sans téléphoner au gérant de gare.
  *

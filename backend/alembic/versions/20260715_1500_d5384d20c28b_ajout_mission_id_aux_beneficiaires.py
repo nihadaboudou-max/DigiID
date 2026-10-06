@@ -1163,11 +1163,11 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_document_identite_cree_le'), table_name='document_identite')
     op.alter_column('document_identite', 'pays_emetteur',
                existing_type=sa.VARCHAR(length=100),
-               server_default=sa.text("'Sénégal'::character varying"),
+               server_default=sa.text("'Bénin'::character varying"),
                existing_nullable=True)
     op.alter_column('document_identite', 'nationalite',
                existing_type=sa.VARCHAR(length=100),
-               server_default=sa.text("'Sénégalaise'::character varying"),
+               server_default=sa.text("'Béninoise'::character varying"),
                existing_nullable=True)
     op.alter_column('document_identite', 'a_ete_corrige',
                existing_type=sa.BOOLEAN(),

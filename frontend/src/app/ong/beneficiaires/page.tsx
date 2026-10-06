@@ -198,7 +198,7 @@ function Contenu() {
               )}
             </div>
 
-            <ChampSaisie libelle="Zone (optionnel)" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="Ex: Dakar" />
+            <ChampSaisie libelle="Zone (optionnel)" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="Ex: Cotonou" />
             
             <div>
               <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">Notes (optionnel)</label>

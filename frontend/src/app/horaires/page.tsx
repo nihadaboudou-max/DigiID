@@ -3,7 +3,7 @@
  * Page publique « Horaires des cars » — accessible **sans connexion**.
  *
  * Répond au besoin le plus courant du voyageur : « quand part le prochain car
- * pour Thiès, et de quelle gare ? ». Le backend n'expose ici **aucune donnée
+ * pour Parakou, et de quelle gare ? ». Le backend n'expose ici **aucune donnée
  * personnelle** : ni client, ni colis, ni téléphone — seulement le trajet,
  * l'heure, le véhicule et le prénom abrégé du chauffeur (« Moussa D. »).
  *
@@ -240,7 +240,7 @@ export default function PageHorairesPublics() {
                 id="recherche-horaire"
                 value={recherche}
                 onChange={(e) => setRecherche(e.target.value)}
-                placeholder="Ex. Thiès, Dakar, car DK-1234"
+                placeholder="Ex. Cotonou, Porto-Novo, car AB-1234"
                 className="w-full rounded-lg border border-ardoise-clair/20 px-3 py-2 text-sm"
               />
             </div>

@@ -7,8 +7,8 @@
  * d'UUID. Il choisit un **voyage**, affiché avec son horaire, son immatriculation
  * et le **nom de son chauffeur**. L'identifiant technique en découle.
  *
- * Le filtre par trajet évite l'erreur coûteuse : affecter un colis Dakar → Thiès
- * à un car Thiès → Dakar. Les voyages sans chauffeur sont signalés comme tels
+ * Le filtre par trajet évite l'erreur coûteuse : affecter un colis Cotonou → Parakou
+ * à un car Parakou → Cotonou. Les voyages sans chauffeur sont signalés comme tels
  * (ils ne peuvent pas être choisis pour une affectation).
  */
 import { useMemo, useState } from "react";
@@ -18,7 +18,7 @@ import { IconeUtilisateur } from "@/composants/commun/Icones";
 import type { Ligne, Voyage } from "@/services/logistique_api";
 import { formaterDateHeure } from "./format";
 
-/** Libellé lisible d'un voyage : « 12/05 08:00 · DK-1234-AB · Amadou Diallo ». */
+/** Libellé lisible d'un voyage : « 12/05 08:00 · AB-1234-RB · Amadou Diallo ». */
 export function libelleVoyage(voyage: Voyage | null | undefined): string {
   if (!voyage) return "Voyage inconnu";
   return [
@@ -30,7 +30,7 @@ export function libelleVoyage(voyage: Voyage | null | undefined): string {
     .join(" · ");
 }
 
-/** Trajet d'un voyage (« Dakar → Thiès »), d'après la ligne déclarée. */
+/** Trajet d'un voyage (« Cotonou → Parakou »), d'après la ligne déclarée. */
 export function trajetVoyage(
   voyage: Voyage | null | undefined,
   lignes: Ligne[] = [],

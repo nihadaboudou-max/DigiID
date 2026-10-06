@@ -2,7 +2,7 @@ import type { Config } from "tailwindcss";
 
 /**
  * Configuration Tailwind CSS — Palette Terre & Lagune DigiID.
- * Synchronisée avec la charte graphique (Lagune, Ocre Dakar, Terre cuite, Sable, Ardoise).
+ * Synchronisée avec la charte graphique (Lagune, Ocre, Terre cuite, Sable, Ardoise).
  */
 const config: Config = {
   content: [

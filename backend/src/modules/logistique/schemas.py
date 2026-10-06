@@ -158,7 +158,7 @@ class VoyageResponse(BaseModel):
     modifie_le: Optional[datetime] = None
     vehicule_immatriculation: Optional[str] = None
     chauffeur_nom: Optional[str] = None
-    # Trajet lisible (« Dakar → Thiès ») : évite un appel par voyage côté front.
+    # Trajet lisible (« Cotonou → Parakou ») : évite un appel par voyage côté front.
     ligne_libelle: Optional[str] = None
     gare_depart_id: Optional[UUID] = None
     gare_arrivee_id: Optional[UUID] = None

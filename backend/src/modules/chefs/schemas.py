@@ -13,7 +13,7 @@ class AgentPoliceCreate(BaseModel):
     nom: str = Field(..., min_length=2, max_length=100)
     telephone: Optional[str] = None
     ville: Optional[str] = None
-    pays: str = "Sénégal"
+    pays: str = "Bénin"
 
 
 class MedecinCreate(BaseModel):
@@ -23,7 +23,7 @@ class MedecinCreate(BaseModel):
     nom: str = Field(..., min_length=2, max_length=100)
     telephone: Optional[str] = None
     ville: Optional[str] = None
-    pays: str = "Sénégal"
+    pays: str = "Bénin"
     specialite: Optional[str] = None
 
 
@@ -34,7 +34,7 @@ class AgentONGCreate(BaseModel):
     nom: str = Field(..., min_length=2, max_length=100)
     telephone: Optional[str] = None
     ville: Optional[str] = None
-    pays: str = "Sénégal"
+    pays: str = "Bénin"
     mission: Optional[str] = None
 
 
@@ -45,7 +45,7 @@ class AgentEnrolementCreate(BaseModel):
     nom: str = Field(..., min_length=2, max_length=100)
     telephone: Optional[str] = None
     ville: Optional[str] = None
-    pays: str = "Sénégal"
+    pays: str = "Bénin"
 
 
 class AgentResponse(BaseModel):

@@ -377,7 +377,7 @@ function Contenu() {
                   onChange={(e) =>
                     modifier("vehicule_immatriculation", e.target.value)
                   }
-                  placeholder="Ex : DK-1234-AB"
+                  placeholder="Ex : AB-1234-RB"
                 />
                 <ChampSaisie
                   libelle="Marque"

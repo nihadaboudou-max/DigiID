@@ -70,7 +70,7 @@ export interface Voyage {
   statut: string;
   vehicule_immatriculation: string | null;
   chauffeur_nom: string | null;
-  /** Trajet lisible renvoyé par l'API : « Dakar → Thiès ». */
+  /** Trajet lisible renvoyé par l'API : « Cotonou → Parakou ». */
   ligne_libelle: string | null;
   gare_depart_id: string | null;
   gare_arrivee_id: string | null;

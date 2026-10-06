@@ -91,7 +91,7 @@ async def _enrichir_voyage(session: AsyncSession, voyage: Voyage) -> Voyage:
     vehicule = await session.get(Vehicule, voyage.vehicule_id)
     voyage.vehicule_immatriculation = vehicule.immatriculation if vehicule else None
     voyage.chauffeur_nom = await _nom_utilisateur(session, voyage.chauffeur_id)
-    # Trajet lisible directement sur le voyage : « Dakar → Thiès ».
+    # Trajet lisible directement sur le voyage : « Cotonou → Parakou ».
     ligne = await session.get(Ligne, voyage.ligne_id)
     if ligne is not None:
         voyage.gare_depart_id = ligne.gare_depart_id
