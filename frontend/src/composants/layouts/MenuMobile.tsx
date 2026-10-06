@@ -1050,7 +1050,7 @@ function MenuCitoyenComplet({
             { href: "/identite/email", libelle: "Vérification email", Icone: IconeEmail },
             { href: "/identite/2fa", libelle: "Double authentification", Icone: IconeCadenas },
             { href: "/identite/mot-de-passe", libelle: "Mot de passe", Icone: IconeCle },
-            { href: "/identite/role", libelle: "Rôle & permissions", Icone: IconeBouclier },
+            //{ href: "/identite/role", libelle: "Rôle & permissions", Icone: IconeBouclier },
           ].map(({ href, libelle, Icone }) => {
             const actif = pathname === href || pathname.startsWith(href);
             return (
