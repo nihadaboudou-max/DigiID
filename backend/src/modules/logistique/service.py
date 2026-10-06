@@ -5,7 +5,7 @@ from urllib.parse import parse_qs, urlparse
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,7 @@ from src.modeles import (
     SuiviFamilial, SuiviFamilialEvenement, NotificationLogistique, Bagage,
 )
 from src.modules.logistique import schemas
+from src.noyau import dechiffrer_donnee, journal
 from src.modules.qr_dynamique.service import (
     generer_token_durable,
     construire_url_qr_durable,
@@ -327,12 +328,90 @@ async def obtenir_voyage(session: AsyncSession, voyage_id: UUID) -> Voyage:
 
 
 async def lister_voyages(session: AsyncSession, page: int, par_page: int,
-                         statut: str | None = None):
+                         statut: str | None = None,
+                         chauffeur_id: UUID | None = None,
+                         ligne_id: UUID | None = None,
+                         a_partir_de: datetime | None = None):
+    """Liste des voyages, filtrable par chauffeur, ligne et date.
+
+    Ces filtres servent trois usages concrets :
+      - le chauffeur : « mes voyages » (il choisit son jour et son trajet) ;
+      - le guichet : « les cars de ce chauffeur sur ce trajet » à l'attribution ;
+      - le public : « les prochains départs » (page citoyens).
+    Avec ``a_partir_de``, on trie du **prochain** départ au plus lointain ;
+    sinon du plus récent au plus ancien.
+    """
     requete = select(Voyage)
     if statut is not None:
         requete = requete.where(Voyage.statut == statut)
-    requete = requete.order_by(Voyage.date_depart.desc())
+    if chauffeur_id is not None:
+        requete = requete.where(Voyage.chauffeur_id == chauffeur_id)
+    if ligne_id is not None:
+        requete = requete.where(Voyage.ligne_id == ligne_id)
+    if a_partir_de is not None:
+        requete = requete.where(Voyage.date_depart >= a_partir_de)
+        requete = requete.order_by(Voyage.date_depart.asc())
+    else:
+        requete = requete.order_by(Voyage.date_depart.desc())
     return await _paginer(session, requete, page, par_page)
+
+
+# Un voyage « actif » peut encore recevoir des colis / passagers.
+STATUTS_VOYAGE_ACTIFS = ("planifie", "en_cours")
+
+
+async def lister_chauffeurs_pour_trajet(
+    session: AsyncSession,
+    *,
+    gare_id: UUID | None = None,
+    ligne_id: UUID | None = None,
+    utilisateur_id: UUID | None = None,
+) -> list[ActeurLogistique]:
+    """Chauffeurs proposables pour un trajet (« qui peut conduire ceci ? »).
+
+    Deux populations, réunies : les chauffeurs **rattachés à la gare de départ**
+    et ceux qui ont **déjà un voyage sur cette ligne**. Personne n'a à connaître
+    un identifiant technique : la liste vient au guichet.
+    """
+    conditions = []
+    if gare_id is not None:
+        conditions.append(ActeurLogistique.gare_id == gare_id)
+    if ligne_id is not None:
+        chauffeurs_de_la_ligne = select(Voyage.chauffeur_id).where(
+            Voyage.ligne_id == ligne_id,
+            Voyage.chauffeur_id.is_not(None),
+            Voyage.statut.in_(STATUTS_VOYAGE_ACTIFS),
+        )
+        conditions.append(ActeurLogistique.utilisateur_id.in_(chauffeurs_de_la_ligne))
+
+    requete = select(ActeurLogistique).where(
+        ActeurLogistique.role == "chauffeur",
+        ActeurLogistique.actif.is_(True),
+    )
+    if utilisateur_id is not None:
+        # Recherche ciblée (fiche retrouvée par QR / code) : pas de filtre trajet.
+        requete = requete.where(ActeurLogistique.utilisateur_id == utilisateur_id)
+    elif conditions:
+        requete = requete.where(or_(*conditions))
+    return list(await session.scalars(requete.limit(300)))
+
+
+async def prochains_departs_par_chauffeur(
+    session: AsyncSession, chauffeur_ids: list[UUID]
+) -> dict[UUID, datetime]:
+    """Prochain départ de chaque chauffeur (voyage planifié ou en cours)."""
+    if not chauffeur_ids:
+        return {}
+    resultat = await session.execute(
+        select(Voyage.chauffeur_id, func.min(Voyage.date_depart))
+        .where(
+            Voyage.chauffeur_id.in_(chauffeur_ids),
+            Voyage.statut.in_(STATUTS_VOYAGE_ACTIFS),
+            Voyage.date_depart >= datetime.now(timezone.utc),
+        )
+        .group_by(Voyage.chauffeur_id)
+    )
+    return {ligne[0]: ligne[1] for ligne in resultat.all()}
 
 
 async def modifier_voyage(session: AsyncSession, voyage_id: UUID,
@@ -354,6 +433,88 @@ async def supprimer_voyage(session: AsyncSession, voyage_id: UUID) -> None:
     voyage = await obtenir_voyage(session, voyage_id)
     await session.delete(voyage)
     await session.commit()
+
+
+async def rejoindre_voyage(
+    session: AsyncSession, *, voyage_id: UUID, chauffeur_id: UUID
+) -> Voyage:
+    """Un chauffeur indépendant se désigne lui-même sur un voyage **planifié**.
+
+    Flexibilité voulue par le terrain : un chauffeur qui travaille sur une autre
+    ligne (ou dont le car a changé) peut prendre un départ encore libre, sans
+    passer par le gérant de gare. Garde-fous :
+      * voyage pas encore parti (statut `planifie`) ;
+      * personne d'autre déjà désigné (sinon on refuse : l'engagement est public,
+        le suivi et les SMS partent sur ce nom).
+    """
+    voyage = await session.get(Voyage, voyage_id)
+    if voyage is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail="Voyage introuvable"
+        )
+    if voyage.chauffeur_id == chauffeur_id:
+        return voyage  # déjà le mien : idempotent (double clic du téléphone)
+    if voyage.statut != "planifie":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                f"Ce voyage est « {voyage.statut} » : on ne peut plus s'y ajouter. "
+                "Demandez au gérant de gare de créer un nouveau départ."
+            ),
+        )
+    if voyage.chauffeur_id is not None:
+        autre = await session.get(Utilisateur, voyage.chauffeur_id)
+        nom = "un autre chauffeur"
+        if autre is not None:
+            nom = f"{dechiffrer_donnee(autre.prenom_chiffre) if autre.prenom_chiffre else ''} " \
+                  f"{dechiffrer_donnee(autre.nom_chiffre) if autre.nom_chiffre else ''}".strip() \
+                  or (autre.digiid_public or "un autre chauffeur")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"{nom} conduit déjà ce voyage (statut « planifie »). Choisissez un autre départ.",
+        )
+
+    voyage.chauffeur_id = chauffeur_id
+    await session.commit()
+    await session.refresh(voyage)
+    journal.info(
+        f"voyage_rejoint | chauffeur={chauffeur_id} | voyage={voyage_id} "
+        f"| ligne={voyage.ligne_id} | depart={voyage.date_depart}"
+    )
+    return voyage
+
+
+async def quitter_voyage(
+    session: AsyncSession, *, voyage_id: UUID, chauffeur_id: UUID
+) -> Voyage:
+    """Un chauffeur se retire d'un voyage tant qu'il n'est pas parti.
+
+    Même logique que `rejoindre_voyage` : on ne « débarque » pas un car déjà en
+    route (les colis et passagers à bord dépendent de ce chauffeur).
+    """
+    voyage = await session.get(Voyage, voyage_id)
+    if voyage is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail="Voyage introuvable"
+        )
+    if voyage.chauffeur_id != chauffeur_id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Vous n'êtes pas le chauffeur de ce voyage.",
+        )
+    if voyage.statut != "planifie":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                "Ce voyage a déjà commencé : vous ne pouvez plus vous en retirer. "
+                "Terminez le voyage ou contactez le gérant de gare."
+            ),
+        )
+    voyage.chauffeur_id = None
+    await session.commit()
+    await session.refresh(voyage)
+    journal.info(f"voyage_quitte | chauffeur={chauffeur_id} | voyage={voyage_id}")
+    return voyage
 
 
 # ─── Acteurs logistiques ─────────────────────────────────────────────

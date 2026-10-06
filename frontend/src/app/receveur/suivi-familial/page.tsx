@@ -340,6 +340,7 @@ function Contenu() {
                         gareArriveeId={suivi.gare_arrivee_id}
                         voyageIdActuel={suivi.voyage_id}
                         chauffeurNomActuel={suivi.chauffeur_nom}
+                        statut={suivi.statut}
                         surAffecter={async (voyageId) => {
                           const maj = await logistiqueAPI.suiviFamilial.affecter(
                             suivi.id,

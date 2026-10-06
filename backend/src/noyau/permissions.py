@@ -114,7 +114,7 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
     RoleUtilisateur.GERANT_GARE: frozenset({
         "logistique.lire", "logistique.ecrire", "logistique.supprimer",
         "logistique.colis.creer", "logistique.scan",
-        "logistique.profil.ecrire",
+        "logistique.profil.ecrire", "logistique.voyage.rejoindre",
         "paiement.lire", "paiement.payer",
     }),
     RoleUtilisateur.RECEVEUR: frozenset({
@@ -123,11 +123,12 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
         "paiement.lire", "paiement.payer",
     }),
     # Le chauffeur peut désormais **enregistrer lui-même** ses clients (colis ou
-    # passager) et tenir à jour son dossier professionnel (identité, permis,
-    # véhicule) : c'est la traçabilité « en route » qui rend la chaîne fiable.
+    # passager), tenir à jour son dossier professionnel (identité, permis,
+    # véhicule) et **choisir ses voyages** : c'est la traçabilité « en route » qui
+    # rend la chaîne fiable, et la flexibilité qui fait vivre le réseau.
     RoleUtilisateur.CHAUFFEUR: frozenset({
         "logistique.lire", "logistique.scan", "logistique.colis.creer",
-        "logistique.profil.ecrire",
+        "logistique.profil.ecrire", "logistique.voyage.rejoindre",
         "paiement.lire",
     }),
     RoleUtilisateur.COMMERCANT: frozenset({

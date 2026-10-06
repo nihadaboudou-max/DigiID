@@ -1,3 +1,4 @@
+
 "use client";
 
 /**
@@ -15,12 +16,17 @@ import { useNotifications } from "@/contextes/notifications";
 import { ErreurAPI } from "@/services/client_api";
 import {
   logistiqueAPI as api,
+  type Acteur,
+  type ChauffeurDisponible,
   type Gare,
   type Ligne,
   type Vehicule,
   type Voyage,
-  type Acteur,
 } from "@/services/logistique_api";
+import {
+  listerTousUtilisateurs,
+  type UtilisateurComplet,
+} from "@/services/super_admin_utilisateurs";
 
 const ONGLETS = ["Gares", "Lignes", "Véhicules", "Voyages", "Acteurs"] as const;
 type Onglet = (typeof ONGLETS)[number];
@@ -253,6 +259,113 @@ function BoutonSupprimer({ onClick }: { onClick: () => void }) {
   );
 }
 
+/**
+ * Annuaire restreint à un rôle : on choisit une **personne**, jamais un UUID.
+ *
+ * Les noms étant chiffrés au repos, la recherche par nom se fait après
+ * déchiffrement, côté client (le backend ne peut pas filtrer dessus).
+ */
+function SelecteurUtilisateur({
+  role,
+  valeur,
+  surChoix,
+}: {
+  role: string;
+  valeur: string;
+  surChoix: (id: string) => void;
+}) {
+  const [utilisateurs, setUtilisateurs] = useState<UtilisateurComplet[]>([]);
+  const [recherche, setRecherche] = useState("");
+  const [chargement, setChargement] = useState(true);
+
+  useEffect(() => {
+    let annule = false;
+    setChargement(true);
+    (async () => {
+      try {
+        const reponse = await listerTousUtilisateurs({
+          role,
+          limite: 100,
+          est_supprime: false,
+        });
+        if (!annule) setUtilisateurs(reponse.utilisateurs);
+      } catch {
+        if (!annule) setUtilisateurs([]);
+      } finally {
+        if (!annule) setChargement(false);
+      }
+    })();
+    return () => {
+      annule = true;
+    };
+  }, [role]);
+
+  const terme = recherche.trim().toLowerCase();
+  const filtres = terme
+    ? utilisateurs.filter((u) =>
+        `${u.prenom ?? ""} ${u.nom ?? ""} ${u.telephone ?? ""} ${u.email} ${
+          u.ville ?? ""
+        }`
+          .toLowerCase()
+          .includes(terme),
+      )
+    : utilisateurs;
+  const choisi = utilisateurs.find((u) => u.id === valeur) ?? null;
+
+  if (chargement) {
+    return (
+      <p className="text-xs italic text-ardoise-clair">
+        Chargement des comptes « {role} »…
+      </p>
+    );
+  }
+  if (utilisateurs.length === 0) {
+    return (
+      <div className="rounded-lg bg-ocre/10 p-2 text-xs text-ardoise">
+        Aucun compte avec le rôle « {role} ». Créez d&apos;abord le compte dans
+        <span className="font-medium"> Super admin → Utilisateurs</span>, puis
+        revenez ici pour l&apos;inscrire au référentiel logistique.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <ChampSimple
+        libelle="Rechercher dans l'annuaire"
+        value={recherche}
+        onChange={setRecherche}
+        placeholder="Nom, prénom ou numéro"
+      />
+      <ChampSelect
+        libelle="Utilisateur"
+        value={valeur}
+        onChange={surChoix}
+        requis
+        options={filtres.map((u) => ({
+          valeur: u.id,
+          libelle: `${u.prenom ?? "?"} ${u.nom ?? ""} — ${
+            u.telephone ?? "tél. non renseigné"
+          }${u.ville ? ` — ${u.ville}` : ""}`,
+        }))}
+        placeholder={filtres.length > 0 ? "Choisir un utilisateur…" : "Aucun résultat"}
+      />
+      {choisi && (
+        <div className="space-y-0.5 rounded-lg border border-lagune/25 bg-lagune/5 p-2 text-xs text-ardoise">
+          <p className="font-semibold">
+            {choisi.prenom} {choisi.nom}
+          </p>
+          <p>📞 {choisi.telephone ?? "Téléphone non renseigné"}</p>
+          <p>✉️ {choisi.email}</p>
+          <p>
+            Ville : {choisi.ville ?? "—"} · Rôle : {choisi.role}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const clsCellule = "py-2 pr-3 border-b border-ardoise-clair/5";
 
 // ─── Section Gares ───────────────────────────────────────────────────
@@ -466,6 +579,37 @@ function SectionVoyage({
   const { notifier } = useNotifications();
   const [f, setF] = useState({ ligne_id: "", vehicule_id: "", chauffeur_id: "", date_depart: "", statut: "planifie" });
   const [enCours, setEnCours] = useState(false);
+  // Chauffeurs proposés à partir de la gare de départ de la ligne choisie.
+  const [chauffeurs, setChauffeurs] = useState<ChauffeurDisponible[]>([]);
+  const [rechercheChauffeur, setRechercheChauffeur] = useState("");
+  const [chargementChauffeurs, setChargementChauffeurs] = useState(false);
+
+  const gareDepartId =
+    lignes.find((l) => l.id === f.ligne_id)?.gare_depart_id ?? null;
+
+  useEffect(() => {
+    let annule = false;
+    setChargementChauffeurs(true);
+    (async () => {
+      try {
+        const elements = await api.chauffeurs.lister({
+          gare_depart_id: gareDepartId ?? undefined,
+          recherche: rechercheChauffeur.trim() || undefined,
+        });
+        if (!annule) setChauffeurs(elements);
+      } catch {
+        if (!annule) setChauffeurs([]);
+      } finally {
+        if (!annule) setChargementChauffeurs(false);
+      }
+    })();
+    return () => {
+      annule = true;
+    };
+  }, [gareDepartId, rechercheChauffeur]);
+
+  const chauffeurChoisi =
+    chauffeurs.find((c) => c.utilisateur_id === f.chauffeur_id) ?? null;
 
   const optionsLignes = lignes.map((l) => ({
     valeur: l.id,
@@ -501,7 +645,39 @@ function SectionVoyage({
         <form onSubmit={soumettre} className="space-y-3">
           <ChampSelect libelle="Ligne" value={f.ligne_id} onChange={(v) => setF({ ...f, ligne_id: v })} options={optionsLignes} requis />
           <ChampSelect libelle="Véhicule" value={f.vehicule_id} onChange={(v) => setF({ ...f, vehicule_id: v })} options={optionsVehicules} requis />
-          <ChampSimple libelle="Chauffeur (ID utilisateur)" value={f.chauffeur_id} onChange={(v) => setF({ ...f, chauffeur_id: v })} placeholder="Optionnel" />
+          {/* Annuaire des chauffeurs : on choisit une personne, pas un UUID. */}
+          <ChampSimple
+            libelle="Filtrer les chauffeurs"
+            value={rechercheChauffeur}
+            onChange={setRechercheChauffeur}
+            placeholder="Nom, prénom ou numéro"
+          />
+          {chargementChauffeurs ? (
+            <p className="text-xs italic text-ardoise-clair">Chargement des chauffeurs…</p>
+          ) : (
+            <ChampSelect
+              libelle={gareDepartId ? "Chauffeur (gare de départ)" : "Chauffeur"}
+              value={f.chauffeur_id}
+              onChange={(v) => setF({ ...f, chauffeur_id: v })}
+              options={chauffeurs.map((c) => ({
+                valeur: c.utilisateur_id,
+                libelle: `${c.nom_complet}${c.telephone ? ` — ${c.telephone}` : ""}`,
+              }))}
+              placeholder="Aucun chauffeur"
+            />
+          )}
+          {chauffeurChoisi && (
+            <div className="space-y-0.5 rounded-lg border border-ocre/25 bg-ocre/5 p-2 text-xs text-ardoise">
+              <p className="font-semibold">{chauffeurChoisi.nom_complet}</p>
+              <p>📞 {chauffeurChoisi.telephone ?? "Téléphone non renseigné"}</p>
+              <p>
+                {chauffeurChoisi.numero_licence
+                  ? `Licence ${chauffeurChoisi.numero_licence}`
+                  : "Licence non renseignée"}
+                {chauffeurChoisi.gare_nom ? ` · ${chauffeurChoisi.gare_nom}` : ""}
+              </p>
+            </div>
+          )}
           <ChampSimple libelle="Départ" type="datetime-local" value={f.date_depart} onChange={(v) => setF({ ...f, date_depart: v })} requis />
           <ChampSelect
             libelle="Statut"
@@ -520,13 +696,14 @@ function SectionVoyage({
       </Carte>
       <Carte>
         <h2 className="font-semibold mb-3">{voyages.length} voyage(s)</h2>
-        <TableauSimple entetes={["Départ", "Véhicule", "Chauffeur", "Statut", ""]}>
+        <TableauSimple entetes={["Départ", "Trajet", "Véhicule", "Chauffeur", "Statut", ""]}>
           {voyages.length === 0 ? (
-            <LigneVide colonnes={5} message="Aucun voyage." />
+            <LigneVide colonnes={6} message="Aucun voyage." />
           ) : (
             voyages.map((v) => (
               <tr key={v.id}>
                 <td className={clsCellule}>{new Date(v.date_depart).toLocaleString("fr-FR")}</td>
+                <td className={clsCellule}>{v.ligne_libelle ?? v.ligne_id}</td>
                 <td className={clsCellule}>{v.vehicule_immatriculation ?? v.vehicule_id}</td>
                 <td className={clsCellule}>{v.chauffeur_nom ?? "—"}</td>
                 <td className={clsCellule}><Badge variante="lagune">{v.statut}</Badge></td>
@@ -579,11 +756,11 @@ function SectionActeur({
       <Carte>
         <h2 className="font-semibold mb-3">Nouvel acteur</h2>
         <form onSubmit={soumettre} className="space-y-3">
-          <ChampSimple libelle="Utilisateur (ID)" value={f.utilisateur_id} onChange={(v) => setF({ ...f, utilisateur_id: v })} requis />
+          {/* Le rôle d'abord : il détermine l'annuaire proposé juste en dessous. */}
           <ChampSelect
             libelle="Rôle"
             value={f.role}
-            onChange={(v) => setF({ ...f, role: v })}
+            onChange={(v) => setF({ ...f, role: v, utilisateur_id: "" })}
             placeholder="Receveur"
             options={[
               { valeur: "receveur", libelle: "Receveur" },
@@ -592,20 +769,31 @@ function SectionActeur({
               { valeur: "commercant", libelle: "Commerçant" },
             ]}
           />
+          <SelecteurUtilisateur
+            role={f.role}
+            valeur={f.utilisateur_id}
+            surChoix={(id) => setF({ ...f, utilisateur_id: id })}
+          />
           <ChampSelect libelle="Gare" value={f.gare_id} onChange={(v) => setF({ ...f, gare_id: v })} options={optionsGares} requis />
           <ChampSimple libelle="N° licence" value={f.numero_licence} onChange={(v) => setF({ ...f, numero_licence: v })} placeholder="Optionnel" />
-          <Bouton type="submit" variante="primaire" chargement={enCours}>Créer</Bouton>
+          <Bouton type="submit" variante="primaire" chargement={enCours} disabled={!f.utilisateur_id}>Créer</Bouton>
         </form>
       </Carte>
       <Carte>
         <h2 className="font-semibold mb-3">{acteurs.length} acteur(s)</h2>
-        <TableauSimple entetes={["Utilisateur", "Rôle", "Gare", "Licence", ""]}>
+        <TableauSimple entetes={["Utilisateur", "Téléphone", "Rôle", "Gare", "Licence", ""]}>
           {acteurs.length === 0 ? (
-            <LigneVide colonnes={5} message="Aucun acteur." />
+            <LigneVide colonnes={6} message="Aucun acteur." />
           ) : (
             acteurs.map((a) => (
               <tr key={a.id}>
-                <td className={clsCellule}>{a.utilisateur_nom ?? a.utilisateur_id}</td>
+                <td className={clsCellule}>
+                  <span className="font-medium">
+                    {a.utilisateur_prenom ?? ""}{" "}
+                    {a.utilisateur_nom_famille ?? a.utilisateur_nom ?? a.utilisateur_id}
+                  </span>
+                </td>
+                <td className={clsCellule}>{a.utilisateur_telephone ?? "—"}</td>
                 <td className={clsCellule}><Badge variante="ocre">{a.role}</Badge></td>
                 <td className={clsCellule}>{a.gare_nom ?? "—"}</td>
                 <td className={clsCellule}>{a.numero_licence ?? "—"}</td>

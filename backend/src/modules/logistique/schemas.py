@@ -158,6 +158,10 @@ class VoyageResponse(BaseModel):
     modifie_le: Optional[datetime] = None
     vehicule_immatriculation: Optional[str] = None
     chauffeur_nom: Optional[str] = None
+    # Trajet lisible (« Dakar → Thiès ») : évite un appel par voyage côté front.
+    ligne_libelle: Optional[str] = None
+    gare_depart_id: Optional[UUID] = None
+    gare_arrivee_id: Optional[UUID] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -192,7 +196,49 @@ class ActeurResponse(BaseModel):
     modifie_le: Optional[datetime] = None
     utilisateur_nom: Optional[str] = None
     gare_nom: Optional[str] = None
+    # Fiche utilisateur déchiffrée (les noms/téléphones sont chiffrés au repos) :
+    # le super-admin et le guichet voient **qui** ils désignent avant de valider.
+    utilisateur_prenom: Optional[str] = None
+    utilisateur_nom_famille: Optional[str] = None
+    utilisateur_telephone: Optional[str] = None
+    utilisateur_digiid_public: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+
+
+class ChauffeurDisponible(BaseModel):
+    """Chauffeur proposé à l'attribution d'un colis ou d'un passager.
+
+    Répond au terrain : on ne désigne pas un chauffeur par un identifiant
+    technique, on le **reconnaît** — par le scan de sa carte DigiID, par son
+    code, ou dans la liste des chauffeurs qui font ce trajet (recherche par nom).
+    """
+    utilisateur_id: UUID
+    nom_complet: str
+    prenom: Optional[str] = None
+    nom_famille: Optional[str] = None
+    telephone: Optional[str] = None
+    digiid_public: Optional[str] = None
+    numero_licence: Optional[str] = None
+    gare_id: Optional[UUID] = None
+    gare_nom: Optional[str] = None
+    # Vrai si le chauffeur est rattaché à la gare de départ du trajet ou s'il a
+    # déjà un voyage (planifié / en cours) sur cette ligne.
+    fait_le_trajet: bool = False
+    prochain_depart_le: Optional[datetime] = None
+
+
+class VoyagePublic(BaseModel):
+    """Horaire public d'un voyage (page citoyens) — aucune donnée sensible."""
+    voyage_id: UUID
+    trajet: str
+    gare_depart: Optional[str] = None
+    gare_arrivee: Optional[str] = None
+    date_depart: datetime
+    vehicule: Optional[str] = None
+    # « Moussa D. » : on identifie le chauffeur sans exposer son nom complet.
+    chauffeur_apercu: Optional[str] = None
+    statut: str
+    capacite: Optional[int] = None
 
 
 # ─── Ticket (QR + numéro en clair) ───────────────────────────────────

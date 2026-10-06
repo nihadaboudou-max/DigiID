@@ -207,7 +207,7 @@ function Contenu() {
             gareArriveeId={colis.gare_arrivee_id}
             voyageIdActuel={colis.voyage_id}
             chauffeurNomActuel={colis.chauffeur_nom}
-            desactive={colis.statut === "livre" || colis.statut === "annule"}
+            statut={colis.statut}
             surAffecter={async (voyageId) => {
               const mis_a_jour = await logistiqueAPI.colis.affecter(colis.id, {
                 voyage_id: voyageId,

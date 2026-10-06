@@ -16,7 +16,7 @@ import {
   IconePartage, IconeParametres, IconeBouclier, IconeStatistique,
   IconeAlerte, IconeJournal, IconeCle, IconeVisage,
   IconeIdentite, IconeEmail, IconeCadenas, IconeScan, IconeFlecheBas,
-  IconeCheck, IconeEnvoyer, IconeColis, IconeTicket, IconePortefeuille,
+  IconeCheck, IconeEnvoyer, IconeColis, IconeTicket, IconePortefeuille, IconeCamion,
 } from "@/composants/commun/Icones";
 
 interface Lien {
@@ -308,6 +308,7 @@ export function BarreLaterale() {
   else if (utilisateur.role === "chauffeur") {
     liens = [
       { href: "/chauffeur/dashboard", libelle: "Mes voyages", Icone: IconeColis },
+      { href: "/chauffeur/voyages", libelle: "Choisir un voyage", Icone: IconeCamion },
       { href: "/chauffeur/colis", libelle: "Mes colis", Icone: IconeTicket },
       { href: "/chauffeur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
       { href: "/chauffeur/passagers", libelle: "Mes passagers", Icone: IconeIdentite },

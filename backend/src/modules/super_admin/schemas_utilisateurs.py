@@ -92,6 +92,9 @@ class UtilisateurApercu(BaseModel):
     email: str
     prenom: Optional[str] = None
     nom: Optional[str] = None
+    # Numéro déchiffré : indispensable pour désigner un chauffeur dans le
+    # référentiel logistique (on montre l'annuaire avant de valider).
+    telephone: Optional[str] = None
     role: str
     est_actif: bool
     est_verrouille: bool

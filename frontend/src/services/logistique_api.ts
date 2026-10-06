@@ -70,7 +70,45 @@ export interface Voyage {
   statut: string;
   vehicule_immatriculation: string | null;
   chauffeur_nom: string | null;
+  /** Trajet lisible renvoyé par l'API : « Dakar → Thiès ». */
+  ligne_libelle: string | null;
+  gare_depart_id: string | null;
+  gare_arrivee_id: string | null;
   cree_le: string;
+}
+
+/**
+ * Chauffeur proposé à l'attribution — on le **reconnaît**, on ne le tape pas.
+ *
+ * Reflète `ChauffeurDisponible` côté backend : fiche complète (nom, prénom,
+ * téléphone, licence, gare) pour vérifier **qui** on désigne avant de valider.
+ */
+export interface ChauffeurDisponible {
+  utilisateur_id: string;
+  nom_complet: string;
+  prenom: string | null;
+  nom_famille: string | null;
+  telephone: string | null;
+  digiid_public: string | null;
+  numero_licence: string | null;
+  gare_id: string | null;
+  gare_nom: string | null;
+  /** Rattaché à la gare de départ, ou a déjà un voyage sur cette ligne. */
+  fait_le_trajet: boolean;
+  prochain_depart_le: string | null;
+}
+
+/** Horaire public d'un voyage (page citoyens) — aucune donnée sensible. */
+export interface VoyagePublic {
+  voyage_id: string;
+  trajet: string;
+  gare_depart: string | null;
+  gare_arrivee: string | null;
+  date_depart: string;
+  vehicule: string | null;
+  chauffeur_apercu: string | null;
+  statut: string;
+  capacite: number | null;
 }
 
 export interface Acteur {
@@ -82,6 +120,11 @@ export interface Acteur {
   actif: boolean;
   utilisateur_nom: string | null;
   gare_nom: string | null;
+  // Fiche utilisateur déchiffrée (le super-admin voit qui il désigne).
+  utilisateur_prenom: string | null;
+  utilisateur_nom_famille: string | null;
+  utilisateur_telephone: string | null;
+  utilisateur_digiid_public: string | null;
   cree_le: string;
 }
 
@@ -105,10 +148,24 @@ export const logistiqueAPI = {
     supprimer: (id: string) => clientAPI.delete(`${BASE}/vehicules/${id}`, opts),
   },
   voyages: {
-    lister: (filtres?: { statut?: string; par_page?: number }) => {
+    lister: (filtres?: {
+      statut?: string;
+      /** Cars d'un chauffeur donné (« mes voyages »). */
+      chauffeur_id?: string;
+      /** Cars d'une ligne (trajet) donnée. */
+      ligne_id?: string;
+      /** Uniquement les départs à venir (tri chronologique). */
+      a_partir_de?: string;
+      page?: number;
+      par_page?: number;
+    }) => {
       const qs = new URLSearchParams();
       qs.set("par_page", String(filtres?.par_page ?? 100));
+      if (filtres?.page) qs.set("page", String(filtres.page));
       if (filtres?.statut) qs.set("statut", filtres.statut);
+      if (filtres?.chauffeur_id) qs.set("chauffeur_id", filtres.chauffeur_id);
+      if (filtres?.ligne_id) qs.set("ligne_id", filtres.ligne_id);
+      if (filtres?.a_partir_de) qs.set("a_partir_de", filtres.a_partir_de);
       return clientAPI.get<ReponseListe<Voyage>>(`${BASE}/voyages?${qs.toString()}`, opts);
     },
     obtenir: (id: string) => clientAPI.get<Voyage>(`${BASE}/voyages/${id}`, opts),
@@ -125,11 +182,74 @@ export const logistiqueAPI = {
     /** « Prévenir de l'approche » : SMS pré-alerte (passagers, proches, destinataires). */
     preAlerte: (id: string, d?: DonneesPreAlerte) =>
       clientAPI.post<ResultatPreAlerte>(`${BASE}/voyages/${id}/pre-alerte`, d ?? {}, opts),
+
+    // ── Le chauffeur choisit ses voyages (flexibilité multi-lignes) ──
+    /**
+     * Se désigner comme chauffeur d'un voyage **planifié** encore libre.
+     *
+     * Répond au terrain : un chauffeur indépendant travaille sur plusieurs
+     * lignes ; il prend un départ sans passer par le gérant de gare. Refusé si
+     * un autre chauffeur est déjà engagé ou si le car est déjà parti.
+     */
+    rejoindre: (id: string) =>
+      clientAPI.post<Voyage>(`${BASE}/voyages/${id}/chauffeur`, {}, opts),
+    /** Se retirer d'un voyage **avant** le départ (libère le car). */
+    quitter: (id: string) =>
+      clientAPI.delete<Voyage>(`${BASE}/voyages/${id}/chauffeur`, opts),
   },
   acteurs: {
     lister: () => clientAPI.get<ReponseListe<Acteur>>(`${BASE}/acteurs?par_page=100`, opts),
     creer: (d: Record<string, unknown>) => clientAPI.post<Acteur>(`${BASE}/acteurs`, d, opts),
     supprimer: (id: string) => clientAPI.delete(`${BASE}/acteurs/${id}`, opts),
+  },
+
+  // ─── Chauffeurs : attribution sans identifiant technique ────────────
+  // Le receveur scanne la carte du chauffeur, saisit son code, ou le choisit
+  // dans la liste des chauffeurs qui font ce trajet (recherche par nom).
+  chauffeurs: {
+    lister: (filtres?: {
+      gare_depart_id?: string;
+      ligne_id?: string;
+      utilisateur_id?: string;
+      /** Nom, prénom, téléphone ou licence. */
+      recherche?: string;
+    }) => {
+      const qs = new URLSearchParams();
+      if (filtres?.gare_depart_id) qs.set("gare_depart_id", filtres.gare_depart_id);
+      if (filtres?.ligne_id) qs.set("ligne_id", filtres.ligne_id);
+      if (filtres?.utilisateur_id) qs.set("utilisateur_id", filtres.utilisateur_id);
+      if (filtres?.recherche) qs.set("recherche", filtres.recherche);
+      const suffixe = qs.toString();
+      return clientAPI.get<ChauffeurDisponible[]>(
+        `${BASE}/chauffeurs${suffixe ? `?${suffixe}` : ""}`,
+        opts,
+      );
+    },
+    /** Retrouve un chauffeur en scannant sa carte DigiID (ou en saisissant son code). */
+    parCode: (code: string) =>
+      clientAPI.get<ChauffeurDisponible>(
+        `${BASE}/chauffeurs/par-code?code=${encodeURIComponent(code)}`,
+        opts,
+      ),
+  },
+
+  // ─── Horaires publics (page citoyens, sans connexion) ──────────────
+  horaires: {
+    /** Les cars qui partent : trajet, heure, véhicule, chauffeur (aperçu). */
+    prochains: (filtres?: {
+      gare_depart_id?: string;
+      gare_arrivee_id?: string;
+      limite?: number;
+    }) => {
+      const qs = new URLSearchParams();
+      if (filtres?.gare_depart_id) qs.set("gare_depart_id", filtres.gare_depart_id);
+      if (filtres?.gare_arrivee_id) qs.set("gare_arrivee_id", filtres.gare_arrivee_id);
+      if (filtres?.limite) qs.set("limite", String(filtres.limite));
+      const suffixe = qs.toString();
+      return clientAPI.get<VoyagePublic[]>(
+        `${BASE}/public/horaires${suffixe ? `?${suffixe}` : ""}`,
+      );
+    },
   },
 
   // ─── Colis (guichet receveur) ───────────────────────────────────────
@@ -294,6 +414,29 @@ export function libelleLigne(ligne: Ligne | null | undefined): string {
 export async function voyagesDuChauffeur(
   utilisateurId: string,
 ): Promise<Voyage[]> {
-  const reponse = await logistiqueAPI.voyages.lister({ par_page: 100 });
-  return reponse.elements.filter((v) => v.chauffeur_id === utilisateurId);
+  const reponse = await logistiqueAPI.voyages.lister({
+    chauffeur_id: utilisateurId,
+    par_page: 100,
+  });
+  return reponse.elements;
+}
+
+/**
+ * Statuts à partir desquels un enregistrement ne peut plus être réaffecté.
+ *
+ * Règle terrain : « on peut changer de chauffeur **tant que** le colis n'est pas
+ * parti ». Dès le départ (transit / en route) ou à l'arrivée, le chauffeur est
+ * engagé : le changer fausserait le suivi et les SMS déjà envoyés.
+ */
+const STATUTS_ATTRIBUTION_FIGEE = new Set([
+  "en_transit",
+  "en_route",
+  "arrive",
+  "livre",
+  "annule",
+]);
+
+export function attributionFigee(statut: string | null | undefined): boolean {
+  if (!statut) return false;
+  return STATUTS_ATTRIBUTION_FIGEE.has(statut);
 }

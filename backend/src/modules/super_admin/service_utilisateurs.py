@@ -75,6 +75,7 @@ def _utilisateur_vers_apercu(u: Utilisateur) -> UtilisateurApercu:
         email=dechiffrer_donnee(u.email_chiffre),
         prenom=dechiffrer_donnee(u.prenom_chiffre) if u.prenom_chiffre else None,
         nom=dechiffrer_donnee(u.nom_chiffre) if u.nom_chiffre else None,
+        telephone=dechiffrer_donnee(u.telephone_chiffre) if u.telephone_chiffre else None,
         role=u.role,
         est_actif=u.est_actif,
         est_verrouille=u.est_verrouille,

@@ -14,7 +14,7 @@ import {
   IconePartage, IconeParametres, IconeBouclier, IconeStatistique,
   IconeAlerte, IconeJournal, IconeCle, IconeCheck, IconeFlecheBas, IconeVisage,
   IconeIdentite, IconeEmail, IconeCadenas, IconeScan, IconeEnvoyer,
-  IconeColis, IconeTicket, IconePortefeuille,
+  IconeColis, IconeTicket, IconePortefeuille, IconeCamion,
 } from "@/composants/commun/Icones";
 
 interface Lien {
@@ -126,6 +126,7 @@ const LIENS_RECEVEUR: Lien[] = [
 
 const LIENS_CHAUFFEUR: Lien[] = [
   { href: "/chauffeur/dashboard", libelle: "Mes voyages", Icone: IconeColis },
+  { href: "/chauffeur/voyages", libelle: "Choisir un voyage", Icone: IconeCamion },
   { href: "/chauffeur/colis", libelle: "Mes colis", Icone: IconeTicket },
   { href: "/chauffeur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
   { href: "/chauffeur/passagers", libelle: "Mes passagers", Icone: IconeIdentite },

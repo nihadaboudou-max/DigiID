@@ -17,6 +17,8 @@ export interface UtilisateurComplet {
   email: string;
   prenom: string | null;
   nom: string | null;
+  /** Numéro déchiffré (sert d'annuaire pour désigner un chauffeur). */
+  telephone: string | null;
   role: string;
   est_actif: boolean;
   est_verrouille: boolean;

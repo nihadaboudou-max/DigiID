@@ -1,9 +1,11 @@
 
 # -*- coding: utf-8 -*-
 """Routes API du domaine logistique (référentiel + colis de bout en bout)."""
+import unicodedata
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
@@ -33,15 +35,45 @@ async def _nom_gare(session: AsyncSession, gare_id: UUID | None) -> str | None:
     return f"{gare.nom} ({gare.ville})" if gare else None
 
 
-async def _nom_utilisateur(session: AsyncSession, utilisateur_id: UUID | None) -> str | None:
+def _texte_dechiffre(valeur_chiffree: str | None) -> str:
+    """Déchiffre un champ utilisateur (nom, prénom, téléphone) stocké chiffré."""
+    return dechiffrer_donnee(valeur_chiffree) if valeur_chiffree else ""
+
+
+async def _fiche_utilisateur(
+    session: AsyncSession, utilisateur_id: UUID | None
+) -> Utilisateur | None:
     if utilisateur_id is None:
         return None
-    utilisateur = await session.get(Utilisateur, utilisateur_id)
-    if utilisateur is None:
-        return None
-    prenom = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else ""
-    nom = dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else ""
+    return await session.get(Utilisateur, utilisateur_id)
+
+
+def _nom_complet(utilisateur: Utilisateur) -> str:
+    prenom = _texte_dechiffre(utilisateur.prenom_chiffre)
+    nom = _texte_dechiffre(utilisateur.nom_chiffre)
     return f"{prenom} {nom}".strip() or utilisateur.digiid_public or "Utilisateur"
+
+
+def _apercu_nom(utilisateur: Utilisateur) -> str:
+    """« Moussa D. » — identifie le chauffeur sans exposer son nom complet."""
+    prenom = _texte_dechiffre(utilisateur.prenom_chiffre)
+    nom = _texte_dechiffre(utilisateur.nom_chiffre)
+    if prenom and nom:
+        return f"{prenom} {nom[0].upper()}."
+    return prenom or nom or utilisateur.digiid_public or "Chauffeur"
+
+
+def _normaliser_recherche(texte: str) -> str:
+    """Minuscules sans accents : « Amadou » se trouve en tapant « amad »."""
+    sans_accents = "".join(
+        c for c in unicodedata.normalize("NFKD", texte) if not unicodedata.combining(c)
+    )
+    return sans_accents.casefold().strip()
+
+
+async def _nom_utilisateur(session: AsyncSession, utilisateur_id: UUID | None) -> str | None:
+    utilisateur = await _fiche_utilisateur(session, utilisateur_id)
+    return _nom_complet(utilisateur) if utilisateur is not None else None
 
 
 async def _enrichir_ligne(session: AsyncSession, ligne: Ligne) -> Ligne:
@@ -59,13 +91,49 @@ async def _enrichir_voyage(session: AsyncSession, voyage: Voyage) -> Voyage:
     vehicule = await session.get(Vehicule, voyage.vehicule_id)
     voyage.vehicule_immatriculation = vehicule.immatriculation if vehicule else None
     voyage.chauffeur_nom = await _nom_utilisateur(session, voyage.chauffeur_id)
+    # Trajet lisible directement sur le voyage : « Dakar → Thiès ».
+    ligne = await session.get(Ligne, voyage.ligne_id)
+    if ligne is not None:
+        voyage.gare_depart_id = ligne.gare_depart_id
+        voyage.gare_arrivee_id = ligne.gare_arrivee_id
+        depart = await session.get(Gare, ligne.gare_depart_id)
+        arrivee = await session.get(Gare, ligne.gare_arrivee_id)
+        if depart is not None and arrivee is not None:
+            voyage.ligne_libelle = f"{depart.ville} → {arrivee.ville}"
     return voyage
 
 
 async def _enrichir_acteur(session: AsyncSession, acteur: ActeurLogistique) -> ActeurLogistique:
     acteur.utilisateur_nom = await _nom_utilisateur(session, acteur.utilisateur_id)
     acteur.gare_nom = await _nom_gare(session, acteur.gare_id)
+    # Fiche déchiffrée : on doit pouvoir **vérifier qui** on désigne avant de valider.
+    utilisateur = await _fiche_utilisateur(session, acteur.utilisateur_id)
+    if utilisateur is not None:
+        acteur.utilisateur_prenom = _texte_dechiffre(utilisateur.prenom_chiffre) or None
+        acteur.utilisateur_nom_famille = _texte_dechiffre(utilisateur.nom_chiffre) or None
+        acteur.utilisateur_telephone = _texte_dechiffre(utilisateur.telephone_chiffre) or None
+        acteur.utilisateur_digiid_public = utilisateur.digiid_public
     return acteur
+
+
+async def _fiche_chauffeur(
+    session: AsyncSession, acteur: ActeurLogistique
+) -> schemas.ChauffeurDisponible | None:
+    """Transforme un acteur « chauffeur » en fiche proposable au guichet."""
+    utilisateur = await _fiche_utilisateur(session, acteur.utilisateur_id)
+    if utilisateur is None:
+        return None
+    return schemas.ChauffeurDisponible(
+        utilisateur_id=utilisateur.id,
+        nom_complet=_nom_complet(utilisateur),
+        prenom=_texte_dechiffre(utilisateur.prenom_chiffre) or None,
+        nom_famille=_texte_dechiffre(utilisateur.nom_chiffre) or None,
+        telephone=_texte_dechiffre(utilisateur.telephone_chiffre) or None,
+        digiid_public=utilisateur.digiid_public,
+        numero_licence=acteur.numero_licence,
+        gare_id=acteur.gare_id,
+        gare_nom=await _nom_gare(session, acteur.gare_id),
+    )
 
 
 async def _bagages_enrichis(
@@ -354,9 +422,16 @@ async def lister_voyages(
     page: int = Query(1, ge=1),
     par_page: int = Query(20, ge=1, le=100),
     statut: str | None = Query(None),
+    chauffeur_id: UUID | None = Query(None, description="Cars d'un chauffeur donné"),
+    ligne_id: UUID | None = Query(None, description="Cars d'une ligne (trajet) donnée"),
+    a_partir_de: datetime | None = Query(
+        None, description="Uniquement les départs à venir (ordre chronologique)"
+    ),
     session: AsyncSession = Depends(obtenir_session),
 ):
-    voyages, total = await service.lister_voyages(session, page, par_page, statut)
+    voyages, total = await service.lister_voyages(
+        session, page, par_page, statut, chauffeur_id, ligne_id, a_partir_de
+    )
     for voyage in voyages:
         await _enrichir_voyage(session, voyage)
     return schemas.ReponseListe(elements=voyages, total=total, page=page, par_page=par_page)
@@ -395,6 +470,54 @@ async def supprimer_voyage(
     session: AsyncSession = Depends(obtenir_session),
 ):
     await service.supprimer_voyage(session, voyage.id)
+
+
+# ─── Le chauffeur choisit ses voyages (flexibilité multi-lignes) ──────
+
+@routeur_voyages.post("/{voyage_id}/chauffeur",
+                      response_model=schemas.VoyageResponse,
+                      summary="Se désigner comme chauffeur d'un voyage (volontaire)")
+@require_permission("logistique.voyage.rejoindre")
+async def rejoindre_voyage(
+    voyage_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    """Un chauffeur indépendant prend un départ encore libre.
+
+    Garde-fou : il doit être **enregistré comme chauffeur** (acteur logistique),
+    sinon n'importe quel compte pourrait s'emparer d'un car.
+    """
+    acteurs = await service.lister_chauffeurs_pour_trajet(
+        session, utilisateur_id=utilisateur_courant.id
+    )
+    if not acteurs:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Votre compte n'est pas enregistré comme chauffeur : demandez au "
+                "super-admin (ou au gérant de gare) de créer votre fiche acteur."
+            ),
+        )
+    voyage = await service.rejoindre_voyage(
+        session, voyage_id=voyage_id, chauffeur_id=utilisateur_courant.id
+    )
+    return await _enrichir_voyage(session, voyage)
+
+
+@routeur_voyages.delete("/{voyage_id}/chauffeur",
+                        response_model=schemas.VoyageResponse,
+                        summary="Se retirer d'un voyage (avant le départ)")
+@require_permission("logistique.voyage.rejoindre")
+async def quitter_voyage(
+    voyage_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    voyage = await service.quitter_voyage(
+        session, voyage_id=voyage_id, chauffeur_id=utilisateur_courant.id
+    )
+    return await _enrichir_voyage(session, voyage)
 
 
 # ─── Actions groupées du chauffeur (passagers ET colis) ──────────────
@@ -512,6 +635,109 @@ async def supprimer_acteur(
     session: AsyncSession = Depends(obtenir_session),
 ):
     await service.supprimer_acteur(session, acteur.id)
+
+
+# ─── Chauffeurs (attribution sans identifiant technique) ────────────
+
+routeur_chauffeurs = APIRouter(prefix="/chauffeurs", tags=["Logistique — Chauffeurs"])
+
+
+@routeur_chauffeurs.get("", response_model=list[schemas.ChauffeurDisponible],
+                        summary="Chauffeurs proposables pour un trajet (liste + recherche)")
+@require_permission("logistique.lire")
+async def lister_chauffeurs(
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    gare_depart_id: UUID | None = Query(None, description="Gare de départ du trajet"),
+    ligne_id: UUID | None = Query(None, description="Ligne (trajet) concernée"),
+    utilisateur_id: UUID | None = Query(None, description="Retrouver un chauffeur précis"),
+    recherche: str | None = Query(None, description="Nom, prénom, téléphone ou licence"),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    """« Qui peut conduire ce trajet ? » — pour l'attribution au guichet.
+
+    Le receveur ne saisit jamais d'identifiant : il voit la liste des chauffeurs
+    rattachés à la gare de départ ou ayant déjà un voyage sur la ligne, avec nom,
+    prénom et numéro — et il peut **réduire la liste en tapant un nom**.
+    """
+    acteurs = await service.lister_chauffeurs_pour_trajet(
+        session, gare_id=gare_depart_id, ligne_id=ligne_id, utilisateur_id=utilisateur_id
+    )
+    fiches: list[schemas.ChauffeurDisponible] = []
+    for acteur in acteurs:
+        fiche = await _fiche_chauffeur(session, acteur)
+        if fiche is not None:
+            fiches.append(fiche)
+
+    # Les noms sont chiffrés au repos : la recherche se fait après déchiffrement.
+    if recherche and recherche.strip():
+        terme = _normaliser_recherche(recherche)
+        fiches = [
+            fiche for fiche in fiches
+            if terme in _normaliser_recherche(
+                " ".join(
+                    filtre for filtre in (
+                        fiche.prenom, fiche.nom_famille, fiche.telephone,
+                        fiche.numero_licence, fiche.digiid_public, fiche.nom_complet,
+                    ) if filtre
+                )
+            )
+        ]
+
+    departs = await service.prochains_departs_par_chauffeur(
+        session, [fiche.utilisateur_id for fiche in fiches]
+    )
+    for fiche in fiches:
+        fiche.prochain_depart_le = departs.get(fiche.utilisateur_id)
+        fiche.fait_le_trajet = (
+            fiche.prochain_depart_le is not None
+            or (gare_depart_id is not None and fiche.gare_id == gare_depart_id)
+        )
+    # Ceux qui font déjà le trajet d'abord, puis ordre alphabétique (annuaire).
+    fiches.sort(key=lambda f: (not f.fait_le_trajet, _normaliser_recherche(f.nom_complet)))
+    return fiches[:100]
+
+
+@routeur_chauffeurs.get("/par-code", response_model=schemas.ChauffeurDisponible,
+                        summary="Retrouver un chauffeur en scannant sa carte DigiID ou son QR")
+@require_permission("logistique.lire")
+async def chauffeur_par_code(
+    code: str = Query(..., min_length=3, max_length=300,
+                      description="DigiID public, code du QR ou URL scannée"),
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    """Le chauffeur présente sa carte (ou dicte son code) → sa fiche s'affiche.
+
+    On réutilise la résolution de carte DigiID du guichet (même source de vérité
+    que le pré-remplissage des fiches client), puis on vérifie qu'elle appartient
+    bien à un **chauffeur enregistré** avant de laisser continuer.
+    """
+    # Import local : évite tout couplage d'import entre les deux modules.
+    from src.modules.identite_digiid import schemas as schemas_identite
+    from src.modules.identite_digiid import service as service_identite
+
+    contact = await service_identite.rechercher_contact(
+        session, schemas_identite.RechercheDigiIDRequest(digiid=code)
+    )
+    acteurs = await service.lister_chauffeurs_pour_trajet(
+        session, utilisateur_id=contact.utilisateur_id
+    )
+    if not acteurs:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"{contact.nom_complet} n'est pas un chauffeur enregistré "
+                "(aucun acteur logistique « chauffeur » actif pour ce compte)."
+            ),
+        )
+    fiche = await _fiche_chauffeur(session, acteurs[0])
+    if fiche is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Chauffeur introuvable")
+    departs = await service.prochains_departs_par_chauffeur(
+        session, [fiche.utilisateur_id]
+    )
+    fiche.prochain_depart_le = departs.get(fiche.utilisateur_id)
+    return fiche
 
 
 # ─── Colis ──────────────────────────────────────────────────────────
@@ -784,6 +1010,54 @@ async def suivi_public(
     return await service.construire_suivi_public(session, code)
 
 
+@routeur_public.get("/horaires", response_model=list[schemas.VoyagePublic],
+                    summary="Prochains départs (page citoyens, sans connexion)")
+async def horaires_publics(
+    gare_depart_id: UUID | None = Query(None),
+    gare_arrivee_id: UUID | None = Query(None),
+    limite: int = Query(30, ge=1, le=100),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    """Les cars qui partent : trajet, heure, véhicule, chauffeur (aperçu).
+
+    Aucune donnée personnelle : ni client, ni colis, ni téléphone. On tolère
+    30 minutes de retard sur le départ pour qu'un car en route reste affiché.
+    """
+    voyages, _ = await service.lister_voyages(
+        session, 1, 100,
+        a_partir_de=datetime.now(timezone.utc) - timedelta(minutes=30),
+    )
+    horaires: list[schemas.VoyagePublic] = []
+    for voyage in voyages:
+        await _enrichir_voyage(session, voyage)
+        if voyage.statut not in service.STATUTS_VOYAGE_ACTIFS:
+            continue
+        if gare_depart_id is not None and voyage.gare_depart_id != gare_depart_id:
+            continue
+        if gare_arrivee_id is not None and voyage.gare_arrivee_id != gare_arrivee_id:
+            continue
+        vehicule = await session.get(Vehicule, voyage.vehicule_id)
+        chauffeur_apercu = None
+        if voyage.chauffeur_id is not None:
+            chauffeur = await _fiche_utilisateur(session, voyage.chauffeur_id)
+            if chauffeur is not None:
+                chauffeur_apercu = _apercu_nom(chauffeur)
+        horaires.append(schemas.VoyagePublic(
+            voyage_id=voyage.id,
+            trajet=voyage.ligne_libelle or "Trajet à confirmer",
+            gare_depart=await _nom_gare(session, voyage.gare_depart_id),
+            gare_arrivee=await _nom_gare(session, voyage.gare_arrivee_id),
+            date_depart=voyage.date_depart,
+            vehicule=voyage.vehicule_immatriculation,
+            chauffeur_apercu=chauffeur_apercu,
+            statut=voyage.statut,
+            capacite=vehicule.capacite if vehicule else None,
+        ))
+        if len(horaires) >= limite:
+            break
+    return horaires
+
+
 # ─── Agrégation ──────────────────────────────────────────────────────
 
 routeur_logistique = APIRouter(prefix="/api/v1/logistique")
@@ -792,6 +1066,7 @@ routeur_logistique.include_router(routeur_lignes)
 routeur_logistique.include_router(routeur_vehicules)
 routeur_logistique.include_router(routeur_voyages)
 routeur_logistique.include_router(routeur_acteurs)
+routeur_logistique.include_router(routeur_chauffeurs)
 routeur_logistique.include_router(routeur_colis)
 routeur_logistique.include_router(routeur_suivi_familial)
 routeur_logistique.include_router(routeur_public)
