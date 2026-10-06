@@ -421,6 +421,7 @@ export function BarreLaterale() {
     "/profil": IconeUtilisateur,
     "/documents-identite": IconeIdentite,
     "/identite": IconeScan,
+    "/inspection": IconeCheck,
     "/identite/carte": IconeIdentite,
     "/identite/email": IconeEmail,
     "/identite/2fa": IconeCadenas,
@@ -641,9 +642,13 @@ export function BarreLaterale() {
                   Vérifications & Sécurité du compte
                 </p>
                 {cbLienSousMenu("/identite", "Vérifications")}
+                {/* Inspection : entrée CONSERVÉE (hub d'extraction et de contrôle
+                    des documents : upload, OCR, 10 types de pièces, historique). */}
                 {cbLienSousMenu("/inspection", "Inspection")}
                 {cbLienSousMenu("/identite/email", "Vérification de l'email")}
+                {/* Menu masqué (simplification) — dé-commenter pour le réafficher :
                 {cbLienSousMenu("/identite/verification-cni", "Vérification CNIL")}
+                */}
                 {cbLienSousMenu("/identite/verification-visuelle", "Vérification visuelle")}
                 {cbLienSousMenu("/identite/2fa", "Double authentification (2FA)")}
                 {cbLienSousMenu("/identite/mot-de-passe", "Changer le mot de passe")}
@@ -657,7 +662,12 @@ export function BarreLaterale() {
               </div>
             </GroupePlie>
 
-            {/* Santé */}
+            {/* ════════════════════════════════════════════════════════
+                MENUS CITOYEN MASQUÉS (simplification du menu) — rien n'est
+                supprimé. Pour les réafficher : retirez cette ligne et celle du
+                « FIN MENUS MASQUÉS » un peu plus bas.
+
+                GROUPE « SANTÉ »
             <GroupePlie
               estActif={
                 pathname.startsWith("/citoyen/mon-dossier-medical") ||
@@ -674,7 +684,7 @@ export function BarreLaterale() {
               {cbLienSousMenu("/citoyen/mes-ordonnances", "Mes ordonnances")}
             </GroupePlie>
 
-            {/* Attestations & Communauté */}
+            GROUPE « ATTESTATIONS &amp; COMMUNAUTÉ »
             <GroupePlie
               estActif={pathname.startsWith("/attestations-communautaires")}
               icone={IconeCheck}
@@ -685,7 +695,7 @@ export function BarreLaterale() {
               {cbLienSousMenu("/attestations-communautaires", "Mes attestations")}
             </GroupePlie>
 
-            {/* Score & Récompenses */}
+            GROUPE « SCORE &amp; RÉCOMPENSES »
             <GroupePlie
               estActif={
                 pathname.startsWith("/score") ||
@@ -705,6 +715,9 @@ export function BarreLaterale() {
               {cbLienSousMenu("/parrainage", "Parrainage")}
             </GroupePlie>
 
+                ════════════════════════════════════════════════════════
+                FIN MENUS MASQUÉS */}
+
             {/* Outils */}
             <GroupePlie
               estActif={
@@ -720,8 +733,10 @@ export function BarreLaterale() {
                 pathname.startsWith("/parametres")
               }
             >
+              {/* Menus masqués (simplification) — dé-commenter pour les réafficher :
               {cbLienSousMenu("/chatbot", "Assistant DigiID (Chatbot RAG)")}
               {cbLienSousMenu("/documents", "Mes Documents (IA)")}
+              */}
               {cbLienSousMenu("/parametres", "Paramètres (Préférences, Rôle &amp; permissions)")}
             </GroupePlie>
 

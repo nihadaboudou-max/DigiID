@@ -855,59 +855,67 @@ export function BoutonMenuMobile() {
                     </div>
                   </SectionPlieMobile>
 
+                  {/* ═══════ MENUS MASQUÉS (simplification du menu citoyen) ═══════
+                  Rien n'est supprimé : retirez cette ligne et celle de « FIN MENUS MASQUÉS »
+                  plus bas pour réafficher ces deux sections.
+
                   <SectionPlieMobile titre="Suivi & Score" couleur="text-ardoise-clair/50"
-                    initialOuvert={pathname.startsWith("/score") || pathname === "/parrainage"}>
-                    <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                      {[
-                        { href: "/score", libelle: "Mon score actuel", Icone: IconeScore },
-                        { href: "/score/facteurs", libelle: "Facteurs d'impact", Icone: IconeStatistique },
-                        { href: "/score/amelioration", libelle: "Conseils d'amélioration", Icone: IconeAlerte },
-                        { href: "/parrainage", libelle: "Parrainage (bonus)", Icone: IconePartage },
-                      ].map(({ href, libelle, Icone }) => {
-                        const actif = pathname === href || pathname.startsWith(href);
-                        return (
-                          <Link key={href} href={href} onClick={() => setOuvert(false)}
-                            className={clsx("flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
-                              actif ? "bg-sable/60 text-lagune font-medium" : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise")}>
-                            <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span className="truncate">{libelle}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
+                  initialOuvert={pathname.startsWith("/score") || pathname === "/parrainage"}>
+                  <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
+                  {[
+                  { href: "/score", libelle: "Mon score actuel", Icone: IconeScore },
+                  { href: "/score/facteurs", libelle: "Facteurs d'impact", Icone: IconeStatistique },
+                  { href: "/score/amelioration", libelle: "Conseils d'amélioration", Icone: IconeAlerte },
+                  { href: "/parrainage", libelle: "Parrainage (bonus)", Icone: IconePartage },
+                  ].map(({ href, libelle, Icone }) => {
+                  const actif = pathname === href || pathname.startsWith(href);
+                  return (
+                  <Link key={href} href={href} onClick={() => setOuvert(false)}
+                  className={clsx("flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
+                  actif ? "bg-sable/60 text-lagune font-medium" : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise")}>
+                  <Icone className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="truncate">{libelle}</span>
+                  </Link>
+                  );
+                  })}
+                  </div>
                   </SectionPlieMobile>
 
                   <SectionPlieMobile titre="Attestations" couleur="text-ardoise-clair/50"
-                    initialOuvert={pathname.startsWith("/attestations-communautaires")}>
-                    <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-                      {[
-                        { href: "/attestations-communautaires", libelle: "Tableau de bord", Icone: IconeAccueil },
-                        { href: "/attestations-communautaires/nouvelle", libelle: "Nouvelle attestation", Icone: IconeEnvoyer },
-                        { href: "/attestations-communautaires/recues", libelle: "Reçues", Icone: IconeFlecheBas },
-                        { href: "/attestations-communautaires/envoyees", libelle: "Envoyées", Icone: IconeEnvoyer },
-                        { href: "/attestations-communautaires/en-attente", libelle: "En attente", Icone: IconeAlerte },
-                      ].map(({ href, libelle, Icone }) => {
-                        const actif = pathname === href;
-                        return (
-                          <Link key={href} href={href} onClick={() => setOuvert(false)}
-                            className={clsx("flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
-                              actif ? "bg-sable/60 text-lagune font-medium" : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise")}>
-                            <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span className="truncate">{libelle}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
+                  initialOuvert={pathname.startsWith("/attestations-communautaires")}>
+                  <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
+                  {[
+                  { href: "/attestations-communautaires", libelle: "Tableau de bord", Icone: IconeAccueil },
+                  { href: "/attestations-communautaires/nouvelle", libelle: "Nouvelle attestation", Icone: IconeEnvoyer },
+                  { href: "/attestations-communautaires/recues", libelle: "Reçues", Icone: IconeFlecheBas },
+                  { href: "/attestations-communautaires/envoyees", libelle: "Envoyées", Icone: IconeEnvoyer },
+                  { href: "/attestations-communautaires/en-attente", libelle: "En attente", Icone: IconeAlerte },
+                  ].map(({ href, libelle, Icone }) => {
+                  const actif = pathname === href;
+                  return (
+                  <Link key={href} href={href} onClick={() => setOuvert(false)}
+                  className={clsx("flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
+                  actif ? "bg-sable/60 text-lagune font-medium" : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise")}>
+                  <Icone className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="truncate">{libelle}</span>
+                  </Link>
+                  );
+                  })}
+                  </div>
                   </SectionPlieMobile>
+
+                  ═══════ FIN MENUS MASQUÉS ═══════ */}
 
                   <SectionPlieMobile titre="Identité" couleur="text-ardoise-clair/50"
                     initialOuvert={pathname.startsWith("/identite")}>
                     <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
                       {[
                         { href: "/identite", libelle: "Tableau de bord identité", Icone: IconeAccueil },
+                        { href: "/inspection", libelle: "Inspection (extraction de documents)", Icone: IconeCheck },
                         { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
                         { href: "/identite/verification-visuelle", libelle: "Reconnaissance faciale", Icone: IconeVisage },
-                        { href: "/identite/verification-cni", libelle: "Scan CNI", Icone: IconeScan },
+                        // Menu masqué (simplification) — dé-commenter pour le réafficher :
+                        // { href: "/identite/verification-cni", libelle: "Scan CNI", Icone: IconeScan },
                         { href: "/identite/email", libelle: "Vérification email", Icone: IconeEmail },
                         { href: "/identite/2fa", libelle: "Double authentification", Icone: IconeCadenas },
                         { href: "/identite/mot-de-passe", libelle: "Mot de passe", Icone: IconeCle },
@@ -971,59 +979,67 @@ function MenuCitoyenComplet({
         })}
       </div>
 
+      {/* ═══════ MENUS MASQUÉS (simplification du menu citoyen) ═══════
+      Rien n'est supprimé : retirez cette ligne et celle de « FIN MENUS MASQUÉS »
+      plus bas pour réafficher ces deux sections.
+
       <SectionPlieMobile titre="Suivi & Score" couleur="text-ardoise-clair/50"
-        initialOuvert={pathname.startsWith("/score") || pathname === "/parrainage"}>
-        <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-          {[
-            { href: "/score", libelle: "Mon score actuel", Icone: IconeScore },
-            { href: "/score/facteurs", libelle: "Facteurs d'impact", Icone: IconeStatistique },
-            { href: "/score/amelioration", libelle: "Conseils d'amélioration", Icone: IconeAlerte },
-            { href: "/parrainage", libelle: "Parrainage (bonus)", Icone: IconePartage },
-          ].map(({ href, libelle, Icone }) => {
-            const actif = pathname === href || pathname.startsWith(href);
-            return (
-              <Link key={href} href={href} onClick={() => setOuvert(false)}
-                className={clsx("flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
-                  actif ? "bg-sable/60 text-lagune font-medium" : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise")}>
-                <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="truncate">{libelle}</span>
-              </Link>
-            );
-          })}
-        </div>
+      initialOuvert={pathname.startsWith("/score") || pathname === "/parrainage"}>
+      <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
+      {[
+      { href: "/score", libelle: "Mon score actuel", Icone: IconeScore },
+      { href: "/score/facteurs", libelle: "Facteurs d'impact", Icone: IconeStatistique },
+      { href: "/score/amelioration", libelle: "Conseils d'amélioration", Icone: IconeAlerte },
+      { href: "/parrainage", libelle: "Parrainage (bonus)", Icone: IconePartage },
+      ].map(({ href, libelle, Icone }) => {
+      const actif = pathname === href || pathname.startsWith(href);
+      return (
+      <Link key={href} href={href} onClick={() => setOuvert(false)}
+      className={clsx("flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
+      actif ? "bg-sable/60 text-lagune font-medium" : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise")}>
+      <Icone className="w-3.5 h-3.5 flex-shrink-0" />
+      <span className="truncate">{libelle}</span>
+      </Link>
+      );
+      })}
+      </div>
       </SectionPlieMobile>
 
       <SectionPlieMobile titre="Attestations" couleur="text-ardoise-clair/50"
-        initialOuvert={pathname.startsWith("/attestations-communautaires")}>
-        <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
-          {[
-            { href: "/attestations-communautaires", libelle: "Tableau de bord", Icone: IconeAccueil },
-            { href: "/attestations-communautaires/nouvelle", libelle: "Nouvelle attestation", Icone: IconeEnvoyer },
-            { href: "/attestations-communautaires/recues", libelle: "Reçues", Icone: IconeFlecheBas },
-            { href: "/attestations-communautaires/envoyees", libelle: "Envoyées", Icone: IconeEnvoyer },
-            { href: "/attestations-communautaires/en-attente", libelle: "En attente", Icone: IconeAlerte },
-          ].map(({ href, libelle, Icone }) => {
-            const actif = pathname === href;
-            return (
-              <Link key={href} href={href} onClick={() => setOuvert(false)}
-                className={clsx("flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
-                  actif ? "bg-sable/60 text-lagune font-medium" : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise")}>
-                <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="truncate">{libelle}</span>
-              </Link>
-            );
-          })}
-        </div>
+      initialOuvert={pathname.startsWith("/attestations-communautaires")}>
+      <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
+      {[
+      { href: "/attestations-communautaires", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/attestations-communautaires/nouvelle", libelle: "Nouvelle attestation", Icone: IconeEnvoyer },
+      { href: "/attestations-communautaires/recues", libelle: "Reçues", Icone: IconeFlecheBas },
+      { href: "/attestations-communautaires/envoyees", libelle: "Envoyées", Icone: IconeEnvoyer },
+      { href: "/attestations-communautaires/en-attente", libelle: "En attente", Icone: IconeAlerte },
+      ].map(({ href, libelle, Icone }) => {
+      const actif = pathname === href;
+      return (
+      <Link key={href} href={href} onClick={() => setOuvert(false)}
+      className={clsx("flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-200",
+      actif ? "bg-sable/60 text-lagune font-medium" : "text-ardoise-clair/70 hover:bg-sable/40 hover:text-ardoise")}>
+      <Icone className="w-3.5 h-3.5 flex-shrink-0" />
+      <span className="truncate">{libelle}</span>
+      </Link>
+      );
+      })}
+      </div>
       </SectionPlieMobile>
+
+      ═══════ FIN MENUS MASQUÉS ═══════ */}
 
       <SectionPlieMobile titre="Identité" couleur="text-ardoise-clair/50"
         initialOuvert={pathname.startsWith("/identite")}>
         <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
           {[
             { href: "/identite", libelle: "Tableau de bord identité", Icone: IconeAccueil },
+            { href: "/inspection", libelle: "Inspection (extraction de documents)", Icone: IconeCheck },
             { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
             { href: "/identite/verification-visuelle", libelle: "Reconnaissance faciale", Icone: IconeVisage },
-            { href: "/identite/verification-cni", libelle: "Scan CNI", Icone: IconeScan },
+            // Menu masqué (simplification) — dé-commenter pour le réafficher :
+            // { href: "/identite/verification-cni", libelle: "Scan CNI", Icone: IconeScan },
             { href: "/identite/email", libelle: "Vérification email", Icone: IconeEmail },
             { href: "/identite/2fa", libelle: "Double authentification", Icone: IconeCadenas },
             { href: "/identite/mot-de-passe", libelle: "Mot de passe", Icone: IconeCle },
