@@ -282,7 +282,7 @@ function Contenu() {
       >
         <TableauColis
           colis={colis}
-          baseSuivi="/receveur/tickets"
+          baseSuivi="/chauffeur/colis"
           baseScan="/chauffeur/scan"
           messageVide="Aucun colis affecté à ce voyage pour le moment."
         />

@@ -33,11 +33,13 @@ import {
   logistiqueAPI,
   type ColisEnregistre,
   type Gare,
+  type Ligne,
   type Voyage,
 } from "@/services/logistique_api";
 import { ControleurBagages } from "./ControleurBagages";
 import { formaterFcfa } from "./format";
 import { RechercheCarteDigiID } from "./RechercheCarteDigiID";
+import { SelectionVoyage, libelleVoyage } from "./SelectionVoyage";
 import { TicketImprimable } from "./TicketImprimable";
 import { fraisServicePourArticles } from "@/types/paiement";
 
@@ -52,9 +54,24 @@ const ETAPES: { numero: Etape; cleTitre: string }[] = [
 
 export function EnregistrementColis({
   digiidInitial,
+  voyageImposeId,
+  chauffeurImposeId,
+  attributionFacultative = false,
+  enregistrementDirect = false,
 }: {
   /** DigiID / lien de QR du client, quand l'agent arrive depuis /guichet/carte. */
   digiidInitial?: string;
+  /** Voyage imposé (espace chauffeur : le colis part dans SON car). */
+  voyageImposeId?: string;
+  /** Chauffeur imposé : celui qui enregistre en route est le conducteur. */
+  chauffeurImposeId?: string;
+  /** Guichet : autorise « je ne sais pas encore quel car partira ». */
+  attributionFacultative?: boolean;
+  /**
+   * Enregistrement **en route par le chauffeur** : le backend inscrit le mode
+   * « chauffeur_direct » et le statut « enregistré en route » (traçabilité).
+   */
+  enregistrementDirect?: boolean;
 } = {}) {
   const { utilisateur } = useAuthentification();
   const { t } = useLangue();
@@ -62,6 +79,7 @@ export function EnregistrementColis({
   // Référentiel
   const [gares, setGares] = useState<Gare[]>([]);
   const [voyages, setVoyages] = useState<Voyage[]>([]);
+  const [lignes, setLignes] = useState<Ligne[]>([]);
   const [chargementRef, setChargementRef] = useState(true);
   const [gareGuichet, setGareGuichet] = useState<Gare | null>(null);
 
@@ -80,7 +98,12 @@ export function EnregistrementColis({
   // Nombre de sacs (1 à 10) — traçabilité, sans impact sur le prix.
   const [nombreBagages, setNombreBagages] = useState(1);
   const [fraisFcfa, setFraisFcfa] = useState("");
-  const [voyageId, setVoyageId] = useState("");
+  const [voyageId, setVoyageId] = useState(voyageImposeId ?? "");
+  /**
+   * Au guichet, on ignore souvent quel car partira (« le prochain ») : cocher
+   * cette case enregistre le colis tout de suite, l'affectation venant après.
+   */
+  const [affecterPlusTard, setAffecterPlusTard] = useState(false);
 
   // État d'envoi
   const [erreur, setErreur] = useState<string | null>(null);
@@ -92,13 +115,15 @@ export function EnregistrementColis({
     let annule = false;
     (async () => {
       try {
-        const [reponseGares, reponseVoyages] = await Promise.all([
+        const [reponseGares, reponseVoyages, reponseLignes] = await Promise.all([
           logistiqueAPI.gares.lister(),
           logistiqueAPI.voyages.lister().catch(() => ({ elements: [] as Voyage[] })),
+          logistiqueAPI.lignes.lister().catch(() => ({ elements: [] as Ligne[] })),
         ]);
         if (annule) return;
         setGares(reponseGares.elements);
         setVoyages(reponseVoyages.elements);
+        setLignes(reponseLignes.elements);
 
         // Pré-remplit la gare de départ depuis la fiche acteur du receveur.
         if (utilisateur?.id) {
@@ -136,7 +161,7 @@ export function EnregistrementColis({
     () => voyages.find((v) => v.id === voyageId) ?? null,
     [voyages, voyageId],
   );
-  const chauffeurId = voyageSelectionne?.chauffeur_id ?? null;
+  const chauffeurId = chauffeurImposeId ?? voyageSelectionne?.chauffeur_id ?? null;
 
   const nombreChiffresTel = destinataireTel.replace(/\D/g, "").length;
   const nombreChiffresTelExpediteur = expediteurTel.replace(/\D/g, "").length;
@@ -162,8 +187,11 @@ export function EnregistrementColis({
   const fraisService = fraisServicePourArticles(
     nombreArticlesValide ? nombreArticlesNombre : 1,
   );
-  // Attribution **obligatoire** : trajet + voyage + chauffeur précis.
-  const attributionValide = !!voyageId && !!chauffeurId;
+  // Attribution : un car précis, **ou** — au guichet — un report explicite
+  // (« le prochain car »). Dans l'espace chauffeur, le car est imposé.
+  const attributionValide = voyageImposeId
+    ? true
+    : affecterPlusTard || (!!voyageId && !!chauffeurId);
   const etapeDetailsValide = fraisValide && nombreArticlesValide && attributionValide;
 
   /** Réinitialise le formulaire pour un nouvel enregistrement. */
@@ -180,7 +208,8 @@ export function EnregistrementColis({
     setNombreArticles("1");
     setNombreBagages(1);
     setFraisFcfa("");
-    setVoyageId("");
+    setVoyageId(voyageImposeId ?? "");
+    setAffecterPlusTard(false);
     setGareArriveeId("");
     setGareDepartId(gareGuichet?.id ?? "");
     setErreur(null);
@@ -206,8 +235,11 @@ export function EnregistrementColis({
         nombre_bagages: nombreBagages,
         frais_fcfa:
           fraisNombre !== null && !Number.isNaN(fraisNombre) ? fraisNombre : null,
-        voyage_id: voyageId,
-        chauffeur_id: chauffeurId as string,
+        // Le colis peut rester « à affecter » (guichet) : on n'envoie alors ni
+        // voyage ni chauffeur, et le receveur complète depuis la fiche du colis.
+        voyage_id: affecterPlusTard ? null : voyageId || null,
+        chauffeur_id: affecterPlusTard ? undefined : (chauffeurId ?? undefined),
+        enregistrement_direct: enregistrementDirect || undefined,
       });
       setResultat(reponse);
     } catch (e) {
@@ -508,40 +540,57 @@ export function EnregistrementColis({
 
                 <ControleurBagages valeur={nombreBagages} onChange={setNombreBagages} />
 
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium text-ardoise">
-                    Voyage / chauffeur <span className="text-terre">*</span>
-                  </label>
-                  <select
-                    className="champ-saisie"
-                    value={voyageId}
-                    onChange={(e) => setVoyageId(e.target.value)}
-                  >
-                    <option value="">— Choisir un voyage —</option>
-                    {voyages.map((v) => (
-                      <option key={v.id} value={v.id} disabled={!v.chauffeur_id}>
-                        {new Intl.DateTimeFormat("fr-FR", {
-                          dateStyle: "short",
-                          timeStyle: "short",
-                        }).format(new Date(v.date_depart))}
-                        {v.vehicule_immatriculation
-                          ? ` · ${v.vehicule_immatriculation}`
-                          : ""}
-                        {v.chauffeur_nom
-                          ? ` · chauffeur : ${v.chauffeur_nom}`
-                          : " · (aucun chauffeur affecté)"}
-                      </option>
-                    ))}
-                  </select>
-                  {voyageSelectionne && !chauffeurId && (
-                    <p className="text-xs font-medium text-terre">
-                      Ce voyage n&apos;a pas de chauffeur affecté — choisissez-en un autre.
+                {voyageImposeId && (
+                  <div className="rounded-xl border border-ocre/30 bg-ocre/5 px-4 py-3">
+                    <p className="text-sm font-medium text-ardoise">
+                      Car imposé : ce colis part dans votre car.
                     </p>
-                  )}
-                  <p className="text-xs italic text-ardoise-clair">
-                    Le chauffeur est attribué automatiquement d&apos;après le voyage sélectionné.
-                  </p>
-                </div>
+                    <p className="text-xs text-ardoise-clair">
+                      {voyageSelectionne
+                        ? libelleVoyage(voyageSelectionne)
+                        : "Voyage en cours de chargement…"}
+                    </p>
+                  </div>
+                )}
+
+                {!voyageImposeId && (
+                  <div className="space-y-2">
+                    <SelectionVoyage
+                      voyages={voyages}
+                      lignes={lignes}
+                      valeur={voyageId}
+                      surSelection={(id) => {
+                        setVoyageId(id);
+                        if (id) setAffecterPlusTard(false);
+                      }}
+                      gareDepartId={gareDepartId}
+                      gareArriveeId={gareArriveeId}
+                      exigerChauffeur
+                      obligatoire={!affecterPlusTard}
+                      desactive={affecterPlusTard}
+                      aide="Le chauffeur est déduit du car choisi : vous n'avez aucun identifiant à saisir."
+                    />
+
+                    {attributionFacultative && (
+                      <label className="flex items-start gap-2 rounded-lg bg-sable/60 px-3 py-2 text-xs text-ardoise">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 rounded border-ardoise-clair/30"
+                          checked={affecterPlusTard}
+                          onChange={(e) => {
+                            setAffecterPlusTard(e.target.checked);
+                            if (e.target.checked) setVoyageId("");
+                          }}
+                        />
+                        <span>
+                          Je ne sais pas encore quel car partira — enregistrer
+                          maintenant et affecter le chauffeur plus tard
+                          (retrouvable depuis la liste des colis).
+                        </span>
+                      </label>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex justify-between">
                   <Bouton variante="ghost" onClick={() => setEtape(2)}>
@@ -601,13 +650,15 @@ export function EnregistrementColis({
                 <Ligne
                   libelle="Voyage / chauffeur"
                   valeur={
-                    voyageSelectionne
-                      ? `${voyageSelectionne.vehicule_immatriculation ?? "Voyage"}${
-                          voyageSelectionne.chauffeur_nom
-                            ? ` · ${voyageSelectionne.chauffeur_nom}`
-                            : ""
-                        }`
-                      : "—"
+                    affecterPlusTard
+                      ? "À affecter plus tard (guichet)"
+                      : voyageSelectionne
+                        ? `${voyageSelectionne.vehicule_immatriculation ?? "Voyage"}${
+                            voyageSelectionne.chauffeur_nom
+                              ? ` · ${voyageSelectionne.chauffeur_nom}`
+                              : ""
+                          }`
+                        : "—"
                   }
                 />
                 <Ligne

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+ # -*- coding: utf-8 -*-
 """Service logistique — logique métier du référentiel + colis de bout en bout."""
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
@@ -39,6 +39,45 @@ async def _verifier_existe(session: AsyncSession, modele, identifiant, libelle: 
             detail=f"{libelle} introuvable",
         )
     return obj
+
+
+async def _verifier_trajet_du_voyage(
+    session: AsyncSession,
+    voyage: Voyage,
+    gare_depart_id: UUID,
+    gare_arrivee_id: UUID,
+) -> None:
+    """Refuse un voyage dont la ligne ne dessert pas le trajet déclaré.
+
+    Sans ce garde-fou, on pouvait affecter un colis Dakar → Thiès à un car
+    Thiès → Dakar : le destinataire aurait attendu un colis parti à l'opposé.
+    """
+    ligne = await session.get(Ligne, voyage.ligne_id)
+    if ligne is None:
+        return
+    if ligne.gare_depart_id == gare_depart_id and ligne.gare_arrivee_id == gare_arrivee_id:
+        return
+    depart = await session.get(Gare, ligne.gare_depart_id)
+    arrivee = await session.get(Gare, ligne.gare_arrivee_id)
+    raise HTTPException(
+        status.HTTP_400_BAD_REQUEST,
+        detail=(
+            "Ce voyage ne correspond pas au trajet déclaré "
+            f"({depart.nom if depart else '?'} → {arrivee.nom if arrivee else '?'})."
+        ),
+    )
+
+
+async def _libelle_voyage(session: AsyncSession, voyage: Voyage) -> str:
+    """Libellé court d'un voyage pour la timeline (« 12/05 08:00 · DK-1234-AB »)."""
+    vehicule = await session.get(Vehicule, voyage.vehicule_id)
+    immatriculation = vehicule.immatriculation if vehicule else None
+    quand = (
+        voyage.date_depart.strftime("%d/%m %H:%M")
+        if voyage.date_depart is not None
+        else None
+    )
+    return " · ".join(partie for partie in (quand, immatriculation) if partie)
 
 
 async def _paginer(session: AsyncSession, requete, page: int, par_page: int):
@@ -415,14 +454,25 @@ async def creer_colis(
     gare_depart = await _verifier_existe(session, Gare, donnees.gare_depart_id, "Gare de départ")
     await _verifier_existe(session, Gare, donnees.gare_arrivee_id, "Gare d'arrivée")
     # Attribution obligatoire : chauffeur précis + voyage précis.
-    voyage = await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
+    # Attribution **souple au guichet** : on enregistre souvent le colis avant de
+    # savoir quel car partira. Le voyage (et donc le chauffeur) peut alors être
+    # affecté plus tard, depuis la fiche — voir ``affecter_colis``. Un chauffeur
+    # qui enregistre « en route », lui, connaît forcément son voyage.
+    voyage = None
+    if donnees.voyage_id is not None:
+        voyage = await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
+        await _verifier_trajet_du_voyage(
+            session, voyage, donnees.gare_depart_id, donnees.gare_arrivee_id
+        )
 
     # ─── Enregistrement direct (le chauffeur inscrit son client en route) ──
     # Sécurité : seul le chauffeur réellement affecté au voyage (ou désigné) peut
     # déclarer un enregistrement « direct » — un receveur ne peut pas se faire
     # passer pour le chauffeur pour s'attribuer un colis.
     if donnees.enregistrement_direct:
-        if voyage.chauffeur_id is not None and voyage.chauffeur_id != utilisateur.id:
+        if voyage is None or (
+            voyage.chauffeur_id is not None and voyage.chauffeur_id != utilisateur.id
+        ):
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
                 detail="Seul le chauffeur du voyage peut enregistrer un client en direct",
@@ -431,17 +481,23 @@ async def creer_colis(
         mode_enregistrement = "chauffeur_direct"
         statut_initial = "enregistre_direct"
     else:
-        if donnees.chauffeur_id is None:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail="Chauffeur obligatoire (ou enregistrement direct par le chauffeur)",
-            )
-        chauffeur_id = donnees.chauffeur_id
+        # Sans voyage, on peut tout de même désigner le chauffeur à la main ;
+        # sinon la fiche reste « à affecter » jusqu'à complétion par un receveur.
+        chauffeur_id = donnees.chauffeur_id or (voyage.chauffeur_id if voyage else None)
         mode_enregistrement = "guichet"
         statut_initial = "enregistre"
 
-    chauffeur = await _verifier_existe(session, Utilisateur, chauffeur_id, "Chauffeur")
-    if voyage.chauffeur_id and voyage.chauffeur_id != chauffeur.id:
+    chauffeur = (
+        await _verifier_existe(session, Utilisateur, chauffeur_id, "Chauffeur")
+        if chauffeur_id is not None
+        else None
+    )
+    if (
+        voyage is not None
+        and chauffeur is not None
+        and voyage.chauffeur_id
+        and voyage.chauffeur_id != chauffeur.id
+    ):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail="Le chauffeur indiqué ne correspond pas au chauffeur du voyage",
@@ -513,6 +569,70 @@ async def creer_colis(
 
 
 # ─── Colis : lecture ─────────────────────────────────────────────────
+
+async def affecter_colis(
+    session: AsyncSession,
+    colis_id: UUID,
+    donnees: schemas.AffectationRequest,
+    utilisateur: Utilisateur,
+) -> Colis:
+    """Affecte (ou réaffecte) un colis à un voyage et à son chauffeur.
+
+    Réponse directe au terrain : au guichet, on enregistre un colis **avant** de
+    savoir quel car partira. Le receveur revient sur la fiche, désigne le voyage
+    — et le chauffeur en découle (c'est celui du voyage).
+    """
+    colis = await obtenir_colis(session, colis_id)
+    if colis.statut in ("livre", "annule"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Un colis livré ou annulé ne peut plus être réaffecté",
+        )
+
+    voyage = await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
+    await _verifier_trajet_du_voyage(
+        session, voyage, colis.gare_depart_id, colis.gare_arrivee_id
+    )
+
+    chauffeur_id = donnees.chauffeur_id or voyage.chauffeur_id
+    if chauffeur_id is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Ce voyage n'a aucun chauffeur affecté : désignez le chauffeur "
+                "ou choisissez un autre voyage"
+            ),
+        )
+    if voyage.chauffeur_id is not None and voyage.chauffeur_id != chauffeur_id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Le chauffeur indiqué ne correspond pas à celui du voyage",
+        )
+    await _verifier_existe(session, Utilisateur, chauffeur_id, "Chauffeur")
+
+    colis.voyage_id = voyage.id
+    colis.chauffeur_id = chauffeur_id
+    # Le ticket porte aussi le voyage : le scan s'en sert pour vérifier la
+    # cohérence (on ne « livre » pas un colis sur un trajet qui n'est pas le sien).
+    ticket = await obtenir_ticket_du_colis(session, colis)
+    if ticket is not None:
+        ticket.voyage_id = voyage.id
+        session.add(ticket)
+
+    session.add(
+        ColisEvenement(
+            colis_id=colis.id,
+            type_evenement="affectation",
+            acteur_id=utilisateur.id,
+            gare_id=colis.gare_depart_id,
+            localisation=await _libelle_voyage(session, voyage),
+            horodatage=datetime.now(timezone.utc),
+        )
+    )
+    await session.commit()
+    await session.refresh(colis)
+    return colis
+
 
 async def obtenir_colis(session: AsyncSession, colis_id: UUID) -> Colis:
     colis = await session.get(Colis, colis_id)
@@ -878,11 +998,22 @@ async def creer_suivi_familial(
     gare_depart = await _verifier_existe(session, Gare, donnees.gare_depart_id, "Gare de départ")
     await _verifier_existe(session, Gare, donnees.gare_arrivee_id, "Gare d'arrivée")
     # Attribution obligatoire : chauffeur précis + voyage précis.
-    voyage = await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
+    # Attribution **souple au guichet** : on enregistre souvent le colis avant de
+    # savoir quel car partira. Le voyage (et donc le chauffeur) peut alors être
+    # affecté plus tard, depuis la fiche — voir ``affecter_colis``. Un chauffeur
+    # qui enregistre « en route », lui, connaît forcément son voyage.
+    voyage = None
+    if donnees.voyage_id is not None:
+        voyage = await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
+        await _verifier_trajet_du_voyage(
+            session, voyage, donnees.gare_depart_id, donnees.gare_arrivee_id
+        )
 
     # ─── Enregistrement direct (le chauffeur inscrit son client en route) ──
     if donnees.enregistrement_direct:
-        if voyage.chauffeur_id is not None and voyage.chauffeur_id != utilisateur.id:
+        if voyage is None or (
+            voyage.chauffeur_id is not None and voyage.chauffeur_id != utilisateur.id
+        ):
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
                 detail="Seul le chauffeur du voyage peut enregistrer un passager en direct",
@@ -891,17 +1022,23 @@ async def creer_suivi_familial(
         mode_enregistrement = "chauffeur_direct"
         statut_initial = "enregistre_direct"
     else:
-        if donnees.chauffeur_id is None:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail="Chauffeur obligatoire (ou enregistrement direct par le chauffeur)",
-            )
-        chauffeur_id = donnees.chauffeur_id
+        # Sans voyage, on peut tout de même désigner le chauffeur à la main ;
+        # sinon la fiche reste « à affecter » jusqu'à complétion par un receveur.
+        chauffeur_id = donnees.chauffeur_id or (voyage.chauffeur_id if voyage else None)
         mode_enregistrement = "guichet"
         statut_initial = "enregistre"
 
-    chauffeur = await _verifier_existe(session, Utilisateur, chauffeur_id, "Chauffeur")
-    if voyage.chauffeur_id and voyage.chauffeur_id != chauffeur.id:
+    chauffeur = (
+        await _verifier_existe(session, Utilisateur, chauffeur_id, "Chauffeur")
+        if chauffeur_id is not None
+        else None
+    )
+    if (
+        voyage is not None
+        and chauffeur is not None
+        and voyage.chauffeur_id
+        and voyage.chauffeur_id != chauffeur.id
+    ):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail="Le chauffeur indiqué ne correspond pas au chauffeur du voyage",
@@ -990,6 +1127,67 @@ async def creer_suivi_familial(
     await session.refresh(suivi)
     await session.refresh(ticket)
     return suivi, ticket
+
+
+async def affecter_suivi_familial(
+    session: AsyncSession,
+    suivi_id: UUID,
+    donnees: schemas.AffectationRequest,
+    utilisateur: Utilisateur,
+) -> SuiviFamilial:
+    """Affecte (ou réaffecte) un passager suivi à un voyage et à son chauffeur.
+
+    Même logique que pour un colis : la famille confie l'enfant au guichet, le
+    receveur sait rarement **quel** car partira sur-le-champ.
+    """
+    suivi = await obtenir_suivi_familial(session, suivi_id)
+    if suivi.statut in ("arrive", "annule"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Un passager arrivé ou annulé ne peut plus être réaffecté",
+        )
+
+    voyage = await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
+    await _verifier_trajet_du_voyage(
+        session, voyage, suivi.gare_depart_id, suivi.gare_arrivee_id
+    )
+
+    chauffeur_id = donnees.chauffeur_id or voyage.chauffeur_id
+    if chauffeur_id is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Ce voyage n'a aucun chauffeur affecté : désignez le chauffeur "
+                "ou choisissez un autre voyage"
+            ),
+        )
+    if voyage.chauffeur_id is not None and voyage.chauffeur_id != chauffeur_id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Le chauffeur indiqué ne correspond pas à celui du voyage",
+        )
+    await _verifier_existe(session, Utilisateur, chauffeur_id, "Chauffeur")
+
+    suivi.voyage_id = voyage.id
+    suivi.chauffeur_id = chauffeur_id
+    ticket = await obtenir_ticket_du_suivi(session, suivi)
+    if ticket is not None:
+        ticket.voyage_id = voyage.id
+        session.add(ticket)
+
+    session.add(
+        SuiviFamilialEvenement(
+            suivi_familial_id=suivi.id,
+            type_evenement="affectation",
+            acteur_id=utilisateur.id,
+            gare_id=suivi.gare_depart_id,
+            localisation=await _libelle_voyage(session, voyage),
+            horodatage=datetime.now(timezone.utc),
+        )
+    )
+    await session.commit()
+    await session.refresh(suivi)
+    return suivi
 
 
 async def obtenir_suivi_familial(

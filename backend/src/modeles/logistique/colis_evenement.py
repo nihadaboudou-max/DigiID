@@ -20,6 +20,7 @@ from src.base_donnees.base import Base, MelangeTracabilite
 # Types d'événement du cycle de vie d'un colis
 TYPES_EVENEMENT_COLIS = (
     "enregistrement",
+    "affectation",
     "depart",
     "mise_en_transit",
     "arrivee",

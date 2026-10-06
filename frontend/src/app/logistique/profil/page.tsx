@@ -19,7 +19,10 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
+import { ChampOCR } from "@/composants/logistique/ChampOCR";
 import { ErreurAPI } from "@/services/client_api";
+import { uploaderAssurance } from "@/services/assurance_auto";
+import { uploaderPermis } from "@/services/permis_conduire";
 import {
   identiteAPI,
   LIBELLES_CHAMPS_PROFIL,
@@ -60,6 +63,22 @@ const FORMULAIRE_VIDE: DonneesProfilLogistique = {
   vehicule_capacite: null,
 };
 
+/**
+ * Convertit une date lue par l'OCR en `AAAA-MM-JJ` (format attendu par un
+ * `<input type="date">`). L'OCR renvoie aussi bien `12.05.2027`, `12/05/2027`
+ * qu'une date ISO : on tolère les trois, et on renvoie `null` si illisible —
+ * mieux vaut un champ vide qu'une date fausse dans un dossier vérifié.
+ */
+function versDateISO(valeur: string | null | undefined): string | null {
+  if (!valeur) return null;
+  const texte = valeur.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texte)) return texte;
+  const correspondance = texte.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+  if (!correspondance) return null;
+  const [, jour, mois, annee] = correspondance;
+  return `${annee}-${mois.padStart(2, "0")}-${jour.padStart(2, "0")}`;
+}
+
 function Contenu() {
   const [dossier, setDossier] = useState<ProfilLogistique | null>(null);
   const [formulaire, setFormulaire] =
@@ -68,6 +87,9 @@ function Contenu() {
   const [enregistrement, setEnregistrement] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [succes, setSucces] = useState<string | null>(null);
+  /** Retour de la dernière lecture OCR (permis ou assurance). */
+  const [messageOCR, setMessageOCR] = useState<string | null>(null);
+  const [erreurOCR, setErreurOCR] = useState<string | null>(null);
 
   useEffect(() => {
     let annule = false;
@@ -115,6 +137,71 @@ function Contenu() {
   ) {
     setFormulaire((precedent) => ({ ...precedent, [cle]: valeur }));
     setSucces(null);
+  }
+
+  /** Applique d'un coup les champs lus par l'OCR (sans écraser par du vide). */
+  function fusionner(patch: Partial<DonneesProfilLogistique>) {
+    setFormulaire((precedent) => ({ ...precedent, ...patch }));
+    setSucces(null);
+  }
+
+  /** Permis de conduire : lit la photo et remplit numéro, catégories, expiration. */
+  async function analyserPermis(fichier: File) {
+    setErreurOCR(null);
+    setMessageOCR(null);
+    try {
+      const reponse = await uploaderPermis(fichier);
+      const donnees = reponse.resultat_ocr.donnees ?? {};
+      const expiration = versDateISO(donnees.date_expiration);
+      fusionner({
+        permis_numero: donnees.numero_permis ?? formulaire.permis_numero ?? "",
+        permis_categorie:
+          (donnees.categories ?? []).join(", ") || formulaire.permis_categorie || "",
+        permis_expiration: expiration ?? formulaire.permis_expiration,
+      });
+      setMessageOCR(
+        `Permis lu : ${reponse.resultat_ocr.champs_extraits ?? 0} champ(s) extrait(s)${
+          donnees.taux_confiance_moyen
+            ? ` · confiance ${Math.round(donnees.taux_confiance_moyen)} %`
+            : ""
+        }. Vérifiez les valeurs ci-dessous avant d'enregistrer (elles restent modifiables).`,
+      );
+      if (!expiration && donnees.date_expiration) {
+        setErreurOCR(
+          `Date d'expiration lue « ${donnees.date_expiration} » : saisissez-la à la main, elle n'a pas pu être convertie.`,
+        );
+      }
+    } catch (e) {
+      setErreurOCR(
+        e instanceof Error ? e.message : "Lecture impossible. Reprenez la photo de plus près.",
+      );
+    }
+  }
+
+  /** Carte verte d'assurance : renseigne le véhicule et la validité du contrat. */
+  async function analyserAssurance(fichier: File) {
+    setErreurOCR(null);
+    setMessageOCR(null);
+    try {
+      const reponse = await uploaderAssurance(fichier);
+      const donnees = reponse.resultat_ocr.donnees ?? {};
+      fusionner({
+        vehicule_immatriculation:
+          donnees.immatriculation_vehicule ?? formulaire.vehicule_immatriculation ?? "",
+        vehicule_marque: donnees.marque_vehicule ?? formulaire.vehicule_marque ?? "",
+        vehicule_modele: donnees.modele_vehicule ?? formulaire.vehicule_modele ?? "",
+      });
+      const validite = donnees.date_expiration
+        ? ` Contrat valable jusqu'au ${donnees.date_expiration}${donnees.compagnie_assurance ? ` (${donnees.compagnie_assurance})` : ""}.`
+        : "";
+      setMessageOCR(
+        `Assurance lue : ${reponse.resultat_ocr.champs_extraits ?? 0} champ(s) extrait(s).${validite} Vérifiez le véhicule ci-dessous avant d'enregistrer.`,
+      );
+    } catch (e) {
+      setErreurOCR(
+        e instanceof Error ? e.message : "Lecture impossible. Reprenez la photo de plus près.",
+      );
+    }
   }
 
   async function enregistrer() {
@@ -226,6 +313,41 @@ function Contenu() {
 
           {estChauffeur && (
             <>
+              <div className="rounded-xl border border-lagune/20 bg-lagune/5 px-4 py-3">
+                <p className="text-sm font-bold text-ardoise">
+                  Scanner mes documents (OCR)
+                </p>
+                <p className="mt-0.5 text-xs text-ardoise-clair">
+                  Prenez la photo de votre permis ou de votre carte verte : les champs
+                  ci-dessous se remplissent tout seuls. Vous gardez la main — rien
+                  n&apos;est enregistré avant que vous ne validiez.
+                </p>
+
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <ChampOCR
+                    libelle="Permis de conduire"
+                    description="Numéro, catégories (C, D…) et date d'expiration du permis."
+                    surFichier={analyserPermis}
+                  />
+                  <ChampOCR
+                    libelle="Assurance (carte verte)"
+                    description="Immatriculation, marque, modèle du véhicule et validité du contrat."
+                    surFichier={analyserAssurance}
+                  />
+                </div>
+
+                {messageOCR && (
+                  <p className="mt-3 rounded-lg bg-white px-3 py-2 text-xs text-ardoise">
+                    {messageOCR}
+                  </p>
+                )}
+                {erreurOCR && (
+                  <p className="mt-3 rounded-lg bg-terre/10 px-3 py-2 text-xs font-medium text-terre">
+                    {erreurOCR}
+                  </p>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <ChampSaisie
                   libelle="Numéro de permis"

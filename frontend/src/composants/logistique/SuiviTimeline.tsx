@@ -17,6 +17,7 @@ interface Proprietes {
 
 /** Icône (emoji sobre) par type d'événement. */
 const ICONES: Record<TypeEvenementColis, string> = {
+  affectation: "🧑‍✈️",
   enregistrement: "📦",
   depart: "🚚",
   mise_en_transit: "🛣️",
@@ -26,6 +27,7 @@ const ICONES: Record<TypeEvenementColis, string> = {
 
 /** Couleur de la pastille par type d'événement. */
 const COULEURS: Record<TypeEvenementColis, string> = {
+  affectation: "bg-terre",
   enregistrement: "bg-lagune",
   depart: "bg-ocre",
   mise_en_transit: "bg-ocre",

@@ -13,6 +13,15 @@ import { Alerte } from "@/composants/commun/Alerte";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { ROLES_SCAN } from "@/composants/logistique/roles";
 import { ScannerTicket } from "@/composants/logistique/ScannerTicket";
+import type { TypeEvenementScan } from "@/types/logistique";
+
+/** Événements qu'un chauffeur peut enregistrer depuis son téléphone. */
+const TYPES_ACCEPTES: TypeEvenementScan[] = [
+  "mise_en_transit",
+  "depart",
+  "arrivee",
+  "livraison",
+];
 
 export default function PageScanChauffeur() {
   return (
@@ -32,6 +41,13 @@ function Contenu() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token") ?? searchParams.get("code") ?? "";
   const voyageId = searchParams.get("voyage_id");
+  // `?type=livraison` arrive depuis la fiche colis (« Remettre au destinataire ») :
+  // l'action est pré-sélectionnée, le chauffeur n'a plus qu'à confirmer.
+  const typeDemande = searchParams.get("type");
+  const typeParDefaut: TypeEvenementScan =
+    (TYPES_ACCEPTES as string[]).includes(typeDemande ?? "")
+      ? (typeDemande as TypeEvenementScan)
+      : "mise_en_transit";
 
   return (
     <div className="space-y-6 apparition">
@@ -50,9 +66,9 @@ function Contenu() {
       )}
 
       <ScannerTicket
-        key={`${token || "scan"}-${voyageId || "sans-voyage"}`}
+        key={`${token || "scan"}-${voyageId || "sans-voyage"}-${typeParDefaut}`}
         tokenInitial={token || undefined}
-        typeParDefaut="mise_en_transit"
+        typeParDefaut={typeParDefaut}
         voyageId={voyageId}
       />
     </div>

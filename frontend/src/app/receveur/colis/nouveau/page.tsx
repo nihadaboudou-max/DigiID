@@ -42,7 +42,7 @@ function Contenu() {
         </p>
       </div>
 
-      <EnregistrementColis digiidInitial={digiid} />
+      <EnregistrementColis digiidInitial={digiid} attributionFacultative />
 
       <Carte variante="pointilles">
         <p className="text-xs text-ardoise-clair">

@@ -14,8 +14,9 @@ import { Alerte } from "@/composants/commun/Alerte";
 import { Badge, type BadgeVariante } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
-import { IconeIdentite, IconeScan } from "@/composants/commun/Icones";
+import { IconeIdentite, IconeScan, IconeUtilisateur } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
+import { AffecterChauffeur } from "@/composants/logistique/AffecterChauffeur";
 import { formaterDateHeure } from "@/composants/logistique/format";
 import { ROLES_GUICHET } from "@/composants/logistique/roles";
 import { ErreurAPI } from "@/services/client_api";
@@ -52,6 +53,8 @@ function Contenu() {
   const [recherche, setRecherche] = useState("");
   const [filtreStatut, setFiltreStatut] = useState<"" | StatutSuiviFamilial>("");
   const [actionEnCours, setActionEnCours] = useState<string | null>(null);
+  /** Suivi dont on est en train de (ré)affecter le chauffeur (panneau ouvert). */
+  const [affectationPour, setAffectationPour] = useState<string | null>(null);
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -235,6 +238,20 @@ function Contenu() {
                       <p className="mt-1 text-xs text-ardoise-clair">
                         Parent : {suivi.parent_nom || "—"} · {suivi.telephone_parent}
                       </p>
+                      <p className="mt-1 text-xs">
+                        <span
+                          className={
+                            suivi.chauffeur_nom
+                              ? "font-medium text-lagune"
+                              : "font-medium text-ocre-fonce"
+                          }
+                        >
+                          Chauffeur : {suivi.chauffeur_nom ?? "à affecter"}
+                        </span>
+                        {suivi.mode_enregistrement === "chauffeur_direct" && (
+                          <span className="text-ardoise-clair"> · enregistré en route</span>
+                        )}
+                      </p>
                       <p className="mt-1 flex flex-wrap gap-1.5 text-[11px]">
                         <span
                           className={
@@ -280,6 +297,22 @@ function Contenu() {
                           ✅ Marquer l&apos;arrivée
                         </Bouton>
                       )}
+                      {!arrive && suivi.statut !== "annule" && (
+                        <Bouton
+                          variante="ghost"
+                          taille="petit"
+                          onClick={() =>
+                            setAffectationPour(
+                              affectationPour === suivi.id ? null : suivi.id,
+                            )
+                          }
+                        >
+                          <IconeUtilisateur className="h-4 w-4" />{" "}
+                          {suivi.chauffeur_nom
+                            ? "Changer de chauffeur"
+                            : "Affecter un chauffeur"}
+                        </Bouton>
+                      )}
                       {suivi.code_clair && (
                         <a
                           href={`/suivi/${encodeURIComponent(suivi.code_clair)}`}
@@ -299,7 +332,33 @@ function Contenu() {
                       </span>
                     </div>
                   </div>
-                </li>
+
+                  {affectationPour === suivi.id && (
+                    <div className="mt-4 border-t border-ardoise-clair/15 pt-4">
+                      <AffecterChauffeur
+                        gareDepartId={suivi.gare_depart_id}
+                        gareArriveeId={suivi.gare_arrivee_id}
+                        voyageIdActuel={suivi.voyage_id}
+                        chauffeurNomActuel={suivi.chauffeur_nom}
+                        surAffecter={async (voyageId) => {
+                          const maj = await logistiqueAPI.suiviFamilial.affecter(
+                            suivi.id,
+                            { voyage_id: voyageId },
+                          );
+                          setSuivis((precedents) =>
+                            precedents.map((s) => (s.id === maj.id ? maj : s)),
+                          );
+                          setMessage(
+                            `${maj.enfant_nom} — chauffeur affecté${
+                              maj.chauffeur_nom ? ` : ${maj.chauffeur_nom}` : ""
+                            }.`,
+                          );
+                          setAffectationPour(null);
+                        }}
+                      />
+                    </div>
+                  )}
+                  </li>
               );
             })}
           </ul>

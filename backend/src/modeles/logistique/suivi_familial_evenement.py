@@ -20,6 +20,7 @@ from src.base_donnees.base import Base, MelangeTracabilite
 # Types d'événement du voyage d'un enfant
 TYPES_EVENEMENT_SUIVI = (
     "enregistrement",
+    "affectation",
     "depart",
     "arrivee",
     "livraison",

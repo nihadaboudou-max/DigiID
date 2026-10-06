@@ -51,7 +51,7 @@ function Contenu() {
         </Link>
       </div>
 
-      <EnregistrementSuiviFamilial digiidInitial={digiid} />
+      <EnregistrementSuiviFamilial digiidInitial={digiid} attributionFacultative />
     </div>
   );
 }

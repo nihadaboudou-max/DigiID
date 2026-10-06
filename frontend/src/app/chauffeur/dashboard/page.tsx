@@ -6,17 +6,23 @@
  * nombre de colis à bord, et donne accès d'un clic à la liste des colis d'un
  * voyage et au scan en route.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 
 import { Alerte } from "@/composants/commun/Alerte";
 import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
-import { IconeColis, IconeScan } from "@/composants/commun/Icones";
+import {
+  IconeColis,
+  IconeIdentite,
+  IconeScan,
+  IconeTicket,
+} from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { formaterDate } from "@/composants/logistique/format";
 import { ROLES_CHAUFFEUR } from "@/composants/logistique/roles";
+import { PortefeuilleCarte } from "@/composants/paiement/PortefeuilleCarte";
 import { useAuthentification } from "@/contextes/authentification";
 import { useLangue } from "@/i18n/useLangue";
 import { ErreurAPI } from "@/services/client_api";
@@ -115,30 +121,43 @@ function Contenu() {
         </p>
       </div>
 
-      {/* Action rapide : scan */}
-      <Link
-        href="/chauffeur/scan"
-        onClick={() => jouer("btn.scanner_un_colis")}
-        className="carte hover:border-ocre/40 hover:shadow-md transition-all duration-200 group block"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-ocre/15 text-ocre-fonce flex items-center justify-center flex-shrink-0 group-hover:bg-ocre group-hover:text-white transition-colors">
-            <IconeScan className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="font-semibold text-ardoise">{t("chauffeur.scan_carte")}</p>
-            <p className="text-xs text-ardoise-clair mt-0.5">
-              {t("chauffeur.scan_carte_desc")}
-            </p>
-          </div>
-        </div>
-      </Link>
+      {/* Actions rapides : les gestes du terrain, sans passer par le guichet */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <LienRapideChauffeur
+          href="/chauffeur/scan"
+          titre={t("chauffeur.scan_carte")}
+          description={t("chauffeur.scan_carte_desc")}
+          icone={<IconeScan className="w-6 h-6" />}
+          onClick={() => jouer("btn.scanner_un_colis")}
+        />
+        <LienRapideChauffeur
+          href="/chauffeur/colis/nouveau"
+          titre="Enregistrer un colis"
+          description="Un client monte avec un colis : la fiche est créée en route."
+          icone={<IconeColis className="w-6 h-6" />}
+        />
+        <LienRapideChauffeur
+          href="/chauffeur/passagers/nouveau"
+          titre="Enregistrer un passager"
+          description="Adulte ou enfant : la famille est prévenue par SMS."
+          icone={<IconeIdentite className="w-6 h-6" />}
+        />
+        <LienRapideChauffeur
+          href="/chauffeur/colis"
+          titre="Mes colis"
+          description="Ce que vous transportez et ce qu'il reste à remettre."
+          icone={<IconeTicket className="w-6 h-6" />}
+        />
+      </div>
 
       {erreur && (
         <Alerte variante="erreur" titre="Erreur">
           {erreur}
         </Alerte>
       )}
+
+      {/* Ma cagnotte : le chauffeur gagne sa commission sur ses propres enregistrements */}
+      <PortefeuilleCarte limiteMouvements={3} cheminCagnotte="/chauffeur/cagnotte" />
 
       {/* Liste des voyages */}
       <Carte
@@ -180,6 +199,39 @@ function Contenu() {
         )}
       </Carte>
     </div>
+  );
+}
+
+/** Raccourci du tableau de bord chauffeur (icône + libellé + explication). */
+function LienRapideChauffeur({
+  href,
+  titre,
+  description,
+  icone,
+  onClick,
+}: {
+  href: string;
+  titre: string;
+  description: string;
+  icone: ReactNode;
+  onClick?: () => void;
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      className="carte group block transition-all duration-200 hover:border-ocre/40 hover:shadow-md"
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-ocre/15 text-ocre-fonce transition-colors group-hover:bg-ocre group-hover:text-white">
+          {icone}
+        </div>
+        <div>
+          <p className="font-semibold text-ardoise">{titre}</p>
+          <p className="mt-0.5 text-xs text-ardoise-clair">{description}</p>
+        </div>
+      </div>
+    </Link>
   );
 }
 

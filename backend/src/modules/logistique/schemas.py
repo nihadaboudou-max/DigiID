@@ -258,7 +258,7 @@ class ColisCreate(BaseModel):
     receveur_id: Optional[UUID] = None
     # **Attribution obligatoire** : tout enregistrement est lié à un chauffeur
     # précis et à un trajet précis (gare de départ → gare d'arrivée).
-    voyage_id: UUID
+    voyage_id: Optional[UUID] = None
     # **Obligatoire** hors enregistrement direct. En mode ``enregistrement_direct``
     # (le chauffeur inscrit son client en route), le champ peut Ǧtre omis : le
     # backend force alors le chauffeur = utilisateur connecté.
@@ -273,11 +273,13 @@ class ColisCreate(BaseModel):
     def _gares_distinctes(self):
         if self.gare_depart_id == self.gare_arrivee_id:
             raise ValueError("Les gares de départ et d'arrivée doivent être différentes")
-        # Hors enregistrement direct, l'attribution à un chauffeur reste
-        # **obligatoire** : on refuse la requête dès la validation.
-        if not self.enregistrement_direct and self.chauffeur_id is None:
+        # En **enregistrement direct**, le chauffeur connaît forcément son
+        # voyage : il est donc obligatoire. Au guichet, on autorise l'inverse —
+        # enregistrer d'abord, affecter le voyage/chauffeur ensuite (voir
+        # le POST « affectation »).
+        if self.enregistrement_direct and self.voyage_id is None:
             raise ValueError(
-                "chauffeur_id est obligatoire (ou passer enregistrement_direct=true)"
+                "voyage_id est obligatoire pour un enregistrement direct par le chauffeur"
             )
         return self
 
@@ -326,6 +328,18 @@ class ColisEnregistre(BaseModel):
     """Réponse d'enregistrement d'un colis : le colis + son ticket (QR + code)."""
     colis: ColisResponse
     ticket: TicketResponse
+
+
+class AffectationRequest(BaseModel):
+    """Affectation (ou réaffectation) d'un enregistrement à un voyage.
+
+    Répond au terrain : au guichet, on enregistre un colis **avant** de savoir
+    quel car partira. Le receveur revient ensuite sur la fiche choisir le
+    voyage — le chauffeur en découle automatiquement (il est celui du voyage).
+    """
+    voyage_id: UUID
+    # Facultatif : si omis, le chauffeur affecté au voyage est retenu.
+    chauffeur_id: Optional[UUID] = None
 
 
 # ─── Événements (timeline) ───────────────────────────────────────────
@@ -426,7 +440,7 @@ class SuiviFamilialCreate(BaseModel):
     gare_depart_id: UUID
     gare_arrivee_id: UUID
     # **Attribution obligatoire** : chauffeur précis + voyage précis.
-    voyage_id: UUID
+    voyage_id: Optional[UUID] = None
     # **Obligatoire** hors enregistrement direct (voir ``enregistrement_direct``).
     chauffeur_id: Optional[UUID] = None
     parent_id: Optional[UUID] = None
@@ -450,11 +464,13 @@ class SuiviFamilialCreate(BaseModel):
                 raise ValueError("Le numéro de l'acheteur du ticket est obligatoire pour un enfant")
             if not self.telephone_parent:
                 self.telephone_parent = self.acheteur_tel
-        # Hors enregistrement direct, l'attribution à un chauffeur reste
-        # **obligatoire** : on refuse la requête dès la validation.
-        if not self.enregistrement_direct and self.chauffeur_id is None:
+        # En **enregistrement direct**, le chauffeur connaît forcément son
+        # voyage : il est donc obligatoire. Au guichet, on autorise l'inverse —
+        # enregistrer d'abord, affecter le voyage/chauffeur ensuite (voir
+        # le POST « affectation »).
+        if self.enregistrement_direct and self.voyage_id is None:
             raise ValueError(
-                "chauffeur_id est obligatoire (ou passer enregistrement_direct=true)"
+                "voyage_id est obligatoire pour un enregistrement direct par le chauffeur"
             )
         return self
 
@@ -610,7 +626,7 @@ class ActionLotVoyageResponse(BaseModel):
     succes: bool = True
     message: str
     type_action: str
-    voyage_id: UUID
+    voyage_id: Optional[UUID] = None
     nb_passagers: int = 0
     nb_colis: int = 0
 
@@ -625,7 +641,7 @@ class PreAlerteResponse(BaseModel):
     """SMS de pré-alerte émis (passagers, proches de confiance, destinataires)."""
     succes: bool = True
     message: str
-    voyage_id: UUID
+    voyage_id: Optional[UUID] = None
     nb_sms: int = 0
     nb_passagers: int = 0
     nb_colis: int = 0

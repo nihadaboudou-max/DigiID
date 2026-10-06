@@ -30,12 +30,14 @@ import {
   gareDeLActeur,
   logistiqueAPI,
   type Gare,
+  type Ligne,
   type SuiviFamilialEnregistre,
   type Voyage,
 } from "@/services/logistique_api";
 import { ControleurBagages } from "./ControleurBagages";
 import { formaterFcfa } from "./format";
 import { RechercheCarteDigiID } from "./RechercheCarteDigiID";
+import { SelectionVoyage, libelleVoyage } from "./SelectionVoyage";
 import { TicketSuiviFamilialImprimable } from "./TicketSuiviFamilialImprimable";
 
 type TypePassager = "enfant" | "adulte";
@@ -45,15 +47,28 @@ const FRAIS_SERVICE_PASSAGER_FCFA = 100;
 
 export function EnregistrementSuiviFamilial({
   digiidInitial,
+  voyageImposeId,
+  chauffeurImposeId,
+  attributionFacultative = false,
+  enregistrementDirect = false,
 }: {
   /** DigiID / lien de QR du client, quand l'agent arrive depuis /guichet/carte. */
   digiidInitial?: string;
+  /** Voyage imposé (espace chauffeur) : le passager voyage dans SON car. */
+  voyageImposeId?: string;
+  /** Chauffeur imposé : celui qui enregistre en route est le conducteur. */
+  chauffeurImposeId?: string;
+  /** Guichet : autorise « je ne sais pas encore quel car partira ». */
+  attributionFacultative?: boolean;
+  /** Enregistrement **en route par le chauffeur** (mode « chauffeur_direct »). */
+  enregistrementDirect?: boolean;
 } = {}) {
   const { utilisateur } = useAuthentification();
 
   // Référentiel
   const [gares, setGares] = useState<Gare[]>([]);
   const [voyages, setVoyages] = useState<Voyage[]>([]);
+  const [lignes, setLignes] = useState<Ligne[]>([]);
   const [chargementRef, setChargementRef] = useState(true);
   const [gareGuichet, setGareGuichet] = useState<Gare | null>(null);
 
@@ -75,7 +90,9 @@ export function EnregistrementSuiviFamilial({
   // Attribution : gares + voyage (+ chauffeur déduit du voyage).
   const [gareDepartId, setGareDepartId] = useState("");
   const [gareArriveeId, setGareArriveeId] = useState("");
-  const [voyageId, setVoyageId] = useState("");
+  const [voyageId, setVoyageId] = useState(voyageImposeId ?? "");
+  /** Au guichet, on ignore souvent quel car partira : report d'affectation. */
+  const [affecterPlusTard, setAffecterPlusTard] = useState(false);
 
   // État d'envoi
   const [erreur, setErreur] = useState<string | null>(null);
@@ -86,13 +103,15 @@ export function EnregistrementSuiviFamilial({
     let annule = false;
     (async () => {
       try {
-        const [reponseGares, reponseVoyages] = await Promise.all([
+        const [reponseGares, reponseVoyages, reponseLignes] = await Promise.all([
           logistiqueAPI.gares.lister(),
           logistiqueAPI.voyages.lister().catch(() => ({ elements: [] as Voyage[] })),
+          logistiqueAPI.lignes.lister().catch(() => ({ elements: [] as Ligne[] })),
         ]);
         if (annule) return;
         setGares(reponseGares.elements);
         setVoyages(reponseVoyages.elements);
+        setLignes(reponseLignes.elements);
 
         if (utilisateur?.id) {
           const gare = await gareDeLActeur(utilisateur.id);
@@ -123,7 +142,7 @@ export function EnregistrementSuiviFamilial({
     () => voyages.find((v) => v.id === voyageId) ?? null,
     [voyages, voyageId],
   );
-  const chauffeurId = voyageSelectionne?.chauffeur_id ?? null;
+  const chauffeurId = chauffeurImposeId ?? voyageSelectionne?.chauffeur_id ?? null;
 
   const nombreChiffresTel = (v: string) => v.replace(/\D/g, "").length;
   const telAcheteurOk = nombreChiffresTel(acheteurTel) >= 6;
@@ -150,8 +169,9 @@ export function EnregistrementSuiviFamilial({
     !!gareDepartId &&
     !!gareArriveeId &&
     gareDepartId !== gareArriveeId &&
-    !!voyageId &&
-    !!chauffeurId;
+    (voyageImposeId
+      ? true
+      : affecterPlusTard || (!!voyageId && !!chauffeurId));
 
   function nouvelEnregistrement() {
     setResultat(null);
@@ -166,7 +186,8 @@ export function EnregistrementSuiviFamilial({
     setProcheNom("");
     setProcheTelephone("");
     setNombreBagages(1);
-    setVoyageId("");
+    setVoyageId(voyageImposeId ?? "");
+    setAffecterPlusTard(false);
     setGareArriveeId("");
     setGareDepartId(gareGuichet?.id ?? "");
     setErreur(null);
@@ -174,9 +195,9 @@ export function EnregistrementSuiviFamilial({
 
   async function enregistrer() {
     setErreur(null);
-    if (!chauffeurId) {
+    if (!attributionFacultative && !voyageImposeId && !chauffeurId) {
       setErreur(
-        "Sélectionnez un voyage affecté à un chauffeur : l'attribution du chauffeur est obligatoire.",
+        "Sélectionnez un voyage affecté à un chauffeur, ou cochez « affecter le chauffeur plus tard ».",
       );
       return;
     }
@@ -200,8 +221,9 @@ export function EnregistrementSuiviFamilial({
         nombre_bagages: nombreBagages,
         gare_depart_id: gareDepartId,
         gare_arrivee_id: gareArriveeId,
-        voyage_id: voyageId,
-        chauffeur_id: chauffeurId,
+        voyage_id: affecterPlusTard ? null : voyageId || null,
+        chauffeur_id: affecterPlusTard ? undefined : (chauffeurId ?? undefined),
+        enregistrement_direct: enregistrementDirect || undefined,
       });
       setResultat(reponse);
     } catch (e) {
@@ -496,38 +518,57 @@ export function EnregistrementSuiviFamilial({
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-ardoise">
-                  Voyage / chauffeur <span className="text-terre">*</span>
-                </label>
-                <select
-                  className="champ-saisie"
-                  value={voyageId}
-                  onChange={(e) => setVoyageId(e.target.value)}
-                >
-                  <option value="">— Choisir un voyage —</option>
-                  {voyages.map((v) => (
-                    <option key={v.id} value={v.id} disabled={!v.chauffeur_id}>
-                      {new Intl.DateTimeFormat("fr-FR", {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      }).format(new Date(v.date_depart))}
-                      {v.vehicule_immatriculation ? ` · ${v.vehicule_immatriculation}` : ""}
-                      {v.chauffeur_nom
-                        ? ` · chauffeur : ${v.chauffeur_nom}`
-                        : " · (aucun chauffeur affecté)"}
-                    </option>
-                  ))}
-                </select>
-                {voyageSelectionne && !chauffeurId && (
-                  <p className="text-xs font-medium text-terre">
-                    Ce voyage n&apos;a pas de chauffeur affecté — choisissez-en un autre.
+              {voyageImposeId && (
+                <div className="rounded-xl border border-ocre/30 bg-ocre/5 px-4 py-3">
+                  <p className="text-sm font-medium text-ardoise">
+                    Car imposé : ce passager voyage dans votre car.
                   </p>
-                )}
-                <p className="text-xs italic text-ardoise-clair">
-                  Le chauffeur est attribué automatiquement d&apos;après le voyage sélectionné.
-                </p>
-              </div>
+                  <p className="text-xs text-ardoise-clair">
+                    {voyageSelectionne
+                      ? libelleVoyage(voyageSelectionne)
+                      : "Voyage en cours de chargement…"}
+                  </p>
+                </div>
+              )}
+
+              {!voyageImposeId && (
+                <div className="space-y-2">
+                  <SelectionVoyage
+                    voyages={voyages}
+                    lignes={lignes}
+                    valeur={voyageId}
+                    surSelection={(id) => {
+                      setVoyageId(id);
+                      if (id) setAffecterPlusTard(false);
+                    }}
+                    gareDepartId={gareDepartId}
+                    gareArriveeId={gareArriveeId}
+                    exigerChauffeur
+                    obligatoire={!affecterPlusTard}
+                    desactive={affecterPlusTard}
+                    aide="Le chauffeur est déduit du car choisi : vous n'avez aucun identifiant à saisir."
+                  />
+
+                  {attributionFacultative && (
+                    <label className="flex items-start gap-2 rounded-lg bg-sable/60 px-3 py-2 text-xs text-ardoise">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 rounded border-ardoise-clair/30"
+                        checked={affecterPlusTard}
+                        onChange={(e) => {
+                          setAffecterPlusTard(e.target.checked);
+                          if (e.target.checked) setVoyageId("");
+                        }}
+                      />
+                      <span>
+                        Je ne sais pas encore quel car partira — enregistrer
+                        maintenant et affecter le chauffeur plus tard (le parent
+                        est prévenu dès l'enregistrement).
+                      </span>
+                    </label>
+                  )}
+                </div>
+              )}
 
               <ControleurBagages valeur={nombreBagages} onChange={setNombreBagages} />
 
@@ -558,3 +599,4 @@ export function EnregistrementSuiviFamilial({
     </div>
   );
 }
+

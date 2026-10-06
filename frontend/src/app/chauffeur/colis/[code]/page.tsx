@@ -1,9 +1,11 @@
 "use client";
 /**
- * Fiche d'un colis : informations, ticket imprimable et timeline (S3).
+ * Fiche d'un colis — vue chauffeur (lecture seule).
  *
- * Le `code` peut être le numéro en clair (`DKR-2025-000001`) ou le token QR :
- * l'API accepte les deux (`GET /api/v1/logistique/colis/{code}`).
+ * Ce que le chauffeur a besoin de savoir au moment de la remise : **à qui** il
+ * remet le colis, d'où il vient, où il va, et le QR à montrer/scanner. Il ne
+ * touche ni à l'argent (l'encaissement reste au guichet) ni à l'affectation des
+ * cars (le gérant de gare décide) : son geste, c'est la remise tracée.
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -15,12 +17,10 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import { IconeScan } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
-import { AffecterChauffeur } from "@/composants/logistique/AffecterChauffeur";
-import { formaterDateHeure, formaterFcfa } from "@/composants/logistique/format";
-import { ROLES_GUICHET } from "@/composants/logistique/roles";
+import { formaterDateHeure } from "@/composants/logistique/format";
+import { ROLES_CHAUFFEUR } from "@/composants/logistique/roles";
 import { SuiviTimeline } from "@/composants/logistique/SuiviTimeline";
 import { TicketImprimable } from "@/composants/logistique/TicketImprimable";
-import { PaiementColis } from "@/composants/paiement/PaiementColis";
 import { ErreurAPI } from "@/services/client_api";
 import { logistiqueAPI } from "@/services/logistique_api";
 import {
@@ -31,9 +31,9 @@ import {
   type Ticket,
 } from "@/types/logistique";
 
-export default function PageDetailTicket() {
+export default function PageColisChauffeur() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={ROLES_GUICHET}>
+    <EnvelopperEspaceProtege rolesAutorises={ROLES_CHAUFFEUR}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
@@ -87,7 +87,9 @@ function Contenu() {
 
   if (chargement) {
     return (
-      <p className="text-ardoise-clair italic py-12 text-center">Chargement du colis…</p>
+      <p className="py-12 text-center italic text-ardoise-clair">
+        Chargement du colis…
+      </p>
     );
   }
 
@@ -97,14 +99,13 @@ function Contenu() {
         <Alerte variante="erreur" titre="Impossible d'afficher le colis">
           {erreur ?? "Colis introuvable."}
         </Alerte>
-        <Link href="/receveur/tickets">
-          <Bouton variante="ghost">← Retour à la liste</Bouton>
+        <Link href="/chauffeur/colis">
+          <Bouton variante="ghost">← Mes colis</Bouton>
         </Link>
       </div>
     );
   }
 
-  // Reconstitution du ticket à partir du colis (pour l'impression / le suivi).
   const ticket: Ticket = {
     id: colis.ticket_id ?? colis.id,
     code_clair: colis.code_clair ?? code,
@@ -120,76 +121,63 @@ function Contenu() {
     cree_le: colis.cree_le,
     modifie_le: colis.modifie_le,
   };
+  const dejaRemis = colis.statut === "livre" || colis.statut === "annule";
 
   return (
     <div className="space-y-6 apparition">
-      {/* Fil d'Ariane */}
       <nav className="flex items-center gap-2 text-sm text-ardoise-clair">
-        <Link href="/receveur/dashboard" className="hover:text-lagune">
-          Guichet
+        <Link href="/chauffeur/colis" className="hover:text-lagune">
+          Mes colis
         </Link>
         <span>/</span>
-        <Link href="/receveur/tickets" className="hover:text-lagune">
-          Colis &amp; tickets
-        </Link>
-        <span>/</span>
-        <span className="text-ardoise font-semibold font-mono">{ticket.code_clair}</span>
+        <span className="font-mono font-semibold text-ardoise">{ticket.code_clair}</span>
       </nav>
 
-      {/* En-tête */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-ardoise font-mono">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="font-mono text-2xl font-bold text-ardoise">
             {ticket.code_clair}
           </h1>
-          <Badge variante={VARIANTES_STATUT_COLIS[colis.statut] ?? "neutre"} taille="moyen">
+          <Badge
+            variante={VARIANTES_STATUT_COLIS[colis.statut] ?? "neutre"}
+            taille="moyen"
+          >
             {LIBELLES_STATUT_COLIS[colis.statut] ?? colis.statut}
           </Badge>
+          {colis.mode_enregistrement === "chauffeur_direct" && (
+            <Badge variante="ocre">Enregistré en route</Badge>
+          )}
         </div>
-        <Link href={`/receveur/scan?code=${encodeURIComponent(ticket.code_clair)}`}>
-          <Bouton variante="primaire">
-            <IconeScan className="w-4 h-4" /> Scanner / Livrer
-          </Bouton>
-        </Link>
+        {!dejaRemis && (
+          <Link
+            href={`/chauffeur/scan?code=${encodeURIComponent(ticket.code_clair)}&type=livraison`}
+          >
+            <Bouton variante="primaire">
+              <IconeScan className="w-4 h-4" /> Remettre au destinataire
+            </Bouton>
+          </Link>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Colonne gauche : ticket */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="space-y-6">
           <TicketImprimable ticket={ticket} colis={colis} />
-
-          {/* S6 — frais de service DigiID (le colis n'est prélevé qu'une fois) */}
-          <div className="no-print">
-            <PaiementColis colis={colis} />
-          </div>
         </div>
 
-        {/* Colonne droite : détails + timeline */}
         <div className="space-y-6">
-          <Carte titre="Informations du colis">
-            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+          <Carte titre="À remettre à">
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
               <Ligne libelle="Destinataire" valeur={colis.destinataire_nom} />
               <Ligne libelle="Téléphone" valeur={colis.destinataire_tel} />
               <Ligne libelle="Départ" valeur={colis.gare_depart_nom || "—"} />
               <Ligne libelle="Arrivée" valeur={colis.gare_arrivee_nom || "—"} />
-              <Ligne libelle="Prix transport" valeur={formaterFcfa(colis.frais_fcfa)} />
               <Ligne
-                libelle="Poids"
-                valeur={colis.poids_kg != null ? `${colis.poids_kg} kg` : "—"}
-              />
-              <Ligne
-                libelle="Valeur déclarée"
-                valeur={colis.valeur_fcfa != null ? formaterFcfa(colis.valeur_fcfa) : "—"}
-              />
-              <Ligne
-                libelle="Nombre d'articles"
+                libelle="Articles"
                 valeur={String(colis.nombre_articles ?? 1)}
               />
-              <Ligne libelle="Enregistré par" valeur={colis.receveur_nom || "—"} />
-              <Ligne
-                libelle="Chauffeur"
-                valeur={colis.chauffeur_nom ?? "À affecter — aucun car désigné"}
-              />
+              <Ligne libelle="Sacs" valeur={String(colis.nombre_bagages ?? 1)} />
+              <Ligne libelle="Expéditeur" valeur={colis.expediteur_nom || "—"} />
+              <Ligne libelle="Enregistré par" valeur={colis.enregistre_par_nom || "—"} />
               {colis.description && (
                 <div className="sm:col-span-2">
                   <dt className="text-ardoise-clair">Description</dt>
@@ -197,27 +185,19 @@ function Contenu() {
                 </div>
               )}
               {colis.livre_le && (
-                <Ligne libelle="Livré le" valeur={formaterDateHeure(colis.livre_le)} />
+                <Ligne libelle="Remis le" valeur={formaterDateHeure(colis.livre_le)} />
               )}
             </dl>
+            <p className="mt-3 text-xs italic text-ardoise-clair">
+              Les frais de service se règlent au guichet : ici, vous ne faites que
+              la remise (elle est horodatée et notifiée automatiquement).
+            </p>
           </Carte>
 
-          <AffecterChauffeur
-            gareDepartId={colis.gare_depart_id}
-            gareArriveeId={colis.gare_arrivee_id}
-            voyageIdActuel={colis.voyage_id}
-            chauffeurNomActuel={colis.chauffeur_nom}
-            desactive={colis.statut === "livre" || colis.statut === "annule"}
-            surAffecter={async (voyageId) => {
-              const mis_a_jour = await logistiqueAPI.colis.affecter(colis.id, {
-                voyage_id: voyageId,
-              });
-              setColis(mis_a_jour);
-              setEvenements(await logistiqueAPI.colis.evenements(mis_a_jour.id));
-            }}
-          />
-
-          <Carte titre="Suivi du colis" description={`${evenements.length} événement(s)`}>
+          <Carte
+            titre="Suivi du colis"
+            description={`${evenements.length} événement(s)`}
+          >
             <SuiviTimeline evenements={evenements} />
           </Carte>
         </div>
@@ -230,7 +210,7 @@ function Contenu() {
 function Ligne({ libelle, valeur }: { libelle: string; valeur: string }) {
   return (
     <div className="flex flex-col">
-      <dt className="text-xs uppercase tracking-wider text-ardoise-clair font-semibold">
+      <dt className="text-xs font-semibold uppercase tracking-wider text-ardoise-clair">
         {libelle}
       </dt>
       <dd className="text-ardoise">{valeur}</dd>

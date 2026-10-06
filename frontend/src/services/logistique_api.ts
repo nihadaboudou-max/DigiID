@@ -162,6 +162,15 @@ export const logistiqueAPI = {
     /** Timeline (événements) d'un colis. */
     evenements: (colisId: string) =>
       clientAPI.get<ColisEvenement[]>(`${BASE}/colis/${colisId}/evenements`, opts),
+
+    /**
+     * Affecte (ou réaffecte) le colis à un voyage — le chauffeur en découle.
+     *
+     * Répond au terrain : au guichet on enregistre souvent le colis **avant**
+     * de savoir quel car partira. On revient ensuite désigner le voyage.
+     */
+    affecter: (colisId: string, donnees: { voyage_id: string; chauffeur_id?: string }) =>
+      clientAPI.post<Colis>(`${BASE}/colis/${colisId}/affectation`, donnees, opts),
   },
 
   // ─── Suivi familial (enfants voyageant seuls — S7) ────────────────
@@ -213,6 +222,14 @@ export const logistiqueAPI = {
     notifications: (id: string) =>
       clientAPI.get<NotificationLogistique[]>(
         `${BASE}/suivi-familial/${id}/notifications`,
+        opts,
+      ),
+
+    /** Affecte (ou réaffecte) le passager à un voyage — le chauffeur en découle. */
+    affecter: (id: string, donnees: { voyage_id: string; chauffeur_id?: string }) =>
+      clientAPI.post<SuiviFamilial>(
+        `${BASE}/suivi-familial/${id}/affectation`,
+        donnees,
         opts,
       ),
   },

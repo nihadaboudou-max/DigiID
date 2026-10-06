@@ -554,6 +554,27 @@ async def lister_colis(
     return schemas.ReponseListe(elements=colis_liste, total=total, page=page, par_page=par_page)
 
 
+@routeur_colis.post("/{colis_id}/affectation",
+                   response_model=schemas.ColisResponse,
+                   summary="Affecter (ou réaffecter) un colis à un voyage / chauffeur")
+@require_permission("logistique.colis.creer")
+async def affecter_colis(
+    colis_id: UUID,
+    donnees: schemas.AffectationRequest,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    """Désigne le car (donc le chauffeur) d'un colis enregistré plus tôt.
+
+    Cas réel : au guichet on enregistre le colis avant de savoir quel car
+    partira. Le receveur revient ensuite désigner le voyage — le chauffeur en
+    découle automatiquement, et l'affectation est tracée dans la timeline.
+    """
+    colis = await service.affecter_colis(session, colis_id, donnees, utilisateur_courant)
+    await _enrichir_colis(session, colis)
+    return colis
+
+
 @routeur_colis.get("/{colis_id}/evenements",
                    response_model=list[schemas.ColisEvenementResponse],
                    summary="Timeline d'un colis")
@@ -662,6 +683,27 @@ async def lister_suivi_familial(
     for suivi in suivis:
         await _enrichir_suivi_familial(session, suivi)
     return schemas.ReponseListe(elements=suivis, total=total, page=page, par_page=par_page)
+
+
+@routeur_suivi_familial.post("/{suivi_id}/affectation",
+                             response_model=schemas.SuiviFamilialResponse,
+                             summary="Affecter (ou réaffecter) un passager à un voyage / chauffeur")
+@require_permission("logistique.colis.creer")
+async def affecter_suivi_familial(
+    suivi_id: UUID,
+    donnees: schemas.AffectationRequest,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    """Désigne le car (donc le chauffeur) d'un passager enregistré plus tôt.
+
+    Le guichet enregistre souvent l'enfant avant de savoir quel car partira :
+    cette route permet de compléter l'attribution, ou de la corriger.
+    """
+    suivi = await service.affecter_suivi_familial(
+        session, suivi_id, donnees, utilisateur_courant
+    )
+    return await _enrichir_suivi_familial(session, suivi)
 
 
 @routeur_suivi_familial.get("/{suivi_id}",

@@ -27,7 +27,7 @@ export type ModeEnregistrement = "guichet" | "chauffeur_direct";
 export type TypeEvenementScan = "livraison" | "depart" | "mise_en_transit" | "arrivee";
 
 /** Événements traçables d'un colis (le scan + l'enregistrement initial). */
-export type TypeEvenementColis = TypeEvenementScan | "enregistrement";
+export type TypeEvenementColis = TypeEvenementScan | "enregistrement" | "affectation";
 
 /** Étiquette QR d'un sac (une par sac — traçabilité, sans impact sur le prix). */
 export interface Bagage {
@@ -156,7 +156,7 @@ export interface DonneesColis {
    *  Peut être omis en **enregistrement direct** : le backend force alors le
    *  chauffeur = utilisateur connecté (et vérifie qu'il conduit bien ce voyage).
    */
-  voyage_id: string;
+  voyage_id?: string | null;
 
   chauffeur_id?: string;
   /**
@@ -225,6 +225,7 @@ export const LIBELLES_MODE_ENREGISTREMENT: Record<ModeEnregistrement, string> = 
 
 /** Libellé lisible d'un type d'événement. */
 export const LIBELLES_EVENEMENT: Record<TypeEvenementColis, string> = {
+  affectation: "Affectation au chauffeur",
   enregistrement: "Enregistrement",
   depart: "Départ",
   mise_en_transit: "Mise en transit",
@@ -270,6 +271,7 @@ export type StatutSuiviFamilial =
 /** Événements traçables du voyage d'un enfant. */
 export type TypeEvenementSuivi =
   | "enregistrement"
+  | "affectation"
   | "depart"
   | "arrivee"
   | "livraison"
@@ -368,7 +370,7 @@ export interface DonneesSuiviFamilial {
    *  Peut être omis en **enregistrement direct** : le backend force alors le
    *  chauffeur = utilisateur connecté (et vérifie qu'il conduit bien ce voyage).
    */
-  voyage_id: string;
+  voyage_id?: string | null;
 
   chauffeur_id?: string;
   /** Enregistrement direct par le chauffeur (client monté en route). */
@@ -454,6 +456,7 @@ export const LIBELLES_STATUT_SUIVI: Record<StatutSuiviFamilial, string> = {
 
 /** Libellé lisible d'un type d'événement de suivi. */
 export const LIBELLES_EVENEMENT_SUIVI: Record<string, string> = {
+  affectation: "Affectation au chauffeur",
   enregistrement: "Enregistrement de l'enfant",
   depart: "Départ",
   arrivee: "Arrivée à destination",

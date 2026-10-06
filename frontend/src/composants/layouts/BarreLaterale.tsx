@@ -308,12 +308,13 @@ export function BarreLaterale() {
   else if (utilisateur.role === "chauffeur") {
     liens = [
       { href: "/chauffeur/dashboard", libelle: "Mes voyages", Icone: IconeColis },
-      { href: "/chauffeur/scan", libelle: "Scanner un colis", Icone: IconeScan },
-      { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
-      { href: "/receveur/suivi-familial", libelle: "Suivi familial", Icone: IconeIdentite },
+      { href: "/chauffeur/colis", libelle: "Mes colis", Icone: IconeTicket },
+      { href: "/chauffeur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
+      { href: "/chauffeur/passagers", libelle: "Mes passagers", Icone: IconeIdentite },
+      { href: "/chauffeur/scan", libelle: "Scanner / Livrer", Icone: IconeScan },
       { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
       { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
-      { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
+      { href: "/chauffeur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
     ];
     titreSection = "Chauffeur";
     couleurLabel = "text-ocre";
