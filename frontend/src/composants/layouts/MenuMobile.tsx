@@ -27,8 +27,9 @@ const LIENS_UTILISATEUR: Lien[] = [
   { href: "/citoyen/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
   { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
   { href: "/profil", libelle: "Mon profil", Icone: IconeUtilisateur },
-  { href: "/score", libelle: "Mon score", Icone: IconeScore },
-  { href: "/chatbot", libelle: "Assistant", Icone: IconeChat },
+  // Menus masqués (simplification) — dé-commenter pour les réafficher :
+  // { href: "/score", libelle: "Mon score", Icone: IconeScore },
+  // { href: "/chatbot", libelle: "Assistant", Icone: IconeChat },
   { href: "/parametres", libelle: "Paramètres", Icone: IconeParametres },
 ];
 
@@ -955,6 +956,10 @@ function MenuCitoyenComplet({
 }) {
   return (
     <div className="mt-3 pt-2 border-t border-ardoise-clair/10">
+      {/* ═══ SECTION MASQUÉE (simplification) : « Mon espace personnel » ═══
+          Dé-commenter : retirer cette ligne et celle de « FIN SECTION MASQUÉE »
+          juste après la liste pour la réafficher.
+
       <div className="pl-2 space-y-0.5 mb-2">
         <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
           Mon espace personnel
@@ -978,6 +983,8 @@ function MenuCitoyenComplet({
           );
         })}
       </div>
+
+          ═══ FIN SECTION MASQUÉE ═══ */}
 
       {/* ═══════ MENUS MASQUÉS (simplification du menu citoyen) ═══════
       Rien n'est supprimé : retirez cette ligne et celle de « FIN MENUS MASQUÉS »

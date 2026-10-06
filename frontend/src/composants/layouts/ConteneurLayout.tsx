@@ -6,7 +6,9 @@
 import { usePathname } from "next/navigation";
 import { useAuthentification } from "@/contextes/authentification";
 import { BarreLaterale } from "@/composants/layouts/BarreLaterale";
-import { BoutonMenuMobile } from "@/composants/layouts/MenuMobile";
+// Doublon masqué (version mobile) : l'icône du menu est déjà rendue dans l'EnTete.
+// Dé-commenter cet import (et le bloc correspondant plus bas) pour le réafficher.
+// import { BoutonMenuMobile } from "@/composants/layouts/MenuMobile";
 import { EnTete } from "@/composants/layouts/EnTete";
 
 // Pages publiques sans layout (connexion, inscription, etc.)
@@ -46,10 +48,12 @@ export function ConteneurLayout({ children }: { children: React.ReactNode }) {
         {/* En-tête */}
         <EnTete />
 
-        {/* Menu mobile — visible uniquement sur mobile */}
+                {/* Menu mobile — MASQUÉ (doublon) : l'icône est déjà dans l'EnTete ci-dessus.
+            Dé-commenter ce bloc (et l'import ci-dessus) pour le réafficher.
         <div className="md:hidden px-4 py-3 border-b border-ardoise-clair/10 bg-white">
           <BoutonMenuMobile />
         </div>
+        */}
 
         {/* Contenu de la page avec padding approprié */}
         <main className="flex-1 p-4 md:p-6 lg:p-8">

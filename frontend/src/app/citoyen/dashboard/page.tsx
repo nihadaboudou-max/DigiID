@@ -10,9 +10,10 @@ import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Badge } from "@/composants/commun/Badge";
-import { BarreProgression } from "@/composants/commun/BarreProgression";
+// ── Score & Récompenses masqué (simplification) — dé-commenter pour le réafficher ──
+// import { BarreProgression } from "@/composants/commun/BarreProgression";
 import { useAuthentification } from "@/contextes/authentification";
-import { obtenirMonScore, type ScoreDetail } from "@/services/score";
+// import { obtenirMonScore, type ScoreDetail } from "@/services/score";
 
 export default function CitoyenDashboard() {
   return (
@@ -24,6 +25,7 @@ export default function CitoyenDashboard() {
 
 function Contenu() {
   const { utilisateur, chargement: chargementAuth } = useAuthentification();
+  /* ── SCORE MASQUÉ (simplification) — dé-commenter ce bloc pour le réafficher ──
   const [scoreData, setScoreData] = useState<ScoreDetail | null>(null);
   const [chargementScore, setChargementScore] = useState(true);
 
@@ -52,6 +54,7 @@ function Contenu() {
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [scoreData]);
+  ── FIN BLOC SCORE ── */
 
   if (chargementAuth) {
     return (
@@ -81,10 +84,12 @@ const CATEGORIES: { titre: string; icone: string; couleur: string; liens: LienAc
     couleur: "border-l-lagune",
     liens: [
       { titre: "Documents d'identité", href: "/documents-identite", icone: "🆔", description: "CNI, permis, assurance" },
-      { titre: "Vérifier ma CNI", href: "/identite/verification-cni", icone: "📄", description: "Scanner ta carte d'identité" },
+      // Menu masqué (simplification) — dé-commenter pour le réafficher :
+      // { titre: "Vérifier ma CNI", href: "/identite/verification-cni", icone: "📄", description: "Scanner ta carte d'identité" },
       { titre: "Reconnaissance faciale", href: "/identite/verification-visuelle", icone: "📸", description: "Vérification biométrique" },
     ],
   },
+  /* ── Catégorie masquée (simplification) — dé-commenter pour la réafficher ──
   {
     titre: "Santé",
     icone: "🏥",
@@ -94,6 +99,7 @@ const CATEGORIES: { titre: string; icone: string; couleur: string; liens: LienAc
       { titre: "Mes ordonnances", href: "/citoyen/mes-ordonnances", icone: "💊", description: "Consultez vos prescriptions" },
     ],
   },
+  */
   {
     titre: "Sécurité & Données",
     icone: "🔒",
@@ -102,9 +108,11 @@ const CATEGORIES: { titre: string; icone: string; couleur: string; liens: LienAc
       { titre: "Mes consentements", href: "/consentements", icone: "✅", description: "Gérer les accès autorisés" },
       { titre: "Mes autorisations", href: "/autorisations", icone: "🔐", description: "Qui a accès à mes données" },
       { titre: "Partager mon DigiID", href: "/partage", icone: "📱", description: "QR code et lien de partage" },
-      { titre: "Mes documents", href: "/documents", icone: "📁", description: "Documents et justificatifs" },
+      // Menu masqué (simplification) — dé-commenter pour le réafficher :
+      // { titre: "Mes documents", href: "/documents", icone: "📁", description: "Documents et justificatifs" },
     ],
   },
+  /* ── Catégorie masquée (simplification) — dé-commenter pour la réafficher ──
   {
     titre: "Engagement & Outils",
     icone: "🌟",
@@ -116,6 +124,7 @@ const CATEGORIES: { titre: string; icone: string; couleur: string; liens: LienAc
       { titre: "Assistant DigiID", href: "/chatbot", icone: "🤖", description: "Pose tes questions" },
     ],
   },
+  */
 ];
 
   // Initiales pour l'avatar
@@ -135,8 +144,9 @@ const CATEGORIES: { titre: string; icone: string; couleur: string; liens: LienAc
     return { texte: "Non vérifié", variante: "neutre" as const };
   })();
 
-  const scoreTotal = scoreData?.score_total ?? 0;
-  const niveauScore = scoreData?.niveau ?? "—";
+  // Score masqué (simplification) — dé-commenter avec le bloc Score :
+  // const scoreTotal = scoreData?.score_total ?? 0;
+  // const niveauScore = scoreData?.niveau ?? "—";
 
   return (
     <div className="space-y-6 apparition pb-20">
@@ -173,7 +183,9 @@ const CATEGORIES: { titre: string; icone: string; couleur: string; liens: LienAc
           </div>
         </Carte>
 
-        {/* Score */}
+        {/* ═══ CARTE SCORE MASQUÉE (simplification) — dé-commenter pour la réafficher ═══
+
+        Carte Score
         {scoreData && !chargementScore ? (
           <Link href="/score" className="lg:col-span-1 block group">
             <Carte className="cursor-pointer hover:shadow-lg transition-all h-full group">
@@ -204,6 +216,8 @@ const CATEGORIES: { titre: string; icone: string; couleur: string; liens: LienAc
             </Carte>
           </div>
         )}
+
+        ═══ FIN CARTE SCORE MASQUÉE ═══ */}
 
         {/* Mini progression des vérifications */}
         <Carte className="lg:col-span-1">
