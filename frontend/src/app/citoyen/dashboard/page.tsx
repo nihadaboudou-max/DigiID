@@ -9,7 +9,12 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
-import { Badge } from "@/composants/commun/Badge";
+import { Badge, type BadgeVariante } from "@/composants/commun/Badge";
+import { EtatVerificationsCitoyen } from "@/composants/verifications";
+import {
+  useEtatVerifications,
+  type NiveauVerification,
+} from "@/crochets/useEtatVerifications";
 // ── Score & Récompenses masqué (simplification) — dé-commenter pour le réafficher ──
 // import { BarreProgression } from "@/composants/commun/BarreProgression";
 import { useAuthentification } from "@/contextes/authentification";
@@ -25,6 +30,7 @@ export default function CitoyenDashboard() {
 
 function Contenu() {
   const { utilisateur, chargement: chargementAuth } = useAuthentification();
+  const etatVerifications = useEtatVerifications();
   /* ── SCORE MASQUÉ (simplification) — dé-commenter ce bloc pour le réafficher ──
   const [scoreData, setScoreData] = useState<ScoreDetail | null>(null);
   const [chargementScore, setChargementScore] = useState(true);
@@ -131,18 +137,23 @@ const CATEGORIES: { titre: string; icone: string; couleur: string; liens: LienAc
   const initiales = ((utilisateur.prenom?.[0] || "") + (utilisateur.nom?.[0] || "")).toUpperCase() || "?";
   const nomComplet = [utilisateur.prenom, utilisateur.nom].filter(Boolean).join(" ") || utilisateur.email;
 
-  // Niveau de vérification
-  const niveauIdentite = (() => {
-    const verif = [
-      utilisateur.est_email_verifie,
-      utilisateur.est_visage_verifie,
-      utilisateur.est_cni_verifiee,
-    ];
-    const completees = verif.filter(Boolean).length;
-    if (completees >= 3) return { texte: "Identité complète ✓", variante: "succes" as const };
-    if (completees >= 1) return { texte: "Partiellement vérifié", variante: "ocre" as const };
-    return { texte: "Non vérifié", variante: "neutre" as const };
-  })();
+  // Niveau de vérification (compte + documents d'identité fournis)
+  const LIBELLES_NIVEAU: Record<NiveauVerification, string> = {
+    aucune: "Non vérifié",
+    partielle: "Partiellement vérifié",
+    renforcee: "Vérifié",
+    complete: "Identité complète ✓",
+  };
+  const VARIANTES_NIVEAU: Record<NiveauVerification, BadgeVariante> = {
+    aucune: "neutre",
+    partielle: "ocre",
+    renforcee: "info",
+    complete: "succes",
+  };
+  const niveauIdentite = {
+    texte: LIBELLES_NIVEAU[etatVerifications.niveau],
+    variante: VARIANTES_NIVEAU[etatVerifications.niveau],
+  };
 
   // Score masqué (simplification) — dé-commenter avec le bloc Score :
   // const scoreTotal = scoreData?.score_total ?? 0;
@@ -219,16 +230,11 @@ const CATEGORIES: { titre: string; icone: string; couleur: string; liens: LienAc
 
         ═══ FIN CARTE SCORE MASQUÉE ═══ */}
 
-        {/* Mini progression des vérifications */}
+        {/* État des vérifications (compte + documents fournis) */}
         <Carte className="lg:col-span-1">
           <p className="text-xs uppercase text-ardoise-clair font-semibold mb-3">Vérifications</p>
-          <div className="space-y-2">
-            <MiniVerif icone="📧" label="Email" fait={!!utilisateur.est_email_verifie} />
-            <MiniVerif icone="📸" label="Visage" fait={!!utilisateur.est_visage_verifie} />
-            <MiniVerif icone="🆔" label="CNI" fait={!!utilisateur.est_cni_verifiee} />
-            <MiniVerif icone="🔐" label="2FA" fait={!!utilisateur.deux_fa_active} />
-          </div>
-          <Link href="/parametres" className="block text-center mt-3 text-xs text-ocre hover:underline font-semibold">
+          <EtatVerificationsCitoyen etat={etatVerifications} variante="compact" />
+          <Link href="/documents-identite" className="block text-center mt-3 text-xs text-ocre hover:underline font-semibold">
             Compléter mes vérifications →
           </Link>
         </Carte>
@@ -278,19 +284,3 @@ const CATEGORIES: { titre: string; icone: string; couleur: string; liens: LienAc
 }
 
 /* ─── Sous-composants ─── */
-
-function MiniVerif({ icone, label, fait }: { icone: string; label: string; fait: boolean }) {
-  return (
-    <div className="flex items-center justify-between py-1">
-      <div className="flex items-center gap-2">
-        <span className="text-xs">{icone}</span>
-        <span className="text-xs text-ardoise">{label}</span>
-      </div>
-      {fait ? (
-        <span className="text-xs text-green-600 font-semibold">✓</span>
-      ) : (
-        <span className="text-xs text-ardoise-clair">—</span>
-      )}
-    </div>
-  );
-}

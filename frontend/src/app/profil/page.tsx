@@ -7,6 +7,8 @@ import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Alerte } from "@/composants/commun/Alerte";
 import { IconeCopier, IconeCheck } from "@/composants/commun/Icones";
+import { EtatVerificationsCitoyen } from "@/composants/verifications";
+import { useEtatVerifications } from "@/crochets/useEtatVerifications";
 import { useAuthentification } from "@/contextes/authentification";
 
 export default function PageProfil() {
@@ -23,6 +25,7 @@ export default function PageProfil() {
 
 function Contenu() {
   const { utilisateur, chargement } = useAuthentification();
+  const etatVerifications = useEtatVerifications();
   const [copie, setCopie] = useState(false);
 
   if (chargement || !utilisateur) {
@@ -105,7 +108,7 @@ function Contenu() {
           <p className="text-sm">
             Votre CNI ou votre visage a été vérifié, mais votre identité globale n'est pas encore validée. 
             Assurez-vous que le <strong>nom et le premier prénom</strong> sur vos documents correspondent exactement à ceux de votre profil.
-            <Link href="/citoyen/documents-identite" className="underline font-semibold ml-1">Vérifier mes documents →</Link>
+            <Link href="/documents-identite" className="underline font-semibold ml-1">Vérifier mes documents →</Link>
           </p>
         </Alerte>
       )}
@@ -155,34 +158,14 @@ function Contenu() {
             </div>
           </div>
 
-          {/* État des vérifications */}
+          {/* État des vérifications (compte + documents d'identité fournis) */}
           <div className="space-y-3">
             <p className="text-xs uppercase text-ardoise-clair font-semibold">État des vérifications</p>
-            <div className="flex items-center justify-between p-2 bg-sable rounded-lg">
-              <span className="text-sm text-ardoise">📧 Email vérifié</span>
-              <Badge variante={utilisateur.est_email_verifie ? "succes" : "terre"} taille="petit">
-                {utilisateur.est_email_verifie ? "Oui" : "Non"}
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between p-2 bg-sable rounded-lg">
-              <span className="text-sm text-ardoise">👤 Visage vérifié</span>
-              <Badge variante={utilisateur.est_visage_verifie ? "succes" : "terre"} taille="petit">
-                {utilisateur.est_visage_verifie ? "Oui" : "Non"}
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between p-2 bg-sable rounded-lg">
-              <span className="text-sm text-ardoise">🪪 CNI vérifiée</span>
-              <Badge variante={utilisateur.est_cni_verifiee ? "succes" : "terre"} taille="petit">
-                {utilisateur.est_cni_verifiee ? "Oui" : "Non"}
-              </Badge>
-            </div>
-            {/* ✅ CORRECTION : Badge calculé localement */}
-            <div className="flex items-center justify-between p-2 bg-lagune/10 rounded-lg border border-lagune/20">
-              <span className="text-sm text-ardoise font-medium">️ Identité globale vérifiée</span>
-              <Badge variante={identiteVerifiee ? "succes" : "terre"} taille="petit">
-                {identiteVerifiee ? "Oui" : "Non"}
-              </Badge>
-            </div>
+            <EtatVerificationsCitoyen
+              etat={etatVerifications}
+              variante="complet"
+              afficherProgression
+            />
           </div>
         </div>
       </Carte>
@@ -219,19 +202,21 @@ function Contenu() {
         <div className="mt-6 pt-4 border-t border-ardoise-clair/10">
           <p className="text-xs text-ardoise-clair font-semibold mb-2">Statut du profil</p>
           <div className="flex flex-wrap gap-2">
-            <Badge variante={utilisateur.est_email_verifie ? "succes" : "terre"} taille="petit">
-              ✉️ {utilisateur.est_email_verifie ? "Vérifié" : "Non vérifié"}
-            </Badge>
-            <Badge variante={utilisateur.est_visage_verifie ? "succes" : "terre"} taille="petit">
-              👤 Visage {utilisateur.est_visage_verifie ? "✓" : "✗"}
-            </Badge>
-            <Badge variante={utilisateur.est_cni_verifiee ? "succes" : "terre"} taille="petit">
-               CNI {utilisateur.est_cni_verifiee ? "✓" : "✗"}
-            </Badge>
-            {/* ✅ CORRECTION : Utiliser identiteVerifiee */}
-            <Badge variante={identiteVerifiee ? "succes" : "terre"} taille="petit">
-              🛡️ Identité {identiteVerifiee ? "✓" : "✗"}
-            </Badge>
+            {etatVerifications.etapes.map((etape) => (
+              <Badge
+                key={etape.id}
+                variante={
+                  etape.statut === "complete"
+                    ? "succes"
+                    : etape.statut === "attention"
+                    ? "ocre"
+                    : "terre"
+                }
+                taille="petit"
+              >
+                {etape.icone} {etape.titre} {etape.statut === "complete" ? "✓" : "✗"}
+              </Badge>
+            ))}
           </div>
         </div>
       </Carte>
