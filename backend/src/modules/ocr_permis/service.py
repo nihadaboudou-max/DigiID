@@ -2,6 +2,7 @@
 """
 Service OCR Permis — orchestration du scan, validation stricte d'identité et sauvegarde.
 """
+import difflib
 import re
 import time
 from datetime import datetime, date
@@ -133,42 +134,59 @@ async def traiter_upload_permis(
     erreurs = [] if succes_ocr else ["Extraction insuffisante"]
     temps_ms = int((time.time() - debut) * 1000)
 
-    # 4. ✅ VÉRIFICATION STRICTE DE COHÉRENCE (Inspirée de la CNI)
+    # 4. ✅ VÉRIFICATION INTELLIGENTE DE COHÉRENCE (Tolérante aux erreurs OCR)
     if succes_ocr and donnees.nom_famille:
         # Déchiffrement des données du profil
         nom_profil = dechiffrer_donnee(utilisateur.nom_chiffre) if utilisateur.nom_chiffre else ""
         prenom_profil = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else ""
 
-        # Normalisation : majuscules, et extraction du PREMIER prénom
-        nom_permis_pur = donnees.nom_famille.strip().upper()
-        prenom_permis_pur = donnees.prenoms.strip().split()[0].upper() if donnees.prenoms else ""
-        nom_profil_pur = nom_profil.strip().upper()
-        prenom_profil_pur = prenom_profil.strip().split()[0].upper() if prenom_profil else ""
+        # Normalisation : on retire les espaces pour gérer les mots collés par l'OCR
+        nom_profil_pur = nom_profil.strip().upper().replace(" ", "")
+        prenom_profil_pur = prenom_profil.strip().upper().replace(" ", "") if prenom_profil else ""
+        
+        nom_permis_pur = donnees.nom_famille.strip().upper().replace(" ", "")
+        prenom_permis_pur = donnees.prenoms.strip().upper().replace(" ", "") if donnees.prenoms else ""
 
         incoherences = []
+        est_coherent = False
 
-        # Comparaison stricte du nom
-        if nom_profil_pur and nom_permis_pur and nom_profil_pur != nom_permis_pur:
-            incoherences.append(
-                f"Le nom sur le permis ({nom_permis_pur}) ne correspond pas à votre profil ({nom_profil_pur})."
-            )
+        # Règle 1 : Le nom de profil est-il inclus dans le nom OCR ? (Ex: "TRAORE" dans "ABOUDOUTRAORE")
+        if nom_profil_pur and nom_profil_pur in nom_permis_pur:
+            est_coherent = True
+        # Règle 2 : Inversement, le nom OCR est-il dans le profil ?
+        elif nom_permis_pur and nom_permis_pur in nom_profil_pur:
+            est_coherent = True
+        # Règle 3 : Similarité globale (gère les fautes de frappe de l'OCR, ex: "TRAORE" vs "TRA0RE")
+        else:
+            complet_profil = f"{nom_profil_pur} {prenom_profil_pur}".strip()
+            complet_permis = f"{nom_permis_pur} {prenom_permis_pur}".strip()
+            
+            if complet_profil and complet_permis:
+                ratio = difflib.SequenceMatcher(None, complet_profil, complet_permis).ratio()
+                if ratio >= 0.75: # 75% de similarité est suffisant pour valider
+                    est_coherent = True
+                else:
+                    incoherences.append(
+                        f"Le nom sur le permis ({donnees.nom_famille}) est trop différent de votre profil ({nom_profil})."
+                    )
 
-        # Comparaison stricte du premier prénom
-        if prenom_profil_pur and prenom_permis_pur and prenom_profil_pur != prenom_permis_pur:
-            incoherences.append(
-                f"Le prénom sur le permis ({prenom_permis_pur}) ne correspond pas à votre profil ({prenom_profil_pur})."
-            )
-
-        # 🚨 BLOCAGE : Si incohérence détectée, on rejette l'upload immédiatement
-        if incoherences:
-            message_erreur = "Incohérence d'identité détectée : " + " ".join(incoherences) + " Veuillez corriger votre nom/prénom dans vos paramètres avant de scanner votre permis."
+        # 🚨 BLOCAGE UNIQUEMENT SI incohérence MAJEURE détectée
+        if not est_coherent and incoherences:
+            message_erreur = "Incohérence d'identité détectée : " + " ".join(incoherences) + " Veuillez corriger votre nom dans vos paramètres avant de scanner, ou vérifier que vous scannez le bon document."
             journal.warning(
-                f"REJET PERMIS | Incohérence identité | utilisateur={utilisateur.id} | "
-                f"Permis(nom={nom_permis_pur}, prenom={prenom_permis_pur}) vs Profil(nom={nom_profil_pur}, prenom={prenom_profil_pur})"
+                f"REJET PERMIS | Incohérence identité majeure | utilisateur={utilisateur.id} | "
+                f"Permis({donnees.nom_famille}) vs Profil({nom_profil})"
             )
             raise ErreurValidation(
                 message_erreur,
                 message_utilisateur=message_erreur
+            )
+        
+        # Si est_coherent est True mais qu'il y a eu une petite différence, on logue juste en info
+        if est_coherent and donnees.nom_famille.strip().upper() != nom_profil.strip().upper():
+            journal.info(
+                f"TOLÉRANCE OCR appliquée | utilisateur={utilisateur.id} | "
+                f"Permis({donnees.nom_famille}) accepté car cohérent avec Profil({nom_profil})"
             )
 
     # 5. Vérification d'unicité du numéro de permis

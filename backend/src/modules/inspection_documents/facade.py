@@ -1,20 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Façade UNIQUE d'extraction de documents.
-
-Un seul point d'entrée pour les 6 documents supportés :
-  1. lit le fichier une fois (et le rend rejouable via seek(0)),
-  2. détecte automatiquement le type si non fourni (classifieur existant),
-  3. délègue à l'adaptateur dédié au type,
-  4. renvoie TOUJOURS la même réponse unifiée.
-
-Chaque document garde SON extracteur, SON schéma et SA table : la façade
-ne fait que l'aiguillage + l'harmonisation du format de réponse.
-"""
+"""Façade UNIQUE d'extraction de documents."""
 from typing import Any, Dict, Optional
 from uuid import UUID
 
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError  # ✅ AJOUT : Pour gérer les doublons proprement
 
 from src.modeles import Utilisateur
 from src.modeles.base_document import table_pour_type
@@ -31,6 +22,7 @@ from src.modules.inspection_documents.adaptateurs.commun import reponse_unifiee
 from src.modules.inspection_documents.classification.document_classifier import classifier_document
 from src.modules.inspection_documents.schemas import TypeDocument
 from src.noyau import journal
+from src.noyau.exceptions import ErreurValidation # ✅ AJOUT : Pour ne pas avaler les rejets métier
 
 # Table d'aiguillage : type → adaptateur.
 ADAPTATEURS = {
@@ -46,14 +38,13 @@ ADAPTATEURS = {
 
 
 def _detecter_type(contenu: bytes) -> TypeDocument:
-    """Détecte le type de document avec le classifieur existant (aucun nouvel OCR)."""
+    """Détecte le type de document avec le classifieur existant."""
     try:
         from src.modules.inspection_documents.extraction.ocr_engine import analyser_document
-
         resultat = analyser_document(contenu)
         texte_brut = resultat.get("texte_brut") or ""
         mrz_lignes = resultat.get("mrz_lignes") or (None, None, None)
-    except Exception as e:  # pragma: no cover - dépend de Tesseract
+    except Exception as e:
         journal.warning(f"Façade : OCR de classification échoué ({e})")
         texte_brut, mrz_lignes = "", (None, None, None)
 
@@ -61,7 +52,7 @@ def _detecter_type(contenu: bytes) -> TypeDocument:
 
 
 def _extraire_champ(donnees: Dict[str, Any], *cles: str) -> Optional[str]:
-    """Renvoie la 1re valeur non vide parmi les clés données (sinon None)."""
+    """Renvoie la 1re valeur non vide parmi les clés données."""
     for cle in cles:
         valeur = donnees.get(cle)
         if valeur not in (None, "", [], {}):
@@ -78,11 +69,7 @@ async def _enregistrer_historique(
     taille_octets: int,
     face: str,
 ) -> None:
-    """Journalise le scan dans la table centrale `inspection_documents`.
-
-    C'est cette table que lit l'historique du frontend : sans cet écrit, les
-    documents scannés via l'interface unique n'apparaîtraient pas.
-    """
+    """Journalise le scan dans la table centrale `inspection_documents`."""
     from src.modeles.inspection_document import InspectionDocument
 
     donnees: Dict[str, Any] = resultat.get("donnees") or {}
@@ -105,7 +92,6 @@ async def _enregistrer_historique(
         nom_fichier=nom_fichier,
         type_mime=type_mime,
         taille_octets=taille_octets,
-        # Index de scan → table spécialisée qui porte les données détaillées.
         table_cible=table_pour_type(type_document),
         document_id=str(resultat.get("identifiant") or "") or None,
         nom_famille=_extraire_champ(donnees, "nom_famille", "nom", "titulaire_nom"),
@@ -127,8 +113,20 @@ async def _enregistrer_historique(
         est_valide=(statut == "approuve"),
         taux_confiance_ocr=confiance,
     )
-    session.add(document)
-    await session.commit()
+    
+    # ✅ CORRECTION : Gestion propre des doublons (IntegrityError)
+    try:
+        session.add(document)
+        await session.commit()
+    except IntegrityError:
+        # Le document existe déjà (même numéro + même type). 
+        # On annule l'insertion mais on ne fait PAS planter tout le système.
+        await session.rollback()
+        journal.info(f"Historique déjà présent pour {document.numero_document} ({type_document}), insertion ignorée.")
+    except Exception as e:
+        # Pour toute autre erreur DB, on rollback et on log, mais on ne bloque pas l'OCR
+        await session.rollback()
+        journal.error(f"Échec inattendu enregistrement historique : {e}")
 
 
 async def traiter(
@@ -146,7 +144,7 @@ async def traiter(
     contenu = await fichier.read()
     try:
         await fichier.seek(0)
-    except Exception:  # pragma: no cover - certains pseudo-fichiers ne supportent pas seek
+    except Exception:
         journal.warning("Façade : impossible de remettre le curseur du fichier à zéro.")
 
     # 2. Résoudre le type (auto-détection si absent).
@@ -163,12 +161,12 @@ async def traiter(
         return reponse_unifiee(
             type_final.value if hasattr(type_final, "value") else str(type_final),
             statut="rejete",
-            message="Type de document non supporté par l'interface unifiée "
-                    "(documents pris en charge : CNI, permis, assurance, carte grise, "
-                    "carte de séjour, consulaire).",
+            message="Type de document non supporté.",
         )
 
-    # 4. Délégation : l'adaptateur lit le fichier (position 0).
+    # 4. Délégation : l'adaptateur lit le fichier.
+    # ⚠️ SI l'adaptateur lève une ErreurValidation (ex: document expiré), 
+    # elle doit remonter directement à FastAPI pour bloquer la requête (code 400).
     resultat = await adaptateur(
         session,
         utilisateur,
@@ -179,18 +177,16 @@ async def traiter(
         utilisateur_cible_id=utilisateur_cible_id,
     )
 
-    # 5. Historique unifié : on journalise le scan dans la table centrale.
-    try:
-        await _enregistrer_historique(
-            session=session,
-            utilisateur=utilisateur,
-            resultat=resultat,
-            nom_fichier=fichier.filename or "document",
-            type_mime=fichier.content_type or "image/jpeg",
-            taille_octets=len(contenu),
-            face=face,
-        )
-    except Exception as e:  # pragma: no cover - ne doit jamais casser l'upload
-        journal.warning(f"Façade : échec enregistrement historique ({e})")
+    # 5. Historique unifié : on journalise le scan.
+    # On le fait même en cas de rejet pour garder une trace, mais sans faire planter si doublon.
+    await _enregistrer_historique(
+        session=session,
+        utilisateur=utilisateur,
+        resultat=resultat,
+        nom_fichier=fichier.filename or "document",
+        type_mime=fichier.content_type or "image/jpeg",
+        taille_octets=len(contenu),
+        face=face,
+    )
 
     return resultat
