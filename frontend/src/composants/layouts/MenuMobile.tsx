@@ -26,11 +26,15 @@ interface Lien {
 const LIENS_UTILISATEUR: Lien[] = [
   { href: "/citoyen/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
   { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
+  { href: "/citoyen/qr-code", libelle: "Mon DigiID", Icone: IconeIdentite },
   { href: "/profil", libelle: "Mon profil", Icone: IconeUtilisateur },
+  { href: "/inspection", libelle: "Document d'identité)", Icone: IconeCheck },
+  { href: "/identite/verification-visuelle", libelle: "Reconnaissance faciale", Icone: IconeVisage },
+  { href: "/aide", libelle: "Aide et Support", Icone: IconeAlerte },
   // Menus masqués (simplification) — dé-commenter pour les réafficher :
-  // { href: "/score", libelle: "Mon score", Icone: IconeScore },
+  // { href: "/score", libelle: "Mon score", Icone: IconeScore },   
   // { href: "/chatbot", libelle: "Assistant", Icone: IconeChat },
-  { href: "/parametres", libelle: "Paramètres", Icone: IconeParametres },
+  //{ href: "/parametres", libelle: "Paramètres", Icone: IconeParametres },
 ];
 
 const LIENS_ADMIN: Lien[] = [
@@ -907,19 +911,21 @@ export function BoutonMenuMobile() {
 
                   ═══════ FIN MENUS MASQUÉS ═══════ */}
 
-                  <SectionPlieMobile titre="Identité" couleur="text-ardoise-clair/50"
+                  <SectionPlieMobile titre="Paramètres" couleur="text-ardoise-clair/50"
                     initialOuvert={pathname.startsWith("/identite")}>
                     <div className="ml-2 pl-3 border-l-2 border-ardoise-clair/10 space-y-0.5 mb-3">
                       {[
                         //{ href: "/identite", libelle: "Tableau de bord identité", Icone: IconeAccueil },
-                        { href: "/inspection", libelle: "Document d'identité)", Icone: IconeCheck },
-                        { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
-                        { href: "/identite/verification-visuelle", libelle: "Reconnaissance faciale", Icone: IconeVisage },
+                        //{ href: "/inspection", libelle: "Document d'identité)", Icone: IconeCheck },
+                        //{ href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
+                        //{ href: "/identite/verification-visuelle", libelle: "Reconnaissance faciale", Icone: IconeVisage },
                         // Menu masqué (simplification) — dé-commenter pour le réafficher :
                         // { href: "/identite/verification-cni", libelle: "Scan CNI", Icone: IconeScan },
+                        { href: "/parametres", libelle: "Paramètres", Icone: IconeParametres },
                         { href: "/identite/email", libelle: "Vérification email", Icone: IconeEmail },
                         { href: "/identite/2fa", libelle: "Double authentification", Icone: IconeCadenas },
                         { href: "/identite/mot-de-passe", libelle: "Mot de passe", Icone: IconeCle },
+                        { href: "/historique", libelle: "Historique d'accès", Icone: IconeAlerte },
                       ].map(({ href, libelle, Icone }) => {
                         const actif = pathname === href || pathname.startsWith(href);
                         return (
@@ -1033,7 +1039,7 @@ function MenuCitoyenComplet({
       })}
       </div>
       </SectionPlieMobile>
-      
+
 
       <SectionPlieMobile titre="Identité" couleur="text-ardoise-clair/50"
         initialOuvert={pathname.startsWith("/identite")}>

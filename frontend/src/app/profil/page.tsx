@@ -236,18 +236,9 @@ function Contenu() {
         </div>
       </Carte>
 
-      {/* Qui peut interroger mon DigiID */}
-      <Carte titre="Qui peut interroger mon DigiID ?">
-        <div className="grid sm:grid-cols-3 gap-4">
-          <BlocUsage titre="Banques" detail="Vérification d'identité avant ouverture de compte." statut="actif" />
-          <BlocUsage titre="Hôpitaux" detail="Accès au dossier médical, ordonnances." statut="actif" />
-          <BlocUsage titre="Administration" detail="Aides sociales, certificats." statut="phase-4" />
-        </div>
-      </Carte>
-
       {/* Sécurité */}
       <Alerte variante="avertissement" titre="🔐 Sécurité">
-        <p className="text-sm">Ne partage ton DigiID qu'avec des institutions de confiance. Chaque consultation est tracée.</p>
+        <p className="text-sm">Ne partage ton DigiID qu'avec des institutions ou personne de confiance. Chaque consultation est tracée.</p>
       </Alerte>
 
       {/* Actions rapides */}

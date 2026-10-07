@@ -581,6 +581,14 @@ export function BarreLaterale() {
               libelle="Tableau de bord"
               Icone={IconeAccueil}
               actif={pathname === "/citoyen/dashboard"}
+            />         
+
+            {/* Ma carte DigiID — QR durable, scannable par le guichet */}
+            <LienNav
+              href="/identite/carte"
+              libelle="Ma carte DigiID"
+              Icone={IconeIdentite}
+              actif={pathname === "/identite/carte"}
             />
 
             {/* Mon DigiID — QR Code dynamique (carte d'identité numérique) */}
@@ -591,68 +599,63 @@ export function BarreLaterale() {
               actif={pathname === "/citoyen/qr-code"}
             />
 
-            {/* Ma carte DigiID — QR durable, scannable par le guichet */}
+            {/* Mon profil */}
             <LienNav
-              href="/identite/carte"
-              libelle="Ma carte DigiID"
-              Icone={IconeIdentite}
-              actif={pathname === "/identite/carte"}
+              href="/profil"
+              libelle="Mon profil"
+              Icone={IconeUtilisateur}
+              actif={pathname === "/profil"}
             />
 
-            {/* Notifications — lien simple */}
+            {/* Document d'identité */}
             <LienNav
-              href="/notifications"
-              libelle="Notifications"
-              Icone={IconeAlerte}
-              actif={pathname === "/notifications"}
+              href="/inspection"
+              libelle="Document d'identité"
+              Icone={IconeIdentite}
+              actif={pathname === "/inspection"}
+            />
+
+            {/* Reconnaissance faciale */}
+            <LienNav
+              href="/identite/verification-visuelle"
+              libelle="Reconnaissance faciale"
+              Icone={IconeVisage}
+              actif={pathname === "/identite/verification-visuelle"}
+            />
+
+            {/* Aide et Support*/}
+            <LienNav
+              href="/aide"
+              libelle="Aide et Support"
+              Icone={IconeCheck}
+              actif={pathname === "/aide"}
             />
 
             <div className="border-t border-ardoise-clair/10 my-1.5" />
 
-            {/* Identité & Sécurité */}
+            {/* Paramètres */}
             <GroupePlie
               estActif={
-                pathname.startsWith("/profil") ||
-                pathname.startsWith("/documents-identite") ||
-                pathname.startsWith("/identite") ||
-                pathname.startsWith("/historique") ||
                 pathname.startsWith("/autorisations") ||
                 pathname.startsWith("/consentements")
               }
-              icone={IconeBouclier}
-              titre="Identité &amp; Sécurité"
+              icone={IconeParametres}
+              titre="Paramètres"
               initialOuvert={
-                pathname.startsWith("/profil") ||
-                pathname.startsWith("/documents-identite") ||
-                pathname.startsWith("/identite") ||
-                pathname.startsWith("/historique") ||
                 pathname.startsWith("/autorisations") ||
                 pathname.startsWith("/consentements")
               }
             >
               <div className="space-y-0.5">
-                <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
-                  Mon Profil
-                </p>
-                {cbLienSousMenu("/profil", "Mon Profil")}
-                {cbLienSousMenu("/documents-identite", "Documents d'identité")}
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
-                  Vérifications & Sécurité du compte
-                </p>
-                {cbLienSousMenu("/identite", "Vérifications")}
-                {/* Inspection : entrée CONSERVÉE (hub d'extraction et de contrôle
-                    des documents : upload, OCR, 10 types de pièces, historique). */}
-                {cbLienSousMenu("/inspection", "Inspection")}
+                
+                {cbLienSousMenu("/parametre", "Paramètre")}
                 {cbLienSousMenu("/identite/email", "Vérification de l'email")}
                 {/* Menu masqué (simplification) — dé-commenter pour le réafficher :
                 {cbLienSousMenu("/identite/verification-cni", "Vérification CNIL")}
                 */}
-                {cbLienSousMenu("/identite/verification-visuelle", "Vérification visuelle")}
                 {cbLienSousMenu("/identite/2fa", "Double authentification (2FA)")}
                 {cbLienSousMenu("/identite/mot-de-passe", "Changer le mot de passe")}
-                {cbLienSousMenu("/historique", "Historique des accès")}
+                {cbLienSousMenu("/historique", "Historique d'accès")}
               </div>
               <div className="space-y-0.5">
                 <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
@@ -718,37 +721,12 @@ export function BarreLaterale() {
                 ════════════════════════════════════════════════════════
                 FIN MENUS MASQUÉS */}
 
-            {/* Outils */}
-            <GroupePlie
-              estActif={
-                pathname === "/chatbot" ||
-                pathname.startsWith("/documents") ||
-                pathname.startsWith("/parametres")
-              }
-              icone={IconeParametres}
-              titre="Outils"
-              initialOuvert={
-                pathname === "/chatbot" ||
-                pathname.startsWith("/documents") ||
-                pathname.startsWith("/parametres")
-              }
-            >
               {/* Menus masqués (simplification) — dé-commenter pour les réafficher :
               {cbLienSousMenu("/chatbot", "Assistant DigiID (Chatbot RAG)")}
               {cbLienSousMenu("/documents", "Mes Documents (IA)")}
               */}
-              {cbLienSousMenu("/parametres", "Paramètres (Préférences, Rôle &amp; permissions)")}
-            </GroupePlie>
+              {/*cbLienSousMenu("/parametres", "Paramètres (Préférences, Rôle &amp; permissions)")*/}
 
-            {/* Aide & Support — lien simple */}
-            <div className="pt-1">
-              <LienNav
-                href="/aide"
-                libelle="Aide &amp; Support (FAQ, contact)"
-                Icone={IconeAlerte}
-                actif={pathname.startsWith("/aide")}
-              />
-            </div>
           </>
         )}
       </nav>
