@@ -617,10 +617,10 @@ export function BarreLaterale() {
 
             {/* Document d'identité */}
             <LienNav
-              href="/inspection"
+              href="/documents-identite"
               libelle="Document d'identité"
               Icone={IconeIdentite}
-              actif={pathname === "/inspection"}
+              actif={pathname === "/documents-identite"}
             />
 
             {/* Reconnaissance faciale */}

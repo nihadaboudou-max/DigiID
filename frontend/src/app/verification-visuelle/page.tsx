@@ -223,7 +223,7 @@ function Contenu() {
                   <Alerte variante="avertissement" titre="CNI requise">
                     <p className="text-xs">
                       Tu dois d'abord scanner ta CNI avant de pouvoir comparer ton visage.
-                      <Link href="/identite/verification-cni" className="underline font-semibold ml-1">
+                      <Link href="/documents-identite" className="underline font-semibold ml-1">
                         Scanner ma CNI →
                       </Link>
                     </p>
@@ -267,7 +267,7 @@ function Contenu() {
               ← Tableau de bord
             </button>
           </Link>
-          <Link href="/identite/verification-cni">
+          <Link href="/documents-identite">
             <button className="px-3 py-1.5 text-xs text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
               Scan CNI →
             </button>
