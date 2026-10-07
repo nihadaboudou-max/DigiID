@@ -268,7 +268,7 @@ routeur_lignes = APIRouter(prefix="/lignes", tags=["Logistique — Lignes"])
 
 @routeur_lignes.post("", response_model=schemas.LigneResponse,
                      status_code=status.HTTP_201_CREATED, summary="Créer une ligne")
-@require_permission("logistique.ecrire")
+@require_permission("logistique.ecrire", "logistique.planifier")
 async def creer_ligne(
     donnees: schemas.LigneCreate,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
@@ -307,7 +307,7 @@ async def obtenir_ligne(
 
 @routeur_lignes.patch("/{ligne_id}", response_model=schemas.LigneResponse,
                       summary="Modifier une ligne")
-@require_permission("logistique.ecrire")
+@require_permission("logistique.ecrire", "logistique.planifier")
 async def modifier_ligne(
     donnees: schemas.LigneUpdate,
     ligne: Ligne = Depends(obtenir_ligne_ou_404),
@@ -336,7 +336,7 @@ routeur_vehicules = APIRouter(prefix="/vehicules", tags=["Logistique — Véhicu
 
 @routeur_vehicules.post("", response_model=schemas.VehiculeResponse,
                         status_code=status.HTTP_201_CREATED, summary="Créer un véhicule")
-@require_permission("logistique.ecrire")
+@require_permission("logistique.ecrire", "logistique.planifier")
 async def creer_vehicule(
     donnees: schemas.VehiculeCreate,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
@@ -375,7 +375,7 @@ async def obtenir_vehicule(
 
 @routeur_vehicules.patch("/{vehicule_id}", response_model=schemas.VehiculeResponse,
                          summary="Modifier un véhicule")
-@require_permission("logistique.ecrire")
+@require_permission("logistique.ecrire", "logistique.planifier")
 async def modifier_vehicule(
     donnees: schemas.VehiculeUpdate,
     vehicule: Vehicule = Depends(obtenir_vehicule_ou_404),
@@ -404,7 +404,7 @@ routeur_voyages = APIRouter(prefix="/voyages", tags=["Logistique — Voyages"])
 
 @routeur_voyages.post("", response_model=schemas.VoyageResponse,
                       status_code=status.HTTP_201_CREATED, summary="Créer un voyage")
-@require_permission("logistique.ecrire")
+@require_permission("logistique.ecrire", "logistique.planifier")
 async def creer_voyage(
     donnees: schemas.VoyageCreate,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
@@ -450,7 +450,7 @@ async def obtenir_voyage(
 
 @routeur_voyages.patch("/{voyage_id}", response_model=schemas.VoyageResponse,
                        summary="Modifier un voyage")
-@require_permission("logistique.ecrire")
+@require_permission("logistique.ecrire", "logistique.planifier")
 async def modifier_voyage(
     donnees: schemas.VoyageUpdate,
     voyage: Voyage = Depends(obtenir_voyage_ou_404),

@@ -15,6 +15,7 @@ import {
   IconeColis, IconeIdentite, IconePortefeuille, IconeScan, IconeTicket,
 } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
+import { DepartsDesChauffeurs } from "@/composants/logistique/DepartsDesChauffeurs";
 import { ROLES_GUICHET } from "@/composants/logistique/roles";
 import { TableauColis } from "@/composants/logistique/TableauColis";
 import { PortefeuilleCarte } from "@/composants/paiement/PortefeuilleCarte";
@@ -134,6 +135,9 @@ function Contenu() {
           description="Commissions reçues sur les colis encaissés."
         />
       </div>
+
+      {/* Les cars annoncés par les chauffeurs : on y charge colis et passagers. */}
+      <DepartsDesChauffeurs gareId={gare?.id} />
 
       {/* S6 — portefeuille : solde + derniers mouvements */}
       <PortefeuilleCarte limiteMouvements={3} />

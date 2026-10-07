@@ -140,11 +140,22 @@ export const logistiqueAPI = {
   lignes: {
     lister: () => clientAPI.get<ReponseListe<Ligne>>(`${BASE}/lignes?par_page=100`, opts),
     creer: (d: Record<string, unknown>) => clientAPI.post<Ligne>(`${BASE}/lignes`, d, opts),
+    /**
+     * Modifie une ligne (trajet) — le chauffeur ajuste ses dessertes.
+     *
+     * Permission `logistique.planifier` (chauffeur) ou `logistique.ecrire`
+     * (gérant de gare, super-admin).
+     */
+    modifier: (id: string, d: Record<string, unknown>) =>
+      clientAPI.patch<Ligne>(`${BASE}/lignes/${id}`, d, opts),
     supprimer: (id: string) => clientAPI.delete(`${BASE}/lignes/${id}`, opts),
   },
   vehicules: {
     lister: () => clientAPI.get<ReponseListe<Vehicule>>(`${BASE}/vehicules?par_page=100`, opts),
     creer: (d: Record<string, unknown>) => clientAPI.post<Vehicule>(`${BASE}/vehicules`, d, opts),
+    /** Modifie un car (plaque, marque, capacité, mise hors service). */
+    modifier: (id: string, d: Record<string, unknown>) =>
+      clientAPI.patch<Vehicule>(`${BASE}/vehicules/${id}`, d, opts),
     supprimer: (id: string) => clientAPI.delete(`${BASE}/vehicules/${id}`, opts),
   },
   voyages: {
@@ -170,6 +181,14 @@ export const logistiqueAPI = {
     },
     obtenir: (id: string) => clientAPI.get<Voyage>(`${BASE}/voyages/${id}`, opts),
     creer: (d: Record<string, unknown>) => clientAPI.post<Voyage>(`${BASE}/voyages`, d, opts),
+    /**
+     * Modifie un voyage : horaire/date d'arrivée, car, ou statut.
+     *
+     * Sert au chauffeur pour **ajuster** (`date_depart`) ou **annuler**
+     * (`statut: "annule"`) un départ qu'il a planifié.
+     */
+    modifier: (id: string, d: Record<string, unknown>) =>
+      clientAPI.patch<Voyage>(`${BASE}/voyages/${id}`, d, opts),
     supprimer: (id: string) => clientAPI.delete(`${BASE}/voyages/${id}`, opts),
 
     // ── Actions groupées du chauffeur (passagers ET colis) ──
@@ -419,6 +438,28 @@ export async function voyagesDuChauffeur(
     par_page: 100,
   });
   return reponse.elements;
+}
+
+/**
+ * Départs à venir, **tous chauffeurs confondus** — la vue du guichet.
+ *
+ * Quand un chauffeur indépendant planifie son voyage, le receveur et le gérant
+ * de gare doivent le voir : c'est ainsi qu'ils lui trouvent de la clientèle et
+ * des colis (ils enregistrent, puis affectent au car du chauffeur). On tolère
+ * deux heures de retard sur le départ pour qu'un car en route reste affiché.
+ */
+export async function departsAVenir(): Promise<Voyage[]> {
+  const depuis = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const reponse = await logistiqueAPI.voyages.lister({
+    a_partir_de: depuis,
+    par_page: 100,
+  });
+  return reponse.elements
+    .filter((v) => v.statut === "planifie" || v.statut === "en_cours")
+    .sort(
+      (a, b) =>
+        new Date(a.date_depart).getTime() - new Date(b.date_depart).getTime(),
+    );
 }
 
 /**

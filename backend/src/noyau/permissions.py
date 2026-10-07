@@ -115,6 +115,7 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
         "logistique.lire", "logistique.ecrire", "logistique.supprimer",
         "logistique.colis.creer", "logistique.scan",
         "logistique.profil.ecrire", "logistique.voyage.rejoindre",
+        "logistique.planifier",
         "paiement.lire", "paiement.payer",
     }),
     RoleUtilisateur.RECEVEUR: frozenset({
@@ -122,13 +123,16 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
         "logistique.profil.ecrire",
         "paiement.lire", "paiement.payer",
     }),
-    # Le chauffeur peut désormais **enregistrer lui-même** ses clients (colis ou
-    # passager), tenir à jour son dossier professionnel (identité, permis,
-    # véhicule) et **choisir ses voyages** : c'est la traçabilité « en route » qui
-    # rend la chaîne fiable, et la flexibilité qui fait vivre le réseau.
+    # Le chauffeur est un **indépendant** : il définit ses propres lignes (trajets
+    # entre les gares existantes), **planifie ses départs** et peut les modifier
+    # ou les annuler. Les gares, elles, ne lui appartiennent pas : ce sont le
+    # gérant de gare et le super-admin qui inscrivent les gares du terrain — on
+    # ne réinvente pas une gare qui existe déjà. Il enregistre par ailleurs ses
+    # propres clients (colis ou passager) : c'est la traçabilité « en route ».
     RoleUtilisateur.CHAUFFEUR: frozenset({
         "logistique.lire", "logistique.scan", "logistique.colis.creer",
         "logistique.profil.ecrire", "logistique.voyage.rejoindre",
+        "logistique.planifier",
         "paiement.lire",
     }),
     RoleUtilisateur.COMMERCANT: frozenset({
@@ -300,13 +304,21 @@ def peut_creer_utilisateur(role_createur: str, role_cible: str) -> bool:
 
 # ─── Décorateurs ─────────────────────────────────────────────────────
 
-def require_permission(permission: str) -> Callable:
+def require_permission(*permissions: str) -> Callable:
     """
-    Décorateur pour vérifier qu'un utilisateur a une permission.
-    
+    Décorateur pour vérifier qu'un utilisateur a **au moins une** permission.
+
     Usage:
         @require_permission("police.ecrire")
         async def creer_verification(...):
+            ...
+
+        # Plusieurs permissions = OU logique. Sert au référentiel logistique :
+        # un gérant de gare écrit au titre de `logistique.ecrire`, tandis qu'un
+        # chauffeur indépendant planifie ses départs au titre de
+        # `logistique.planifier`.
+        @require_permission("logistique.ecrire", "logistique.planifier")
+        async def planifier_voyage(...):
             ...
     """
     def decorator(func: Callable) -> Callable:
@@ -319,11 +331,11 @@ def require_permission(permission: str) -> Callable:
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Utilisateur courant non disponible",
                 )
-            
-            if not a_permission(utilisateur.role, permission):
+
+            if not any(a_permission(utilisateur.role, permission) for permission in permissions):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Permission '{permission}' requise",
+                    detail="Permission requise : " + " ou ".join(sorted(permissions)),
                 )
             
             return await func(*args, **kwargs)

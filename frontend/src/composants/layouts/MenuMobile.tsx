@@ -132,7 +132,9 @@ const LIENS_RECEVEUR: Lien[] = [
 
 const LIENS_CHAUFFEUR: Lien[] = [
   { href: "/chauffeur/dashboard", libelle: "Mes voyages", Icone: IconeColis },
-  { href: "/chauffeur/voyages", libelle: "Choisir un voyage", Icone: IconeCamion },
+  // Le chauffeur est un indépendant : il déclare ses lignes et planifie ses
+  // propres départs (le guichet y charge ensuite colis et passagers).
+  { href: "/chauffeur/voyages", libelle: "Planifier mes trajets", Icone: IconeCamion },
   { href: "/chauffeur/colis", libelle: "Mes colis", Icone: IconeTicket },
   { href: "/chauffeur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
   { href: "/chauffeur/passagers", libelle: "Mes passagers", Icone: IconeIdentite },
