@@ -493,17 +493,6 @@ function Contenu() {
               />
             </div>
 
-            <p className="mt-2 text-xs text-ardoise-clair">
-              Retrouvez tous vos documents scannés dans{" "}
-              <Link
-                href="/documents-identite"
-                className="font-medium text-lagune hover:underline"
-              >
-                Mes documents d&apos;identité
-              </Link>
-              .
-            </p>
-
             {messageOCR && (
               <p className="mt-3 rounded-lg bg-white px-3 py-2 text-xs text-ardoise">
                 {messageOCR}
@@ -642,19 +631,6 @@ function ResumeDossier({ dossier }: { dossier: ProfilLogistique }) {
         )}
         <Element valide={dossier.photo_verifiee} libelle="Photo d'identité" />
       </ul>
-
-      {manquants.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-ardoise-clair/10">
-          <p className="text-sm font-semibold text-ocre-fonce mb-1">
-            Reste à vérifier :
-          </p>
-          <ul className="text-sm text-ardoise-clair list-disc list-inside">
-            {manquants.map((champ) => (
-              <li key={champ}>{LIBELLES_CHAMPS_PROFIL[champ] ?? champ}</li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       {dossier.verifie_le && (
         <p className="text-xs text-ardoise-clair mt-3">
