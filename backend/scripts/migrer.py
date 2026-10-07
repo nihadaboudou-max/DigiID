@@ -228,6 +228,92 @@ def _creer_index_uniques_logistique(engine):
             logger.warning("⚠️  Index %s non créé (%s)", nom_index, str(exc)[:160])
 
 
+def _ajouter_colonnes_documents(engine):
+    """Aligne les tables documents existantes sur le mixin commun (additif).
+
+    Ne touche ni aux types existants ni aux données : n'ajoute QUE les colonnes
+    manquantes (``ADD COLUMN IF NOT EXISTS``), conformément au principe
+    « additif, jamais destructif » du plan S8. Nécessaire car ``create_all`` ne
+    crée QUE les tables manquantes, jamais les colonnes (bases cloud existantes).
+    """
+    communs = {
+        "type_document": "VARCHAR(50)",
+        "face": "VARCHAR(20)",
+        "nom_fichier": "VARCHAR(255)",
+        "type_mime": "VARCHAR(100)",
+        "taille_octets": "INTEGER",
+        "document_chemin": "VARCHAR(500)",
+        "nom_famille": "VARCHAR(255)",
+        "prenoms": "VARCHAR(255)",
+        "sexe": "VARCHAR(10)",
+        "numero_document": "VARCHAR(100)",
+        "lieu_naissance": "VARCHAR(255)",
+        "autorite_delivrance": "VARCHAR(255)",
+        "nationalite": "VARCHAR(100)",
+        "taille": "VARCHAR(10)",
+        "mrz_ligne_1": "TEXT",
+        "mrz_ligne_2": "TEXT",
+        "mrz_ligne_3": "TEXT",
+        "mrz_valide": "BOOLEAN DEFAULT false",
+        "texte_brut": "TEXT",
+        "taux_confiance_ocr": "DOUBLE PRECISION",
+        "statut": "VARCHAR(30) DEFAULT 'en_attente'",
+        "est_valide": "BOOLEAN DEFAULT true",
+        "scores_validation": "JSON",
+        "mis_a_jour_le": "TIMESTAMP WITH TIME ZONE DEFAULT NOW()",
+        "est_supprime": "BOOLEAN DEFAULT false",
+        "date_suppression": "TIMESTAMP WITH TIME ZONE",
+    }
+    tables_documents = [
+        "verification_cni",
+        "permis_conduire",
+        "assurances_auto",
+        "cartes_grises",
+        "cartes_sejour",
+        "cartes_consulaires",
+        "passeports",
+    ]
+
+    with engine.connect() as conn:
+        tables_presentes = set(inspect(conn).get_table_names())
+
+    for table in tables_documents:
+        if table not in tables_presentes:
+            continue
+        for colonne, type_sql in communs.items():
+            sql = (
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS "
+                f"{colonne} {type_sql}"
+            )
+            try:
+                with engine.begin() as conn:
+                    conn.execute(sa_text(sql))
+            except Exception as exc:  # pragma: no cover — jamais bloquant
+                logger.warning(
+                    "⚠️  Colonne %s.%s non ajoutée (%s)",
+                    table, colonne, str(exc)[:160],
+                )
+
+    # Index de scan : pointeur vers la table spécialisée qui porte les données.
+    if "inspection_documents" in tables_presentes:
+        for colonne, type_sql in (
+            ("table_cible", "VARCHAR(100)"),
+            ("document_id", "VARCHAR(36)"),
+        ):
+            sql = (
+                "ALTER TABLE inspection_documents ADD COLUMN IF NOT EXISTS "
+                f"{colonne} {type_sql}"
+            )
+            try:
+                with engine.begin() as conn:
+                    conn.execute(sa_text(sql))
+            except Exception as exc:  # pragma: no cover
+                logger.warning(
+                    "⚠️  Colonne inspection_documents.%s non ajoutée (%s)",
+                    colonne, str(exc)[:160],
+                )
+
+
 def _corriger_colonnes_manquantes(engine):
     with engine.connect() as conn:
         tables_presentes = set(inspect(conn).get_table_names())
@@ -511,6 +597,13 @@ def executer_migrations():
             moteur = create_engine(url_sync)
             try:
                 _corriger_colonnes_manquantes(moteur)
+            finally:
+                moteur.dispose()
+
+            # 3b-ter. Colonnes communes des documents (mixin BaseDocumentInspection)
+            moteur = create_engine(url_sync)
+            try:
+                _ajouter_colonnes_documents(moteur)
             finally:
                 moteur.dispose()
 

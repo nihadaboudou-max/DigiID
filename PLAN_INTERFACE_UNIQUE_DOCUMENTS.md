@@ -1,5 +1,16 @@
 # PLAN — Interface unique d'extraction de documents (1 jour)
 
+> **Statut — étape S8 réalisée (« 1 document = 1 table »).**
+> L'interface unique (`POST /api/v1/inspection-documents/upload`) et les 6 documents sont
+> opérationnels ; la refonte des modèles est faite : mixin commun `BaseDocumentInspection`
+> (`src/modeles/base_document.py`), 7 tables spécialisées alignées
+> (`verification_cni`, `permis_conduire`, `assurances_auto`, `cartes_grises`, `cartes_sejour`,
+> `cartes_consulaires`, `passeports`), et `inspection_documents` devient un **journal/index de
+> scan** (`table_cible` + `document_id`) **sans** `donnees_specifiques` JSON fourre-tout.
+> Migration additive `20261007_1000_base_document_inspection` + correcteur idempotent
+> `scripts/migrer.py::_ajouter_colonnes_documents`. Frontend : rendu **par type** via
+> `src/composants/inspection/champsParType.ts` (`CHAMPS_PAR_TYPE`, `champsDocument()`).
+
 ## 0. Objectif
 - **1 seule route** `POST /api/v1/inspection-documents/upload` (auto-détection ou `type_document` fourni).
 - **1 seul écran** frontend.

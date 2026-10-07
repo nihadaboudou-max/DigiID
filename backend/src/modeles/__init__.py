@@ -37,6 +37,11 @@ from .carte_grise import CarteGrise
 from .carte_sejour import CarteSejour
 from .consulaire import CarteConsulaire
 from .passeport import Passeport
+from .base_document import (
+    BaseDocumentInspection,
+    TABLE_PAR_TYPE,
+    table_pour_type,
+)
 from src.modeles.inspection_document import InspectionDocument
 from src.modeles.logistique import (
     Gare, Ligne, Vehicule, Voyage, ActeurLogistique, STATUTS_VOYAGE, ROLES_ACTEUR,
@@ -108,6 +113,9 @@ __all__ = [
     "CarteSejour",
     "CarteConsulaire",
     "Passeport",
+    "BaseDocumentInspection",
+    "TABLE_PAR_TYPE",
+    "table_pour_type",
     "InspectionDocument",
     "Gare",
     "Ligne",

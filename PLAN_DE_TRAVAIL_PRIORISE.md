@@ -33,7 +33,7 @@
 | **S7** | Suivi public (colis + familial) + SMS ✅ | 🔴 P0 | S2 | M |
 | **P0+** | Correctifs revue : passagers, bagages, attribution chauffeur, actions groupées ✅ | 🔴 P0 | S2, S7 | M |
 | | **➜ FIN PROTOTYPE MÉMOIRE (démontrable)** | | | |
-| **S8** | Refonte documents « 1 document = 1 table » | 🟠 P1 | — | L |
+| **S8** | Refonte documents « 1 document = 1 table » ✅ | 🟠 P1 | — | L |
 | **S9** | Bagages passagers + voyageurs ✅ (avancé en P0+) | 🟠 P1 | S2 | M |
 | **S10** | Score logistique chauffeur + avis + litiges | 🟠 P1 | S2 | M |
 | **S11** | Espace commerçant + abonnements e-commerce | 🟠 P1 | S6 | M |
@@ -228,11 +228,28 @@
 
 ## 🟠 P1 — Renfort (si le temps permet, avant ou autour du mémoire)
 
-#### Étape S8 — Refonte documents « 1 document = 1 table »
+#### Étape S8 — Refonte documents « 1 document = 1 table » ✅ (fait)
 - Base commune `BaseDocumentInspection` + tables par type + `inspection_documents` en index ;
   rendu inspection **par type** côté frontend.
 - **Intérêt** : qualité de code + cohérence (structure déjà décrite dans l'architecture).
 - **Dépendances** : aucune (peut se faire en parallèle).
+- **Réalisé** :
+  - **Mixin commun** `src/modeles/base_document.py` (`BaseDocumentInspection`) : métadonnées
+    fichier, identité commune, MRZ, OCR brut, validation + `scores_validation`, audit et
+    soft‑delete. Table de correspondance `TABLE_PAR_TYPE` / `table_pour_type()`.
+  - **7 tables spécialisées** alignées sur le mixin (héritage) : `verification_cni`,
+    `permis_conduire`, `assurances_auto`, `cartes_grises`, `cartes_sejour`,
+    `cartes_consulaires`, `passeports` — chacune ne garde que ses colonnes métier typées.
+  - **`inspection_documents` = journal/index de scan** : nouvelles colonnes `table_cible` +
+    `document_id` pointant vers la table spécialisée (la façade ne réécrit plus de JSON
+    fourre‑tout `donnees_specifiques`).
+  - **Migration additive** `20261007_1000_base_document_inspection` + correcteur
+    `scripts/migrer.py::_ajouter_colonnes_documents` (idempotents, aucun `DROP`/`ALTER TYPE`).
+  - **Frontend** : module partagé `composants/inspection/champsParType.ts`
+    (`CHAMPS_PAR_TYPE`, `champsDocument()`) ; `ExtractionResults.tsx` et `app/inspection/page.tsx`
+    rendent désormais les champs **par type** (libellés métier) au lieu d'un JSON générique.
+  - **Garde‑fous** : aucune colonne supprimée ni retypée (les champs de date d'identité restent
+    en `DATE`) ; le `downgrade` retire uniquement les colonnes réellement introduites.
 
 #### Étape S9 — Bagages passagers + voyageurs ✅ (avancé en P0+)
 - Bagages en soute, étiquettes, liste passagers d'un voyage, matching à l'arrivée.
@@ -292,7 +309,9 @@
 > avec passagers enfant/adulte, proche de confiance obligatoire, attribution
 > (trajet + voyage + chauffeur) obligatoire, bagages traçables (1‑10 sacs) et actions
 > groupées du chauffeur.
-> Prochaine étape possible : **S8 — Refonte documents « 1 document = 1 table »** (P1).
+> **S8 — Refonte documents « 1 document = 1 table »** : ✅ **livrée** (mixin commun,
+> 7 tables spécialisées, `inspection_documents` en index, rendu par type côté frontend).
+> Prochaine étape possible : **S10 — Score logistique chauffeur + avis + litiges** (P1).
 > *Reste optionnel sur S9* : validation anti‑fraude du **nombre de sacs à l'arrivée** par scan
 > des étiquettes `SAC-…`.
 
@@ -317,7 +336,13 @@ Rappel de ce qui est en place côté logistique :
   du chauffeur (`POST /voyages/{id}/depart|arrivee|pre-alerte` + composant
   `ActionsVoyageChauffeur`) et **liste des passagers** sur `/chauffeur/voyages/[id]`.
 
-**Prochaine étape proposée** : S8 — refonte documents « 1 document = 1 table ».
+- **S8** : refonte documents — mixin `BaseDocumentInspection`, 7 tables spécialisées
+  (`verification_cni`, `permis_conduire`, `assurances_auto`, `cartes_grises`, `cartes_sejour`,
+  `cartes_consulaires`, `passeports`), `inspection_documents` en **index de scan**
+  (`table_cible` + `document_id`), migration `20261007_1000_base_document_inspection`,
+  rendu inspection **par type** (`composants/inspection/champsParType.ts`).
+
+**Prochaine étape proposée** : S10 — score logistique chauffeur + avis + litiges.
 
 ---
 

@@ -17,6 +17,7 @@ from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import Utilisateur
+from src.modeles.base_document import table_pour_type
 from src.modules.inspection_documents.adaptateurs import (
     adapter_assurance,
     adapter_carte_grise,
@@ -86,6 +87,7 @@ async def _enregistrer_historique(
 
     donnees: Dict[str, Any] = resultat.get("donnees") or {}
     statut = str(resultat.get("statut") or "en_attente")
+    type_document = str(resultat.get("type_document") or "inconnu")
 
     confiance = 0.0
     for cle in ("taux_confiance_ocr", "taux_confiance_moyen", "confiance"):
@@ -98,14 +100,18 @@ async def _enregistrer_historique(
 
     document = InspectionDocument(
         utilisateur_id=utilisateur.id,
-        type_document=str(resultat.get("type_document") or "inconnu"),
+        type_document=type_document,
         face=face,
         nom_fichier=nom_fichier,
         type_mime=type_mime,
         taille_octets=taille_octets,
+        # Index de scan → table spécialisée qui porte les données détaillées.
+        table_cible=table_pour_type(type_document),
+        document_id=str(resultat.get("identifiant") or "") or None,
         nom_famille=_extraire_champ(donnees, "nom_famille", "nom", "titulaire_nom"),
         prenoms=_extraire_champ(donnees, "prenoms", "prenom", "titulaire_prenoms"),
         date_naissance=_extraire_champ(donnees, "date_naissance"),
+        date_delivrance=_extraire_champ(donnees, "date_delivrance"),
         date_expiration=_extraire_champ(donnees, "date_expiration"),
         nationalite=_extraire_champ(donnees, "nationalite"),
         numero_document=_extraire_champ(
@@ -117,7 +123,6 @@ async def _enregistrer_historique(
             "numero_carte",
         ),
         texte_brut=(resultat.get("texte_brut") or None),
-        donnees_specifiques=donnees,
         statut=statut,
         est_valide=(statut == "approuve"),
         taux_confiance_ocr=confiance,

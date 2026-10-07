@@ -7,23 +7,13 @@ Les codes officiels du certificat d'immatriculation sont mappés aux colonnes :
   - P.6 -> puissance_fiscale_cv, S.1 -> nombre_places, F.2 -> poids_total_kg
   - B   -> date_premiere_mise_circulation, E -> numero_formule
 """
-import uuid
-from datetime import datetime
-from sqlalchemy import Column, String, Date, DateTime, ForeignKey, Boolean, Integer
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, Date, Integer
 from src.base_donnees.base import Base
+from src.modeles.base_document import BaseDocumentInspection
 
 
-class CarteGrise(Base):
+class CarteGrise(BaseDocumentInspection, Base):
     __tablename__ = "cartes_grises"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    utilisateur_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("utilisateur.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
 
     # --- Identification du véhicule ---
     numero_immatriculation = Column(String(50), nullable=False, index=True)
@@ -52,13 +42,6 @@ class CarteGrise(Base):
     pays_emetteur = Column(String(100), nullable=True)
     date_delivrance = Column(Date, nullable=True)
     date_expiration = Column(Date, nullable=True)  # souvent absente sur une carte grise
-
-    # --- Statut & traçabilité ---
-    est_valide = Column(Boolean, default=True)
-    cree_le = Column(DateTime(timezone=True), default=datetime.utcnow)
-    mis_a_jour_le = Column(
-        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
-    )
 
     def __repr__(self):
         return (

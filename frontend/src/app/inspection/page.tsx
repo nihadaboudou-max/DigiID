@@ -14,6 +14,7 @@ import {
   obtenirHistorique,
   supprimerVerification,
 } from "@/services/inspectionApi";
+import { champsDocument } from "@/composants/inspection/champsParType";
 
 // ── Libellés / styles partagés ─────────────────────────────────────────────
 const LIBELLES_TYPE_DOCUMENT: Record<TypeDocument, string> = {
@@ -404,12 +405,8 @@ function ResultatsAnalyse({ resultat }: ResultatsAnalyseProps) {
           <p className="text-sm text-gray-500">Aucune donnée extraite.</p>
         ) : (
           <div className="grid grid-cols-2 gap-3 text-sm">
-            {Object.entries(donnees).map(([cle, valeur]) => (
-              <InfoField
-                key={cle}
-                label={formaterLibelleChamp(cle)}
-                value={formaterValeur(valeur)}
-              />
+            {champsDocument(resultat.type_document, donnees).map((champ) => (
+              <InfoField key={champ.cle} label={champ.libelle} value={champ.valeur} />
             ))}
           </div>
       )}
@@ -428,20 +425,6 @@ function ResultatsAnalyse({ resultat }: ResultatsAnalyseProps) {
       )}
     </div>
   );
-}
-
-function formaterLibelleChamp(cle: string): string {
-  return cle
-    .split("_")
-    .map((mot) => mot.charAt(0).toUpperCase() + mot.slice(1))
-    .join(" ");
-}
-
-function formaterValeur(valeur: any): string {
-  if (valeur === null || valeur === undefined) return "";
-  if (Array.isArray(valeur)) return valeur.join(", ");
-  if (typeof valeur === "object") return JSON.stringify(valeur);
-  return String(valeur);
 }
 
 // Composant helper pour afficher les champs

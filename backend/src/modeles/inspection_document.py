@@ -31,6 +31,10 @@ class InspectionDocument(Base):
     # --- Métadonnées du fichier ---
     type_document: Mapped[str] = mapped_column(String(50), nullable=False, default="inconnu", index=True)
     face: Mapped[str] = mapped_column(String(20), nullable=False, default="unique") # recto, verso, unique
+
+    # --- Index de scan : pointeur vers la table spécialisée qui porte les données ---
+    table_cible: Mapped[str] = mapped_column(String(100), nullable=True, index=True)
+    document_id: Mapped[str] = mapped_column(String(36), nullable=True)  # id logique (pas de FK : multi-tables)
     nom_fichier: Mapped[str] = mapped_column(String(255), nullable=False)
     type_mime: Mapped[str] = mapped_column(String(50), nullable=False, default="image/jpeg")
     taille_octets: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -55,8 +59,11 @@ class InspectionDocument(Base):
     mrz_ligne_3: Mapped[str] = mapped_column(Text, nullable=True)
     mrz_valide: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # --- Données flexibles (JSON) ---
-    # Stocke les données spécifiques (ex: catégories de permis, n° police assurance)
+        # --- Données flexibles (JSON) ---
+    # ⚠️ DÉPRÉCIÉ (S8) : plus alimenté par la façade unifiée. Les données détaillées
+    # vivent désormais dans la table spécialisée pointée par `table_cible`/`document_id`.
+    # Conservé (lecture seule) pour l'historique des scans antérieurs — jamais supprimé
+    # (principe « additif, jamais destructif »).
     donnees_specifiques: Mapped[dict] = mapped_column(JSON, nullable=True, default=dict) 
     texte_brut: Mapped[str] = mapped_column(Text, nullable=True) # Texte OCR brut (pour debug/audit)
 

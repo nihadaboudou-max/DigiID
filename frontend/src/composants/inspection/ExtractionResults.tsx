@@ -1,6 +1,7 @@
 "use client";
 
 import { ReponseDocumentUnifie, TypeDocument } from "@/types/inspection";
+import { champsDocument } from "@/composants/inspection/champsParType";
 
 interface ExtractionResultsProps {
   result: ReponseDocumentUnifie | null;
@@ -95,14 +96,10 @@ export default function ExtractionResults({ result, loading, error }: Extraction
         </div>
         {Object.keys(donnees).length === 0 ? (
           <p className="text-sm text-gray-500">Aucune donnée extraite.</p>
-        ) : (
+                ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {Object.entries(donnees).map(([cle, valeur]) => (
-              <InfoField
-                key={cle}
-                label={formaterLibelleChamp(cle)}
-                value={formaterValeur(valeur)}
-              />
+            {champsDocument(result.type_document, donnees).map((champ) => (
+              <InfoField key={champ.cle} label={champ.libelle} value={champ.valeur} />
             ))}
           </div>
         )}
@@ -121,20 +118,6 @@ export default function ExtractionResults({ result, loading, error }: Extraction
       )}
     </div>
   );
-}
-
-function formaterLibelleChamp(cle: string): string {
-  return cle
-    .split("_")
-    .map((mot) => mot.charAt(0).toUpperCase() + mot.slice(1))
-    .join(" ");
-}
-
-function formaterValeur(valeur: any): string {
-  if (valeur === null || valeur === undefined) return "";
-  if (Array.isArray(valeur)) return valeur.join(", ");
-  if (typeof valeur === "object") return JSON.stringify(valeur);
-  return String(valeur);
 }
 
 function InfoField({ label, value }: { label: string; value?: string }) {

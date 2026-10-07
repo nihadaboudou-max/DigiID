@@ -1,22 +1,15 @@
 # -*- coding: utf-8 -*-
 """Modèle de données pour l'Assurance Automobile (Carte Verte)."""
-import uuid
-from datetime import date, datetime
-from sqlalchemy import Column, String, Date, DateTime, ForeignKey, Boolean
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, Date, Boolean
 from src.base_donnees.base import Base
+from src.modeles.base_document import BaseDocumentInspection
 
-class AssuranceAuto(Base):
+
+class AssuranceAuto(BaseDocumentInspection, Base):
     __tablename__ = "assurances_auto"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    utilisateur_id = Column(UUID(as_uuid=True), ForeignKey("utilisateur.id", ondelete="CASCADE"), nullable=False, index=True)
-
-    # Identité de l'assuré (extrait par OCR)
-    nom_famille = Column(String(255), nullable=True)
-    prenoms = Column(String(255), nullable=True)
+    # Identité de l'assuré (spécifique : dates en type DATE natif)
     date_naissance = Column(Date, nullable=True)
-    lieu_naissance = Column(String(255), nullable=True)
     
     # Assureur
     compagnie_assurance = Column(String, nullable=False)
@@ -33,8 +26,6 @@ class AssuranceAuto(Base):
     
     # Statut
     est_active = Column(Boolean, default=True)
-    cree_le = Column(DateTime(timezone=True), default=datetime.utcnow)
-    mis_a_jour_le = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self):
         return f"<AssuranceAuto(contrat='{self.numero_contrat}', immat='{self.immatriculation}')>"
