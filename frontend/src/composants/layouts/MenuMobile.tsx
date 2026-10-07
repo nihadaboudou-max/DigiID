@@ -28,6 +28,7 @@ const LIENS_UTILISATEUR: Lien[] = [
   { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
   { href: "/citoyen/qr-code", libelle: "Mon DigiID", Icone: IconeIdentite },
   { href: "/profil", libelle: "Mon profil", Icone: IconeUtilisateur },
+  { href: "/horaires", libelle: "Mes horaires", Icone: IconePortefeuille },
   { href: "/inspection", libelle: "Document d'identité)", Icone: IconeCheck },
   { href: "/identite/verification-visuelle", libelle: "Reconnaissance faciale", Icone: IconeVisage },
   { href: "/aide", libelle: "Aide et Support", Icone: IconeAlerte },

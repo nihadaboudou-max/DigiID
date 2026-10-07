@@ -607,6 +607,14 @@ export function BarreLaterale() {
               actif={pathname === "/profil"}
             />
 
+            {/* Programme voyage */}
+            <LienNav
+              href="/horaires"
+              libelle="Mes horaires"
+              Icone={IconeUtilisateur}
+              actif={pathname === "/horaires"}
+            />
+
             {/* Document d'identité */}
             <LienNav
               href="/inspection"
