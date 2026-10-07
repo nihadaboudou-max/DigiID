@@ -13,9 +13,10 @@
  * L'OCR passe par l'**extraction universelle** (interface unique
  * `POST /api/v1/inspection-documents/upload`) : une seule route, une seule
  * réponse (`ReponseDocumentUnifie`) et **le type de document est détecté
- * automatiquement**. Une seule photo suffit pour le permis comme pour la carte
- * verte — au lieu des endpoints individuels `/permis/upload` et
- * `/assurance/upload` qui obligeaient à choisir le document à l'avance.
+ * automatiquement**. Une seule photo suffit pour chacun de vos documents — pièce
+ * d'identité, permis, carte verte, carte grise… — au lieu des endpoints
+ * individuels (`/permis/upload`, `/assurance/upload`…) qui obligeaient à choisir
+ * le document à l'avance.
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -73,6 +74,27 @@ const FORMULAIRE_VIDE: DonneesProfilLogistique = {
 };
 
 /**
+ * Type de document choisi pour le scan. « auto » laisse l'extraction universelle
+ * reconnaître le document ; les autres forcent le type (utile si la
+ * reconnaissance automatique hésite).
+ */
+type TypeScan = "auto" | "piece" | "permis" | "assurance" | "carte_grise";
+
+/**
+ * Libellé de pièce d'identité inscrit au dossier selon le document reconnu par
+ * l'extraction universelle (CNI, passeport, séjour…).
+ */
+const LIBELLES_PIECE: Partial<Record<TypeDocument, string>> = {
+  [TypeDocument.CNI_BIOMETRIQUE]: "CNI",
+  [TypeDocument.CNI_PAPIER]: "CNI",
+  [TypeDocument.PASSEPORT]: "Passeport",
+  [TypeDocument.CARTE_SEJOUR]: "Carte de séjour",
+  [TypeDocument.CARTE_CONSULAIRE]: "Carte consulaire",
+  [TypeDocument.CARTE_VOTE]: "Carte de vote",
+  [TypeDocument.CARTE_ETUDIANT]: "Carte étudiant",
+};
+
+/**
  * Convertit une date lue par l'OCR en `AAAA-MM-JJ` (format attendu par un
  * `<input type="date">`). L'OCR renvoie aussi bien `12.05.2027`, `12/05/2027`
  * qu'une date ISO : on tolère les trois, et on renvoie `null` si illisible —
@@ -99,6 +121,8 @@ function Contenu() {
   /** Retour de la dernière lecture OCR (permis ou assurance). */
   const [messageOCR, setMessageOCR] = useState<string | null>(null);
   const [erreurOCR, setErreurOCR] = useState<string | null>(null);
+  /** Type de document à scanner (auto-détection par défaut). */
+  const [typeScan, setTypeScan] = useState<TypeScan>("auto");
 
   useEffect(() => {
     let annule = false;
@@ -154,61 +178,155 @@ function Contenu() {
     setSucces(null);
   }
 
+  /** Remplit le dossier à partir des données d'un permis de conduire. */
+  function appliquerPermis(donnees: Record<string, any>, extraits: number) {
+    const expiration = versDateISO(donnees.date_expiration);
+    const categories = Array.isArray(donnees.categories)
+      ? donnees.categories.join(", ")
+      : (donnees.categories ?? "");
+    fusionner({
+      permis_numero: donnees.numero_document ?? formulaire.permis_numero ?? "",
+      permis_categorie: categories || formulaire.permis_categorie || "",
+      permis_expiration: expiration ?? formulaire.permis_expiration,
+    });
+    setMessageOCR(
+      `Permis reconnu : ${extraits} champ(s) lu(s). Vérifiez les valeurs ci-dessous avant d'enregistrer (elles restent modifiables).`,
+    );
+    if (!expiration && donnees.date_expiration) {
+      setErreurOCR(
+        `Date d'expiration lue « ${donnees.date_expiration} » : saisissez-la à la main, elle n'a pas pu être convertie.`,
+      );
+    }
+  }
+
+  /** Remplit le dossier à partir des données d'une carte verte d'assurance. */
+  function appliquerAssurance(donnees: Record<string, any>, extraits: number) {
+    fusionner({
+      vehicule_immatriculation:
+        donnees.immatriculation ?? formulaire.vehicule_immatriculation ?? "",
+      vehicule_marque: donnees.marque_vehicule ?? formulaire.vehicule_marque ?? "",
+      vehicule_modele: donnees.modele_vehicule ?? formulaire.vehicule_modele ?? "",
+    });
+    const validite = donnees.date_expiration
+      ? ` Contrat valable jusqu'au ${donnees.date_expiration}${donnees.compagnie_assurance ? ` (${donnees.compagnie_assurance})` : ""}.`
+      : "";
+    setMessageOCR(
+      `Assurance reconnue : ${extraits} champ(s) lu(s).${validite} Vérifiez le véhicule ci-dessous avant d'enregistrer.`,
+    );
+  }
+
+  /** Remplit la pièce d'identité du dossier (CNI, passeport, séjour…). */
+  function appliquerPiece(
+    type: TypeDocument,
+    donnees: Record<string, any>,
+    extraits: number,
+  ) {
+    const libelle = LIBELLES_PIECE[type] ?? "Pièce d'identité";
+    fusionner({
+      type_piece: libelle,
+      numero_piece:
+        donnees.numero_document ??
+        donnees.numero_passeport ??
+        formulaire.numero_piece ??
+        "",
+    });
+    setMessageOCR(
+      `${libelle} reconnue : ${extraits} champ(s) lu(s). Vérifiez le type et le numéro ci-dessus avant d'enregistrer.`,
+    );
+  }
+
+  /** Remplit le véhicule du dossier à partir d'une carte grise. */
+  function appliquerCarteGrise(donnees: Record<string, any>, extraits: number) {
+    const capacite = donnees.nombre_places;
+    fusionner({
+      vehicule_immatriculation:
+        donnees.numero_immatriculation ?? formulaire.vehicule_immatriculation ?? "",
+      vehicule_marque: donnees.marque ?? formulaire.vehicule_marque ?? "",
+      vehicule_modele: donnees.modele ?? formulaire.vehicule_modele ?? "",
+      vehicule_capacite:
+        typeof capacite === "number" ? capacite : formulaire.vehicule_capacite,
+    });
+    setMessageOCR(
+      `Carte grise reconnue : ${extraits} champ(s) lu(s). Vérifiez le véhicule ci-dessous avant d'enregistrer.`,
+    );
+  }
+
   /**
-   * Extraction **universelle** : une seule photo, un seul appel à l'interface
-   * unique (`POST /api/v1/inspection-documents/upload`). On ne force plus le type
-   * du document : **le backend le détecte tout seul** (permis, carte verte…).
-   * On route ensuite les données lues vers la bonne partie du dossier.
+   * Extraction **universelle** : un seul appel à l'interface unique
+   * (`POST /api/v1/inspection-documents/upload`), qui renvoie toujours la même
+   * réponse. Le type est détecté automatiquement ; le routage vers la bonne
+   * partie du dossier se fait sur le type renvoyé, avec un repli sur les champs
+   * réellement extraits si l'auto-détection est indécise.
    */
   async function analyserDocument(fichier: File) {
     setErreurOCR(null);
     setMessageOCR(null);
     try {
-      // Aucun type transmis : c'est l'extraction universelle qui reconnaît le document.
-      const reponse = await uploadDocument(fichier);
-      const donnees = reponse.donnees ?? {};
+      // « auto » → on ne transmet aucun type : le backend détecte tout seul.
+      const typeForce =
+        typeScan === "piece"
+          ? TypeDocument.CNI_BIOMETRIQUE
+          : typeScan === "permis"
+            ? TypeDocument.PERMIS_CONDUIRE
+            : typeScan === "assurance"
+              ? TypeDocument.CARTE_ASSURANCE
+              : typeScan === "carte_grise"
+                ? TypeDocument.CARTE_GRISE
+                : undefined;
+
+      const reponse = await uploadDocument(fichier, typeForce);
+      const donnees = (reponse.donnees ?? {}) as Record<string, any>;
       const extraits = reponse.champs_extraits ?? 0;
+      const type = reponse.type_document;
 
-      if (reponse.type_document === TypeDocument.PERMIS_CONDUIRE) {
-        const expiration = versDateISO(donnees.date_expiration);
-        const categories = Array.isArray(donnees.categories)
-          ? donnees.categories.join(", ")
-          : (donnees.categories ?? "");
-        fusionner({
-          permis_numero: donnees.numero_document ?? formulaire.permis_numero ?? "",
-          permis_categorie: categories || formulaire.permis_categorie || "",
-          permis_expiration: expiration ?? formulaire.permis_expiration,
-        });
-        setMessageOCR(
-          `Permis reconnu : ${extraits} champ(s) lu(s). Vérifiez les valeurs ci-dessous avant d'enregistrer (elles restent modifiables).`,
-        );
-        if (!expiration && donnees.date_expiration) {
-          setErreurOCR(
-            `Date d'expiration lue « ${donnees.date_expiration} » : saisissez-la à la main, elle n'a pas pu être convertie.`,
-          );
-        }
+      // 1) Le type renvoyé par le backend décide du routage.
+      if (type === TypeDocument.PERMIS_CONDUIRE) {
+        appliquerPermis(donnees, extraits);
+        return;
+      }
+      if (type === TypeDocument.CARTE_ASSURANCE) {
+        appliquerAssurance(donnees, extraits);
+        return;
+      }
+      if (type === TypeDocument.CARTE_GRISE) {
+        appliquerCarteGrise(donnees, extraits);
+        return;
+      }
+      if (LIBELLES_PIECE[type]) {
+        appliquerPiece(type, donnees, extraits);
         return;
       }
 
-      if (reponse.type_document === TypeDocument.CARTE_ASSURANCE) {
-        fusionner({
-          vehicule_immatriculation:
-            donnees.immatriculation ?? formulaire.vehicule_immatriculation ?? "",
-          vehicule_marque: donnees.marque_vehicule ?? formulaire.vehicule_marque ?? "",
-          vehicule_modele: donnees.modele_vehicule ?? formulaire.vehicule_modele ?? "",
-        });
-        const validite = donnees.date_expiration
-          ? ` Contrat valable jusqu'au ${donnees.date_expiration}${donnees.compagnie_assurance ? ` (${donnees.compagnie_assurance})` : ""}.`
-          : "";
-        setMessageOCR(
-          `Assurance reconnue : ${extraits} champ(s) lu(s).${validite} Vérifiez le véhicule ci-dessous avant d'enregistrer.`,
-        );
+      // 2) Auto-détection indécise : on se fie aux champs réellement lus.
+      if (
+        "compagnie_assurance" in donnees ||
+        "immatriculation" in donnees ||
+        "marque_vehicule" in donnees
+      ) {
+        appliquerAssurance(donnees, extraits);
+        return;
+      }
+      if (
+        "numero_immatriculation" in donnees ||
+        "numero_chassis" in donnees ||
+        "marque" in donnees
+      ) {
+        appliquerCarteGrise(donnees, extraits);
+        return;
+      }
+      if ("categories" in donnees) {
+        appliquerPermis(donnees, extraits);
+        return;
+      }
+      if ("numero_document" in donnees || "numero_passeport" in donnees) {
+        // Document d'identité reconnu uniquement par ses champs.
+        appliquerPiece(TypeDocument.CNI_BIOMETRIQUE, donnees, extraits);
         return;
       }
 
-      // Document reconnu mais hors périmètre de ce dossier (ex. CNI).
+      // 3) Rien d'exploitable : on invite à préciser le type ou à reprendre la photo.
       setErreurOCR(
-        "Document reconnu, mais ce dossier attend un permis de conduire ou une carte verte. Reprenez la photo du bon document.",
+        "Impossible de reconnaître le document. Précisez son type ci-dessus, ou reprenez une photo plus nette.",
       );
     } catch (e) {
       setErreurOCR(
@@ -324,49 +442,82 @@ function Contenu() {
             />
           </div>
 
+          {/* Scan OCR (extraction universelle) : remplit les champs selon le
+              document — pièce d'identité pour tout le monde, et en plus permis /
+              véhicule pour les chauffeurs. */}
+          <div className="rounded-xl border border-lagune/20 bg-lagune/5 px-4 py-3">
+            <p className="text-sm font-bold text-ardoise">
+              Scanner un document (OCR)
+            </p>
+            <p className="mt-0.5 text-xs text-ardoise-clair">
+              Prenez une photo de votre pièce d&apos;identité, de votre permis, de
+              votre carte verte ou de votre carte grise : le système reconnaît le
+              document et remplit les bons champs. Vous gardez la main — rien
+              n&apos;est enregistré avant que vous ne validiez.
+            </p>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(
+                [
+                  ["auto", "Auto-détection"],
+                  ["piece", "Pièce d'identité"],
+                  ["permis", "Permis de conduire"],
+                  ["assurance", "Carte verte"],
+                  ["carte_grise", "Carte grise"],
+                ] as [TypeScan, string][]
+              ).map(([valeur, libelle]) => (
+                <button
+                  key={valeur}
+                  type="button"
+                  onClick={() => setTypeScan(valeur)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                    typeScan === valeur
+                      ? "border-lagune bg-lagune-teinte text-lagune"
+                      : "border-ardoise/20 bg-white text-ardoise hover:bg-lagune-teinte/40"
+                  }`}
+                >
+                  {libelle}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-[11px] text-ardoise-clair">
+              L&apos;auto-détection suffit la plupart du temps ; précisez le type
+              seulement si la reconnaissance se trompe.
+            </p>
+
+            <div className="mt-2">
+              <ChampOCR
+                libelle="Photo du document"
+                description="Une photo suffit : le type de document est reconnu automatiquement (extraction universelle)."
+                surFichier={analyserDocument}
+              />
+            </div>
+
+            <p className="mt-2 text-xs text-ardoise-clair">
+              Retrouvez tous vos documents scannés dans{" "}
+              <Link
+                href="/documents-identite"
+                className="font-medium text-lagune hover:underline"
+              >
+                Mes documents d&apos;identité
+              </Link>
+              .
+            </p>
+
+            {messageOCR && (
+              <p className="mt-3 rounded-lg bg-white px-3 py-2 text-xs text-ardoise">
+                {messageOCR}
+              </p>
+            )}
+            {erreurOCR && (
+              <p className="mt-3 rounded-lg bg-terre/10 px-3 py-2 text-xs font-medium text-terre">
+                {erreurOCR}
+              </p>
+            )}
+          </div>
+
           {estChauffeur && (
             <>
-              <div className="rounded-xl border border-lagune/20 bg-lagune/5 px-4 py-3">
-                <p className="text-sm font-bold text-ardoise">
-                  Scanner un document (OCR)
-                </p>
-                <p className="mt-0.5 text-xs text-ardoise-clair">
-                  Prenez une seule photo : le système reconnaît tout seul votre permis
-                  ou votre carte verte, puis remplit les bons champs ci-dessous. Vous
-                  gardez la main — rien n&apos;est enregistré avant que vous ne validiez.
-                </p>
-
-                <div className="mt-3">
-                  <ChampOCR
-                    libelle="Permis de conduire ou carte verte"
-                    description="Une photo suffit : le type de document est détecté automatiquement (extraction universelle)."
-                    surFichier={analyserDocument}
-                  />
-                </div>
-
-                <p className="mt-2 text-xs text-ardoise-clair">
-                  Retrouvez tous vos documents scannés dans{" "}
-                  <Link
-                    href="/documents-identite"
-                    className="font-medium text-lagune hover:underline"
-                  >
-                    Mes documents d&apos;identité
-                  </Link>
-                  .
-                </p>
-
-                {messageOCR && (
-                  <p className="mt-3 rounded-lg bg-white px-3 py-2 text-xs text-ardoise">
-                    {messageOCR}
-                  </p>
-                )}
-                {erreurOCR && (
-                  <p className="mt-3 rounded-lg bg-terre/10 px-3 py-2 text-xs font-medium text-terre">
-                    {erreurOCR}
-                  </p>
-                )}
-              </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <ChampSaisie
                   libelle="Numéro de permis"
