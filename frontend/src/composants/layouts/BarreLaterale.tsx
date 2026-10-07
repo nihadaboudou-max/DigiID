@@ -658,10 +658,6 @@ export function BarreLaterale() {
                 {cbLienSousMenu("/historique", "Historique d'accès")}
               </div>
               <div className="space-y-0.5">
-                <p className="text-[10px] uppercase tracking-wider text-ardoise-clair/40 font-semibold px-3 py-1">
-                  Autorisations
-                </p>
-                {cbLienSousMenu("/autorisations", "Autorisations")}
               </div>
             </GroupePlie>
 
