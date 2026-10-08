@@ -2,12 +2,11 @@
 /**
  * Ticket de colis imprimable — guichet logistique (S3).
  *
- * Affiche l'étiquette à coller sur le colis : QR Code durable (scannable par
- * la caméra native d'un téléphone), numéro en clair (repli saisie manuelle),
- * gares de départ/arrivée, destinataire et prix du transport (facultatif).
- *
- * Le bouton « Imprimer » est masqué à l'impression (`.no-print`) et seule la
- * zone `.zone-impression` est imprimée (voir `styles/globaux.css`).
+ * Affiche l'étiquette à coller sur le colis : QR Code durable, numéro en clair,
+ * gares de départ/arrivée, destinataire et prix du transport.
+ * 
+ * Grâce aux classes "zone-impression" et "print:hidden", seule cette zone 
+ * sera imprimée, sans le menu, ni le bouton d'impression.
  */
 import { Bouton } from "@/composants/commun/Bouton";
 import { IconeTicket } from "@/composants/commun/Icones";
@@ -30,7 +29,12 @@ export function TicketImprimable({
 
   return (
     <div className="space-y-4">
-      <div className="zone-impression bg-white border-2 border-ardoise/20 rounded-xl p-5 text-ardoise">
+      
+      {/* ==========================================
+          ZONE 1 : Le ticket principal 
+          (La classe "zone-impression" est ciblée par le CSS d'impression)
+         ========================================== */}
+      <div className="zone-impression bg-white border-2 border-ardoise/20 rounded-xl p-5 text-ardoise print:shadow-none print:border-gray-300">
         {/* En-tête */}
         <div className="flex items-center justify-between border-b border-dashed border-ardoise-clair/40 pb-3 mb-4">
           <div className="flex items-center gap-2 text-lagune">
@@ -62,15 +66,11 @@ export function TicketImprimable({
             <dl className="grid grid-cols-1 gap-2">
               <div className="flex gap-2">
                 <dt className="text-ardoise-clair min-w-[92px]">Départ</dt>
-                <dd className="font-medium">
-                  {colis?.gare_depart_nom || "—"}
-                </dd>
+                <dd className="font-medium">{colis?.gare_depart_nom || "—"}</dd>
               </div>
               <div className="flex gap-2">
                 <dt className="text-ardoise-clair min-w-[92px]">Arrivée</dt>
-                <dd className="font-medium">
-                  {colis?.gare_arrivee_nom || "—"}
-                </dd>
+                <dd className="font-medium">{colis?.gare_arrivee_nom || "—"}</dd>
               </div>
               <div className="flex gap-2">
                 <dt className="text-ardoise-clair min-w-[92px]">Expéditeur</dt>
@@ -94,9 +94,7 @@ export function TicketImprimable({
               </div>
               <div className="flex gap-2">
                 <dt className="text-ardoise-clair min-w-[92px]">Prix transport</dt>
-                <dd className="font-bold text-lagune">
-                  {formaterFcfa(colis?.frais_fcfa)}
-                </dd>
+                <dd className="font-bold text-lagune">{formaterFcfa(colis?.frais_fcfa)}</dd>
               </div>
             </dl>
           </div>
@@ -127,9 +125,11 @@ export function TicketImprimable({
         </div>
       </div>
 
-      {/* Étiquettes bagages : une par sac (traçabilité + anti-fraude à l'arrivée) */}
+      {/* ==========================================
+          ZONE 2 : Les étiquettes bagages (si existantes)
+         ========================================== */}
       {colis && colis.bagages && colis.bagages.length > 0 && (
-        <div className="zone-impression bg-white border-2 border-ardoise/20 rounded-xl p-5 text-ardoise">
+        <div className="zone-impression bg-white border-2 border-ardoise/20 rounded-xl p-5 text-ardoise print:shadow-none print:border-gray-300 print:mt-4">
           <p className="text-sm font-bold uppercase tracking-wider text-lagune mb-3">
             Étiquettes bagages ({colis.bagages.length} sac
             {colis.bagages.length > 1 ? "s" : ""})
@@ -172,8 +172,12 @@ export function TicketImprimable({
         </div>
       )}
 
+      {/* ==========================================
+          ZONE 3 : Le bouton d'impression 
+          (print:hidden garantit qu'il ne s'imprime JAMAIS)
+         ========================================== */}
       {afficherImpression && (
-        <div className="no-print flex flex-wrap gap-3">
+        <div className="no-print flex flex-wrap gap-3 print:hidden">
           <Bouton variante="secondaire" onClick={() => window.print()}>
             🖨️ Imprimer le ticket
           </Bouton>

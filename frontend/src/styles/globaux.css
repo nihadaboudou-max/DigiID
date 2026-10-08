@@ -250,3 +250,49 @@
 .delai-4 { animation-delay: 0.20s; }
 .delai-5 { animation-delay: 0.25s; }
 .delai-6 { animation-delay: 0.30s; }
+
+
+/* ==========================================
+   STYLES D'IMPRESSION (Ticket Logistique)
+   ========================================== */
+@media print {
+  /* 1. Cacher TOUT le contenu de la page par défaut */
+  body, body * {
+    visibility: hidden;
+  }
+
+  /* 2. Rendre VISIBLE uniquement la zone du ticket */
+  .zone-impression,
+  .zone-impression * {
+    visibility: visible !important;
+  }
+
+  /* 3. Positionner le ticket proprement en haut à gauche de la feuille */
+  .zone-impression {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    background: white !important;
+    border: 1px solid #ccc !important; /* Bordure légère pour le cadre */
+    box-shadow: none !important;
+  }
+
+  /* 4. Forcer la disparition des boutons et éléments inutiles */
+  .no-print, 
+  button, 
+  nav, 
+  header, 
+  footer, 
+  .sidebar {
+    display: none !important;
+  }
+
+  /* 5. Optimiser la feuille (enlever les marges par défaut du navigateur) */
+  @page {
+    margin: 1cm;
+    size: auto;
+  }
+}
