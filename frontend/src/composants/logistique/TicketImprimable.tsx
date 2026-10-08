@@ -1,13 +1,4 @@
 "use client";
-/**
- * Ticket de colis imprimable — guichet logistique (S3).
- *
- * Affiche l'étiquette à coller sur le colis : QR Code durable, numéro en clair,
- * gares de départ/arrivée, destinataire et prix du transport.
- * 
- * Grâce aux classes "zone-impression" et "print:hidden", seule cette zone 
- * sera imprimée, sans le menu, ni le bouton d'impression.
- */
 import { Bouton } from "@/composants/commun/Bouton";
 import { IconeTicket } from "@/composants/commun/Icones";
 import type { Colis, Ticket } from "@/types/logistique";
@@ -16,7 +7,6 @@ import { formaterDate, formaterDateHeure, formaterFcfa, urlImageQR } from "./for
 interface Proprietes {
   ticket: Ticket;
   colis?: Colis | null;
-  /** Affiche le bouton d'impression (désactivable en aperçu). */
   afficherImpression?: boolean;
 }
 
@@ -28,13 +18,12 @@ export function TicketImprimable({
   const qrSrc = urlImageQR(ticket.qr_code_url || ticket.qr_token);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       
       {/* ==========================================
-          ZONE 1 : Le ticket principal 
-          (La classe "zone-impression" est ciblée par le CSS d'impression)
+          PAGE 1 : LE TICKET PRINCIPAL (Pour le remettant/client)
          ========================================== */}
-      <div className="zone-impression bg-white border-2 border-ardoise/20 rounded-xl p-5 text-ardoise print:shadow-none print:border-gray-300">
+      <div className="zone-impression ticket-principal bg-white border-2 border-ardoise/20 rounded-xl p-5 text-ardoise">
         {/* En-tête */}
         <div className="flex items-center justify-between border-b border-dashed border-ardoise-clair/40 pb-3 mb-4">
           <div className="flex items-center gap-2 text-lagune">
@@ -43,7 +32,7 @@ export function TicketImprimable({
           </div>
           <div className="text-right">
             <p className="text-xs uppercase tracking-wider text-ardoise-clair font-semibold">
-              Ticket colis
+              Ticket Colis (Remettant)
             </p>
             <p className="text-xs text-ardoise-clair">
               Émis le {formaterDateHeure(ticket.cree_le)}
@@ -99,88 +88,86 @@ export function TicketImprimable({
             </dl>
           </div>
 
-          {/* QR Code */}
+          {/* QR Code Principal */}
           <div className="flex flex-col items-center justify-start gap-2">
             {qrSrc ? (
-              <img
-                src={qrSrc}
-                alt={`QR Code du colis ${ticket.code_clair}`}
-                className="w-40 h-40 border border-ardoise-clair/20 rounded-lg bg-white"
-              />
+              <img src={qrSrc} alt={`QR Code du colis ${ticket.code_clair}`} className="w-40 h-40 border border-ardoise-clair/20 rounded-lg bg-white" />
             ) : (
               <div className="w-40 h-40 border-2 border-dashed border-ardoise-clair/30 rounded-lg flex items-center justify-center text-center text-xs text-ardoise-clair p-2">
-                QR indisponible — utilisez le numéro ci-contre.
+                QR indisponible
               </div>
             )}
             <p className="text-[10px] text-ardoise-clair text-center max-w-[160px]">
-              Scannez pour suivre / remettre le colis
+              À conserver par le remettant
             </p>
           </div>
         </div>
 
         {/* Pied */}
         <div className="mt-4 pt-3 border-t border-dashed border-ardoise-clair/40 text-[11px] text-ardoise-clair flex justify-between">
-          <span>DigiID — prototype académique</span>
-          <span>Réf. {ticket.id.slice(0, 8)} · {formaterDate(ticket.cree_le)}</span>
+          <span>DigiID — Suivi logistique</span>
+          <span>Réf. {ticket.id.slice(0, 8)}</span>
         </div>
       </div>
 
       {/* ==========================================
-          ZONE 2 : Les étiquettes bagages (si existantes)
+          PAGES SUIVANTES : ÉTIQUETTES BAGAGES (1 par page)
          ========================================== */}
       {colis && colis.bagages && colis.bagages.length > 0 && (
-        <div className="zone-impression bg-white border-2 border-ardoise/20 rounded-xl p-5 text-ardoise print:shadow-none print:border-gray-300 print:mt-4">
-          <p className="text-sm font-bold uppercase tracking-wider text-lagune mb-3">
-            Étiquettes bagages ({colis.bagages.length} sac
-            {colis.bagages.length > 1 ? "s" : ""})
-          </p>
-          <p className="mb-3 text-[11px] text-ardoise-clair">
-            À attacher à chaque sac. Le nombre de sacs est vérifié à l&apos;arrivée
-            (anti-fraude) — il n&apos;affecte pas le prix.
-          </p>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            {colis.bagages.map((b) => {
-              const qrBagage = urlImageQR(b.qr_code_url);
-              return (
-                <div
-                  key={b.id}
-                  className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-ardoise-clair/40 p-3 text-center"
-                >
-                  <span className="text-xs font-bold text-ardoise">
-                    {b.numero_serie}
-                  </span>
-                  {qrBagage ? (
-                    <img
-                      src={qrBagage}
-                      alt={`QR du sac ${b.numero_serie}`}
-                      className="h-24 w-24 border border-ardoise-clair/20 rounded bg-white"
-                    />
-                  ) : (
-                    <div className="flex h-24 w-24 items-center justify-center border-2 border-dashed border-ardoise-clair/30 rounded text-center text-[10px] text-ardoise-clair">
-                      QR indisponible
-                    </div>
-                  )}
-                  {b.code_clair && (
-                    <code className="text-[10px] text-ardoise-clair break-all">
-                      {b.code_clair}
-                    </code>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <>
+          {colis.bagages.map((b, index) => {
+            const qrBagage = urlImageQR(b.qr_code_url);
+            return (
+              <div
+                key={b.id}
+                className="zone-impression etiquette-bagage bg-white border-2 border-dashed border-ardoise/30 rounded-xl p-8 text-ardoise flex flex-col items-center justify-center"
+              >
+                <p className="text-xs uppercase tracking-wider text-ardoise-clair font-bold mb-2">
+                  Étiquette Bagage {index + 1} / {colis.bagages.length}
+                </p>
+                
+                <span className="text-xl font-bold text-lagune mb-4">
+                  {b.numero_serie}
+                </span>
+
+                {qrBagage ? (
+                  <img
+                    src={qrBagage}
+                    alt={`QR du sac ${b.numero_serie}`}
+                    className="h-48 w-48 border border-ardoise-clair/20 rounded bg-white mb-4"
+                  />
+                ) : (
+                  <div className="flex h-48 w-48 items-center justify-center border-2 border-dashed border-ardoise-clair/30 rounded text-center text-xs text-ardoise-clair mb-4">
+                    QR indisponible
+                  </div>
+                )}
+
+                {b.code_clair && (
+                  <code className="text-sm font-mono text-ardoise-clair break-all text-center">
+                    {b.code_clair}
+                  </code>
+                )}
+
+                <p className="mt-6 text-[10px] text-ardoise-clair text-center border-t border-dashed border-ardoise-clair/30 pt-2 w-full">
+                  Colis parent : <strong>{ticket.code_clair}</strong> — À coller sur le sac
+                </p>
+              </div>
+            );
+          })}
+        </>
       )}
 
       {/* ==========================================
-          ZONE 3 : Le bouton d'impression 
-          (print:hidden garantit qu'il ne s'imprime JAMAIS)
+          BOUTON D'IMPRESSION (Caché à l'impression)
          ========================================== */}
       {afficherImpression && (
-        <div className="no-print flex flex-wrap gap-3 print:hidden">
-          <Bouton variante="secondaire" onClick={() => window.print()}>
-            🖨️ Imprimer le ticket
+        <div className="no-print flex flex-wrap gap-3 print:hidden mt-6">
+          <Bouton variante="primaire" onClick={() => window.print()}>
+            ️ Imprimer le dossier complet
           </Bouton>
+          <p className="text-xs text-ardoise-clair self-center">
+            (Le ticket principal sera sur la 1ère page, les étiquettes sur les suivantes)
+          </p>
         </div>
       )}
     </div>

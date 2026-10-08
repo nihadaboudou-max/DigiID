@@ -261,36 +261,55 @@
     visibility: hidden;
   }
 
-  /* 2. Rendre VISIBLE uniquement la zone du ticket */
+  /* 2. Rendre VISIBLE uniquement les zones d'impression */
   .zone-impression,
   .zone-impression * {
     visibility: visible !important;
   }
 
-  /* 3. Positionner le ticket proprement en haut à gauche de la feuille */
-  .zone-impression {
+  /* 3. Forcer le saut de page après le ticket principal */
+  .ticket-principal {
+    break-after: page !important;
+    page-break-after: always !important;
     position: absolute !important;
-    left: 0 !important;
     top: 0 !important;
+    left: 0 !important;
     width: 100% !important;
     margin: 0 !important;
     padding: 20px !important;
     background: white !important;
-    border: 1px solid #ccc !important; /* Bordure légère pour le cadre */
-    box-shadow: none !important;
   }
 
-  /* 4. Forcer la disparition des boutons et éléments inutiles */
-  .no-print, 
-  button, 
-  nav, 
-  header, 
-  footer, 
-  .sidebar {
+  /* 4. Forcer le saut de page après CHAQUE étiquette bagage */
+  .etiquette-bagage {
+    break-after: page !important;
+    page-break-after: always !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 40px !important;
+    background: white !important;
+    /* Centrer l'étiquette sur la page A4 */
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 250px !important; 
+  }
+
+  /* 5. Éviter une page blanche à la toute fin */
+  .etiquette-bagage:last-child {
+    break-after: auto !important;
+    page-break-after: auto !important;
+  }
+
+  /* 6. Cacher les boutons et menus */
+  .no-print, button, nav, header, footer, .sidebar {
     display: none !important;
   }
 
-  /* 5. Optimiser la feuille (enlever les marges par défaut du navigateur) */
   @page {
     margin: 1cm;
     size: auto;
