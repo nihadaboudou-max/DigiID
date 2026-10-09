@@ -293,6 +293,7 @@ export function BarreLaterale() {
       { href: "/receveur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
       { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
       { href: "/receveur/suivi-familial", libelle: "Suivi familial", Icone: IconeIdentite },
+      { href: "/receveur/vehicules", libelle: "Cars & chauffeurs", Icone: IconeCamion },
       { href: "/receveur/scan", libelle: "Scanner / Livrer", Icone: IconeScan },
       { href: "/guichet/carte", libelle: "Carte client (scan)", Icone: IconeIdentite },
       { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },

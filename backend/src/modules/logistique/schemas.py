@@ -97,6 +97,10 @@ class VehiculeCreate(BaseModel):
     capacite: Optional[int] = Field(None, ge=0)
     gare_id: Optional[UUID] = None
     actif: bool = True
+    # Chauffeur propriétaire du car. Le gérant de gare et le receveur peuvent
+    # l'affecter à l'enregistrement ; un chauffeur qui crée son propre car y est
+    # affecté d'office par le serveur (il ne choisit pas à qui il appartient).
+    chauffeur_id: Optional[UUID] = None
 
     @field_validator("immatriculation")
     @classmethod
@@ -111,6 +115,15 @@ class VehiculeUpdate(BaseModel):
     actif: Optional[bool] = None
 
 
+class AffectationVehiculeRequest(BaseModel):
+    """Affectation (ou retrait) d'un car à un chauffeur.
+
+    ``chauffeur_id = None`` retire le car du chauffeur sans le supprimer : le
+    car redevient « non affecté » et seul le guichet peut le réattribuer.
+    """
+    chauffeur_id: Optional[UUID] = None
+
+
 class VehiculeResponse(BaseModel):
     id: UUID
     immatriculation: str
@@ -118,6 +131,8 @@ class VehiculeResponse(BaseModel):
     capacite: Optional[int] = None
     gare_id: Optional[UUID] = None
     gare_nom: Optional[str] = None
+    chauffeur_id: Optional[UUID] = None
+    chauffeur_nom: Optional[str] = None
     actif: bool
     cree_le: datetime
     modifie_le: Optional[datetime] = None

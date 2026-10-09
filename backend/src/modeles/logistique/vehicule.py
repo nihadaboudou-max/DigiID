@@ -20,6 +20,7 @@ class Vehicule(Base, MelangeTracabilite):
         Index("ix_vehicules_immatriculation_unique", "immatriculation", unique=True),
         Index("ix_vehicules_gare", "gare_id"),
         Index("ix_vehicules_actif", "actif"),
+        Index("ix_vehicules_chauffeur", "chauffeur_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -31,6 +32,19 @@ class Vehicule(Base, MelangeTracabilite):
     gare_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("gares.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # ─── Affectation du car à un chauffeur ───────────────────────────
+    # Un car appartient à un chauffeur (ou lui est confié par le gérant de gare
+    # / le receveur / le super-admin). C'est ce lien qui décide des cars qu'un
+    # chauffeur **voit** lorsqu'il planifie un départ : les siens (affectés),
+    # plus celui dont il a déclaré la plaque dans son dossier professionnel
+    # (`profils_logistiques.vehicule_immatriculation`).
+    # `SET NULL` : la suppression d'un compte ne détruit jamais le car
+    # (l'historique des voyages doit rester lisible).
+    chauffeur_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("utilisateur.id", ondelete="SET NULL"),
         nullable=True,
     )
     actif: Mapped[bool] = mapped_column(

@@ -5,7 +5,7 @@ import unicodedata
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
@@ -22,7 +22,10 @@ from src.modules.logistique.dependances import (
     obtenir_gare_ou_404, obtenir_ligne_ou_404, obtenir_vehicule_ou_404,
     obtenir_voyage_ou_404, obtenir_acteur_ou_404,
 )
-from src.noyau import dechiffrer_donnee
+from src.config.constantes import TypesEvenementAudit
+from src.noyau import dechiffrer_donnee, journal
+from src.noyau.constantes_roles import RoleUtilisateur
+from src.noyau.journal import enregistrer_evenement_audit
 from src.noyau.permissions import require_permission
 
 
@@ -82,8 +85,57 @@ async def _enrichir_ligne(session: AsyncSession, ligne: Ligne) -> Ligne:
     return ligne
 
 
+def _est_chauffeur(utilisateur: Utilisateur) -> bool:
+    """Le rôle « chauffeur » : le seul dont la vue des cars est restreinte.
+
+    Tous les autres rôles du pivot (gérant de gare, receveur, super-admin)
+    gardent la vue complète du référentiel roulant : c'est eux qui affectent.
+    """
+    return utilisateur.role == RoleUtilisateur.CHAUFFEUR.value
+
+
+async def _auditer_logistique(
+    session: AsyncSession,
+    requete: Request,
+    utilisateur: Utilisateur,
+    type_evenement: TypesEvenementAudit,
+    description: str,
+    donnees: dict | None = None,
+) -> None:
+    """Trace un geste du référentiel roulant dans le journal d'audit.
+
+    Répond au besoin de terrain « qui a enregistré ce car, qui l'a affecté à qui,
+    qui a planifié ce départ ». Le geste métier est déjà validé et enregistré
+    quand on arrive ici : une panne du journal ne doit donc pas faire échouer
+    l'action du guichet ou du chauffeur, mais elle ne doit pas passer inaperçue
+    non plus (d'où le `journal.error`).
+
+    On écrit sous point de sauvegarde : un échec de l'audit n'annule que
+    l'audit, jamais la réponse (l'objet métier déjà committé reste exploitable).
+    """
+    try:
+        async with session.begin_nested():
+            await enregistrer_evenement_audit(
+                session,
+                type_evenement=type_evenement.value,
+                description=description,
+                utilisateur_id=utilisateur.id,
+                role_acteur=utilisateur.role,
+                adresse_ip=requete.client.host if requete.client else None,
+                agent_utilisateur=requete.headers.get("user-agent"),
+                donnees_supplementaires=donnees,
+            )
+        await session.commit()
+    except Exception as erreur:  # pragma: no cover — jamais bloquant
+        journal.error(
+            f"Audit logistique non enregistre ({type_evenement.value}) : {erreur}"
+        )
+
+
 async def _enrichir_vehicule(session: AsyncSession, vehicule: Vehicule) -> Vehicule:
     vehicule.gare_nom = await _nom_gare(session, vehicule.gare_id)
+    # Le guichet doit voir **qui conduit** ce car (il l'a peut-être affecté).
+    vehicule.chauffeur_nom = await _nom_utilisateur(session, vehicule.chauffeur_id)
     return vehicule
 
 
@@ -336,13 +388,43 @@ routeur_vehicules = APIRouter(prefix="/vehicules", tags=["Logistique — Véhicu
 
 @routeur_vehicules.post("", response_model=schemas.VehiculeResponse,
                         status_code=status.HTTP_201_CREATED, summary="Créer un véhicule")
-@require_permission("logistique.ecrire", "logistique.planifier")
+@require_permission(
+    "logistique.ecrire", "logistique.planifier", "logistique.vehicule.ecrire"
+)
 async def creer_vehicule(
     donnees: schemas.VehiculeCreate,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
-    vehicule = await service.creer_vehicule(session, donnees)
+    """Enregistre un car et, si on le connaît, son chauffeur.
+
+    - **Chauffeur** : le car lui appartient d'office — il ne choisit pas à qui
+      il appartient (et s'il redéclare une plaque libre, elle lui est attribuée).
+    - **Gérant de gare / receveur / super-admin** : il peut désigner le chauffeur
+      directement (`chauffeur_id`), ou enregistrer le car « non affecté » pour
+      l'affecter ensuite.
+    """
+    chauffeur_impose = (
+        utilisateur_courant.id if _est_chauffeur(utilisateur_courant) else None
+    )
+    vehicule = await service.creer_vehicule(
+        session, donnees, chauffeur_impose=chauffeur_impose
+    )
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.VEHICULE_ENREGISTRE,
+        f"Enregistrement du car {vehicule.immatriculation}",
+        donnees={
+            "vehicule_id": str(vehicule.id),
+            "immatriculation": vehicule.immatriculation,
+            "chauffeur_id": (
+                str(vehicule.chauffeur_id) if vehicule.chauffeur_id else None
+            ),
+            "capacite": vehicule.capacite,
+            "gare_id": str(vehicule.gare_id) if vehicule.gare_id else None,
+        },
+    )
     return await _enrichir_vehicule(session, vehicule)
 
 
@@ -362,6 +444,37 @@ async def lister_vehicules(
     return schemas.ReponseListe(elements=vehicules, total=total, page=page, par_page=par_page)
 
 
+@routeur_vehicules.get("/mes-vehicules",
+                       response_model=list[schemas.VehiculeResponse],
+                       summary="Les cars du chauffeur connecté (affectés ou déclarés)")
+@require_permission("logistique.lire")
+async def lister_mes_vehicules(
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    """« Quels cars puis-je conduire ? » — la question du chauffeur, et rien d'autre.
+
+    Un chauffeur ne voit que **ses** cars : ceux qui lui sont *affectés* par le
+    guichet et celui dont il a déclaré la *plaque* dans son dossier
+    professionnel. Il planifie donc un départ sur un car qu'on lui reconnaît,
+    jamais sur le car d'un collègue.
+
+    Les autres rôles (gérant de gare, receveur, super-admin) gardent la liste
+    complète : ce sont eux qui affectent, ils doivent pouvoir chercher
+    n'importe quel car pour la mettre à jour.
+    """
+    if _est_chauffeur(utilisateur_courant):
+        vehicules = await service.vehicules_autorises_pour_chauffeur(
+            session, utilisateur_courant.id
+        )
+    else:
+        vehicules, _ = await service.lister_vehicules(session, 1, 100)
+        vehicules = list(vehicules)
+    for vehicule in vehicules:
+        await _enrichir_vehicule(session, vehicule)
+    return vehicules
+
+
 @routeur_vehicules.get("/{vehicule_id}", response_model=schemas.VehiculeResponse,
                        summary="Obtenir un véhicule")
 @require_permission("logistique.lire")
@@ -375,14 +488,49 @@ async def obtenir_vehicule(
 
 @routeur_vehicules.patch("/{vehicule_id}", response_model=schemas.VehiculeResponse,
                          summary="Modifier un véhicule")
-@require_permission("logistique.ecrire", "logistique.planifier")
+@require_permission(
+    "logistique.ecrire", "logistique.planifier", "logistique.vehicule.ecrire"
+)
 async def modifier_vehicule(
     donnees: schemas.VehiculeUpdate,
+    requete: Request,
     vehicule: Vehicule = Depends(obtenir_vehicule_ou_404),
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
+    """Corrige un car : marque, capacité, gare, mise hors service.
+
+    Un chauffeur ne corrige que **ses** cars (le serveur revérifie : un appel
+    direct ne doit pas permettre de toucher au car d'un collègue) ; le guichet,
+    lui, intervient sur tout le référentiel roulant.
+    """
+    if _est_chauffeur(utilisateur_courant):
+        await service.verifier_vehicule_du_chauffeur(
+            session, vehicule.id, utilisateur_courant.id
+        )
+    avant = {
+        "marque": vehicule.marque,
+        "capacite": vehicule.capacite,
+        "gare_id": str(vehicule.gare_id) if vehicule.gare_id else None,
+        "actif": vehicule.actif,
+    }
     vehicule = await service.modifier_vehicule(session, vehicule.id, donnees)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.VEHICULE_MODIFIE,
+        f"Modification du car {vehicule.immatriculation}",
+        donnees={
+            "vehicule_id": str(vehicule.id),
+            "immatriculation": vehicule.immatriculation,
+            "avant": avant,
+            "apres": {
+                "marque": vehicule.marque,
+                "capacite": vehicule.capacite,
+                "gare_id": str(vehicule.gare_id) if vehicule.gare_id else None,
+                "actif": vehicule.actif,
+            },
+        },
+    )
     return await _enrichir_vehicule(session, vehicule)
 
 
@@ -390,11 +538,63 @@ async def modifier_vehicule(
                           summary="Supprimer un véhicule")
 @require_permission("logistique.supprimer")
 async def supprimer_vehicule(
+    requete: Request,
     vehicule: Vehicule = Depends(obtenir_vehicule_ou_404),
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
-    await service.supprimer_vehicule(session, vehicule.id)
+    immatriculation = vehicule.immatriculation
+    vehicule_id = vehicule.id
+    await service.supprimer_vehicule(session, vehicule_id)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.VEHICULE_SUPPRIME,
+        f"Suppression du car {immatriculation}",
+        donnees={"vehicule_id": str(vehicule_id), "immatriculation": immatriculation},
+    )
+
+
+@routeur_vehicules.post("/{vehicule_id}/affectation",
+                        response_model=schemas.VehiculeResponse,
+                        summary="Affecter (ou retirer) un car à un chauffeur")
+@require_permission("logistique.vehicule.affecter")
+async def affecter_vehicule(
+    vehicule_id: UUID,
+    donnees: schemas.AffectationVehiculeRequest,
+    requete: Request,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    """Désigne le chauffeur d'un car — ou le retire (`chauffeur_id = null`).
+
+    Gérant de gare et receveur enregistrent les cars qui se présentent et les
+    affectent dans la foulée, sans attendre que le super-admin soit disponible.
+    On refuse un compte qui n'est pas un chauffeur reconnu : un car se confie à
+    quelqu'un qui conduit. Le geste est tracé (qui a affecté, à qui, quand).
+    """
+    vehicule = await service.affecter_vehicule(
+        session, vehicule_id, donnees.chauffeur_id
+    )
+    type_evenement = (
+        TypesEvenementAudit.VEHICULE_AFFECTE
+        if donnees.chauffeur_id is not None
+        else TypesEvenementAudit.VEHICULE_DESAFFECTE
+    )
+    await _auditer_logistique(
+        session, requete, utilisateur_courant, type_evenement,
+        (
+            f"Car {vehicule.immatriculation} "
+            + ("affecté à un chauffeur" if donnees.chauffeur_id else "retiré du chauffeur")
+        ),
+        donnees={
+            "vehicule_id": str(vehicule.id),
+            "immatriculation": vehicule.immatriculation,
+            "chauffeur_id": (
+                str(vehicule.chauffeur_id) if vehicule.chauffeur_id else None
+            ),
+        },
+    )
+    return await _enrichir_vehicule(session, vehicule)
 
 
 # ─── Voyages ─────────────────────────────────────────────────────────
@@ -407,10 +607,37 @@ routeur_voyages = APIRouter(prefix="/voyages", tags=["Logistique — Voyages"])
 @require_permission("logistique.ecrire", "logistique.planifier")
 async def creer_voyage(
     donnees: schemas.VoyageCreate,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
+    """Planifie un départ (chauffeur indépendant ou guichet).
+
+    Un chauffeur ne planifie qu'avec **ses** cars : le serveur revérifie
+    l'affectation avant d'écrire (la liste filtrée côté client ne protège pas
+    d'un appel direct). Le guichet, lui, planifie pour n'importe quel car.
+    """
+    if _est_chauffeur(utilisateur_courant):
+        await service.verifier_vehicule_du_chauffeur(
+            session, donnees.vehicule_id, utilisateur_courant.id
+        )
     voyage = await service.creer_voyage(session, donnees)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.VOYAGE_PLANIFIE,
+        f"Départ planifié (voyage {voyage.id})",
+        donnees={
+            "voyage_id": str(voyage.id),
+            "ligne_id": str(voyage.ligne_id),
+            "vehicule_id": str(voyage.vehicule_id),
+            "chauffeur_id": (
+                str(voyage.chauffeur_id) if voyage.chauffeur_id else None
+            ),
+            "date_depart": (
+                voyage.date_depart.isoformat() if voyage.date_depart else None
+            ),
+        },
+    )
     return await _enrichir_voyage(session, voyage)
 
 
@@ -453,11 +680,71 @@ async def obtenir_voyage(
 @require_permission("logistique.ecrire", "logistique.planifier")
 async def modifier_voyage(
     donnees: schemas.VoyageUpdate,
+    requete: Request,
     voyage: Voyage = Depends(obtenir_voyage_ou_404),
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
+    """Ajuste un départ : horaire, car, ou annulation.
+
+    Un chauffeur n'ajuste que ses propres départs, avec ses propres cars, et ne
+    peut pas forcer un statut de route (« en route » se constate en scannant
+    passagers et colis, pas en modifiant une date).
+    """
+    if _est_chauffeur(utilisateur_courant):
+        if voyage.chauffeur_id != utilisateur_courant.id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail="Ce départ n'est pas le vôtre : vous ne pouvez pas le modifier.",
+            )
+        if donnees.chauffeur_id is not None and (
+            donnees.chauffeur_id != utilisateur_courant.id
+        ):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail="Un chauffeur ne cède pas son départ à un autre : le guichet le fait.",
+            )
+        if donnees.vehicule_id is not None:
+            await service.verifier_vehicule_du_chauffeur(
+                session, donnees.vehicule_id, utilisateur_courant.id
+            )
+        if donnees.statut is not None and donnees.statut not in ("planifie", "annule"):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Un chauffeur replanifie ou annule un départ ; pour le mettre "
+                    "en route ou à l'arrivée, utilisez « Valider le départ » et "
+                    "« Arrivés » (colis et passagers sont alors validés)."
+                ),
+            )
+    avant = {
+        "date_depart": (
+            voyage.date_depart.isoformat() if voyage.date_depart else None
+        ),
+        "vehicule_id": str(voyage.vehicule_id),
+        "chauffeur_id": str(voyage.chauffeur_id) if voyage.chauffeur_id else None,
+        "statut": voyage.statut,
+    }
     voyage = await service.modifier_voyage(session, voyage.id, donnees)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.VOYAGE_MODIFIE,
+        f"Modification du départ (voyage {voyage.id})",
+        donnees={
+            "voyage_id": str(voyage.id),
+            "avant": avant,
+            "apres": {
+                "date_depart": (
+                    voyage.date_depart.isoformat() if voyage.date_depart else None
+                ),
+                "vehicule_id": str(voyage.vehicule_id),
+                "chauffeur_id": (
+                    str(voyage.chauffeur_id) if voyage.chauffeur_id else None
+                ),
+                "statut": voyage.statut,
+            },
+        },
+    )
     return await _enrichir_voyage(session, voyage)
 
 
@@ -480,6 +767,7 @@ async def supprimer_voyage(
 @require_permission("logistique.voyage.rejoindre")
 async def rejoindre_voyage(
     voyage_id: UUID,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
@@ -501,6 +789,16 @@ async def rejoindre_voyage(
         )
     voyage = await service.rejoindre_voyage(
         session, voyage_id=voyage_id, chauffeur_id=utilisateur_courant.id
+    )
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.VOYAGE_CHAUFFEUR_ENGAGE,
+        f"Un chauffeur s'est engagé sur le voyage {voyage.id}",
+        donnees={
+            "voyage_id": str(voyage.id),
+            "vehicule_id": str(voyage.vehicule_id),
+            "chauffeur_id": str(utilisateur_courant.id),
+        },
     )
     return await _enrichir_voyage(session, voyage)
 

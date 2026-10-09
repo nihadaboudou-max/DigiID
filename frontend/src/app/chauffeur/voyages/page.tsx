@@ -143,11 +143,13 @@ function Contenu() {
       // On part du début de la journée : un car en retard (ou parti ce matin)
       // reste visible, et les départs à venir arrivent en premier.
       const depuis = bornesDuJour(aujourdHui())?.debut;
-      const [repGares, repLignes, repVehicules, repVoyages, repMesVoyages] =
+      const [repGares, repLignes, mesVehicules, repVoyages, repMesVoyages] =
         await Promise.all([
           logistiqueAPI.gares.lister().catch(() => ({ elements: [] as Gare[] })),
           logistiqueAPI.lignes.lister(),
-          logistiqueAPI.vehicules.lister(),
+          // Mes cars uniquement : le serveur ne renvoie que ceux qui me sont
+          // affectés et celui dont j'ai déclaré la plaque dans mon dossier pro.
+          logistiqueAPI.vehicules.listerMesVehicules(),
           logistiqueAPI.voyages.lister({ a_partir_de: depuis, par_page: 100 }),
           // Mes voyages à part : si le réseau a plus de 100 départs à venir, les
           // miens doivent quand même remonter (le filtre est fait côté serveur).
@@ -158,7 +160,7 @@ function Contenu() {
         ]);
       setGares(repGares.elements);
       setLignes(repLignes.elements);
-      setVehicules(repVehicules.elements);
+      setVehicules(mesVehicules);
       const voyagesParId = new Map<string, Voyage>();
       repVoyages.elements.forEach((v) => voyagesParId.set(v.id, v));
       repMesVoyages.elements.forEach((v) => voyagesParId.set(v.id, v));
@@ -167,7 +169,7 @@ function Contenu() {
         ...precedent,
         date_depart: precedent.date_depart || prochainDepartLocal(),
         ligne_id: precedent.ligne_id || repLignes.elements[0]?.id || "",
-        vehicule_id: precedent.vehicule_id || repVehicules.elements[0]?.id || "",
+        vehicule_id: precedent.vehicule_id || mesVehicules[0]?.id || "",
       }));
     } catch (e) {
       setErreur(
@@ -812,9 +814,15 @@ function Contenu() {
             <p className="mb-2 text-xs font-semibold uppercase text-ardoise-clair">
               Mes cars ({vehicules.length})
             </p>
+            <p className="mb-2 text-xs text-ardoise-clair">
+              Seuls les cars qui vous sont affectés apparaissent ici : vous ne
+              pouvez pas planifier un départ avec le car d&apos;un collègue.
+            </p>
             {vehicules.length === 0 ? (
               <p className="text-sm text-ardoise-clair italic">
-                Aucun car. Enregistrez le vôtre ci-dessus.
+                Aucun car rattaché à votre compte. Enregistrez votre plaque
+                ci-dessus (elle devient la vôtre), ou demandez au gérant de gare
+                / receveur de vous affecter un car existant.
               </p>
             ) : (
               <ul className="space-y-2">

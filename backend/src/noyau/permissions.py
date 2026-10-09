@@ -116,11 +116,19 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
         "logistique.colis.creer", "logistique.scan",
         "logistique.profil.ecrire", "logistique.voyage.rejoindre",
         "logistique.planifier",
+        # Référentiel roulant : enregistrer un car et l'affecter à un chauffeur
+        # sur le terrain, sans attendre que le super-admin soit disponible.
+        "logistique.vehicule.ecrire", "logistique.vehicule.affecter",
         "paiement.lire", "paiement.payer",
     }),
+    # Le receveur tient le guichet au quotidien : il enregistre les cars qui se
+    # présentent le jour même (et les affecte à leur chauffeur) quand le
+    # super-admin ou le gérant de gare n'est pas disponible. Il ne supprime
+    # rien et ne planifie pas de départ : ces gestes restent réservés.
     RoleUtilisateur.RECEVEUR: frozenset({
         "logistique.lire", "logistique.colis.creer", "logistique.scan",
         "logistique.profil.ecrire",
+        "logistique.vehicule.ecrire", "logistique.vehicule.affecter",
         "paiement.lire", "paiement.payer",
     }),
     # Le chauffeur est un **indépendant** : il définit ses propres lignes (trajets

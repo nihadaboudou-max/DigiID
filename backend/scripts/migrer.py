@@ -185,6 +185,11 @@ COLONNES_A_VERIFIER = [
     ("colis", "mode_enregistrement", "VARCHAR(20) NOT NULL DEFAULT 'guichet'"),
     ("colis", "enregistre_par_id", "UUID REFERENCES utilisateur(id) ON DELETE SET NULL"),
     ("suivi_familial", "mode_enregistrement", "VARCHAR(20) NOT NULL DEFAULT 'guichet'"),
+    # Un car appartient à un chauffeur (affecté par le super-admin, le gérant de
+    # gare ou le receveur). `create_all` ne crée QUE les tables manquantes,
+    # jamais les colonnes → sans cette ligne, toute requête sur un car échoue.
+    ("vehicules", "chauffeur_id",
+     "UUID REFERENCES utilisateur(id) ON DELETE SET NULL"),
 ]
 
 
@@ -216,6 +221,12 @@ def _creer_index_uniques_logistique(engine):
             "ix_colis_mode_enregistrement",
             "CREATE INDEX IF NOT EXISTS ix_colis_mode_enregistrement "
             "ON colis(mode_enregistrement)",
+        ),
+        (
+            "vehicules",
+            "ix_vehicules_chauffeur",
+            "CREATE INDEX IF NOT EXISTS ix_vehicules_chauffeur "
+            "ON vehicules(chauffeur_id)",
         ),
     ]
     for table, nom_index, sql in index_a_creer:

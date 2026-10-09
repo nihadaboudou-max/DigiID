@@ -63,6 +63,21 @@ export const ROLES_CAGNOTTE: string[] = [
   "super_admin",
 ];
 
+/**
+ * Référentiel roulant : enregistrer un car et l'affecter à son chauffeur.
+ *
+ * Permissions `logistique.vehicule.ecrire` et `logistique.vehicule.affecter` :
+ * ouvertes au gérant de gare et au receveur, qui traitent le terrain au
+ * quotidien (« le super-admin n'est pas toujours disponible »), plus les admins
+ * pour le support.
+ */
+export const ROLES_REFERENTIEL_ROULANT: string[] = [
+  "receveur",
+  "gerant_gare",
+  "super_administrateur",
+  "super_admin",
+];
+
 /** Encaisser un paiement (permission `paiement.payer`). */
 export const ROLES_PAIEMENT: string[] = [
   "receveur",

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import (
     Gare, Ligne, Vehicule, Voyage, ActeurLogistique, Domaine, Utilisateur,
-    Ticket, Colis, ColisEvenement,
+    Ticket, Colis, ColisEvenement, ProfilLogistique,
     SuiviFamilial, SuiviFamilialEvenement, NotificationLogistique, Bagage,
 )
 from src.modules.logistique import schemas
@@ -256,10 +256,27 @@ async def supprimer_ligne(session: AsyncSession, ligne_id: UUID) -> None:
 
 # ─── Véhicules ───────────────────────────────────────────────────────
 
-async def creer_vehicule(session: AsyncSession, donnees: schemas.VehiculeCreate) -> Vehicule:
+async def creer_vehicule(session: AsyncSession, donnees: schemas.VehiculeCreate,
+                         *, chauffeur_impose: UUID | None = None) -> Vehicule:
+    """Enregistre un car (une plaque = un car, l'immatriculation est unique).
+
+    ``chauffeur_impose`` : quand c'est un chauffeur qui enregistre son propre
+    car, le serveur décide que le car lui appartient — il ne choisit jamais à
+    qui il appartient. Dans ce cas, si la plaque est déjà au référentiel mais
+    n'est affectée à personne, elle lui est attribuée (voir
+    ``_reclamer_vehicule``).
+    """
+    if chauffeur_impose is not None:
+        donnees = donnees.model_copy(update={"chauffeur_id": chauffeur_impose})
+    if donnees.chauffeur_id is not None:
+        await _verifier_chauffeur(session, donnees.chauffeur_id)
     if await session.scalar(
         select(Vehicule).where(Vehicule.immatriculation == donnees.immatriculation)
     ):
+        if chauffeur_impose is not None:
+            return await _reclamer_vehicule(
+                session, donnees.immatriculation, chauffeur_impose
+            )
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             detail=f"Le véhicule '{donnees.immatriculation}' existe déjà")
     if donnees.gare_id is not None:
@@ -279,10 +296,13 @@ async def obtenir_vehicule(session: AsyncSession, vehicule_id: UUID) -> Vehicule
 
 
 async def lister_vehicules(session: AsyncSession, page: int, par_page: int,
-                           est_actif: bool | None = None):
+                           est_actif: bool | None = None,
+                           chauffeur_id: UUID | None = None):
     requete = select(Vehicule)
     if est_actif is not None:
         requete = requete.where(Vehicule.actif == est_actif)
+    if chauffeur_id is not None:
+        requete = requete.where(Vehicule.chauffeur_id == chauffeur_id)
     requete = requete.order_by(Vehicule.immatriculation)
     return await _paginer(session, requete, page, par_page)
 
@@ -304,6 +324,152 @@ async def supprimer_vehicule(session: AsyncSession, vehicule_id: UUID) -> None:
     vehicule = await obtenir_vehicule(session, vehicule_id)
     await session.delete(vehicule)
     await session.commit()
+
+
+# ─── Cars d'un chauffeur : qui voit / utilise quel car ───────────────
+# Règle métier : un car appartient à un chauffeur. Quand il planifie un départ,
+# il ne doit voir — et ne peut choisir — que les siens ; sinon il engage le car
+# d'un autre et les SMS partent sur le mauvais nom. Deux sources d'appartenance :
+#   1. l'affectation faite par le guichet (`vehicules.chauffeur_id`) ;
+#   2. la plaque déclarée par le chauffeur dans son dossier professionnel
+#      (`profils_logistiques.vehicule_immatriculation`).
+# Le guichet, lui, garde la vue complète : c'est lui qui affecte.
+
+def normaliser_immatriculation(texte: str | None) -> str:
+    """« ab-1234 xx » → « AB1234XX » : deux saisies d'une même plaque se rejoignent."""
+    if not texte:
+        return ""
+    return "".join(caractere for caractere in texte.upper() if caractere.isalnum())
+
+
+async def _verifier_chauffeur(session: AsyncSession, chauffeur_id: UUID) -> Utilisateur:
+    """Le compte destiné à conduire doit exister et être un chauffeur reconnu.
+
+    Deux preuves acceptées (le terrain n'a pas toujours les deux) : la fiche
+    d'acteur logistique « chauffeur », ou le dossier professionnel de type
+    « chauffeur ». Cela évite d'exiger un identifiant technique au guichet.
+    """
+    utilisateur = await session.get(Utilisateur, chauffeur_id)
+    if utilisateur is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Chauffeur introuvable")
+    acteur = await session.scalar(
+        select(ActeurLogistique).where(
+            ActeurLogistique.utilisateur_id == chauffeur_id,
+            ActeurLogistique.role == "chauffeur",
+            ActeurLogistique.actif.is_(True),
+        )
+    )
+    profil = await session.scalar(
+        select(ProfilLogistique).where(
+            ProfilLogistique.utilisateur_id == chauffeur_id,
+            ProfilLogistique.type_profil == "chauffeur",
+        )
+    )
+    if acteur is None and profil is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Ce compte n'est pas reconnu comme chauffeur : créez d'abord sa "
+                "fiche de chauffeur (acteur logistique) ou faites-lui déclarer "
+                "son dossier professionnel."
+            ),
+        )
+    return utilisateur
+
+
+async def vehicules_autorises_pour_chauffeur(
+    session: AsyncSession, utilisateur_id: UUID
+) -> list[Vehicule]:
+    """Les cars qu'un chauffeur peut voir et utiliser (voir règle en tête de bloc)."""
+    profil = await session.scalar(
+        select(ProfilLogistique).where(ProfilLogistique.utilisateur_id == utilisateur_id)
+    )
+    plaque_declaree = normaliser_immatriculation(
+        profil.vehicule_immatriculation if profil is not None else None
+    )
+
+    # Le référentiel roulant est volontairement petit (quelques dizaines de cars) :
+    # on filtre en mémoire, la comparaison de plaques restant robuste aux espaces
+    # et aux tirets (« AB 1234 XX » = « AB-1234-XX »).
+    vehicules = (
+        await session.execute(select(Vehicule).order_by(Vehicule.immatriculation))
+    ).scalars().all()
+    return [
+        vehicule
+        for vehicule in vehicules
+        if vehicule.chauffeur_id == utilisateur_id
+        or (
+            plaque_declaree
+            and normaliser_immatriculation(vehicule.immatriculation) == plaque_declaree
+        )
+    ]
+
+
+async def verifier_vehicule_du_chauffeur(
+    session: AsyncSession, vehicule_id: UUID, utilisateur_id: UUID
+) -> Vehicule:
+    """Garde-fou serveur : un chauffeur n'engage que SES cars.
+
+    La liste filtrée côté API ne protège pas d'un appel direct : l'appartenance
+    est donc re-vérifiée ici, au moment de l'écriture (planifier ou ajuster un
+    départ, modifier un car).
+    """
+    vehicule = await obtenir_vehicule(session, vehicule_id)
+    autorises = await vehicules_autorises_pour_chauffeur(session, utilisateur_id)
+    if vehicule.id not in {autorise.id for autorise in autorises}:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Le car {vehicule.immatriculation} ne vous est pas affecté. "
+                "Demandez au gérant de gare (ou au receveur) de l'affecter à "
+                "votre compte."
+            ),
+        )
+    return vehicule
+
+
+async def affecter_vehicule(
+    session: AsyncSession, vehicule_id: UUID, chauffeur_id: UUID | None
+) -> Vehicule:
+    """Affecte un car à un chauffeur (ou le retire : ``chauffeur_id = None``)."""
+    vehicule = await obtenir_vehicule(session, vehicule_id)
+    if chauffeur_id is not None:
+        await _verifier_chauffeur(session, chauffeur_id)
+    vehicule.chauffeur_id = chauffeur_id
+    await session.commit()
+    await session.refresh(vehicule)
+    return vehicule
+
+
+async def _reclamer_vehicule(
+    session: AsyncSession, immatriculation: str, chauffeur_id: UUID
+) -> Vehicule:
+    """Un chauffeur qui redéclare sa plaque récupère son car s'il n'est à personne.
+
+    Cas réel : le super-admin a inscrit la flotte sans savoir qui conduit quoi.
+    Le chauffeur enregistre sa plaque → elle devient la sienne (tracé), au lieu
+    d'un échec « ce véhicule existe déjà » qui le bloquerait. Si la plaque
+    appartient déjà à quelqu'un d'autre, on refuse : un car ne se prend pas.
+    """
+    vehicule = await session.scalar(
+        select(Vehicule).where(Vehicule.immatriculation == immatriculation)
+    )
+    if vehicule is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Véhicule introuvable")
+    if vehicule.chauffeur_id == chauffeur_id:
+        return vehicule
+    if vehicule.chauffeur_id is not None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Le car {vehicule.immatriculation} est déjà affecté à un autre "
+                "chauffeur. Voyez le gérant de gare ou le receveur."
+            ),
+        )
+    vehicule.chauffeur_id = chauffeur_id
+    await session.commit()
+    await session.refresh(vehicule)
+    return vehicule
 
 
 # ─── Voyages ─────────────────────────────────────────────────────────

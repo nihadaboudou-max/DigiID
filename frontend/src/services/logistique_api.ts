@@ -56,6 +56,10 @@ export interface Vehicule {
   capacite: number | null;
   gare_id: string | null;
   gare_nom: string | null;
+  /** Chauffeur à qui le car est affecté (null = car non affecté). */
+  chauffeur_id: string | null;
+  /** Nom lisible du chauffeur affecté — le guichet voit qui conduit le car. */
+  chauffeur_nom: string | null;
   actif: boolean;
   cree_le: string;
 }
@@ -152,11 +156,34 @@ export const logistiqueAPI = {
   },
   vehicules: {
     lister: () => clientAPI.get<ReponseListe<Vehicule>>(`${BASE}/vehicules?par_page=100`, opts),
+    /**
+     * Les cars **que je peux conduire** — la question du chauffeur.
+     *
+     * Le serveur ne renvoie que les cars affectés au compte connecté et celui
+     * dont il a déclaré la plaque dans son dossier professionnel. Les autres
+     * rôles (guichet, super-admin) reçoivent la liste complète : ce sont eux
+     * qui affectent, ils doivent pouvoir chercher n'importe quel car.
+     */
+    listerMesVehicules: () =>
+      clientAPI.get<Vehicule[]>(`${BASE}/vehicules/mes-vehicules`, opts),
     creer: (d: Record<string, unknown>) => clientAPI.post<Vehicule>(`${BASE}/vehicules`, d, opts),
     /** Modifie un car (plaque, marque, capacité, mise hors service). */
     modifier: (id: string, d: Record<string, unknown>) =>
       clientAPI.patch<Vehicule>(`${BASE}/vehicules/${id}`, d, opts),
     supprimer: (id: string) => clientAPI.delete(`${BASE}/vehicules/${id}`, opts),
+    /**
+     * Affecte un car à un chauffeur — ou l'en retire (`chauffeurId = null`).
+     *
+     * Permission `logistique.vehicule.affecter` : ouverte au gérant de gare et
+     * au receveur, pour enregistrer un car qui se présente sans attendre le
+     * super-admin. Le geste est tracé dans le journal d'audit.
+     */
+    affecter: (id: string, chauffeurId: string | null) =>
+      clientAPI.post<Vehicule>(
+        `${BASE}/vehicules/${id}/affectation`,
+        { chauffeur_id: chauffeurId },
+        opts,
+      ),
   },
   voyages: {
     lister: (filtres?: {

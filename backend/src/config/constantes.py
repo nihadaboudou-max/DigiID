@@ -183,6 +183,19 @@ class TypesEvenementAudit(str, Enum):
     SUSPENSION_UTILISATEUR = "suspension_utilisateur"
     REACTIVATION_UTILISATEUR = "reactivation_utilisateur"
 
+    # ─── Pivot logistique : référentiel roulant (cars & départs) ─────
+    # Un car appartient à un chauffeur : qui l'enregistre, l'affecte, le
+    # modifie ou le retire doit rester traçable (journal d'audit — « qui fait
+    # quoi »). Idem pour la planification d'un départ.
+    VEHICULE_ENREGISTRE = "vehicule_enregistre"
+    VEHICULE_MODIFIE = "vehicule_modifie"
+    VEHICULE_AFFECTE = "vehicule_affecte"
+    VEHICULE_DESAFFECTE = "vehicule_desaffecte"
+    VEHICULE_SUPPRIME = "vehicule_supprime"
+    VOYAGE_PLANIFIE = "voyage_planifie"
+    VOYAGE_MODIFIE = "voyage_modifie"
+    VOYAGE_CHAUFFEUR_ENGAGE = "voyage_chauffeur_engage"
+
     # Sécurité
     TENTATIVE_INTRUSION = "tentative_intrusion"
     ALERTE_FRAUDE = "alerte_fraude"

@@ -508,8 +508,36 @@ function SectionVehicule({
   supprimer: (id: string) => void;
 }) {
   const { notifier } = useNotifications();
-  const [f, setF] = useState({ immatriculation: "", marque: "", capacite: "", gare_id: "" });
+  const [f, setF] = useState({
+    immatriculation: "", marque: "", capacite: "", gare_id: "", chauffeur_id: "",
+  });
   const [enCours, setEnCours] = useState(false);
+  const [affectationEnCours, setAffectationEnCours] = useState<string | null>(null);
+
+  // Annuaire des chauffeurs : on désigne une **personne**, jamais un UUID.
+  const [chauffeurs, setChauffeurs] = useState<ChauffeurDisponible[]>([]);
+  const [rechercheChauffeur, setRechercheChauffeur] = useState("");
+  const [chargementChauffeurs, setChargementChauffeurs] = useState(false);
+
+  useEffect(() => {
+    let annule = false;
+    setChargementChauffeurs(true);
+    (async () => {
+      try {
+        const elements = await api.chauffeurs.lister({
+          recherche: rechercheChauffeur.trim() || undefined,
+        });
+        if (!annule) setChauffeurs(elements);
+      } catch {
+        if (!annule) setChauffeurs([]);
+      } finally {
+        if (!annule) setChargementChauffeurs(false);
+      }
+    })();
+    return () => {
+      annule = true;
+    };
+  }, [rechercheChauffeur]);
 
   const soumettre = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -520,14 +548,36 @@ function SectionVehicule({
         marque: f.marque || null,
         capacite: nombreOuNull(f.capacite),
         gare_id: f.gare_id || null,
+        // Le car est confié d'emblée à son chauffeur : sans affectation, il
+        // n'apparaîtrait dans « Mes cars » d'aucun chauffeur.
+        chauffeur_id: f.chauffeur_id || null,
       });
       notifier("Véhicule créé", "succes");
-      setF({ immatriculation: "", marque: "", capacite: "", gare_id: "" });
+      setF({ immatriculation: "", marque: "", capacite: "", gare_id: "", chauffeur_id: "" });
       rafraichir();
     } catch (err) {
       notifier(err instanceof ErreurAPI ? err.message_utilisateur : "Erreur", "erreur");
     } finally {
       setEnCours(false);
+    }
+  };
+
+  /** Affecte (ou retire) le chauffeur d'un car déjà enregistré. */
+  const affecter = async (vehicule: Vehicule, chauffeurId: string) => {
+    setAffectationEnCours(vehicule.id);
+    try {
+      await api.vehicules.affecter(vehicule.id, chauffeurId || null);
+      notifier(
+        chauffeurId
+          ? `Car ${vehicule.immatriculation} affecté`
+          : `Car ${vehicule.immatriculation} retiré du chauffeur`,
+        "succes",
+      );
+      rafraichir();
+    } catch (err) {
+      notifier(err instanceof ErreurAPI ? err.message_utilisateur : "Erreur", "erreur");
+    } finally {
+      setAffectationEnCours(null);
     }
   };
 
@@ -540,14 +590,34 @@ function SectionVehicule({
           <ChampSimple libelle="Marque" value={f.marque} onChange={(v) => setF({ ...f, marque: v })} />
           <ChampSimple libelle="Capacité" type="number" value={f.capacite} onChange={(v) => setF({ ...f, capacite: v })} />
           <ChampSelect libelle="Gare" value={f.gare_id} onChange={(v) => setF({ ...f, gare_id: v })} options={optionsGares} placeholder="Aucune" />
+          <ChampSimple
+            libelle="Filtrer les chauffeurs"
+            value={rechercheChauffeur}
+            onChange={setRechercheChauffeur}
+            placeholder="Nom, prénom ou numéro"
+          />
+          {chargementChauffeurs ? (
+            <p className="text-xs italic text-ardoise-clair">Chargement des chauffeurs…</p>
+          ) : (
+            <ChampSelect
+              libelle="Chauffeur"
+              value={f.chauffeur_id}
+              onChange={(v) => setF({ ...f, chauffeur_id: v })}
+              options={chauffeurs.map((c) => ({
+                valeur: c.utilisateur_id,
+                libelle: `${c.nom_complet}${c.telephone ? ` — ${c.telephone}` : ""}`,
+              }))}
+              placeholder="Aucun (à affecter plus tard)"
+            />
+          )}
           <Bouton type="submit" variante="primaire" chargement={enCours}>Créer</Bouton>
         </form>
       </Carte>
       <Carte>
         <h2 className="font-semibold mb-3">{vehicules.length} véhicule(s)</h2>
-        <TableauSimple entetes={["Immatriculation", "Marque", "Capacité", "Gare", ""]}>
+        <TableauSimple entetes={["Immatriculation", "Marque", "Capacité", "Gare", "Chauffeur", ""]}>
           {vehicules.length === 0 ? (
-            <LigneVide colonnes={5} message="Aucun véhicule." />
+            <LigneVide colonnes={6} message="Aucun véhicule." />
           ) : (
             vehicules.map((v) => (
               <tr key={v.id}>
@@ -555,6 +625,27 @@ function SectionVehicule({
                 <td className={clsCellule}>{v.marque ?? "—"}</td>
                 <td className={clsCellule}>{v.capacite ?? "—"}</td>
                 <td className={clsCellule}>{v.gare_nom ?? "—"}</td>
+                <td className={clsCellule}>
+                  {/* Affectation directe : le car entre aussitôt dans « Mes cars » du chauffeur. */}
+                  <select
+                    className={clsInput}
+                    value={v.chauffeur_id ?? ""}
+                    disabled={affectationEnCours === v.id}
+                    onChange={(e) => affecter(v, e.target.value)}
+                  >
+                    <option value="">— Non affecté —</option>
+                    {/* Le chauffeur en place reste visible même hors du filtre en cours. */}
+                    {v.chauffeur_nom &&
+                      !chauffeurs.some((c) => c.utilisateur_id === v.chauffeur_id) && (
+                        <option value={v.chauffeur_id ?? ""}>{v.chauffeur_nom}</option>
+                      )}
+                    {chauffeurs.map((c) => (
+                      <option key={c.utilisateur_id} value={c.utilisateur_id}>
+                        {c.nom_complet}
+                      </option>
+                    ))}
+                  </select>
+                </td>
                 <td className={clsCellule}><BoutonSupprimer onClick={() => supprimer(v.id)} /></td>
               </tr>
             ))
