@@ -151,6 +151,36 @@ async def traiter_upload_carte_sejour(
     await session.commit()
     await session.refresh(nouvelle)
 
+    # ✅ Photo du titulaire : la carte de séjour porte la photo de son titulaire.
+    from src.modules.verification_visuelle.photo_document import enregistrer_photo_document
+    await enregistrer_photo_document(
+        session,
+        nouvelle,
+        contenu,
+        "carte_sejour",
+        type_mime=fichier.content_type,
+        prefixe="carte_sejour",
+    )
+
+    # ✅ La carte de séjour est MARQUÉE comme document fourni.
+    from src.modules.documents_identite.service import marquer_document_fourni
+    await marquer_document_fourni(
+        session,
+        utilisateur,
+        type_document="carte_sejour",
+        numero_document=donnees.numero_titre,
+        nom_complet=" ".join(
+            v for v in [donnees.prenoms, donnees.nom_famille] if v
+        ) or None,
+        date_naissance=_parser_date(donnees.date_naissance),
+        lieu_naissance=donnees.lieu_naissance,
+        nationalite=donnees.nationalite,
+        date_delivrance=_parser_date(donnees.date_delivrance),
+        date_expiration=date_expiration,
+        pays_emetteur=donnees.pays_emetteur,
+        autorite_delivrance=donnees.autorite_delivrance,
+    )
+
     if date_expiration:
         from src.noyau.rappels_expiration import notifier_expiration_proche
         await notifier_expiration_proche(session, utilisateur, "carte_sejour", date_expiration)

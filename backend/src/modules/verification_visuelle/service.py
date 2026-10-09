@@ -32,6 +32,11 @@ from src.modules.verification_visuelle.schemas import (
 from src.noyau import journal
 from src.noyau.exceptions import ErreurValidation
 
+# Seuil de similarité minimal entre le selfie et la photo du titulaire d'un
+# document d'identité (CNI, passeport, permis, carte de séjour, consulaire…).
+# Même valeur que pour la CNI : tolère les écarts d'angle et d'éclairage.
+SEUIL_SIMILARITE_DOCUMENT = 0.50
+
 
 async def _lire_image(fichier: UploadFile) -> bytes:
     """Lit et valide le contenu du fichier uploadé."""
@@ -126,55 +131,71 @@ async def traiter_upload_photo(
             statut = "rejete"
             date_verification = None
 
-    # 5. Comparaison avec la photo de la CNI (si les étapes précédentes sont OK)
+    # 5. Comparaison avec la photo du titulaire des documents fournis
+    #    ⚠️ Pas uniquement la CNI : passeport, permis, carte de séjour et carte
+    #    consulaire portent aussi la photo de leur titulaire. Les documents qui
+    #    n'en contiennent pas (attestation d'assurance, carte grise) sont exclus.
+    #    Le selfie est accepté s'il correspond à AU MOINS UN de ces documents.
+    document_correspondant: str | None = None
+    documents_compares: list[str] = []
+
     if statut == "approuve":
-        from src.modeles.verification_cni import VerificationCNI
-        
-        resultat_cni = await session.execute(
-            select(VerificationCNI)
-            .where(
-                VerificationCNI.utilisateur_id == utilisateur.id,
-                VerificationCNI.face == "recto",
-                VerificationCNI.est_valide == True,
-                VerificationCNI.embedding_photo_cni.isnot(None),
-                VerificationCNI.est_supprime == False,
-            )
-            .order_by(desc(VerificationCNI.cree_le))
-            .limit(1)
+        from src.modules.verification_visuelle.photo_document import (
+            charger_references_faciales,
+            libelle_document,
         )
-        cni_verification = resultat_cni.scalar_one_or_none()
-        
-        if cni_verification and cni_verification.embedding_photo_cni:
-            # Comparer les embeddings (seuil=0.0 pour obtenir le score brut sans filtrage)
-            doublons_cni = comparaison.comparer_embeddings(
-                embedding,
-                [("cni", cni_verification.embedding_photo_cni)],
-                seuil=0.0
-            )
-            score_similarite = doublons_cni[0]["similarite"] if doublons_cni else 0.0
-            
-            # Seuil abaissé à 50% (0.50) pour tolérer les différences d'angle/éclairage
-            if score_similarite < 0.50:  
+
+        references = await charger_references_faciales(session, utilisateur.id)
+        documents_compares = sorted({libelle_document(type_doc) for type_doc, _ in references})
+
+        if references:
+            # seuil=0.0 → on récupère tous les scores bruts pour choisir le
+            # meilleur document correspondant (et non plus la seule CNI).
+            resultats = comparaison.comparer_embeddings(embedding, references, seuil=0.0)
+
+            if resultats:
+                meilleur = max(resultats, key=lambda r: r["similarite"])
+                score_similarite = meilleur["similarite"]
+                document_correspondant = meilleur["utilisateur_id"]
+            else:
+                score_similarite = 0.0
+
+            if score_similarite < SEUIL_SIMILARITE_DOCUMENT:
                 statut = "rejete"
+                document_correspondant = None
                 raison = (
-                    f"La photo ne correspond pas à celle de votre CNI "
-                    f"(similarité: {score_similarite:.1%}). "
-                    f"Assurez-vous que c'est bien vous sur la photo, bien éclairé et face à la caméra."
+                    "La photo ne correspond à aucun des documents fournis "
+                    f"({', '.join(documents_compares)}) — similarité maximale : "
+                    f"{score_similarite:.1%}. Assure-toi d'être bien éclairé, de face "
+                    "et sans lunettes."
                 )
                 date_verification = None
                 journal.warning(
-                    f"REJET VÉRIFICATION VISUELLE - Pas de match CNI | "
-                    f"user={utilisateur.id} score={score_similarite:.2f}"
+                    f"REJET VÉRIFICATION VISUELLE - Aucun document ne correspond | "
+                    f"user={utilisateur.id} score_max={score_similarite:.2f} "
+                    f"documents={documents_compares}"
                 )
             else:
                 journal.info(
-                    f"MATCH CNI RÉUSSI | user={utilisateur.id} score={score_similarite:.2f}"
+                    f"MATCH DOCUMENT RÉUSSI | user={utilisateur.id} "
+                    f"document={document_correspondant} score={score_similarite:.2f} "
+                    f"| {len(references)} référence(s) comparée(s)"
                 )
+        else:
+            # Aucun document exploitable : on ne peut pas comparer. Le selfie
+            # reste validé (liveness + anti-doublon) mais on le trace, car
+            # aucune preuve d'identité n'a pu être confrontée.
+            journal.warning(
+                f"VÉRIFICATION VISUELLE SANS RÉFÉRENCE | user={utilisateur.id} — "
+                "aucun document d'identité avec photo du titulaire : le selfie est "
+                "validé sans comparaison biométrique."
+            )
 
     journal.info(
         f"Traitement vérification visuelle terminé : "
         f"verdict={verdict}, liveness={score_liveness:.2f}, "
-        f"doublons={len(doublons)}, statut_final={statut}, similarite_cni={score_similarite}"
+        f"doublons={len(doublons)}, statut_final={statut}, "
+        f"similarite_document={score_similarite}, document={document_correspondant}"
     )
 
     # 6. Enregistrement en base de données
@@ -193,6 +214,10 @@ async def traiter_upload_photo(
             "user_agent": user_agent,
             "adresse_ip": adresse_ip,
             "verdict_anti_spoofing": verdict,
+            # Traçabilité biométrique : quel(s) document(s) ont été comparés et
+            # lequel a permis la correspondance.
+            "documents_compares": documents_compares,
+            "document_correspondant": document_correspondant,
         },
         date_verification=date_verification,
     )
@@ -396,10 +421,18 @@ async def comparer_photo_profil_avec_document(
     document_id: str,
 ) -> ResultatComparaisonFaciale:
     """
-    Compare l'embedding facial de la dernière vérification visuelle (selfie) 
-    avec l'embedding de la CNI (document_id).
+    Compare l'embedding facial de la dernière vérification visuelle (selfie)
+    avec celui d'un document précis — CNI, mais aussi passeport, permis de
+    conduire, carte de séjour ou carte consulaire (tout document portant la
+    photo de son titulaire).
     """
     import uuid
+
+    from src.modules.verification_visuelle.photo_document import (
+        charger_embedding_par_document_id,
+        libelle_document,
+    )
+
     try:
         doc_uuid = uuid.UUID(document_id)
     except ValueError:
@@ -428,49 +461,25 @@ async def comparer_photo_profil_avec_document(
             message_utilisateur="Vous devez d'abord effectuer une vérification visuelle réussie."
         )
 
-    # 2. Résoudre l'ID du document → ID de la vérification CNI.
-    #    Le frontend peut passer soit l'ID de la VerificationCNI directement,
-    #    soit l'ID d'une ligne document_identite (qui référence verification_id).
-    from src.modeles import DocumentIdentite
-    from src.modeles.verification_cni import VerificationCNI
+    # 2. Retrouver l'empreinte faciale du document demandé, TOUS TYPES CONFONDUS
+    #    (CNI, passeport, permis, carte de séjour, carte consulaire).
+    reference = await charger_embedding_par_document_id(session, utilisateur.id, doc_uuid)
 
-    resultat_doc = await session.execute(
-        select(DocumentIdentite).where(
-            DocumentIdentite.id == doc_uuid,
-            DocumentIdentite.utilisateur_id == utilisateur.id,
-            DocumentIdentite.est_actif.is_(True),
-        )
-    )
-    document_identite = resultat_doc.scalar_one_or_none()
-
-    verification_cni_id = doc_uuid
-    if document_identite and document_identite.verification_id:
-        verification_cni_id = document_identite.verification_id
-
-    # 3. Récupérer la vérification CNI correspondante
-    resultat_cni = await session.execute(
-        select(VerificationCNI)
-        .where(
-            VerificationCNI.id == verification_cni_id,
-            VerificationCNI.utilisateur_id == utilisateur.id,
-            VerificationCNI.face == "recto",
-            VerificationCNI.est_valide == True,
-            VerificationCNI.embedding_photo_cni.isnot(None),
-            VerificationCNI.est_supprime == False,
-        )
-    )
-    verification_cni = resultat_cni.scalar_one_or_none()
-
-    if not verification_cni or not verification_cni.embedding_photo_cni:
+    if reference is None:
         raise ErreurValidation(
-            "Document CNI invalide ou sans empreinte faciale.",
-            message_utilisateur="Le document sélectionné n'est pas une CNI validée avec photo."
+            "Document sans empreinte faciale exploitable.",
+            message_utilisateur=(
+                "Le document sélectionné ne contient pas de photo du titulaire "
+                "exploitable (ou n'a pas encore été scanné)."
+            ),
         )
+
+    type_document, embedding_document = reference
 
     # 3. Comparer les embeddings (seuil=0.0 pour obtenir le score brut)
     resultat_comparaison = comparaison.comparer_embeddings(
         verification_visuelle.embedding,
-        [("cni", verification_cni.embedding_photo_cni)],
+        [(type_document, embedding_document)],
         seuil=0.0
     )
     
@@ -480,18 +489,26 @@ async def comparer_photo_profil_avec_document(
     SEUIL_RECOMMANDE = 0.50
     correspond = score_similarite >= SEUIL_RECOMMANDE
     
+    libelle = libelle_document(type_document)
+
     if correspond:
         if score_similarite >= 0.65:
-            message = "Excellente correspondance. Visage confirmé."
+            message = f"Excellente correspondance avec la photo du {libelle}. Visage confirmé."
         elif score_similarite >= 0.55:
-            message = "Bonne correspondance. Visage confirmé."
+            message = f"Bonne correspondance avec la photo du {libelle}. Visage confirmé."
         else:
-            message = "Correspondance acceptable. Visage confirmé."
+            message = f"Correspondance acceptable avec la photo du {libelle}. Visage confirmé."
     else:
         if score_similarite >= 0.40:
-            message = "Faible similarité. La photo CNI peut être ancienne ou l'angle différent."
+            message = (
+                f"Faible similarité avec la photo du {libelle}. "
+                "La photo du document peut être ancienne ou l'angle différent."
+            )
         else:
-            message = "Visage non correspondant. Assurez-vous que c'est bien vous."
+            message = (
+                f"Visage non correspondant à la photo du {libelle}. "
+                "Assurez-vous que c'est bien vous."
+            )
 
     return ResultatComparaisonFaciale(
         correspond=correspond,

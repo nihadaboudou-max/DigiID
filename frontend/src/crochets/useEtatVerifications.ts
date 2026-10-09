@@ -2,11 +2,16 @@
  * Hook useEtatVerifications — État des vérifications d'identité du citoyen.
  *
  * Croise les indicateurs du profil (email, visage, CNI, 2FA) avec les
- * **documents d'identité réellement fournis** par l'utilisateur (CNI, permis,
- * assurance) pour produire une liste d'étapes affichable sur la page profil
- * et sur le tableau de bord citoyen.
+ * **documents d'identité réellement fournis** par l'utilisateur — CNI, mais
+ * aussi **passeport**, permis de conduire, carte de séjour, carte consulaire
+ * et attestation d'assurance — pour produire une liste d'étapes affichable sur
+ * la page profil et sur le tableau de bord citoyen.
  *
- * Le chargement des documents est « best effort » : si l'API échoue (réseau,
+ * ⚠️ Les documents proviennent de DEUX familles de tables (table commune
+ * `document_identite` + une table par document du module OCR) : l'agrégation
+ * est faite par `listerDocumentsFournis()`.
+ *
+ * Le chargement des documents est « best effort » : si une API échoue (réseau,
  * endpoint indisponible…), on retombe sur les seuls indicateurs du profil
  * sans bloquer l'affichage.
  *
@@ -18,9 +23,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthentification } from "@/contextes/authentification";
 import {
-  listerDocumentsIdentite,
-  type DocumentIdentiteDetail,
-} from "@/services/documents_identite";
+  listerDocumentsFournis,
+  contientPhotoTitulaire,
+  type DocumentFourni,
+} from "@/services/documents_fournis";
 import type { Utilisateur } from "@/types/api";
 
 // ---------- Types ----------
@@ -29,6 +35,7 @@ export type IdEtapeVerification =
   | "email"
   | "visage"
   | "cni"
+  | "passeport"
   | "permis"
   | "assurance"
   | "2fa";
@@ -56,6 +63,12 @@ export interface EtapeVerification {
   lien: string;
   /** Nombre de documents fournis pour cette étape (0 pour email/visage/2FA). */
   documents: number;
+  /**
+   * `true` si le document porte la photo de son titulaire — donc utilisable
+   * comme référence par la vérification visuelle (selfie). Ex. : un passeport
+   * ou une carte de séjour, contrairement à une attestation d'assurance.
+   */
+  photoDisponible?: boolean;
 }
 
 export type NiveauVerification =
@@ -73,7 +86,13 @@ export interface EtatVerifications {
   niveau: NiveauVerification;
   /** Identité « forte » : CNI + visage validés. */
   identiteVerifiee: boolean;
-  /** Nombre total de documents d'identité fournis (CNI + permis + assurance). */
+  /**
+   * Identité confirmée par au moins un titre d'identité **avec photo**
+   * (CNI, passeport, permis, carte de séjour, carte consulaire) ET visage
+   * vérifié — y compris sans CNI.
+   */
+  identiteConfirmeeParTitre: boolean;
+  /** Nombre total de documents d'identité fournis (toutes tables confondues). */
   documentsFournis: number;
   chargement: boolean;
 }
@@ -89,7 +108,7 @@ export interface ProprietesEtapeVerification {
 
 // ---------- Constantes ----------
 
-const TYPES_DOCUMENT = ["cni", "permis", "assurance"] as const;
+const TYPES_DOCUMENT = ["cni", "passeport", "permis", "assurance"] as const;
 type TypeDocumentIdentite = (typeof TYPES_DOCUMENT)[number];
 
 /** Tolérance d'un jour : un document qui expire aujourd'hui reste valide. */
@@ -114,37 +133,35 @@ export function formaterDateVerification(iso?: string | null): string | undefine
 }
 
 function documentsDuType(
-  documents: DocumentIdentiteDetail[],
+  documents: DocumentFourni[],
   type: TypeDocumentIdentite,
-): DocumentIdentiteDetail[] {
+): DocumentFourni[] {
   return documents.filter((doc) => doc.type_document === type);
 }
 
 /**
  * Choisit le document le plus représentatif d'un type : le premier encore
- * valide, sinon le premier de la liste (triée par `modifie_le` décroissant).
+ * valide, sinon le premier de la liste.
  */
 function choisirDocument(
-  documents: DocumentIdentiteDetail[],
+  documents: DocumentFourni[],
   type: TypeDocumentIdentite,
-): DocumentIdentiteDetail | null {
+): DocumentFourni | null {
   const duType = documentsDuType(documents, type);
   if (duType.length === 0) return null;
-  return duType.find((doc) => !documentExpire(doc.date_expiration)) ?? duType[0];
-}
-
-/** Référence lisible d'un document (n° de permis, de contrat, de carte…). */
-function referenceDocument(doc: DocumentIdentiteDetail): string | undefined {
   return (
-    doc.numero_document ??
-    doc.numero_permis ??
-    doc.numero_contrat ??
-    undefined
+    duType.find((doc) => !documentExpire(doc.date_expiration) && doc.est_valide) ??
+    duType[0]
   );
 }
 
+/** Référence lisible d'un document (n° de passeport, de permis, de contrat…). */
+function referenceDocument(doc: DocumentFourni): string | undefined {
+  return doc.numero_document ?? undefined;
+}
+
 function construireEtapeDocument(
-  documents: DocumentIdentiteDetail[],
+  documents: DocumentFourni[],
   type: TypeDocumentIdentite,
   options: ProprietesEtapeVerification,
 ): EtapeVerification {
@@ -160,6 +177,7 @@ function construireEtapeDocument(
       libelle: "Non fourni",
       lien: options.lien,
       documents: 0,
+      photoDisponible: false,
     };
   }
 
@@ -173,6 +191,7 @@ function construireEtapeDocument(
       detail: `Expiré le ${formaterDateVerification(doc.date_expiration)}`,
       lien: options.lien,
       documents: nombre,
+      photoDisponible: contientPhotoTitulaire(type),
     };
   }
 
@@ -185,19 +204,24 @@ function construireEtapeDocument(
     detail: referenceDocument(doc),
     lien: options.lien,
     documents: nombre,
+    photoDisponible: contientPhotoTitulaire(type),
   };
 }
 
-function niveauDepuis(completees: number): NiveauVerification {
+/**
+ * Niveau global : calculé **relativement** au nombre d'étapes, pour rester
+ * juste quel que soit le nombre d'étapes affichées (le passeport en ajoute une).
+ */
+function niveauDepuis(completees: number, total: number): NiveauVerification {
   if (completees === 0) return "aucune";
-  if (completees <= 2) return "partielle";
-  if (completees <= 4) return "renforcee";
-  return "complete";
+  if (total <= 0 || completees >= total) return "complete";
+  if (completees <= Math.ceil(total / 3)) return "partielle";
+  return "renforcee";
 }
 
 function construireEtapeCni(
   utilisateur: Utilisateur,
-  documents: DocumentIdentiteDetail[],
+  documents: DocumentFourni[],
 ): EtapeVerification {
   const nombre = documentsDuType(documents, "cni").length;
 
@@ -211,12 +235,13 @@ function construireEtapeCni(
       libelle: "Vérifiée",
       lien: "/documents-identite",
       documents: nombre,
+      photoDisponible: true,
     };
   }
 
   const doc = choisirDocument(documents, "cni");
   if (doc) {
-    const expire = documentExpire(doc.date_expiration);
+    const expire = documentExpire(doc.date_expiration) || !doc.est_valide;
     return {
       id: "cni",
       titre: "CNI",
@@ -228,6 +253,7 @@ function construireEtapeCni(
         : "Document fourni",
       lien: "/documents-identite",
       documents: nombre,
+      photoDisponible: true,
     };
   }
 
@@ -239,12 +265,13 @@ function construireEtapeCni(
     libelle: "Non fournie",
     lien: "/documents-identite",
     documents: 0,
+    photoDisponible: false,
   };
 }
 
 export function construireEtapesVerification(
   utilisateur: Utilisateur,
-  documents: DocumentIdentiteDetail[],
+  documents: DocumentFourni[],
 ): EtapeVerification[] {
   return [
     {
@@ -266,6 +293,14 @@ export function construireEtapesVerification(
       documents: 0,
     },
     construireEtapeCni(utilisateur, documents),
+    // ✅ Le passeport est un titre d'identité à part entière : avant cette
+    //    étape, il n'était nulle part affiché alors qu'il porte une photo.
+    construireEtapeDocument(documents, "passeport", {
+      titre: "Passeport",
+      icone: "🛂",
+      lien: "/inspection",
+      libelleFourni: "Fourni",
+    }),
     construireEtapeDocument(documents, "permis", {
       titre: "Permis",
       icone: "🚗",
@@ -298,7 +333,7 @@ export function construireEtapesVerification(
  */
 export function useEtatVerifications(actif: boolean = true): EtatVerifications {
   const { utilisateur } = useAuthentification();
-  const [documents, setDocuments] = useState<DocumentIdentiteDetail[]>([]);
+  const [documents, setDocuments] = useState<DocumentFourni[]>([]);
   const [chargement, setChargement] = useState(actif);
 
   const charger = useCallback(async () => {
@@ -307,8 +342,7 @@ export function useEtatVerifications(actif: boolean = true): EtatVerifications {
       return;
     }
     try {
-      const reponse = await listerDocumentsIdentite();
-      setDocuments(reponse.documents ?? []);
+      setDocuments(await listerDocumentsFournis());
     } catch (erreur) {
       // Best effort : le détail documentaire est un bonus, les indicateurs du
       // profil (email/visage/CNI/2FA) restent affichés.
@@ -344,6 +378,7 @@ export function useEtatVerifications(actif: boolean = true): EtatVerifications {
         pourcentage: 0,
         niveau: "aucune",
         identiteVerifiee: false,
+        identiteConfirmeeParTitre: false,
         documentsFournis: 0,
         chargement,
       };
@@ -353,14 +388,28 @@ export function useEtatVerifications(actif: boolean = true): EtatVerifications {
     const completees = etapes.filter((etape) => etape.statut === "complete").length;
     const total = etapes.length;
 
+    // Un titre d'identité AVEC photo et non expiré suffit à confirmer l'identité
+    // — y compris un passeport, une carte de séjour ou une carte consulaire :
+    // la CNI n'est plus le seul document accepté.
+    const titreAvecPhoto = etapes.find(
+      (etape) =>
+        etape.photoDisponible &&
+        etape.id !== "cni" &&
+        etape.statut === "complete",
+    );
+
     return {
       etapes,
       completees,
       total,
       pourcentage: total > 0 ? Math.round((completees / total) * 100) : 0,
-      niveau: niveauDepuis(completees),
+      niveau: niveauDepuis(completees, total),
       identiteVerifiee: Boolean(
         utilisateur.est_cni_verifiee && utilisateur.est_visage_verifie,
+      ),
+      identiteConfirmeeParTitre: Boolean(
+        utilisateur.est_visage_verifie &&
+          (utilisateur.est_cni_verifiee || titreAvecPhoto),
       ),
       documentsFournis: documents.length,
       chargement,

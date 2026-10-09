@@ -38,9 +38,17 @@ async def lister_mes_documents(
     requete: Request,
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
-    type_document: Optional[str] = Query(None, regex="^(cni|permis|assurance)$"),
+    type_document: Optional[str] = Query(
+        None,
+        regex="^(cni|passeport|permis|assurance|carte_sejour|carte_consulaire|carte_grise)$",
+    ),
 ):
-    """Retourne tous les documents d'identité actifs de l'utilisateur."""
+    """Retourne tous les documents d'identité actifs de l'utilisateur.
+
+    ⚠️ Le filtre accepte désormais AUSSI les titres d'identité autres que la
+    CNI (passeport, carte de séjour, carte consulaire) : ils sont marqués dans
+    cette table au moment de leur scan.
+    """
     return await service.lister_documents(
         session=session,
         utilisateur=utilisateur,

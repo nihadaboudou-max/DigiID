@@ -408,12 +408,23 @@ async def traiter_upload_document(
             message_utilisateur=f"Ce numéro de {type_document.value if type_document else 'document'} ({donnees.numero_document}) existe déjà dans notre base de données. Impossible de l'enregistrer une seconde fois."
         )
 
-    # 8. Mise à jour du statut utilisateur si tout est approuvé
+        # 8. Mise à jour du statut utilisateur si tout est approuvé
+    #    ⚠️ CORRECTION : `est_cni_verifiee` est RÉSERVÉ à la CNI. Auparavant,
+    #    TOUT document approuvé (passeport, permis, assurance, carte grise…)
+    #    positionnait `est_cni_verifiee = True` → le profil affichait une CNI
+    #    « vérifiée » alors qu'aucune CNI n'avait été fournie. Les autres
+    #    documents marquent bien l'identité (date de mise à jour + score) mais
+    #    PAS le drapeau CNI.
     if validation.est_valide and validation.statut == StatutVerification.APPROUVE:
-        utilisateur.est_cni_verifiee = True
-        utilisateur.date_verification_cni = datetime.now(timezone.utc)
-        utilisateur.date_derniere_mise_a_jour_verifications = datetime.now(timezone.utc)
-        await session.commit() # Commit des changements utilisateur
+        maintenant = datetime.now(timezone.utc)
+        utilisateur.date_derniere_mise_a_jour_verifications = maintenant
+        if donnees.type_document in (
+            TypeDocument.CNI_BIOMETRIQUE,
+            TypeDocument.CNI_PAPIER,
+        ):
+            utilisateur.est_cni_verifiee = True
+            utilisateur.date_verification_cni = maintenant
+        await session.commit()  # Commit des changements utilisateur
         try:
             from src.modules.scoring.service import declencher_recalcul_score
             await declencher_recalcul_score(session=session, utilisateur=utilisateur, raison="upload_document_valide")

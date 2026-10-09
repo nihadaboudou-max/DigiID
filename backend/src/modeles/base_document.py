@@ -78,6 +78,24 @@ class BaseDocumentInspection:
     taille_octets = Column(Integer, nullable=True)
     document_chemin = Column(String(500), nullable=True)
 
+    # --- Biométrie : photo du titulaire portée par le document ---
+    # Renseignées UNIQUEMENT quand le document contient une photo d'identité
+    # (passeport, permis de conduire, carte de séjour, carte consulaire…).
+    # Les documents qui n'en contiennent pas (attestation d'assurance, carte
+    # grise) laissent ces deux colonnes à NULL : la vérification visuelle les
+    # ignore alors explicitement.
+    #
+    # ⚠️ Noms volontairement distincts de `photo_chemin` / `embedding_photo_cni`
+    # déjà déclarés par `VerificationCNI`, qui hérite AUSSI de ce mixin.
+    photo_titulaire_chemin = Column(
+        String(500), nullable=True,
+        doc="Chemin de l'image du document contenant la photo du titulaire",
+    )
+    embedding_photo_document = Column(
+        JSON, nullable=True,
+        doc="Embedding facial (512D) de la photo du titulaire — NULL si le document n'en contient pas",
+    )
+
     # --- Identité commune ---
     nom_famille = Column(String(255), nullable=True)
     prenoms = Column(String(255), nullable=True)

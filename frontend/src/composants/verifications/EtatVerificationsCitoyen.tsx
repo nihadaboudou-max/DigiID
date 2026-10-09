@@ -3,9 +3,13 @@
  * EtatVerificationsCitoyen — État des vérifications d'identité du citoyen.
  *
  * Affiche, dans l'ordre, les vérifications du compte (email, visage, 2FA) et
- * les documents d'identité fournis (CNI, permis, assurance), avec leur statut
- * (vérifié / à valider / expiré / non fourni). Chaque ligne mène à la page où
- * compléter la démarche.
+ * les documents d'identité fournis (CNI, passeport, permis, assurance), avec
+ * leur statut (vérifié / à valider / expiré / non fourni). Chaque ligne mène à
+ * la page où compléter la démarche.
+ *
+ * ⚠️ L'« identité globale » est validée par un **titre d'identité avec photo**
+ * (CNI, passeport, permis, carte de séjour, carte consulaire) + le visage : le
+ * passeport n'est donc plus un document « invisible ».
  *
  * Utilisé sur la page profil (`variante="complet"`) et sur le tableau de bord
  * citoyen (`variante="compact"`).
@@ -62,7 +66,7 @@ export default function EtatVerificationsCitoyen({
     total,
     pourcentage,
     niveau,
-    identiteVerifiee,
+    identiteConfirmeeParTitre,
     chargement,
   } = etat ?? etatInterne;
 
@@ -103,8 +107,11 @@ export default function EtatVerificationsCitoyen({
       {afficherProgression && (
         <div className="flex items-center justify-between p-2 bg-lagune/10 rounded-lg border border-lagune/20">
           <span className="text-sm text-ardoise font-medium">🛡️ Identité globale</span>
-          <Badge variante={identiteVerifiee ? "succes" : "terre"} taille="petit">
-            {identiteVerifiee ? "Vérifiée" : "Non vérifiée"}
+          <Badge
+            variante={identiteConfirmeeParTitre ? "succes" : "terre"}
+            taille="petit"
+          >
+            {identiteConfirmeeParTitre ? "Vérifiée" : "Non vérifiée"}
           </Badge>
         </div>
       )}
@@ -132,8 +139,21 @@ function LigneEtape({
       <span className="flex items-center gap-2 min-w-0 text-sm text-ardoise">
         <span aria-hidden>{etape.icone}</span>
         <span className="truncate">{etape.titre}</span>
+        {/* Document portant la photo du titulaire : utilisable comme référence
+            biométrique par la vérification visuelle (passeport, séjour…). */}
+        {etape.photoDisponible && (
+          <span
+            aria-hidden
+            title="Ce document contient la photo de son titulaire"
+            className="shrink-0 text-[10px] leading-none"
+          >
+            📷
+          </span>
+        )}
         {variante === "complet" && etape.detail && (
-          <span className="text-xs text-ardoise-clair truncate">· {etape.detail}</span>
+          <span className="text-xs text-ardoise-clair truncate">
+            · {etape.detail}
+          </span>
         )}
         {variante === "complet" && etape.documents > 1 && (
           <span className="text-xs text-ardoise-clair">({etape.documents})</span>

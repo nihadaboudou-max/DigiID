@@ -9,7 +9,7 @@ Fonctionnalités :
   - Supprimer (soft-delete) un document
   - Déclencher recalcul du score après modification
 """
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -122,6 +122,98 @@ async def ajouter_document(
     return _document_vers_detail(doc)
 
 
+async def marquer_document_fourni(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    *,
+    type_document: str,
+    numero_document: Optional[str] = None,
+    nom_complet: Optional[str] = None,
+    date_naissance: Optional[date] = None,
+    lieu_naissance: Optional[str] = None,
+    nationalite: Optional[str] = None,
+    date_delivrance: Optional[date] = None,
+    date_expiration: Optional[date] = None,
+    pays_emetteur: Optional[str] = None,
+    autorite_delivrance: Optional[str] = None,
+    verification_id: Optional[UUID] = None,
+    source: str = "ocr",
+) -> Optional[DocumentIdentite]:
+    """
+    Marque un document comme « fourni » par l'utilisateur (upsert).
+
+    ⚠️ C'est LE point d'entrée unique que lit le reste de l'application
+    (`GET /api/v1/utilisateur/documents-identite`, page « Documents », tableau
+    de bord, `synchroniser_profil_document`…). Sans cet enregistrement, un
+    document scanné — notamment un **passeport**, une carte de séjour ou une
+    carte consulaire — n'apparaît nulle part : le système ne « marque » pas le
+    document.
+
+    Idempotent : met à jour la ligne active du même type si elle existe, sinon
+    en crée une. Ne lève jamais : l'échec du marquage ne doit pas faire échouer
+    l'extraction du document.
+    """
+    champs = {
+        "numero_document": numero_document,
+        "nom_complet": nom_complet,
+        "date_naissance": date_naissance,
+        "lieu_naissance": lieu_naissance,
+        "nationalite": nationalite,
+        "date_delivrance": date_delivrance,
+        "date_expiration": date_expiration,
+        "pays_emetteur": pays_emetteur,
+        "autorite_delivrance": autorite_delivrance,
+        "verification_id": verification_id,
+    }
+
+    try:
+        resultat = await session.execute(
+            select(DocumentIdentite)
+            .where(
+                DocumentIdentite.utilisateur_id == utilisateur.id,
+                DocumentIdentite.type_document == type_document,
+                DocumentIdentite.est_actif.is_(True),
+            )
+            .order_by(DocumentIdentite.modifie_le.desc())
+        )
+        doc = resultat.scalars().first()
+
+        if doc is None:
+            doc = DocumentIdentite(
+                utilisateur_id=utilisateur.id,
+                type_document=type_document,
+                source=source,
+                est_actif=True,
+                **{c: v for c, v in champs.items() if v is not None},
+            )
+            session.add(doc)
+            journal.info(
+                f"Document marqué comme fourni : {type_document} pour {utilisateur.id}"
+            )
+        else:
+            for champ, valeur in champs.items():
+                if valeur is not None:
+                    setattr(doc, champ, valeur)
+            doc.modifie_le = datetime.now(timezone.utc)
+            journal.info(
+                f"Document fourni mis à jour : {type_document} pour {utilisateur.id}"
+            )
+
+        await session.commit()
+        await session.refresh(doc)
+        return doc
+
+    except Exception as e:  # pragma: no cover - jamais bloquant pour l'upload
+        journal.warning(
+            f"Marquage du document {type_document} impossible ({e})"
+        )
+        try:
+            await session.rollback()
+        except Exception:
+            pass
+        return None
+
+
 async def lister_documents(
     session: AsyncSession,
     utilisateur: Utilisateur,
@@ -130,7 +222,8 @@ async def lister_documents(
     """
     Liste tous les documents actifs de l'utilisateur.
 
-    Optionnellement filtré par type_document (cni, permis, assurance).
+    Optionnellement filtré par type_document (cni, passeport, permis,
+    assurance, carte_sejour, carte_consulaire, carte_grise).
     """
     query = select(DocumentIdentite).where(
         DocumentIdentite.utilisateur_id == utilisateur.id,
@@ -364,36 +457,65 @@ async def verifier_coherence_profil_document(
     }
 
 
+# Titres d'identité qui portent la photo de leur titulaire : ils valent
+# preuve d'identité au même titre que la CNI (voir
+# `verification_visuelle.photo_document.TYPES_DOCUMENT_AVEC_PHOTO`).
+TYPES_TITRE_IDENTITE_AVEC_PHOTO = (
+    "passeport",
+    "carte_sejour",
+    "carte_consulaire",
+    "permis",
+)
+
+
 async def synchroniser_profil_document(
     session: AsyncSession,
     utilisateur: Utilisateur,
 ) -> dict:
     """
-    Vérifie si l'utilisateur remplit toutes les conditions pour
-    est_verifie_identite = True :
-      1. est_cni_verifiee = True
-      2. est_visage_verifie = True
-      3. Au moins un document actif avec nom/prénom cohérents
-    Si toutes les conditions sont remplies, marque l'utilisateur
-    comme vérifié et enregistre la date.
+    Vérifie si l'utilisateur remplit toutes les conditions pour que son
+    identité soit considérée comme vérifiée :
+      1. Un titre d'identité avec photo est vérifié — CNI, mais aussi
+         passeport, carte de séjour ou carte consulaire ;
+      2. est_visage_verifie = True ;
+      3. Au moins un document actif avec nom/prénom cohérents.
+
+    ⚠️ `Utilisateur` n'ayant pas de colonne `est_verifie_identite`, seule la
+    date de dernière mise à jour est enregistrée ; la synthèse renvoyée est
+    calculée à partir des drapeaux réellement persistés.
     """
     from datetime import datetime, timezone
 
-    # Condition 1 : CNI vérifiée
+    # Condition 1 : un TITRE D'IDENTITÉ AVEC PHOTO est vérifié.
+    # ⚠️ CORRECTION : exiger la CNI excluait de fait les citoyens qui présentent
+    #    un PASSEPORT, une carte de séjour ou une carte consulaire — documents
+    #    au moins aussi probants, qui portent la photo de leur titulaire et sont
+    #    désormais marqués dans `document_identite` dès leur scan. La CNI reste
+    #    bien sûr acceptée.
     if not utilisateur.est_cni_verifiee:
-        return {
-            "est_verifie_identite": False,
-            "raison": "CNI non vérifiée.",
-            "est_cni_verifiee": False,
-            "est_visage_verifie": utilisateur.est_visage_verifie,
-        }
+        resultat_titre = await session.execute(
+            select(DocumentIdentite).where(
+                DocumentIdentite.utilisateur_id == utilisateur.id,
+                DocumentIdentite.est_actif.is_(True),
+                DocumentIdentite.type_document.in_(
+                    TYPES_TITRE_IDENTITE_AVEC_PHOTO
+                ),
+            )
+        )
+        if resultat_titre.scalars().first() is None:
+            return {
+                "est_verifie_identite": False,
+                "raison": "Aucun titre d'identité vérifié (CNI, passeport, carte de séjour ou carte consulaire).",
+                "est_cni_verifiee": False,
+                "est_visage_verifie": utilisateur.est_visage_verifie,
+            }
 
     # Condition 2 : Visage vérifié
     if not utilisateur.est_visage_verifie:
         return {
             "est_verifie_identite": False,
             "raison": "Visage non vérifié.",
-            "est_cni_verifiee": True,
+            "est_cni_verifiee": bool(utilisateur.est_cni_verifiee),
             "est_visage_verifie": False,
         }
 
@@ -410,7 +532,7 @@ async def synchroniser_profil_document(
         return {
             "est_verifie_identite": False,
             "raison": "Aucun document d'identité actif.",
-            "est_cni_verifiee": True,
+            "est_cni_verifiee": bool(utilisateur.est_cni_verifiee),
             "est_visage_verifie": True,
         }
 
@@ -428,27 +550,32 @@ async def synchroniser_profil_document(
         return {
             "est_verifie_identite": False,
             "raison": "Aucun document cohérent avec le profil (nom/prénom).",
-            "est_cni_verifiee": True,
+            "est_cni_verifiee": bool(utilisateur.est_cni_verifiee),
             "est_visage_verifie": True,
         }
 
-    # ✅ Toutes les conditions remplies → marquer comme vérifié
-    utilisateur.est_verifie_identite = True
-    utilisateur.date_verification_identite = datetime.now(timezone.utc)
-    utilisateur.date_derniere_mise_a_jour_verifications = datetime.now(timezone.utc)
+    # ✅ Toutes les conditions remplies :
+    #    ⚠️ CORRECTION : `Utilisateur` n'a PAS de colonnes `est_verifie_identite`
+    #    ni `date_verification_identite`. Les écrire créait des attributs Python
+    #    volatils — jamais persistés — alors que cette fonction répondait quand
+    #    même « identité vérifiée ». On n'enregistre donc que la date de dernière
+    #    mise à jour (colonne réelle) et on renvoie une synthèse CALCULÉE à
+    #    partir des deux drapeaux réellement stockés.
+    maintenant = datetime.now(timezone.utc)
+    utilisateur.date_derniere_mise_a_jour_verifications = maintenant
     await session.commit()
 
     journal.info(
         f"✅ Identité vérifiée | utilisateur={utilisateur.id} | "
-        f"CNI OK + Visage OK + Document cohérent"
+        f"titre d'identité OK + Visage OK + Document cohérent"
     )
 
     return {
         "est_verifie_identite": True,
-        "raison": "Identité vérifiée avec succès (CNI + Visage + Document cohérent).",
-        "est_cni_verifiee": True,
-        "est_visage_verifie": True,
-        "date_verification": utilisateur.date_verification_identite.isoformat(),
+        "raison": "Identité vérifiée avec succès (titre d'identité + Visage + Document cohérent).",
+        "est_cni_verifiee": bool(utilisateur.est_cni_verifiee),
+        "est_visage_verifie": bool(utilisateur.est_visage_verifie),
+        "date_verification": maintenant.isoformat(),
     }
     
     

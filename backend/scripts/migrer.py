@@ -243,6 +243,12 @@ def _ajouter_colonnes_documents(engine):
         "type_mime": "VARCHAR(100)",
         "taille_octets": "INTEGER",
         "document_chemin": "VARCHAR(500)",
+        # Biométrie : photo du titulaire portée par le document (NULL si le
+        # document n'en contient pas — assurance, carte grise…).
+        # ⚠️ Noms distincts de `photo_chemin` / `embedding_photo_cni` de
+        # `verification_cni`, déjà présents dans COLONNES_A_VERIFIER.
+        "photo_titulaire_chemin": "VARCHAR(500)",
+        "embedding_photo_document": "JSON",
         "nom_famille": "VARCHAR(255)",
         "prenoms": "VARCHAR(255)",
         "sexe": "VARCHAR(10)",

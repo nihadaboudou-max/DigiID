@@ -236,6 +236,36 @@ async def traiter_upload_permis(
     await session.commit()
     await session.refresh(nouveau_permis)
 
+    # ✅ Photo du titulaire : le permis porte la photo de son titulaire.
+    #    Son empreinte faciale est extraite puis réutilisée par la vérification
+    #    visuelle (le selfie n'est donc plus comparé à la seule CNI).
+    from src.modules.verification_visuelle.photo_document import enregistrer_photo_document
+    await enregistrer_photo_document(
+        session,
+        nouveau_permis,
+        contenu,
+        "permis_conduire",
+        type_mime=fichier.content_type,
+        prefixe="permis",
+    )
+
+    # ✅ Le permis est MARQUÉ comme document fourni (profil, tableau de bord…).
+    from src.modules.documents_identite.service import marquer_document_fourni
+    await marquer_document_fourni(
+        session,
+        utilisateur,
+        type_document="permis",
+        numero_document=donnees.numero_permis,
+        nom_complet=" ".join(
+            v for v in [donnees.prenoms, donnees.nom_famille] if v
+        ) or None,
+        date_naissance=_parser_date(donnees.date_naissance),
+        lieu_naissance=donnees.lieu_naissance,
+        date_delivrance=_parser_date(donnees.date_delivrance),
+        date_expiration=date_expiration_permis,
+        autorite_delivrance=donnees.autorite_delivrance,
+    )
+
     # ✅ Rappel : le permis expire bientôt ?
     from src.noyau.rappels_expiration import notifier_expiration_proche
     await notifier_expiration_proche(session, utilisateur, "permis", nouveau_permis.date_expiration)

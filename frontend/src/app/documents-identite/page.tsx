@@ -319,9 +319,18 @@ function VueDocument({
   onSupprimer: () => Promise<void>;
   notifier: (msg: string, type: "succes" | "erreur" | "info") => void;
 }) {
-  // Seuls les champs non sensibles sont modifiables/affichés comme tels
-  const champs = champsParType(doc.type_document).filter(
-    (c) => CHAMPS_MODIFIABLES[doc.type_document].includes(c.key)
+  // Seuls les champs non sensibles sont modifiables/affichés comme tels.
+  // ⚠️ Cette page ne gère que la CNI, le permis et l'assurance : les autres
+  //    titres d'identité (passeport, carte de séjour, carte consulaire) sont
+  //    scannés depuis /inspection et n'ont pas d'onglet ici.
+  const ongletCourant: OngletType =
+    doc.type_document === "cni" ||
+    doc.type_document === "permis" ||
+    doc.type_document === "assurance"
+      ? doc.type_document
+      : "cni";
+  const champs = champsParType(ongletCourant).filter(
+    (c) => CHAMPS_MODIFIABLES[ongletCourant].includes(c.key)
   );
   const champsOfficielsOriginaux = doc.type_document === "cni"
     ? [

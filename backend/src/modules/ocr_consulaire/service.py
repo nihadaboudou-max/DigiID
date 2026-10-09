@@ -139,6 +139,39 @@ async def traiter_upload_consulaire(
     await session.commit()
     await session.refresh(nouvelle)
 
+    # ✅ Photo du titulaire : la carte consulaire porte la photo de son titulaire.
+    #    Son empreinte faciale est extraite puis réutilisée par la vérification
+    #    visuelle (le selfie n'est donc plus comparé à la seule CNI).
+    from src.modules.verification_visuelle.photo_document import enregistrer_photo_document
+    await enregistrer_photo_document(
+        session,
+        nouvelle,
+        contenu,
+        "carte_consulaire",
+        type_mime=fichier.content_type,
+        prefixe="consulaire",
+    )
+
+    # ✅ La carte consulaire est MARQUÉE comme document fourni : sans cette
+    #    ligne, elle n'apparaîtrait ni dans le profil, ni dans le tableau de
+    #    bord, ni dans la vérification d'identité.
+    from src.modules.documents_identite.service import marquer_document_fourni
+    await marquer_document_fourni(
+        session,
+        utilisateur,
+        type_document="carte_consulaire",
+        numero_document=donnees.numero_immatriculation_consulaire,
+        nom_complet=" ".join(
+            v for v in [donnees.prenoms, donnees.nom_famille] if v
+        ) or None,
+        date_naissance=_parser_date(donnees.date_naissance),
+        lieu_naissance=donnees.lieu_naissance,
+        nationalite=donnees.nationalite,
+        date_delivrance=_parser_date(donnees.date_delivrance),
+        date_expiration=date_expiration,
+        pays_emetteur=donnees.pays_emetteur,
+    )
+
     if date_expiration:
         from src.noyau.rappels_expiration import notifier_expiration_proche
         await notifier_expiration_proche(session, utilisateur, "consulaire", date_expiration)

@@ -143,6 +143,40 @@ async def traiter_upload_passeport(
     await session.commit()
     await session.refresh(nouveau)
 
+    # ✅ Photo du titulaire : la page d'identité du passeport porte la photo.
+    #    Son empreinte faciale est extraite MAINTENANT puis réutilisée par la
+    #    vérification visuelle (le selfie n'est donc plus comparé à la seule CNI).
+    from src.modules.verification_visuelle.photo_document import enregistrer_photo_document
+    await enregistrer_photo_document(
+        session,
+        nouveau,
+        contenu,
+        "passeport",
+        type_mime=fichier.content_type,
+        prefixe="passeport",
+    )
+
+    # ✅ Le passeport est MARQUÉ comme document fourni : sans cette ligne, il
+    #    n'apparaîtrait ni dans le profil, ni dans le tableau de bord, ni dans
+    #    la vérification d'identité (seule la CNI y figurait auparavant).
+    from src.modules.documents_identite.service import marquer_document_fourni
+    await marquer_document_fourni(
+        session,
+        utilisateur,
+        type_document="passeport",
+        numero_document=donnees.numero_passeport,
+        nom_complet=" ".join(
+            v for v in [donnees.prenoms, donnees.nom_famille] if v
+        ) or None,
+        date_naissance=_parser_date(donnees.date_naissance),
+        lieu_naissance=donnees.lieu_naissance,
+        nationalite=donnees.nationalite,
+        date_delivrance=_parser_date(donnees.date_delivrance),
+        date_expiration=date_expiration,
+        pays_emetteur=donnees.pays_emetteur,
+        autorite_delivrance=donnees.autorite_delivrance,
+    )
+
     if date_expiration:
         from src.noyau.rappels_expiration import notifier_expiration_proche
         await notifier_expiration_proche(session, utilisateur, "passeport", date_expiration)

@@ -291,6 +291,24 @@ async def traiter_upload_assurance(
     await session.commit()
     await session.refresh(nouvelle_assurance)
 
+    # ✅ L'assurance est MARQUÉE comme document fourni (profil, tableau de bord…).
+    #    ⚠️ Elle ne contient PAS de photo du titulaire : elle n'est donc jamais
+    #    utilisée comme référence par la vérification visuelle.
+    from src.modules.documents_identite.service import marquer_document_fourni
+    await marquer_document_fourni(
+        session,
+        utilisateur,
+        type_document="assurance",
+        numero_document=donnees.numero_contrat,
+        nom_complet=" ".join(
+            v for v in [donnees.prenoms_assure, donnees.nom_assure] if v
+        ) or None,
+        date_naissance=_parser_date(donnees.date_naissance),
+        lieu_naissance=donnees.lieu_naissance,
+        date_delivrance=date_effet_parsee,
+        date_expiration=date_expiration_parsee,
+    )
+
     # ✅ Rappel : l'assurance expire bientôt ?
     from src.noyau.rappels_expiration import notifier_expiration_proche
     await notifier_expiration_proche(session, utilisateur, "assurance", nouvelle_assurance.date_expiration)
@@ -406,4 +424,5 @@ async def modifier_assurance(
         f"Assurance corrigée (champs non sensibles) | user={utilisateur.id} "
         f"assurance={assurance_id} champs={list(modifications.keys())}"
     )
+    return _assurance_vers_detail(assurance)
     return _assurance_vers_detail(assurance)

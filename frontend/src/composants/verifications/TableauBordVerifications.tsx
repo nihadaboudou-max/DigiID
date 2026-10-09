@@ -16,16 +16,24 @@ import {
   obtenirSynthese,
   type SyntheseVerificationCNI,
 } from "@/services/verification_cni";
-// Imports pour les nouvelles vérifications (à adapter selon tes fichiers de service)
-import { obtenirHistoriquePermis } from "@/services/permis_conduire";
-import { obtenirHistoriqueAssurance } from "@/services/assurance_auto";
+// Vue unifiée des documents réellement fournis (CNI, **passeport**, permis,
+// carte de séjour, carte consulaire, assurance) — toutes tables confondues.
+import { listerDocumentsFournis } from "@/services/documents_fournis";
 
 // =============================================================================
 // Types
 // =============================================================================
 
 interface EtapeVerification {
-  id: "email" | "visage" | "cni" | "permis" | "assurance" | "role" | "2fa";
+  id:
+    | "email"
+    | "visage"
+    | "cni"
+    | "passeport"
+    | "permis"
+    | "assurance"
+    | "role"
+    | "2fa";
   titre: string;
   description: string;
   icone: string;
@@ -45,6 +53,7 @@ export default function TableauBordVerifications() {
   // États des vérifications
   const [verifVisage, setVerifVisage] = useState<VerificationDetail | null>(null);
   const [syntheseCNI, setSyntheseCNI] = useState<SyntheseVerificationCNI | null>(null);
+  const [hasPasseport, setHasPasseport] = useState(false);
   const [hasPermis, setHasPermis] = useState(false);
   const [hasAssurance, setHasAssurance] = useState(false);
   
@@ -55,17 +64,22 @@ export default function TableauBordVerifications() {
 
     const chargerDonnees = async () => {
       try {
-        const [visage, cni, permis, assurance] = await Promise.allSettled([
+        const [visage, cni, documents] = await Promise.allSettled([
           obtenirStatutVerification(),
           obtenirSynthese(),
-          obtenirHistoriquePermis(1),
-          obtenirHistoriqueAssurance(1),
+          listerDocumentsFournis(),
         ]);
 
         if (visage.status === "fulfilled") setVerifVisage(visage.value);
         if (cni.status === "fulfilled") setSyntheseCNI(cni.value);
-        if (permis.status === "fulfilled") setHasPermis(permis.value.total > 0);
-        if (assurance.status === "fulfilled") setHasAssurance(assurance.value.total > 0);
+        if (documents.status === "fulfilled") {
+          const types = new Set(
+            documents.value.map((doc) => doc.type_document),
+          );
+          setHasPasseport(types.has("passeport"));
+          setHasPermis(types.has("permis"));
+          setHasAssurance(types.has("assurance"));
+        }
       } catch (err) {
         console.error("Erreur chargement tableau de bord:", err);
       } finally {
@@ -84,10 +98,17 @@ export default function TableauBordVerifications() {
     );
   }
 
-  const etapes = construireEtapes(utilisateur, verifVisage, syntheseCNI, hasPermis, hasAssurance);
+  const etapes = construireEtapes(
+    utilisateur,
+    verifVisage,
+    syntheseCNI,
+    hasPasseport,
+    hasPermis,
+    hasAssurance,
+  );
   const progres = utilisateur.progres_verifications ?? 0;
   const niveau = utilisateur.niveau_verification ?? "aucune";
-  const totalEtapes = 7; // Email, Visage, CNI, Permis, Assurance, Role, 2FA
+  const totalEtapes = 8; // Email, Visage, CNI, Passeport, Permis, Assurance, Role, 2FA
 
   return (
     <div className="space-y-4">
@@ -323,6 +344,7 @@ function construireEtapes(
   utilisateur: Utilisateur,
   verifVisage: VerificationDetail | null,
   syntheseCNI: SyntheseVerificationCNI | null,
+  hasPasseport: boolean,
   hasPermis: boolean,
   hasAssurance: boolean
 ): EtapeVerification[] {
@@ -358,6 +380,16 @@ function construireEtapes(
       lien: syntheseCNI?.statut === "approuve" ? undefined : "/verification-cni",
       action: syntheseCNI?.statut === "rejete" ? "Re-scanner" : "Scanner",
       detail: syntheseCNI?.statut === "approuve" ? "Authentifiée" : undefined,
+    },
+    {
+      id: "passeport",
+      titre: "🛂 Passeport",
+      description: "Scanne ton passeport : titre d'identité accepté.",
+      icone: "🛂",
+      statut: hasPasseport ? "complete" : "a_faire",
+      lien: "/inspection",
+      action: hasPasseport ? "Voir" : "Scanner",
+      detail: hasPasseport ? "Enregistré" : undefined,
     },
     {
       id: "permis",

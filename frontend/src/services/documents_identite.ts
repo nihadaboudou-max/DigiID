@@ -23,7 +23,19 @@ const PREFIXE = "/api/v1/utilisateur/documents-identite";
 export interface DocumentIdentiteDetail {
   id: string;
   utilisateur_id: string;
-  type_document: "cni" | "permis" | "assurance";
+  /**
+   * Type du document. Au-delà de la CNI, du permis et de l'assurance, cette
+   * table reçoit désormais les AUTRES titres d'identité scannés (passeport,
+   * carte de séjour, carte consulaire, carte grise).
+   */
+  type_document:
+    | "cni"
+    | "passeport"
+    | "permis"
+    | "assurance"
+    | "carte_sejour"
+    | "carte_consulaire"
+    | "carte_grise";
   est_actif: boolean;
   source: "manuel" | "ocr" | null;
   a_ete_corrige: boolean;
