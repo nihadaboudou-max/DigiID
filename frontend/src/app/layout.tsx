@@ -11,6 +11,7 @@ import { FournisseurLangue } from "@/i18n/useLangue";
 import { FournisseurAuthentification } from "@/contextes/authentification";
 import { FournisseurNotifications } from "@/contextes/notifications";
 import { ConteneurLayout } from "@/composants/layouts/ConteneurLayout";
+import { AssistantImpression } from "@/composants/commun/AssistantImpression";
 import { GuideVocal } from "@/composants/accessibilite/GuideVocal";
 
 // Polices Poppins hébergées localement
@@ -48,6 +49,8 @@ export default function LayoutRacine({
               <ConteneurLayout>{children}</ConteneurLayout>
               {/* Guide vocal : présent sur TOUTES les pages, publiques comprises. */}
               <GuideVocal />
+              {/* Impression propre (une page par ticket) même via Ctrl+P. */}
+              <AssistantImpression />
             </FournisseurNotifications>
           </FournisseurAuthentification>
         </FournisseurLangue>

@@ -252,62 +252,109 @@
 .delai-6 { animation-delay: 0.30s; }
 
 
-/* ==========================================
-   STYLES D'IMPRESSION (Ticket Logistique)
-   ========================================== */
+/* ============================================================
+   STYLES D'IMPRESSION — tickets & étiquettes QR
+   ============================================================
+   Objectif : **une page par ticket, une page par étiquette**, jamais de
+   superposition. Les trois règles qui le garantissent :
+
+   1. `.zone-impression` reste **dans le flux normal** — surtout pas
+      `position: absolute`. Deux blocs absolus à `top: 0` se recouvrent (d'où
+      les tickets superposés, avec un seul visible), et un élément hors flux
+      n'accepte aucun saut de page ;
+   2. deux zones consécutives sont séparées par un **saut de page** ;
+   3. `services/impression.ts` marque le ticket et **son chemin d'ancêtres**
+      (`data-impression-chemin`) puis `<html>` (`data-impression="1"`) : tout
+      le reste de l'application est masqué.
+
+   Ces règles ne s'appliquent **que** quand l'écran contient un ticket : les
+   autres impressions (manifeste, export, carte…) gardent leur mise en page.
+   ============================================================ */
 @media print {
-  /* 1. Cacher TOUT le contenu de la page par défaut */
-  body, body * {
-    visibility: hidden;
+  /* 1. Commandes et décoration de l'application : jamais imprimées. */
+  .no-print,
+  button,
+  nav,
+  aside,
+  header,
+  footer {
+    display: none !important;
   }
 
-  /* 2. Rendre VISIBLE uniquement les zones d'impression */
-  .zone-impression,
-  .zone-impression * {
+  /* 2. Ne garder que le ticket : ni menus, ni formulaires, ni notifications.
+        `impression.ts` marque le ticket, son contenu (`data-impression-visible`)
+        et ses parents — sélecteur volontairement simple, compris de tous les
+        navigateurs. */
+  html[data-impression="1"] body *:not([data-impression-visible]) {
+    display: none !important;
+  }
+  /* Filet de sécurité, si le JavaScript n'a pas marqué la page (impression par
+     le menu du navigateur, par exemple) : `:has()` conserve les ancêtres du
+     ticket et masque tout le reste. Ignoré par les navigateurs sans `:has()`, et
+     sans effet sur les écrans qui ne contiennent aucun ticket. */
+  html:has(.zone-impression):not([data-impression])
+    body
+    *:not(.zone-impression):not(.zone-impression *):not(:has(.zone-impression)) {
+    display: none !important;
+  }
+
+  /* 3. Les ancêtres du ticket ne doivent ni le décaler ni le contraindre
+        (barre latérale masquée, plus de centrage ni de largeur d'écran). */
+  [data-impression-chemin] {
+    display: block !important;
+    position: static !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-width: none !important;
+    overflow: visible !important;
+    transform: none !important;
+  }
+
+  /* 4. Un ticket : pleine largeur, fond blanc, dans le flux normal. */
+  .zone-impression {
+    display: block !important;
     visibility: visible !important;
-  }
-
-  /* 3. Forcer le saut de page après le ticket principal */
-  .ticket-principal {
-    break-after: page !important;
-    page-break-after: always !important;
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
     width: 100% !important;
+    max-width: none !important;
     margin: 0 !important;
-    padding: 20px !important;
-    background: white !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #2a2d34 !important;
+    /* Les couleurs (badges, filets) doivent sortir telles quelles. */
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* 4. Forcer le saut de page après CHAQUE étiquette bagage */
+  /* 5. Une nouvelle zone commence toujours sur une nouvelle page.
+        `data-impression-page` est posé par `preparerImpression()` ; la règle
+        `~` couvre le cas où le JavaScript n'a pas tourné. */
+  [data-impression-page],
+  .zone-impression ~ .zone-impression {
+    break-before: page !important;
+    page-break-before: always !important;
+  }
+
+  /* 6. Un ticket ne doit jamais être coupé par un changement de page. */
+  .ticket-principal,
   .etiquette-bagage {
-    break-after: page !important;
-    page-break-after: always !important;
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 40px !important;
-    background: white !important;
-    /* Centrer l'étiquette sur la page A4 */
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* 7. L'étiquette bagage occupe sa page et reste centrée (découpe facile). */
+  .etiquette-bagage {
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
-    min-height: 250px !important; 
-  }
-
-  /* 5. Éviter une page blanche à la toute fin */
-  .etiquette-bagage:last-child {
-    break-after: auto !important;
-    page-break-after: auto !important;
-  }
-
-  /* 6. Cacher les boutons et menus */
-  .no-print, button, nav, header, footer, .sidebar {
-    display: none !important;
+    min-height: 86vh !important;
+    padding: 20px !important;
   }
 
   @page {

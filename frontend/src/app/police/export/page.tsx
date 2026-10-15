@@ -10,6 +10,7 @@ import Link from "next/link";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
+import { imprimer } from "@/services/impression";
 import { genererRapport } from "@/services/police";
 
 export default function PageExport() {
@@ -178,14 +179,15 @@ function Contenu() {
       {/* Résultat */}
       {resultat && (
         <Carte titre="Rapport généré">
-          <div className="text-center py-4">
+          {/* Zone d'impression : « Télécharger » n'imprime que le rapport. */}
+          <div className="zone-impression text-center py-4">
             <p className="text-5xl mb-4">✅</p>
             <p className="text-lg font-bold text-succes mb-2">Rapport généré avec succès !</p>
             <p className="text-sm text-ardoise-clair mb-4">
               Période : du {new Date(dateDebut).toLocaleDateString("fr-FR")} au {new Date(dateFin).toLocaleDateString("fr-FR")}
             </p>
             <div className="flex justify-center gap-3">
-              <Bouton variante="primaire" onClick={() => window.print()}>
+              <Bouton variante="primaire" onClick={() => void imprimer()}>
                 📥 Télécharger ({format.toUpperCase()})
               </Bouton>
               <Bouton variante="ghost" onClick={() => setResultat(null)}>

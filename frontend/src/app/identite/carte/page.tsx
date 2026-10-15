@@ -22,6 +22,7 @@ import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspacePr
 import { formaterDateHeure, urlImageQR } from "@/composants/logistique/format";
 import { TOUS_LES_ROLES } from "@/composants/logistique/roles";
 import { ErreurAPI } from "@/services/client_api";
+import { imprimer } from "@/services/impression";
 import { identiteAPI, type CarteDigiID, type VoyageCitoyen } from "@/services/identite_api";
 
 export default function PageMaCarteDigiID() {
@@ -115,7 +116,8 @@ function Contenu() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* ─── Carte (QR permanent) ─────────────────────────────────── */}
         <Carte titre="Carte d'identité numérique">
-          <div className="flex flex-col items-center gap-4">
+          {/* Zone d'impression : « Imprimer » ne sort que la carte, QR compris. */}
+          <div className="zone-impression flex flex-col items-center gap-4">
             {imageQR ? (
               <div className="bg-white p-3 rounded-xl border-2 border-lagune/20">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -151,7 +153,7 @@ function Contenu() {
               <Bouton
                 variante="ghost"
                 taille="petit"
-                onClick={() => window.print()}
+                onClick={() => void imprimer()}
               >
                 Imprimer
               </Bouton>

@@ -11,6 +11,7 @@
  */
 import { Bouton } from "@/composants/commun/Bouton";
 import { IconeIdentite } from "@/composants/commun/Icones";
+import { imprimer } from "@/services/impression";
 import type { SuiviFamilial, Ticket } from "@/types/logistique";
 import { formaterDate, formaterDateHeure, urlImageQR } from "./format";
 
@@ -121,6 +122,11 @@ export function TicketSuiviFamilialImprimable({
             <p className="rounded-lg bg-lagune/5 p-2 text-xs text-ardoise-clair">
               Suivez le voyage sur : <span className="break-all">{lienSuivi}</span>
             </p>
+
+            <p className="text-[11px] text-ardoise-clair">
+              Le nombre de sacs est vérifié à l&apos;arrivée (anti-fraude) — il
+              n&apos;affecte pas le prix.
+            </p>
           </div>
 
           {/* QR Code */}
@@ -151,54 +157,54 @@ export function TicketSuiviFamilialImprimable({
         </div>
       </div>
 
-      {/* Étiquettes bagages : une par sac (traçabilité + anti-fraude à l'arrivée) */}
-      {suivi.bagages && suivi.bagages.length > 0 && (
-        <div className="zone-impression rounded-xl border-2 border-ardoise/20 bg-white p-5 text-ardoise">
-          <p className="mb-3 text-sm font-bold uppercase tracking-wider text-lagune">
-            Étiquettes bagages ({suivi.bagages.length} sac
-            {suivi.bagages.length > 1 ? "s" : ""})
-          </p>
-          <p className="mb-3 text-[11px] text-ardoise-clair">
-            À attacher à chaque sac. Le nombre de sacs est vérifié à l&apos;arrivée
-            (anti-fraude) — il n&apos;affecte pas le prix.
-          </p>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            {suivi.bagages.map((b) => {
-              const qrBagage = urlImageQR(b.qr_code_url);
-              return (
-                <div
-                  key={b.id}
-                  className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-ardoise-clair/40 p-3 text-center"
-                >
-                  <span className="text-xs font-bold text-ardoise">
-                    {b.numero_serie}
-                  </span>
-                  {qrBagage ? (
-                    <img
-                      src={qrBagage}
-                      alt={`QR du sac ${b.numero_serie}`}
-                      className="h-24 w-24 rounded border border-ardoise-clair/20 bg-white"
-                    />
-                  ) : (
-                    <div className="flex h-24 w-24 items-center justify-center rounded border-2 border-dashed border-ardoise-clair/30 text-center text-[10px] text-ardoise-clair">
-                      QR indisponible
-                    </div>
-                  )}
-                  {b.code_clair && (
-                    <code className="break-all text-[10px] text-ardoise-clair">
-                      {b.code_clair}
-                    </code>
-                  )}
-                </div>
-              );
-            })}
+      {/* Étiquettes bagages : **une par page**, comme le ticket — traçabilité et
+          vérification anti-fraude à l'arrivée. Une planche de vignettes serrées
+          était illisible (et se faisait couper par la page). */}
+      {suivi.bagages?.map((bagage, index) => {
+        const qrBagage = urlImageQR(bagage.qr_code_url);
+        return (
+          <div
+            key={bagage.id}
+            className="zone-impression etiquette-bagage flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-ardoise/30 bg-white p-8 text-ardoise"
+          >
+            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-ardoise-clair">
+              Étiquette bagage {index + 1} / {suivi.bagages?.length}
+            </p>
+
+            <span className="mb-1 text-xl font-bold text-lagune">
+              {bagage.numero_serie}
+            </span>
+            <p className="mb-4 text-sm text-ardoise">Passager : {suivi.enfant_nom}</p>
+
+            {qrBagage ? (
+              <img
+                src={qrBagage}
+                alt={`QR du sac ${bagage.numero_serie}`}
+                className="mb-4 h-48 w-48 rounded border border-ardoise-clair/20 bg-white"
+              />
+            ) : (
+              <div className="mb-4 flex h-48 w-48 items-center justify-center rounded border-2 border-dashed border-ardoise-clair/30 p-2 text-center text-xs text-ardoise-clair">
+                QR indisponible — utilisez le code ci-dessous.
+              </div>
+            )}
+
+            {bagage.code_clair && (
+              <code className="break-all text-center font-mono text-sm text-ardoise-clair">
+                {bagage.code_clair}
+              </code>
+            )}
+
+            <p className="mt-6 w-full border-t border-dashed border-ardoise-clair/30 pt-2 text-center text-[10px] text-ardoise-clair">
+              Ticket parent : <strong>{ticket.code_clair}</strong> — à attacher au sac
+            </p>
           </div>
-        </div>
-      )}
+        );
+      })}
 
       {afficherImpression && (
         <div className="no-print flex flex-wrap gap-3">
-          <Bouton variante="secondaire" onClick={() => window.print()}>
+          {/* `imprimer()` : une page pour le ticket, une page par étiquette. */}
+          <Bouton variante="secondaire" onClick={() => void imprimer()}>
             🖨️ Imprimer le ticket
           </Bouton>
         </div>

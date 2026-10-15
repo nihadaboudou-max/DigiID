@@ -17,6 +17,7 @@ import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import { ErreurAPI } from "@/services/client_api";
+import { imprimer } from "@/services/impression";
 import { identiteAPI } from "@/services/identite_api";
 import type { LigneManifeste, ManifesteVoyage as TypeManifeste } from "@/types/identite";
 import { LIBELLES_MODE_ENREGISTREMENT } from "@/types/logistique";
@@ -72,7 +73,9 @@ export function ManifesteVoyage({
           {erreur ?? "Aucune donnée."}
         </Alerte>
       ) : (
-        <div className={compact ? "space-y-4" : "space-y-6"}>
+        // Zone d'impression : le manifeste se vide de tout le reste à
+        // l'impression (et n'est jamais coupé au milieu d'une page).
+        <div className={`zone-impression ${compact ? "space-y-4" : "space-y-6"}`}>
           {/* Compteurs */}
           <div className="grid grid-cols-3 gap-3">
             <Compteur libelle="Colis" valeur={manifeste.nb_colis} />
@@ -91,7 +94,7 @@ export function ManifesteVoyage({
               variante="ghost"
               taille="petit"
               className="no-print"
-              onClick={() => window.print()}
+              onClick={() => void imprimer()}
             >
               Imprimer le manifeste
             </Bouton>

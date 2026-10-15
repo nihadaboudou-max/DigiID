@@ -1,6 +1,7 @@
 "use client";
 import { Bouton } from "@/composants/commun/Bouton";
 import { IconeTicket } from "@/composants/commun/Icones";
+import { imprimer } from "@/services/impression";
 import type { Colis, Ticket } from "@/types/logistique";
 import { formaterDate, formaterDateHeure, formaterFcfa, urlImageQR } from "./format";
 
@@ -86,6 +87,11 @@ export function TicketImprimable({
                 <dd className="font-bold text-lagune">{formaterFcfa(colis?.frais_fcfa)}</dd>
               </div>
             </dl>
+
+            <p className="text-[11px] text-ardoise-clair">
+              Le nombre de sacs est vérifié à l&apos;arrivée (anti-fraude) — il
+              n&apos;affecte pas le prix.
+            </p>
           </div>
 
           {/* QR Code Principal */}
@@ -162,7 +168,9 @@ export function TicketImprimable({
          ========================================== */}
       {afficherImpression && (
         <div className="no-print flex flex-wrap gap-3 print:hidden mt-6">
-          <Bouton variante="primaire" onClick={() => window.print()}>
+          {/* `imprimer()` (et non `window.print()`) : attend les QR codes puis
+              marque la page pour obtenir UNE page par ticket et par étiquette. */}
+          <Bouton variante="primaire" onClick={() => void imprimer()}>
             ️ Imprimer le dossier complet
           </Bouton>
           <p className="text-xs text-ardoise-clair self-center">
