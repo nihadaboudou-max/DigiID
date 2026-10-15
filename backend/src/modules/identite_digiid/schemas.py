@@ -63,7 +63,12 @@ class ContactDigiIDResponse(BaseModel):
     # Origine de la correspondance : utile pour la traçabilité du guichet.
     # (Pas de recherche par téléphone : les numéros sont chiffrés au repos —
     # le guichet scanne donc le QR ou saisit le DigiID public.)
-    correspondance: Literal["digiid", "qr"] = "digiid"
+    #
+    # - `digiid` : identifiant public saisi à la main (secours) ;
+    # - `qr` : QR **durable** de la carte citoyenne ;
+    # - `qr_dynamique` : QR **temporaire** (30 s, usage unique) affiché par le
+    #   citoyen — le circuit le plus sûr, à privilégier au scan.
+    correspondance: Literal["digiid", "qr", "qr_dynamique"] = "digiid"
 
 
 # ─── Profil logistique (dossier professionnel) ───────────────────────

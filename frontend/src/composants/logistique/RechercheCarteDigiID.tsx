@@ -1,17 +1,22 @@
 "use client";
 
 /**
- * RechercheCarteDigiID — « le client présente sa carte, la fiche se remplit ».
+ * RechercheCarteDigiID — « le client présente son code, la fiche se remplit ».
  *
- * Point clé du plan : au guichet, l'agent n'a plus à ressaisir le nom et le
- * téléphone du client. Il saisit (ou colle) le **DigiID public** / l'**URL du
- * QR** de la carte, et le formulaire est pré-rempli avec des données exactes —
- * ce qui garantit que les SMS de suivi partiront vers le bon numéro.
+ * Deux entrées, dans cet ordre :
  *
- * Le composant est volontairement autonome : il ne connaît ni colis ni passager,
- * il se contente de remonter le contact trouvé via `surSelection`.
+ *  1. **Scan du QR dynamique** (bouton principal) : le citoyen affiche son code
+ *     de 30 secondes, à **usage unique** — impossible à rejouer si un tiers
+ *     photographie l'écran. C'est le chemin à la fois le plus rapide et le plus
+ *     sûr : plus de nom ni de numéro ressaisis (donc SMS de suivi corrects).
+ *  2. **Saisie du code** (DigiID public, ou lien collé) : toujours disponible —
+ *     client sans écran, caméra refusée, code abîmé. Le code est bon, mais il
+ *     prend du temps : c'est l'option de repli.
+ *
+ * Le composant reste volontairement autonome : il ne connaît ni colis ni
+ * passager, il remonte le contact trouvé via `surSelection`.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { Alerte } from "@/composants/commun/Alerte";
 import { Badge } from "@/composants/commun/Badge";
@@ -22,6 +27,14 @@ import {
   chercherContactParCarte,
   type ContactDigiID,
 } from "@/services/identite_api";
+import { LecteurQRCode } from "./LecteurQRCode";
+
+/** Libellé lisible de l'origine du code présenté au guichet. */
+const LIBELLES_ORIGINE: Record<string, string> = {
+  digiid: "DigiID saisi",
+  qr: "QR de la carte",
+  qr_dynamique: "QR dynamique (30 s)",
+};
 
 interface ProprietesRechercheCarte {
   /** Appelé quand un contact est trouvé (ou `null` quand on repart de zéro). */
@@ -43,7 +56,7 @@ export function RechercheCarteDigiID({
   surSelection,
   libelle = "Carte DigiID du client",
   titre = "Client avec un compte DigiID ?",
-  description = "Saisissez le DigiID public de sa carte, ou collez le lien du QR scanné : la fiche se pré-remplit automatiquement.",
+  description = "Scannez le QR affiché par le client (code dynamique de 30 secondes, à usage unique) — ou saisissez son DigiID public : la fiche se pré-remplit automatiquement.",
   rechercheInitiale,
 }: ProprietesRechercheCarte) {
   const [valeur, setValeur] = useState(rechercheInitiale ?? "");
@@ -52,6 +65,9 @@ export function RechercheCarteDigiID({
   const [messageErreur, setMessageErreur] = useState<string | null>(null);
   // Évite une double recherche (React 18 StrictMode monte deux fois en dev).
   const dejaCherche = useRef(false);
+  // Identifiant DOM unique : plusieurs lecteurs peuvent cohabiter sur un même
+  // écran (expéditeur ET destinataire d'un même colis).
+  const idLecteur = `qr-client-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   async function rechercher(depuisValeur?: string) {
     const requete = (depuisValeur ?? valeur).trim();
@@ -99,6 +115,22 @@ export function RechercheCarteDigiID({
         </div>
       </div>
 
+            {/* Scan d'abord : c'est le geste rapide. Le code dynamique du citoyen
+          (30 s, usage unique) ne peut pas être rejoué par un tiers. */}
+      <LecteurQRCode
+        id={idLecteur}
+        libelleBouton="Scanner le QR du client"
+        messageIndisponible="Caméra indisponible ou accès refusé. Saisissez le code à la main ci-dessous."
+        surDecode={(texte) => {
+          setValeur(texte);
+          void rechercher(texte);
+        }}
+      />
+
+      <p className="text-xs italic text-ardoise-clair">
+        Sans scan possible ? Le code reste accepté, mais il est plus lent à saisir.
+      </p>
+
       <div className="flex flex-col sm:flex-row sm:items-end gap-2">
         <div className="flex-1">
           <ChampSaisie
@@ -144,8 +176,8 @@ export function RechercheCarteDigiID({
             {contact.digiid_public && (
               <Badge variante="lagune">{contact.digiid_public}</Badge>
             )}
-            <Badge variante="neutre">
-              {contact.correspondance === "qr" ? "QR scanné" : "DigiID"}
+                        <Badge variante="neutre">
+              {LIBELLES_ORIGINE[contact.correspondance] ?? contact.correspondance}
             </Badge>
           </div>
           <p className="text-sm text-ardoise-clair">

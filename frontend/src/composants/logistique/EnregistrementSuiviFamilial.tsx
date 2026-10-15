@@ -445,6 +445,19 @@ export function EnregistrementSuiviFamilial({
                 />
               )}
 
+              {/* Le proche de confiance a lui aussi le droit au scan : un numéro
+                  mal recopié, et c'est le parent qui n'est pas prévenu. */}
+              <RechercheCarteDigiID
+                libelle="DigiID du proche de confiance (facultatif)"
+                titre="Le proche de confiance a une carte DigiID ?"
+                description="Scannez son QR dynamique (ou saisissez son DigiID) : son nom et son téléphone se remplissent automatiquement."
+                surSelection={(contact) => {
+                  if (!contact) return;
+                  setProcheNom(contact.nom_complet);
+                  if (contact.telephone) setProcheTelephone(contact.telephone);
+                }}
+              />
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <ChampSaisie
                   libelle="Nom du proche de confiance"

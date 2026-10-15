@@ -22,8 +22,9 @@ from src.modules.identite_digiid import schemas
 from src.modules.qr_dynamique.service import (
     generer_token_durable,
     construire_url_qr_durable,
+    verifier_qr_code,
 )
-from src.noyau import dechiffrer_donnee
+from src.noyau import dechiffrer_donnee, journal
 
 # Chemin frontend encodé dans le QR de la carte DigiID.
 # Il pointe vers la page **guichet** (et non vers la carte du citoyen) : un agent
@@ -115,13 +116,24 @@ async def obtenir_ou_creer_carte(
 
 
 async def rechercher_contact(
-    session: AsyncSession, requete: schemas.RechercheDigiIDRequest
+    session: AsyncSession,
+    requete: schemas.RechercheDigiIDRequest,
+    agent: Utilisateur | None = None,
 ) -> schemas.ContactDigiIDResponse:
-    """Retrouve un citoyen par DigiID public ou par QR de carte (scan guichet).
+    """Retrouve un citoyen par DigiID public, QR de carte ou QR dynamique.
 
     C'est **le** point qui supprime la ressaisie au guichet : le commerçant ou
     l'agent scanne la carte, la fiche se pré-remplit avec des données exactes
     (donc les SMS de suivi partent vers le bon numéro).
+
+    Trois entrées acceptées, du plus sûr au plus lent :
+
+    1. **QR dynamique** (`qr_dynamique`) : le citoyen affiche son code de 30
+       secondes ; il est à **usage unique**, donc impossible à rejouer si
+       quelqu'un photographie l'écran. C'est ce qu'on scanne au guichet.
+    2. QR **durable** de la carte citoyenne (jeton en base).
+    3. **DigiID public** tapé ou saisi à la main — le mode de secours, quand le
+       client n'a pas d'écran ou que la caméra refuse.
     """
     brut = requete.digiid.strip()
     if not brut:
@@ -129,6 +141,10 @@ async def rechercher_contact(
 
     utilisateur: Utilisateur | None = None
     correspondance = "digiid"
+    # Jeton candidat (URL de QR, ou jeton collé sans URL) : sert à tenter le
+    # circuit dynamique quand la carte durable ne répond pas.
+    token: str | None = None
+    raison_dynamique: str | None = None
 
     if brut.startswith("http://") or brut.startswith("https://"):
         # URL complète du QR scannée par un téléphone : on extrait ?token=…
@@ -149,18 +165,30 @@ async def rechercher_contact(
         )
         if utilisateur is None:
             # Tolérance : jeton QR collé sans URL (copié depuis l'image).
+            token = brut
             utilisateur = await session.scalar(
                 select(Utilisateur).where(Utilisateur.qr_token_digiid == brut)
             )
             if utilisateur is not None:
                 correspondance = "qr"
 
-    if utilisateur is None or utilisateur.est_supprime or not utilisateur.est_actif:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND,
-            detail="Aucun compte DigiID ne correspond à cette carte. "
-                   "Vérifiez le code ou créez une fiche manuelle.",
+    if utilisateur is None and token and agent is not None:
+        # QR dynamique (30 s, usage unique) : le circuit sûr. Un token déjà
+        # utilisé ou expiré est refusé, et le message le dit au guichet.
+        utilisateur, raison_dynamique = await _resoudre_qr_dynamique(
+            session, token, agent
         )
+        if utilisateur is not None:
+            correspondance = "qr_dynamique"
+
+    if utilisateur is None or utilisateur.est_supprime or not utilisateur.est_actif:
+        detail = (
+            "Aucun compte DigiID ne correspond à cette carte. "
+            "Vérifiez le code ou créez une fiche manuelle."
+        )
+        if raison_dynamique:
+            detail = f"{detail} ({raison_dynamique})"
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=detail)
 
     return schemas.ContactDigiIDResponse(
         utilisateur_id=utilisateur.id,
@@ -175,6 +203,29 @@ async def rechercher_contact(
 
 
 # ─── Profil logistique (dossier professionnel) ───────────────────────
+
+async def _resoudre_qr_dynamique(
+    session: AsyncSession, token: str, agent: Utilisateur
+) -> tuple[Utilisateur | None, str | None]:
+    """Valide un QR **dynamique** (30 s, usage unique) et rend le citoyen.
+
+    Le jeton vit dans Redis et n'accepte qu'un seul scan : c'est le circuit à
+    privilégier au guichet — un code photographié par un tiers est inutilisable.
+    Le second élément du couple est la raison d'un échec, formulée pour le
+    guichet (« QR Code expiré. Demandez à la personne de rafraîchir son code. »).
+
+    Redis indisponible ne doit pas bloquer le guichet : on renvoie alors
+    simplement « pas de correspondance » et la saisie manuelle prend le relais.
+    """
+    try:
+        resultat = await verifier_qr_code(session, token, agent)
+    except Exception as erreur:  # noqa: BLE001 — le guichet ne doit jamais rester bloqué
+        journal.warning(f"QR dynamique non vérifiable ({token[:8]}…) : {erreur}")
+        return None, None
+    if resultat.get("succes") and resultat.get("citoyen") is not None:
+        return resultat["citoyen"], None
+    return None, resultat.get("message")
+
 
 def _champs_manquants(profil: ProfilLogistique) -> list[str]:
     """Liste des éléments encore à fournir/valider (pilotage du terrain)."""

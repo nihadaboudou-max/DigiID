@@ -387,6 +387,18 @@ export function EnregistrementColis({
               description={t("colis.destinataire.desc")}
             >
               <div className="space-y-4">
+                {/* Le destinataire peut aussi présenter son code : même geste
+                    rapide que pour l'expéditeur, mêmes SMS fiables. */}
+                <RechercheCarteDigiID
+                  libelle="DigiID du destinataire (facultatif)"
+                  titre="Le destinataire a une carte DigiID ?"
+                  description="Scannez son QR dynamique (ou saisissez son DigiID) : le nom et le téléphone ci-dessous se remplissent automatiquement."
+                  surSelection={(contact) => {
+                    if (!contact) return;
+                    setDestinataireNom(contact.nom_complet);
+                    if (contact.telephone) setDestinataireTel(contact.telephone);
+                  }}
+                />
                 <ChampSaisie
                   libelle="Nom du destinataire"
                   required

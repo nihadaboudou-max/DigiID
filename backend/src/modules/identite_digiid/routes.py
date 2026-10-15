@@ -85,11 +85,12 @@ async def rechercher_contact_guichet(
 ):
     """Le client présente sa carte → la fiche colis/passager se pré-remplit.
 
-    Accepte le DigiID public **ou** l'URL complète du QR scannée. La réponse se
-    limite à nom / téléphone / ville / adresse : le guichet n'accède à rien
-    d'autre.
+    Accepte, par ordre de sécurité : le **QR dynamique** du citoyen (30 s, usage
+    unique), l'URL du QR durable de sa carte, ou son **DigiID public** tapé à la
+    main. La réponse se limite à nom / téléphone / ville / adresse : le guichet
+    n'accède à rien d'autre.
     """
-    return await service.rechercher_contact(session, donnees)
+    return await service.rechercher_contact(session, donnees, agent=utilisateur_courant)
 
 
 # ─── Profil logistique (dossier professionnel) ───────────────────────

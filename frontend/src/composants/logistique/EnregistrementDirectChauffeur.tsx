@@ -296,6 +296,19 @@ export function EnregistrementDirectChauffeur({
                 </select>
               </div>
             </div>
+            {/* Le proche du passager se remplit de la même façon : scan du QR
+                dynamique, ou saisie du code s'il n'a pas d'écran. */}
+            <RechercheCarteDigiID
+              libelle="DigiID du proche (facultatif)"
+              titre="Le proche à prévenir a une carte DigiID ?"
+              description="Scannez son QR dynamique (ou saisissez son DigiID) : son nom et son téléphone se remplissent automatiquement."
+              surSelection={(contact) => {
+                if (!contact) return;
+                setProcheNom(contact.nom_complet);
+                if (contact.telephone) setProcheTelephone(contact.telephone);
+              }}
+            />
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <ChampSaisie
                 libelle="Proche de confiance (nom)"

@@ -37,7 +37,13 @@ export interface ContactDigiID {
   ville: string | null;
   adresse: string | null;
   role: string;
-  correspondance: "digiid" | "qr";
+  /**
+   * Origine du code présenté au guichet :
+   * - `digiid` : identifiant public saisi à la main (repli) ;
+   * - `qr` : QR durable de la carte citoyenne ;
+   * - `qr_dynamique` : QR temporaire de 30 s, à usage unique (le plus sûr).
+   */
+  correspondance: "digiid" | "qr" | "qr_dynamique";
 }
 
 // ─── Profil logistique (dossier professionnel) ───────────────────────
