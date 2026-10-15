@@ -35,6 +35,8 @@ export function PiedDePage() {
           </h4>
           <ul className="space-y-2.5 text-sm">
             <li><Link href="/" className="text-white/80 hover:text-ocre transition-colors">Accueil</Link></li>
+            <li><Link href="/suivi" className="text-white/80 hover:text-ocre transition-colors">Suivre un envoi</Link></li>
+            <li><Link href="/horaires" className="text-white/80 hover:text-ocre transition-colors">Horaires des départs</Link></li>
             <li><Link href="/inscription" className="text-white/80 hover:text-ocre transition-colors">Inscription</Link></li>
             <li><Link href="/connexion" className="text-white/80 hover:text-ocre transition-colors">Connexion</Link></li>
             <li><Link href="/aide" className="text-white/80 hover:text-ocre transition-colors">Centre d'aide</Link></li>

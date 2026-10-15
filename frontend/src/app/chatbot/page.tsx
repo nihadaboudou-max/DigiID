@@ -25,13 +25,33 @@ import { ErreurAPI } from "@/services/client_api";
 export default function PageChatbot() {
   return (
     <EnvelopperEspaceProtege rolesAutorises={[      
+      // Citoyens et agents
       "citoyen", "agent_police", "chef_police", "agent_medical", "chef_medical", 
       "agent_ong", "chef_ong", "agent_terrain", "chef_agent", "admin_domaine", 
-      "administrateur", "super_administrateur"]}>
+      "administrateur", "super_administrateur", "super_admin",
+      // Pivot logistique : le guichet, le chauffeur et le commerçant sont en
+      // première ligne face aux clients — ils ont le plus besoin de l'assistant.
+      "receveur", "gerant_gare", "chauffeur", "commercant"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );
 }
+
+/**
+ * Questions prêtes à cliquer : elles couvrent le parcours du pivot
+ * (colis, passagers, cars, guichet, chauffeur) — l'utilisateur pressé obtient
+ * une réponse en un geste au lieu de rédiger sa question.
+ */
+const SUGGESTIONS = [
+  "Comment enregistrer un colis au guichet ?",
+  "Le client n'a pas de compte DigiID, comment je remplis sa fiche ?",
+  "Pourquoi scanner le QR du client plutôt que taper son code ?",
+  "Le QR est refusé, que faire ?",
+  "Comment marquer un colis livré ?",
+  "Je suis chauffeur : comment récupérer mon car ?",
+  "Comment prévenir le parent d'un enfant qui voyage seul ?",
+  "Combien ai-je encaissé aujourd'hui ?",
+] as const;
 
 function Contenu() {
   const { utilisateur } = useAuthentification();
@@ -107,10 +127,14 @@ function Contenu() {
     }
   }
 
-  // --- Envoyer un message ---
+  // --- Envoyer un message (formulaire ou question suggérée) ---
   async function gererEnvoi(evt: React.FormEvent) {
     evt.preventDefault();
-    const texte = saisie.trim();
+    await envoyerTexte(saisie);
+  }
+
+  async function envoyerTexte(texteBrut: string) {
+    const texte = texteBrut.trim();
     if (!texte || envoiEnCours || !actuelle) return;
 
     // Si pas de conversation ouverte, en créer une d'abord
@@ -245,9 +269,29 @@ function Contenu() {
                 {/* Messages */}
                 <div className="flex-grow overflow-y-auto p-6 space-y-4 bg-white max-h-[500px]">
                   {actuelle.messages.length === 0 ? (
-                    <Alerte variante="info">
-                      Conversation vide. Pose ta première question — l'assistant te répondra.
-                    </Alerte>
+                    <div className="space-y-4">
+                      <Alerte variante="info">
+                        Conversation vide. Pose ta première question — l&apos;assistant te répondra.
+                      </Alerte>
+                      <div>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ardoise-clair">
+                          Questions fréquentes (logistique)
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {SUGGESTIONS.map((suggestion) => (
+                            <button
+                              key={suggestion}
+                              type="button"
+                              disabled={envoiEnCours}
+                              onClick={() => void envoyerTexte(suggestion)}
+                              className="rounded-full border border-lagune/20 bg-lagune/5 px-3 py-1.5 text-left text-xs font-medium text-lagune transition-colors hover:bg-lagune/10 disabled:opacity-50"
+                            >
+                              {suggestion}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   ) : (
                     actuelle.messages.map((m) => (
                       <Bulle key={m.id} message={m} prenom={utilisateur?.prenom} />

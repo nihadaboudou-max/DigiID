@@ -35,6 +35,42 @@ TAILLE_MEMOIRE_MESSAGES = 10
 LIMITE_CARACTERES_PAR_DOC = 2000
 
 
+# Connaissances « pivot logistique » du prototype : le guichet, le chauffeur, le
+# commerçant et le gérant de gare doivent obtenir la même réponse partout.
+# Ce bloc est volontairement factuel : il décrit ce que l'application fait
+# réellement aujourd'hui (règles serveur), pas une promesse de roadmap.
+CONNAISSANCES_LOGISTIQUE = (
+    "\n\n--- LOGISTIQUE DIGIID (transport routier) ---\n"
+    "DigiID organise l'envoi de colis et le voyage des passagers entre deux gares :\n"
+    "- Roles : 'receveur' (guichet), 'gerant_gare' (guichet + planification + "
+    "referentiel de sa gare), 'chauffeur' (independant), 'commercant' (envoie des "
+    "colis depuis sa boutique), super-administrateur (referentiel reseau).\n"
+    "- Le client n'a pas besoin de compte : son nom et son telephone suffisent. "
+    "S'il a un compte DigiID, il presente son QR CODE DYNAMIQUE (valable 30 "
+    "secondes, a usage unique) : le formulaire se pre-remplit tout seul. Un code "
+    "deja scanne ou expire est refuse : il faut en generer un nouveau. Le DigiID "
+    "public (12 caracteres) peut aussi etre saisi a la main, mais c'est plus lent.\n"
+    "- Colis : enregistrement au guichet ou en route par le chauffeur, ticket avec "
+    "un code de suivi. Le destinataire suit l'envoi sur la page publique /suivi "
+    "avec ce code, sans compte et sans voir de donnees personnelles.\n"
+    "- Passagers : billet avec code de suivi. Pour un ENFANT qui voyage seul, le "
+    "guichet enregistre un proche de confiance : il recoit un SMS au depart, a "
+    "l'approche et a l'arrivee.\n"
+    "- Un car appartient a UN chauffeur : il est affecte par le guichet ou le "
+    "gerant de gare, ou revendique par le chauffeur quand la plaque est libre au "
+    "referentiel. Un chauffeur ne voit que ses cars et ne peut pas planifier un "
+    "depart avec le car d'un collegue (refus cote serveur).\n"
+    "- Le chauffeur planifie ses departs, valide le depart et l'arrivee de tout ce "
+    "qui est a bord, scanne les codes, et suit sa cagnotte du jour.\n"
+    "- Le guichet encaisse les frais (cagnotte du guichet), scanne les codes de "
+    "ticket pour marquer une livraison (un second scan indique 'deja livre').\n"
+    "- Un depart deja parti ne se rejoint plus et ne se modifie plus.\n"
+    "- Toutes les actions sensibles (affectation d'un car, planification, "
+    "enregistrement) sont tracees dans le journal d'audit consultable par le "
+    "super-administrateur.\n"
+)
+
+
 def _construire_prompt_systeme(prenom: Optional[str], documents: list[tuple[str, str]]) -> str:
     """
     Construit le message système qui donne au LLM son rôle et son contexte.
@@ -52,6 +88,9 @@ def _construire_prompt_systeme(prenom: Optional[str], documents: list[tuple[str,
         "Tu ne donnes jamais d'informations sur d'autres utilisateurs. "
         "Si tu ne sais pas, tu le dis honnêtement."
     )
+
+    # Le contexte métier « pivot » : colis, passagers, cars, guichet, chauffeur.
+    base += CONNAISSANCES_LOGISTIQUE
 
     # Personnalisation par prénom si disponible
     if prenom:
