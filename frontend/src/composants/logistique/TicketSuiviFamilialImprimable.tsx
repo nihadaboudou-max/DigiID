@@ -126,7 +126,7 @@ export function TicketSuiviFamilialImprimable({
             <p className="text-[11px] text-ardoise-clair">
               Le nombre de sacs est vérifié à l&apos;arrivée (anti-fraude) — il
               n&apos;affecte pas le prix.
-            </p>
+            </p> 
           </div>
 
           {/* QR Code */}
