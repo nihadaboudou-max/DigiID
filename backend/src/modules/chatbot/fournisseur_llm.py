@@ -13,6 +13,11 @@ from src.noyau.exceptions import ErreurServiceIndisponible
 
 TIMEOUT_SECONDES = 400.0  # Plus long pour la vision
 
+# Le chatbot ne doit jamais faire patienter l'utilisateur : si le modèle n'est
+# pas joignable (Ollama arrêté, mauvaise URL), on échoue en quelques secondes —
+# le service bascule alors sur les réponses locales du guide (reponses_locales).
+TIMEOUT_CHAT = httpx.Timeout(connect=4.0, read=120.0, write=30.0, pool=5.0)
+
 # =============================================================================
 # 1. FONCTIONS POUR LE CHATBOT (TEXTE)
 # =============================================================================
@@ -46,7 +51,7 @@ async def _appeler_ollama(
 
     url = f"{parametres.ollama_url}/api/chat"
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT_SECONDES) as client:
+        async with httpx.AsyncClient(timeout=TIMEOUT_CHAT) as client:
             reponse = await client.post(
                 url,
                 json={
@@ -76,7 +81,7 @@ async def _appeler_groq(
     messages.append({"role": "user", "content": question_utilisateur})
 
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT_SECONDES) as client:
+        async with httpx.AsyncClient(timeout=TIMEOUT_CHAT) as client:
             reponse = await client.post(
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {parametres.groq_api_key}"},

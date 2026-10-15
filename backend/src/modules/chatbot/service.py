@@ -20,6 +20,7 @@ from sqlalchemy.orm import selectinload
 
 from src.modeles import Conversation, Message, Utilisateur
 from src.modules.chatbot.fournisseur_llm import appeler_llm
+from src.modules.chatbot.reponses_locales import repondre_localement
 from src.modules.documents.service import obtenir_textes_documents
 from src.modules.gamification import service_badges, service_tracking
 from src.noyau import journal
@@ -219,13 +220,20 @@ async def envoyer_message(
     # 6. Construire le prompt système avec les docs en contexte
     prompt_systeme = _construire_prompt_systeme(prenom=prenom, documents=documents)
 
-    # 7. Appeler le LLM
+    # 7. Appeler le LLM — et si l'IA n'est pas joignable, répondre quand même.
+    #    Le guide local (colis, passagers, cars, QR dynamique, score, données)
+    #    prend le relais : une question posée doit TOUJOURS obtenir une réponse.
     journal.info(f"Appel LLM : utilisateur={utilisateur.id} historique={len(historique_pour_llm)} docs={len(documents)}")
-    contenu_reponse = await appeler_llm(
-        prompt_systeme=prompt_systeme,
-        messages_historique=historique_pour_llm,
-        question_utilisateur=contenu_utilisateur,
-    )
+    try:
+        contenu_reponse = await appeler_llm(
+            prompt_systeme=prompt_systeme,
+            messages_historique=historique_pour_llm,
+            question_utilisateur=contenu_utilisateur,
+        )
+    except Exception as erreur:  # noqa: BLE001 — le chatbot ne doit jamais renvoyer une erreur
+        role = getattr(utilisateur.role, "value", utilisateur.role)
+        journal.warning(f"LLM indisponible ({erreur}) — réponse du guide local")
+        contenu_reponse, _ = repondre_localement(contenu_utilisateur, role=role)
 
     # 8. Enregistrer la réponse de l'assistant
     message_assistant = Message(
