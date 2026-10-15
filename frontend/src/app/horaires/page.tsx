@@ -171,8 +171,30 @@ export default function PageHorairesPublics() {
     router.push(`/suivi/${encodeURIComponent(code)}`);
   };
 
+  /**
+   * Ce que le guide vocal lit à l'ouverture : les trois prochains départs.
+   * C'est la question que se pose un voyageur — et il n'a rien à lire.
+   */
+  const annonceVocale = useMemo(() => {
+    if (chargement) return "Chargement des horaires des cars.";
+    if (affiches.length === 0) {
+      return "Aucun départ annoncé pour le moment. Touchez 7 prochains jours pour en voir davantage.";
+    }
+    const prochains = affiches.slice(0, 3).map((horaire) => {
+      const heure = heureSeule(horaire.date_depart);
+      const depart = horaire.gare_depart ?? "la gare de départ";
+      return `${horaire.trajet ?? "Trajet"}, départ à ${heure} de ${depart}`;
+    });
+    const nombre = `${affiches.length} départ${affiches.length > 1 ? "s" : ""} affiché${affiches.length > 1 ? "s" : ""}`;
+    return `Horaires des cars. ${nombre}. ${prochains.join(". ")}.`;
+  }, [chargement, affiches]);
+
   return (
-    <div className="min-h-screen bg-sable-clair px-4 py-8">
+    <div
+      className="min-h-screen bg-sable-clair px-4 py-8"
+      data-vocal-zone
+      data-vocal-annonce={erreur ? `Attention. ${erreur}` : annonceVocale}
+    >
       <div className="mx-auto max-w-3xl space-y-6 apparition">
         {/* En-tête public */}
         <header className="text-center">

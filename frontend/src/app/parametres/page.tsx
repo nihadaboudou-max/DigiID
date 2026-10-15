@@ -14,6 +14,7 @@ import { Alerte } from "@/composants/commun/Alerte";
 import { Gestion2FA } from "@/composants/commun/Gestion2FA";
 import { SelecteurLangue } from "@/composants/accessibilite/SelecteurLangue";
 import { BoutonMuet } from "@/composants/accessibilite/BoutonMuet";
+import { ReglagesVoix } from "@/composants/accessibilite/ReglagesVoix";
 import {
   IconeCle, IconeBouclier, IconeLangue, IconeJournal, IconeEnvoyer, IconeUtilisateur
 } from "@/composants/commun/Icones";
@@ -212,6 +213,11 @@ function Contenu() {
         <div className="mt-4 pt-3 border-t border-ardoise-clair/10 flex items-center justify-between gap-3">
           <p className="text-xs text-ardoise-clair">Voix de l'application (guidage parlé)</p>
           <BoutonMuet />
+        </div>
+
+        {/* Réglages de la voix : voix utilisée, test, débit, guide parlé */}
+        <div className="mt-4 pt-4 border-t border-ardoise-clair/10">
+          <ReglagesVoix />
         </div>
       </Carte>
 

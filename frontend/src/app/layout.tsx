@@ -11,6 +11,7 @@ import { FournisseurLangue } from "@/i18n/useLangue";
 import { FournisseurAuthentification } from "@/contextes/authentification";
 import { FournisseurNotifications } from "@/contextes/notifications";
 import { ConteneurLayout } from "@/composants/layouts/ConteneurLayout";
+import { GuideVocal } from "@/composants/accessibilite/GuideVocal";
 
 // Polices Poppins hébergées localement
 const poppins = localFont({
@@ -45,6 +46,8 @@ export default function LayoutRacine({
           <FournisseurAuthentification>
             <FournisseurNotifications>
               <ConteneurLayout>{children}</ConteneurLayout>
+              {/* Guide vocal : présent sur TOUTES les pages, publiques comprises. */}
+              <GuideVocal />
             </FournisseurNotifications>
           </FournisseurAuthentification>
         </FournisseurLangue>

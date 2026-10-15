@@ -15,7 +15,7 @@
 import type { ButtonHTMLAttributes, MouseEvent, FocusEvent, ReactNode } from "react";
 
 import { Bouton } from "@/composants/commun/Bouton";
-import { useVoix } from "@/i18n/useLangue";
+import { useLangue } from "@/i18n/useLangue";
 
 type Quand = "avant" | "apres" | "sur-clic";
 
@@ -49,10 +49,17 @@ export function BoutonVocal({
   children,
   ...reste
 }: ProprietesBoutonVocal) {
-  const { jouer } = useVoix();
+  const { jouer, t } = useLangue();
+
+  // Un bouton vocal doit se faire entendre même sans audio enregistré : à
+  // défaut de clé, on lit le libellé affiché (guide vocal français, S5).
+  const texteEnfant = typeof children === "string" ? children : undefined;
+  const libelleParlable = texteAudio ?? (cleAudio ? t(cleAudio) : texteEnfant);
 
   function annoncer() {
-    if (cleAudio) jouer(cleAudio, texteAudio);
+    if (!libelleParlable) return;
+    // `jouer` cherche un .mp3 pour la clé ; sans clé connue, la voix lit le texte.
+    jouer(cleAudio ?? "(texte)", libelleParlable);
   }
 
   function gererClic(evenement: MouseEvent<HTMLButtonElement>) {
@@ -67,7 +74,7 @@ export function BoutonVocal({
   }
 
   return (
-    <Bouton onClick={gererClic} onFocus={gererFocus} {...reste}>
+    <Bouton data-vocal={libelleParlable} onClick={gererClic} onFocus={gererFocus} {...reste}>
       {children}
     </Bouton>
   );

@@ -51,7 +51,11 @@ export default function PageSuivi() {
   }
 
   return (
-    <main className="flex-grow">
+    <main
+      className="flex-grow"
+      data-vocal-zone
+      data-vocal-annonce="Vous êtes sur le suivi public. Entrez le code écrit sur le ticket, puis touchez Rechercher. Je vous dirai ensuite où se trouve l'envoi, étape par étape."
+    >
       <section className="bg-gradient-to-b from-sable-clair to-white py-16">
         <div className="mx-auto max-w-3xl px-6 text-center apparition">
           <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-ocre">

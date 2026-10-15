@@ -95,8 +95,35 @@ export default function PageSuiviPublic() {
     void charger();
   }, [charger]);
 
+  /**
+   * Phrase que le guide vocal lit à voix haute dès l'ouverture de la page :
+   * c'est l'information qui rassure la famille (« il est arrivé »), sans avoir
+   * à lire quoi que ce soit.
+   */
+  const annonceVocale = suivi
+    ? [
+        suivi.type === "enfant"
+          ? `Suivi de l'enfant ${suivi.enfant?.enfant_nom ?? ""}`.trim()
+          : `Suivi du colis de ${suivi.colis?.destinataire_nom ?? ""}`.trim(),
+        `État actuel : ${LIBELLES_STATUT[suivi.statut] ?? suivi.statut}.`,
+        suivi.gare_depart_nom
+          ? `Départ de ${suivi.gare_depart_nom}, arrivée à ${
+              suivi.gare_arrivee_nom ?? "la gare d'arrivée"
+            }.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : erreur
+      ? `Attention. ${erreur}`
+      : undefined;
+
   return (
-    <div className="min-h-screen bg-sable-clair px-4 py-8">
+    <div
+      className="min-h-screen bg-sable-clair px-4 py-8"
+      data-vocal-zone
+      data-vocal-annonce={annonceVocale}
+    >
       <div className="mx-auto max-w-2xl space-y-6 apparition">
         {/* En-tête */}
         <header className="text-center">

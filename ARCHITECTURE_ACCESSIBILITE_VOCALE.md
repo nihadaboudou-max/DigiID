@@ -310,4 +310,74 @@ Réutilise `Tableau`, `Modal`, patterns super-admin existants.
 
 ---
 
-*Fin du document. Aucun code écrit : en attente de validation.*
+## 10. État d'implémentation — guide vocal **global** (fait)
+
+> Le principe retenu : **ce n'est pas à chaque page d'être parlante, c'est à
+> l'application entière de l'être.** Le guide est monté **une seule fois** dans le
+> layout racine (`app/layout.tsx`), donc présent sur **toutes** les pages,
+> publiques comprises (suivi d'un colis, horaires, connexion, espaces internes).
+
+### 10.1 Fichiers
+
+| Fichier | Rôle |
+|---------|------|
+| `i18n/gestionnaire_audio.ts` | moteur : file d'attente, `franciser()`, découpage, vitesse, préférences (`muet`, `vitesse`) |
+| `i18n/guide_vocal.ts` | lecture d'écran (`composerScriptPage`), mode guidé, annonce des notifications |
+| `composants/accessibilite/GuideVocal.tsx` | commande flottante : « Écouter cette page », « Guide », « Lentement » |
+| `composants/accessibilite/ReglagesVoix.tsx` | Paramètres : voix utilisée, test, débit, guide |
+| `composants/accessibilite/BoutonVocal.tsx` | bouton parlant, même **sans** clé audio (lit son libellé) |
+
+### 10.2 Les trois commandes, accessibles partout
+
+1. **🔊 Écouter cette page** — lit, dans l'ordre : le titre de l'écran, l'annonce
+   de la page, les messages affichés, les champs à remplir, les actions à toucher.
+   Aucune annotation n'est nécessaire : la page est analysée (`h1`, `[role=alert]`,
+   `input/select/textarea`, `button`/`a[href]`).
+2. **🧑‍🏫 Guide** — mode guidé persistant : à chaque écran, la voix dit quoi faire ;
+   chaque bouton, lien ou champ touché est nommé à voix haute.
+3. **🐢 Lentement** — débit 0,75× pour les personnes âgées.
+
+Le mode guidé se **désactive** et s'interrompt avec `Échap`.
+
+### 10.3 Le français d'abord
+
+- Toutes les phrases du guide sont écrites **en français clair, à l'impératif**,
+  et vivent dans `fr.json` (une clé de traduction = une phrase parlable).
+- `franciser()` prépare le texte pour la voix : emojis retirés, `#` → *dièse*,
+  `n°` → *numéro*, `FCFA` → *francs CFA*, sigles épelés (`QR` → *Q R*),
+  chemins d'écran remplacés (« l'écran indiqué »), `départ/arrivée` → « départ
+  ou arrivée ».
+- `AUDIOS_ENREGISTRES = false` (aucun `.mp3` déposé) : en **français**, la voix
+  démarre **directement** en synthèse vocale — plus rapide, et aucun 404.
+- Les lectures longues sont **découpées** en morceaux (< 180 caractères), sinon
+  les navigateurs coupent la parole.
+- Les **notifications** (succès / avertissement / erreur) sont annoncées :
+  « C'est fait. … », « Attention. … ». Un résultat d'action ne reste jamais
+  uniquement à l'écran.
+
+### 10.4 Annotations disponibles pour les pages
+
+| Attribut | Effet |
+|----------|-------|
+| `data-vocal-zone` | délimite la zone à raconter (pages sans `<main>`) |
+| `data-vocal-annonce` | phrase d'introduction propre à l'écran (ex. suivi d'un colis : « État actuel : en route ») |
+| `data-vocal-texte` | phrase d'explication lue en fin de script |
+| `data-vocal` | libellé parlé d'un bouton (`<BoutonVocal>`) |
+| `data-vocal-ignorer` | zone jamais lue (décor, commande vocale elle-même) |
+
+Pages déjà annotées : suivi public, suivi d'un colis (annonce du **statut**),
+connexion, horaires (les **trois prochains départs** sont énoncés), aide
+(la réponse est lue à l'ouverture), assistant colis (une phrase par étape) et
+scan de ticket (résultat et alerte « déjà livré » annoncés).
+
+### 10.5 Ce qui reste (S5, phase « voix humaine »)
+
+- Enregistrer les `.mp3` (`public/audios/{fr,fon,dendi,bariba}/`), puis passer
+  `AUDIOS_ENREGISTRES` et `ACTIVER_PREACHARGEMENT_AUDIO` à `true`.
+- §3.7 « assistant pas-à-pas » avec **mise en évidence de la zone à toucher** :
+  le guidage parlé est en place, le surlignage visuel ne l'est pas encore.
+- Modules backend `i18n` / *studio vocal* (§5) : à faire.
+
+---
+
+*Fin du document.*

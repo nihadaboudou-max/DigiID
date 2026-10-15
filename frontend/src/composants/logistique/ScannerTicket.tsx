@@ -18,6 +18,7 @@ import { Carte } from "@/composants/commun/Carte";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { IconeCheck, IconeScan } from "@/composants/commun/Icones";
 import { BoutonVocal } from "@/composants/accessibilite/BoutonVocal";
+import { annoncerNotification } from "@/i18n/guide_vocal";
 import { useLangue } from "@/i18n/useLangue";
 import { useAuthentification } from "@/contextes/authentification";
 import { ErreurAPI } from "@/services/client_api";
@@ -77,7 +78,7 @@ export function ScannerTicket({
   voyageId = null,
 }: Proprietes) {
   const { utilisateur } = useAuthentification();
-  const { t, jouer } = useLangue();
+  const { t } = useLangue();
 
   const [code, setCode] = useState(tokenInitial ?? "");
   const [typeEvenement, setTypeEvenement] = useState<TypeEvenementScan>(typeParDefaut);
@@ -91,6 +92,11 @@ export function ScannerTicket({
   const [cameraEnDemarrage, setCameraEnDemarrage] = useState(false);
   const [erreurCamera, setErreurCamera] = useState<string | null>(null);
   const refScanner = useRef<Html5Qrcode | null>(null);
+
+  /** Libellé parlable de l'action sélectionnée (annonce du guide vocal). */
+  const optionCourante =
+    OPTIONS_TYPE.find((option) => option.valeur === typeEvenement)?.libelle ??
+    "Remise au destinataire";
 
   // Gare de rattachement (contexte du scan)
   useEffect(() => {
@@ -119,6 +125,10 @@ export function ScannerTicket({
     const cible = analyserEntreeScan(entreeBrute);
     if (!cible.token && !cible.code_clair) {
       setErreur("Scannez ou saisissez d'abord le numéro du colis.");
+      annoncerNotification(
+        "Scannez ou saisissez d'abord le numéro du colis.",
+        "erreur",
+      );
       return;
     }
     setErreur(null);
@@ -134,16 +144,21 @@ export function ScannerTicket({
       });
       setResultat(reponse);
       setCode("");
-      // Alerte parlée anti-fraude : « DÉJÀ LIVRÉ » est annoncé à voix haute.
-      if (reponse.deja_livre) {
-        jouer("scan.deja_livre", t("scan.deja_livre"));
-      }
+      // Le résultat du scan est **toujours annoncé** : l'agent du guichet peut
+      // garder les yeux sur le colis, et l'alerte anti-fraude « DÉJÀ LIVRÉ »
+      // ne peut pas passer inaperçue. (Si des .mp3 sont enregistrés plus tard
+      // pour `scan.deja_livre`, `jouer` les prendra en charge.)
+      annoncerNotification(
+        reponse.message,
+        reponse.deja_livre ? "erreur" : reponse.deja_scanne ? "avertissement" : "succes",
+      );
     } catch (e) {
-      setErreur(
+      const message =
         e instanceof ErreurAPI
           ? e.message_utilisateur
-          : "Échec du scan. Vérifiez le numéro puis réessayez.",
-      );
+          : "Échec du scan. Vérifiez le numéro puis réessayez.";
+      setErreur(message);
+      annoncerNotification(message, "erreur");
     } finally {
       setEnCours(false);
     }
@@ -202,7 +217,17 @@ export function ScannerTicket({
   }
 
   return (
-    <div className="space-y-5">
+    <div
+      className="space-y-5"
+      data-vocal-zone
+      data-vocal-annonce={
+        erreur
+          ? `Attention. ${erreur}`
+          : `Scanner un colis. Action choisie : ${optionCourante}. ${
+              gareContexte ? `Scan rattaché à la gare ${gareContexte.nom}.` : ""
+            } Scannez le Q R du ticket, ou tapez son numéro, puis touchez Valider le scan.`
+      }
+    >
       <Carte
         titre={t("scan.carte_titre")}
         description={t("scan.carte_desc")}

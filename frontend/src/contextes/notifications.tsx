@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { annoncerNotification } from "@/i18n/guide_vocal";
+
 type VarianteNotification = "info" | "succes" | "avertissement" | "erreur";
 
 interface Notification {
@@ -43,6 +45,9 @@ export function FournisseurNotifications({ children }: { children: ReactNode }) 
     (message: string, variante: VarianteNotification = "info") => {
       const id = `n-${Date.now()}-${Math.random()}`;
       setItems((liste) => [...liste, { id, message, variante }]);
+      // Un utilisateur qui ne lit pas doit entendre le résultat de son action :
+      // la notification est donc aussi annoncée à voix haute (français, S5).
+      annoncerNotification(message, variante);
       setTimeout(() => {
         setItems((liste) => liste.filter((n) => n.id !== id));
       }, DUREE_AFFICHAGE_MS);

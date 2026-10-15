@@ -16,7 +16,7 @@
  *
  * À l'enregistrement, le backend génère le ticket (numéro en clair + QR durable).
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Alerte } from "@/composants/commun/Alerte";
 import { Bouton } from "@/composants/commun/Bouton";
@@ -25,7 +25,7 @@ import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { IconeCheck, IconeColis, IconeTicket } from "@/composants/commun/Icones";
 import { BoutonVocal } from "@/composants/accessibilite/BoutonVocal";
 import { PaiementColis } from "@/composants/paiement/PaiementColis";
-import { useLangue } from "@/i18n/useLangue";
+import { useLangue, useVoix } from "@/i18n/useLangue";
 import { useAuthentification } from "@/contextes/authentification";
 import { ErreurAPI } from "@/services/client_api";
 import {
@@ -52,6 +52,18 @@ const ETAPES: { numero: Etape; cleTitre: string }[] = [
   { numero: 4, cleTitre: "colis.etape.recap" },
 ];
 
+/**
+ * Ce que le guide vocal dit à chaque étape (clés de traduction = phrases
+ * parlables). L'agent du guichet travaille les mains occupées : il doit
+ * pouvoir être guidé sans lire l'écran.
+ */
+const VOCAL_ETAPE: Record<Etape, string> = {
+  1: "colis.vocal.expediteur",
+  2: "colis.vocal.destinataire",
+  3: "colis.vocal.details",
+  4: "colis.vocal.recap",
+};
+
 export function EnregistrementColis({
   digiidInitial,
   voyageImposeId,
@@ -75,6 +87,7 @@ export function EnregistrementColis({
 } = {}) {
   const { utilisateur } = useAuthentification();
   const { t } = useLangue();
+  const { guide, lireTexte } = useVoix();
 
   // Référentiel
   const [gares, setGares] = useState<Gare[]>([]);
@@ -109,6 +122,29 @@ export function EnregistrementColis({
   const [erreur, setErreur] = useState<string | null>(null);
   const [enregistrement, setEnregistrement] = useState(false);
   const [resultat, setResultat] = useState<ColisEnregistre | null>(null);
+
+  // ─── Guidage vocal de l'assistant (S5) ─────────────────────────────
+
+  /**
+   * Au **changement d'étape** seulement : à l'ouverture de l'écran, le guide
+   * global a déjà raconté la page ; ici on dit quoi faire maintenant.
+   */
+  const premierRendu = useRef(true);
+  useEffect(() => {
+    if (premierRendu.current) {
+      premierRendu.current = false;
+      return;
+    }
+    if (!guide) return;
+    const minuterie = window.setTimeout(() => lireTexte(t(VOCAL_ETAPE[etape])), 250);
+    return () => window.clearTimeout(minuterie);
+  }, [etape, guide, lireTexte, t]);
+
+  /** Le ticket vient d'être créé : c'est LE moment important pour l'agent. */
+  useEffect(() => {
+    if (!resultat || !guide) return;
+    lireTexte(t("colis.vocal.succes"));
+  }, [resultat, guide, lireTexte, t]);
 
   // ─── Chargement du référentiel ─────────────────────────────────────
   useEffect(() => {
@@ -256,7 +292,11 @@ export function EnregistrementColis({
   // ─── Écran de succès : ticket imprimable ───────────────────────────
   if (resultat) {
     return (
-      <div className="space-y-5 apparition">
+      <div
+        className="space-y-5 apparition"
+        data-vocal-zone
+        data-vocal-annonce={t("colis.vocal.succes")}
+      >
         <Alerte variante="succes" titre={t("colis.succes.titre")}>
           {t("colis.succes.desc")}
         </Alerte>
@@ -286,7 +326,7 @@ export function EnregistrementColis({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" data-vocal-zone data-vocal-annonce={t(VOCAL_ETAPE[etape])}>
       {/* Fil des étapes */}
       <ol className="flex items-center gap-2 text-sm">
         {ETAPES.map((e, i) => {

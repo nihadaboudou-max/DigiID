@@ -17,6 +17,7 @@ import Link from "next/link";
 import { Carte } from "@/composants/commun/Carte";
 import { ChampRecherche } from "@/composants/commun/ChampRecherche";
 import { useAuthentification } from "@/contextes/authentification";
+import { useVoix } from "@/i18n/useLangue";
 import {
   CONTENUS_AIDE,
   LIBELLES_PROFIL,
@@ -26,6 +27,7 @@ import {
 
 export default function PageAide() {
   const { utilisateur } = useAuthentification();
+  const { lireTexte } = useVoix();
   const [profilForce, setProfilForce] = useState<ProfilAide | null>(null);
   const [recherche, setRecherche] = useState("");
   const [ouverte, setOuverte] = useState<string | null>(null);
@@ -50,7 +52,11 @@ export default function PageAide() {
   }, [contenu, recherche]);
 
   return (
-    <main className="flex-grow">
+    <div
+      className="flex-grow"
+      data-vocal-zone
+      data-vocal-annonce={`Aide pour : ${LIBELLES_PROFIL[profil]}. ${contenu.resume} Touchez une question : je lis la réponse à voix haute.`}
+    >
       <section className="bg-gradient-to-b from-sable-clair to-white py-14">
         <div className="mx-auto max-w-3xl px-6 text-center apparition">
           <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-ocre">
@@ -107,7 +113,19 @@ export default function PageAide() {
                   <Carte key={item.question} className="!p-0">
                     <button
                       type="button"
-                      onClick={() => setOuverte(estOuverte ? null : item.question)}
+                      onClick={() => {
+                        const ouvre = !estOuverte;
+                        setOuverte(ouvre ? item.question : null);
+                        // La réponse est lue à voix haute : l'essentiel de l'aide
+                        // est ainsi accessible sans savoir lire.
+                        if (ouvre) {
+                          lireTexte(
+                            item.lien
+                              ? `${item.reponse} Touchez ${item.lien.libelle} pour y aller.`
+                              : item.reponse,
+                          );
+                        }
+                      }}
                       className="flex w-full items-start justify-between gap-4 rounded-2xl p-5 text-left transition-colors hover:bg-sable-clair"
                     >
                       <span className="font-semibold text-lagune">{item.question}</span>
@@ -201,6 +219,6 @@ export default function PageAide() {
           )}
         </div>
       </section>
-    </main>
+    </div>
   );
 }

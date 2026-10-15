@@ -29,6 +29,12 @@ import fon from "./fon.json";
 import dendi from "./dendi.json";
 import bariba from "./bariba.json";
 import { CLE_MUET, gestionnaireAudio } from "./gestionnaire_audio";
+import {
+  definirGuide,
+  lireGuideEnregistre,
+  lirePage,
+  surChangementGuide,
+} from "./guide_vocal";
 import { ACTIVER_PREACHARGEMENT_AUDIO } from "./config";
 import {
   CLE_LANGUE,
@@ -63,6 +69,16 @@ interface ContexteLangueValeur {
   /** Joue l'audio d'une clé (texte de repli = traduction).
    *  `langueForcee` permet de pré-écouter une langue avant de l'avoir choisie. */
   jouer: (cle: string, textePersonnalise?: string, langueForcee?: Langue) => void;
+  /** Lit un texte libre en français (guide vocal, message important). */
+  lireTexte: (texte: string) => boolean;
+  /** Lit l'écran courant : titre, messages, champs, actions à toucher. */
+  lireEcran: () => boolean;
+  /** Mode guidé : la voix explique chaque écran et chaque toucher. */
+  guide: boolean;
+  basculerGuide: () => void;
+  /** Débit de la voix (0,6 lent → 1,3 rapide). */
+  vitesse: number;
+  definirVitesse: (valeur: number) => void;
   /** Arrête tout son en cours. */
   arreter: () => void;
   /** Son coupé ? */
@@ -89,17 +105,25 @@ function interpoler(texte: string, parametres?: ParametresTraduction): string {
 export function FournisseurLangue({ children }: { children: ReactNode }) {
   const [langue, setLangue] = useState<Langue>(LANGUE_PAR_DEFAUT);
   const [muet, setMuet] = useState(false);
+  const [guide, setGuide] = useState(false);
+  const [vitesse, setVitesse] = useState(0.92);
   const monte = useRef(false);
 
-  // Restaure la langue et la préférence « muet » au premier rendu client.
+  // Restaure la langue et les préférences vocales au premier rendu client.
   useEffect(() => {
     monte.current = true;
     const memoLangue = window.localStorage.getItem(CLE_LANGUE);
     if (estLangue(memoLangue)) setLangue(memoLangue);
     setMuet(gestionnaireAudio.estMuet());
+    setGuide(lireGuideEnregistre());
+    setVitesse(gestionnaireAudio.vitesseActuelle());
 
     const desabonner = gestionnaireAudio.surChangementMuet(setMuet);
-    return desabonner;
+    const desabonnerGuide = surChangementGuide(setGuide);
+    return () => {
+      desabonner();
+      desabonnerGuide();
+    };
   }, []);
 
   // Applique `lang` sur <html> et persiste le choix.
@@ -132,6 +156,16 @@ export function FournisseurLangue({ children }: { children: ReactNode }) {
   );
 
   const arreter = useCallback(() => gestionnaireAudio.arreter(), []);
+
+  const lireTexte = useCallback((texte: string) => gestionnaireAudio.parler(texte), []);
+  const lireEcran = useCallback(() => lirePage(), []);
+  const basculerGuide = useCallback(() => {
+    definirGuide(!lireGuideEnregistre());
+  }, []);
+  const definirVitesse = useCallback((valeur: number) => {
+    gestionnaireAudio.definirVitesse(valeur);
+    setVitesse(gestionnaireAudio.vitesseActuelle());
+  }, []);
   const definirMuet = useCallback((valeur: boolean) => {
     gestionnaireAudio.definirMuet(valeur);
     setMuet(valeur);
@@ -157,12 +191,33 @@ export function FournisseurLangue({ children }: { children: ReactNode }) {
       definirLangue,
       t,
       jouer,
+      lireTexte,
+      lireEcran,
+      guide,
+      basculerGuide,
+      vitesse,
+      definirVitesse,
       arreter,
       muet,
       definirMuet,
       basculerMuet,
     }),
-    [langue, definirLangue, t, jouer, arreter, muet, definirMuet, basculerMuet],
+    [
+      langue,
+      definirLangue,
+      t,
+      jouer,
+      lireTexte,
+      lireEcran,
+      guide,
+      basculerGuide,
+      vitesse,
+      definirVitesse,
+      arreter,
+      muet,
+      definirMuet,
+      basculerMuet,
+    ],
   );
 
   return <Contexte.Provider value={valeur}>{children}</Contexte.Provider>;
@@ -183,8 +238,21 @@ export function useLangue(): ContexteLangueValeur {
  * Réutilise le même contexte de langue (une seule source de vérité).
  */
 export function useVoix() {
-  const { jouer, arreter, muet, definirMuet, basculerMuet } = useLangue();
-  return { jouer, arreter, muet, definirMuet, basculerMuet };
+  const { jouer, lireTexte, lireEcran, arreter, muet, definirMuet, basculerMuet, guide, basculerGuide, vitesse, definirVitesse } =
+    useLangue();
+  return {
+    jouer,
+    lireTexte,
+    lireEcran,
+    arreter,
+    muet,
+    definirMuet,
+    basculerMuet,
+    guide,
+    basculerGuide,
+    vitesse,
+    definirVitesse,
+  };
 }
 
 export { CLE_MUET };

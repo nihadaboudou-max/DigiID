@@ -241,7 +241,18 @@ function ContenuConnexion() {
   return (
     <>
       <EnTete />
-      <main className="flex-grow flex items-center justify-center px-6 py-12 bg-sable-clair">
+      <main
+        className="flex-grow flex items-center justify-center px-6 py-12 bg-sable-clair"
+        data-vocal-zone
+        data-vocal-annonce={
+          erreur
+            ? `Attention. ${erreur}`
+            : (info ??
+              (etape === "identifiants"
+                ? "Connexion. Écrivez votre email, puis votre mot de passe, puis touchez Se connecter."
+                : "Vérification. Saisissez le code à 6 chiffres reçu, puis touchez Valider le code."))
+        }
+      >
         <div className="max-w-md w-full carte apparition">
           <div className="text-center mb-6">
             <div className="flex justify-center mb-4">
