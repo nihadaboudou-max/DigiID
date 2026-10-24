@@ -10,7 +10,6 @@ import { useRouter } from "next/navigation";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Alerte } from "@/composants/commun/Alerte";
 import { uploaderPhoto } from "@/services/verification_visuelle";
-import clsx from "clsx";
 import { ErreurAPI } from "@/services/client_api";
 
 type Props = {
@@ -23,6 +22,7 @@ export default function UploadPhoto({ onSucces }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  
   /** Ref pour le flux caméra (pas de state pour éviter le délai React) */
   const fluxRef = useRef<MediaStream | null>(null);
 
@@ -34,7 +34,6 @@ export default function UploadPhoto({ onSucces }: Props) {
 
   /**
    * Branche le flux APRÈS que React a rendu la balise <video>.
-   * Sans ça, videoRef.current est null car le DOM n'est pas encore mis à jour.
    */
   useEffect(() => {
     if (modeCamera && fluxRef.current && videoRef.current) {
@@ -49,11 +48,11 @@ export default function UploadPhoto({ onSucces }: Props) {
       const flux = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: 640, height: 480 },
       });
-      fluxRef.current = flux;   // stocke dans une ref (dispo immediatement)
-      setModeCamera(true);       // React rend <video> → useEffect branche le flux
+      fluxRef.current = flux;
+      setModeCamera(true);
       setCapture(null);
     } catch {
-      setErreur("Impossible d'accéder à la caméra. Vérifie les permissions.");
+      setErreur("Impossible d'accéder à la caméra. Vérifie les permissions de ton navigateur.");
     }
   }
 
@@ -81,22 +80,27 @@ export default function UploadPhoto({ onSucces }: Props) {
   }
 
   /**
-   * Exploite la réponse de l'API : un rejet n'est pas un succès.
-   *
-   * ⚠️ Sans document d'identité, le backend rejette le selfie avec
-   * `action_requise = "ajouter_document_identite"` : on redirige vers la page
-   * des documents plutôt que d'afficher un succès trompeur.
+   * Exploite la réponse de l'API.
+   * ⚠️ CORRECTION : On ne doit PAS appeler onSucces() si c'est rejeté.
    */
   function traiterReponse(resultat: { statut?: string; raison?: string | null; details?: Record<string, unknown> | null }): void {
     const action = String(resultat.details?.action_requise ?? "");
+    
+    // Cas 1 : Le backend dit explicitement qu'il manque un document
     if (action === "ajouter_document_identite") {
-      setErreur(resultat.raison ?? "Ajoute d'abord un document d'identité.");
-      router.push("/documents-identite");
-      return;
+      setErreur(resultat.raison ?? "Vérification impossible : Vous devez d'abord scanner et faire valider votre pièce d'identité (CNI, Passeport ou Permis).");
+      // On ne redirige pas brutalement, on laisse l'utilisateur lire le message d'erreur rouge.
+      // Il pourra cliquer sur le lien "Documents d'identité" dans la page principale.
+      return; 
     }
+    
+    // Cas 2 : Rejet pour une autre raison (visage non détecté, etc.)
     if (resultat.statut === "rejete") {
-      setErreur(resultat.raison ?? "Photo rejetée.");
+      setErreur(resultat.raison ?? "Photo rejetée. Assurez-vous que votre visage est bien visible et éclairé.");
+      return; // ⚠️ CORRECTION CRITIQUE : On sort ici, on n'appelle PAS onSucces()
     }
+    
+    // Cas 3 : Succès
     onSucces();
   }
 
@@ -112,8 +116,20 @@ export default function UploadPhoto({ onSucces }: Props) {
       const resultat = await uploaderPhoto(fichier, setProgression);
       arreterCamera();
       traiterReponse(resultat);
-    } catch (e) {
-      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de l'envoi.");
+    } catch (err: any) {
+      // ✅ CORRECTION : Gestion robuste de l'erreur pour afficher le VRAI message
+      console.error("Erreur upload capture:", err);
+      let msg = "Une erreur inattendue est survenue.";
+      
+      if (err instanceof ErreurAPI) {
+        msg = err.message_utilisateur || err.message || "Erreur de validation.";
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        msg = err.message;
+      } else if (typeof err === 'string') {
+        msg = err;
+      }
+      
+      setErreur(msg);
     } finally {
       setChargement(false);
     }
@@ -129,8 +145,20 @@ export default function UploadPhoto({ onSucces }: Props) {
     try {
       const resultat = await uploaderPhoto(fichier, setProgression);
       traiterReponse(resultat);
-    } catch (err) {
-      setErreur(err instanceof ErreurAPI ? err.message_utilisateur : "Erreur lors de l'envoi.");
+    } catch (err: any) {
+      // ✅ CORRECTION : Même gestion robuste que pour la caméra
+      console.error("Erreur upload fichier:", err);
+      let msg = "Une erreur inattendue est survenue.";
+      
+      if (err instanceof ErreurAPI) {
+        msg = err.message_utilisateur || err.message || "Erreur de validation.";
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        msg = err.message;
+      } else if (typeof err === 'string') {
+        msg = err;
+      }
+      
+      setErreur(msg);
     } finally {
       setChargement(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -145,7 +173,8 @@ export default function UploadPhoto({ onSucces }: Props) {
 
   return (
     <div className="space-y-4">
-      {erreur && <Alerte variante="erreur">{erreur}</Alerte>}
+      {/* ✅ L'erreur s'affiche ici, clairement, en rouge, avec le message exact du backend */}
+      {erreur && <Alerte variante="erreur" titre="Action requise">{erreur}</Alerte>}
 
       {/* Zone caméra */}
       {modeCamera && (
