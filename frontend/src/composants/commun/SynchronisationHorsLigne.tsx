@@ -7,9 +7,10 @@
  *  - affiche un indicateur **compact** (icône + compteur), sans texte explicatif ;
  *  - reste silencieux quand tout est synchronisé.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { IconeCheck, IconeColis } from "@/composants/commun/Icones";
+import { aUneSession } from "@/services/client_api";
 import {
   fileEnAttente,
   purgerColisSynchronises,
@@ -20,13 +21,21 @@ export function SynchronisationHorsLigne() {
   const [enAttente, setEnAttente] = useState(0);
   const [enCours, setEnCours] = useState(false);
   const [horsLigne, setHorsLigne] = useState(false);
+  // Verrou anti-réentrance **hors état React** : si `synchroniser` dépendait
+  // de `enCours`, son identité changerait à chaque passage, l'effet se
+  // réabonnerait et relancerait un rejeu à la fin du précédent (boucle).
+  const enCoursRef = useRef(false);
 
   const rafraichir = useCallback(async () => {
     setEnAttente((await fileEnAttente().catch(() => [])).length);
   }, []);
 
   const synchroniser = useCallback(async () => {
-    if (enCours) return;
+    if (enCoursRef.current) return;
+    // Sans session sur ce poste (page publique, agent déconnecté), un appel
+    // authentifié ne peut que répondre 401 : on n'insiste pas.
+    if (!aUneSession()) return;
+    enCoursRef.current = true;
     setEnCours(true);
     try {
       const bilan = await synchroniserFile();
@@ -34,10 +43,18 @@ export function SynchronisationHorsLigne() {
     } catch {
       // Silencieux : la file sera rejouée au prochain retour du réseau.
     } finally {
+      enCoursRef.current = false;
       setEnCours(false);
       await rafraichir();
     }
-  }, [enCours, rafraichir]);
+  }, [rafraichir]);
+
+  /** Rejeu périodique : uniquement si une session existe et qu'il y a à envoyer. */
+  const synchroniserSiNecessaire = useCallback(async () => {
+    if (enCoursRef.current || !aUneSession()) return;
+    if ((await fileEnAttente().catch(() => [])).length === 0) return;
+    await synchroniser();
+  }, [synchroniser]);
 
   useEffect(() => {
     setHorsLigne(typeof navigator !== "undefined" && !navigator.onLine);
@@ -52,7 +69,13 @@ export function SynchronisationHorsLigne() {
       void synchroniser();
     };
     const surHorsLigne = () => setHorsLigne(true);
-    const intervalle = window.setInterval(() => void rafraichir(), 30_000);
+    // Filet de sécurité : certains réseaux reviennent sans événement `online`
+    // (Wi-Fi du guichet, reprise après veille) et l'agent a pu se reconnecter
+    // entre-temps — on retente donc toutes les 30 s, sans insister sans session.
+    const intervalle = window.setInterval(() => {
+      void rafraichir();
+      void synchroniserSiNecessaire();
+    }, 30_000);
 
     window.addEventListener("online", surLigne);
     window.addEventListener("offline", surHorsLigne);
@@ -61,7 +84,7 @@ export function SynchronisationHorsLigne() {
       window.removeEventListener("offline", surHorsLigne);
       window.clearInterval(intervalle);
     };
-  }, [rafraichir, synchroniser]);
+  }, [rafraichir, synchroniser, synchroniserSiNecessaire]);
 
   if (!horsLigne && enAttente === 0) return null;
 

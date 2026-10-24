@@ -10,14 +10,27 @@ Ce qui est prouvé ici, sans base de données (session factice) :
   * un colis déjà présent pour ce ``id_local`` n'est jamais recréé ;
   * une collision concurrente (index UNIQUE) renvoie le colis gagnant au lieu
     de faire échouer toute la synchronisation.
+
+Et, côté authentification (bug « 401 AUTH_001 » de la synchro) :
+
+  * la route est bien protégée par ``Depends(utilisateur_courant)`` : sans
+    jeton Bearer, l'API répond **401 AUTH_001** — code que le client doit
+    interpréter comme « renouveler le jeton d'accès », pas comme un refus de
+    droit ;
+  * elle reste soumise à ``logistique.colis.creer`` : aucun jeton
+    « programmatique » partagé n'ouvre la porte à un poste non habilité.
 """
 import asyncio
 import uuid
 
+import pytest
+from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 
 from src.modeles import Colis, Ticket, Utilisateur
+from src.modules.authentification.dependances import utilisateur_courant as dependance_utilisateur
 from src.modules.logistique import routes, schemas, service
+from src.noyau.exceptions import ErreurAuthentification
 
 
 class Resultat:
@@ -195,3 +208,36 @@ class TestSynchroniserColisHorsLigne:
         assert session.rollbacks == 1
         assert resultats[0]["colis"] is gagnant
         assert resultats[0]["ticket"] is ticket
+
+
+class TestAuthentificationDeLaRoute:
+    """Ce que le client doit comprendre d'un refus de la route de synchro."""
+
+    def test_sans_jeton_bearer_repond_auth_001(self):
+        """Sans en-tête `Authorization` : 401 AUTH_001, jamais 403.
+
+        C'est le cas d'un poste dont le cookie d'accès (15 min) a expiré
+        pendant la coupure : le client doit renouveler le jeton, pas
+déconnecter l'agent.
+        """
+        with pytest.raises(ErreurAuthentification) as erreur:
+            asyncio.run(dependance_utilisateur(credentials=None, session=None))
+
+        assert erreur.value.code_http == 401
+        assert erreur.value.code_erreur == "AUTH_001"
+
+    def test_role_sans_permission_est_refuse(self):
+        """Un compte sans `logistique.colis.creer` ne synchronise pas."""
+        citoyen = _utilisateur()
+        citoyen.role = "citoyen"
+
+        with pytest.raises(HTTPException) as erreur:
+            asyncio.run(
+                routes.synchroniser_colis_hors_ligne(
+                    donnees=[_element("poste-0004", uuid.uuid4(), uuid.uuid4())],
+                    utilisateur_courant=citoyen,
+                    session=SessionFactice(),
+                )
+            )
+
+        assert erreur.value.status_code == 403

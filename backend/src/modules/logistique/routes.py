@@ -1077,6 +1077,19 @@ async def synchroniser_colis_hors_ligne(
     été créé lors d'une tentative précédente, on renvoie **le même** colis et son
     ticket au lieu d'en créer un second. Le poste peut donc rejouer sa file
     autant de fois que nécessaire, même après une coupure au milieu de l'envoi.
+
+    Authentification : la route reste sur ``Depends(utilisateur_courant)`` — un
+    jeton **utilisateur** ordinaire, aucun jeton « programmatique » partagé.
+    C'est volontaire :
+
+      * le rejeu est fait par le poste de l'agent (page ouverte), et le client
+        HTTP renouvelle son jeton d'accès avant l'envoi quand le cookie de
+        15 minutes a expiré pendant la coupure — un 401 ``AUTH_001`` signale
+        un poste sans session, pas un défaut de droits ;
+      * chaque colis reste tracé nominativement (``enregistre_par_id``) et
+        soumis à ``logistique.colis.creer`` : un secret d'API partagé
+        permettrait à n'importe quel poste d'écrire sous l'identité d'un autre,
+        et l'audit du guichet perdrait son sens.
     """
     resultats: list[dict] = []
     for element in donnees:

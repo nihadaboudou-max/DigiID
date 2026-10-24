@@ -11,6 +11,11 @@
 import Cookies from "js-cookie";
 
 import type { Jetons, ReponseErreurAPI } from "@/types/api";
+import {
+  effacerJetonsApresRafraichissement,
+  peutRafraichirApres401,
+  renouvelerAvantEnvoi,
+} from "@/services/jetons";
 
 // ✅ CORRECTION : URL_BASE vide pour éviter le doublon /api/backend/api/v1/...
 // Les appels sont déjà au format /api/v1/... dans les composants
@@ -21,14 +26,6 @@ const NOM_COOKIE_TOKEN = "digiid_token";
 const NOM_COOKIE_REFRESH = "digiid_refresh";
 
 const CHEMIN_RAFRAICHIR = "/api/v1/auth/rafraichir";
-
-/** Codes d'erreur pour lesquels on ne tente pas de rafraîchir le token. */
-const CODES_SANS_RAFRAICHISSEMENT = new Set([
-  "AUTH_001",
-  "AUTH_004",
-  "AUTH_005",
-  "AUTH_008",
-]);
 
 /**
  * Événement personnalisé déclenché quand l'authentification expire
@@ -79,6 +76,24 @@ export function effacerJetons() {
   Cookies.remove(NOM_COOKIE_REFRESH, { path: "/" });
 }
 
+/**
+ * Vrai si ce poste possède encore une session (accès ou rafraîchissement).
+ *
+ * Sert aux routines de fond (synchronisation hors-ligne) : sans session, un
+ * appel authentifié ne peut que répondre 401 — inutile d'alerter l'utilisateur.
+ */
+export function aUneSession(): boolean {
+  return Boolean(obtenirTokenAcces() || obtenirTokenRafraichissement());
+}
+
+/** État local des jetons, tel que le lisent les règles pures de `./jetons`. */
+function etatDesJetons() {
+  return {
+    acces: obtenirTokenAcces(),
+    rafraichissement: obtenirTokenRafraichissement(),
+  };
+}
+
 // -----------------------------------------------------------------------------
 // Rafraîchissement automatique (mutex pour requêtes parallèles)
 // -----------------------------------------------------------------------------
@@ -93,26 +108,38 @@ async function executerRafraichissement(): Promise<boolean> {
   }
 
   const url = `${URL_BASE}${CHEMIN_RAFRAICHIR}`;
+  let reponse: Response;
   try {
-    const reponse = await fetch(url, {
+    reponse = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: refresh }),
       credentials: "include",
     });
-
-    if (!reponse.ok) {
-      effacerJetons();
-      return false;
-    }
-
-    const jetons = (await reponse.json()) as Jetons;
-    stockerJetons(jetons.token_acces, jetons.token_rafraichissement);
-    return true;
   } catch {
-    effacerJetons();
+    // ⚠️ Backend injoignable ≠ session révoquée : on GARDE le refresh token
+    // (7 jours), sinon une tentative pendant la coupure déconnecte l'agent.
     return false;
   }
+
+  if (!reponse.ok) {
+    // 401/403 = refresh refusé (session révoquée) → on nettoie ; 5xx = on garde.
+    if (effacerJetonsApresRafraichissement(reponse.status)) effacerJetons();
+    return false;
+  }
+
+  let jetons: Jetons;
+  try {
+    jetons = (await reponse.json()) as Jetons;
+  } catch {
+    return false;
+  }
+  if (!jetons?.token_acces || !jetons?.token_rafraichissement) {
+    return false;
+  }
+
+  stockerJetons(jetons.token_acces, jetons.token_rafraichissement);
+  return true;
 }
 
 function tenterRafraichissement(): Promise<boolean> {
@@ -185,7 +212,16 @@ async function appel_api<T>(
   };
 
   if (authentifie) {
-    const token = obtenirTokenAcces();
+    // Cookie d'accès expiré (15 min) après une coupure : on renouvelle AVANT
+    // d'envoyer, sinon la requête part sans `Authorization` → 401 `AUTH_001`.
+    // C'est ce qui bloquait la synchronisation des colis hors-ligne.
+    let token = obtenirTokenAcces();
+    if (
+      renouvelerAvantEnvoi(etatDesJetons(), authentifie, _retry) &&
+      chemin !== CHEMIN_RAFRAICHIR
+    ) {
+      if (await tenterRafraichissement()) token = obtenirTokenAcces();
+    }
     if (token) {
       enTetes["Authorization"] = `Bearer ${token}`;
     }
@@ -245,13 +281,24 @@ async function appel_api<T>(
   ) {
     const erreurApi = donnees as ReponseErreurAPI;
     const code = erreurApi.code_erreur || "";
-    if (!CODES_SANS_RAFRAICHISSEMENT.has(code)) {
+    if (
+      peutRafraichirApres401(
+        code,
+        _retry,
+        Boolean(obtenirTokenRafraichissement()),
+      )
+    ) {
       const rafraichi = await tenterRafraichissement();
       if (rafraichi) {
         return appel_api<T>(chemin, { ...options, _retry: true });
       }
     }
-    declencherEvenementAuthExpire();
+    // On ne déconnecte que si la session a réellement disparu : un refresh
+    // refusé (401/403) efface les jetons, alors qu'une panne serveur (5xx) ou
+    // réseau les conserve pour la prochaine tentative.
+    if (!obtenirTokenRafraichissement()) {
+      declencherEvenementAuthExpire();
+    }
     throw new ErreurAPI(
       "AUTH_TOKEN_EXPIRE",
       "Session expirée. Veuillez vous reconnecter.",

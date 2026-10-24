@@ -8,7 +8,7 @@
  * jamais deux fois le même colis, même si la première tentative avait abouti
  * sans que la réponse nous parvienne.
  */
-import { clientAPI, estErreurReseau } from "@/services/client_api";
+import { ErreurAPI, clientAPI, estErreurReseau } from "@/services/client_api";
 
 import { ecrire, lister, lire, supprimer } from "./base_locale";
 
@@ -62,12 +62,21 @@ export interface BilanSynchronisation {
 
 /**
  * ⚠️ `authentifie: true` est **obligatoire** : sans le jeton Bearer, la route
- * `POST /colis/synchroniser` répondait 401 et la file ne partait jamais —
- * c'est l'une des raisons pour lesquelles le mode hors-ligne semblait inactif.
+ * `POST /colis/synchroniser` répondait 401 et la file ne partait jamais.
+ * Le client HTTP renouvelle désormais le jeton d'accès avant l'envoi quand le
+ * cookie (15 min) a expiré pendant la coupure.
  */
 const OPTIONS_SYNC = { authentifie: true } as const;
 
 const CHEMIN_SYNC = "/api/v1/logistique/colis/synchroniser";
+
+/**
+ * Refus d'authentification (401) : la file est **conservée** et repartira
+ * après reconnexion de l'agent. Ce n'est jamais un motif de rejet du colis.
+ */
+function estErreurAuthentification(erreur: unknown): boolean {
+  return erreur instanceof ErreurAPI && erreur.code_http === 401;
+}
 
 /**
  * Rejoue la file d'attente sur le serveur.
@@ -114,6 +123,13 @@ export async function synchroniserFile(): Promise<BilanSynchronisation> {
       return bilan;
     }
 
+    // Session refusée (401) : inutile de rejouer colis par colis — tous seront
+    // refusés de la même façon. La file reste intacte pour la prochaine session.
+    if (estErreurAuthentification(erreur)) {
+      bilan.restants = enAttente.length;
+      return bilan;
+    }
+
     // Un lot peut être refusé (voyage clôturé, permission…). On tente alors
     // colis par colis : un élément invalide ne bloque pas les autres.
     for (const element of enAttente) {
@@ -130,11 +146,15 @@ export async function synchroniserFile(): Promise<BilanSynchronisation> {
         bilan.envoyes += 1;
       } catch (erreurColis) {
         // Une coupure en cours de route n'est pas un refus : on réessaiera.
-        const message = estErreurReseau(erreurColis)
-          ? "Réseau indisponible — nouvel essai à la reconnexion"
-          : erreurColis instanceof Error
-            ? erreurColis.message
-            : "Erreur inconnue";
+        // Un 401 non plus : le colis reste en attente, il partira à la
+        // prochaine session (ne jamais le marquer « refusé »).
+        const message = estErreurAuthentification(erreurColis)
+          ? "Session expirée — le colis partira après reconnexion"
+          : estErreurReseau(erreurColis)
+            ? "Réseau indisponible — nouvel essai à la reconnexion"
+            : erreurColis instanceof Error
+              ? erreurColis.message
+              : "Erreur inconnue";
         await ecrire("file_colis", {
           ...element,
           derniere_erreur: message,
