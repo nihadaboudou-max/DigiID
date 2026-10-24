@@ -8,7 +8,7 @@
  * jamais deux fois le même colis, même si la première tentative avait abouti
  * sans que la réponse nous parvienne.
  */
-import { clientAPI } from "@/services/client_api";
+import { clientAPI, estErreurReseau } from "@/services/client_api";
 
 import { ecrire, lister, lire, supprimer } from "./base_locale";
 
@@ -61,6 +61,15 @@ export interface BilanSynchronisation {
 }
 
 /**
+ * ⚠️ `authentifie: true` est **obligatoire** : sans le jeton Bearer, la route
+ * `POST /colis/synchroniser` répondait 401 et la file ne partait jamais —
+ * c'est l'une des raisons pour lesquelles le mode hors-ligne semblait inactif.
+ */
+const OPTIONS_SYNC = { authentifie: true } as const;
+
+const CHEMIN_SYNC = "/api/v1/logistique/colis/synchroniser";
+
+/**
  * Rejoue la file d'attente sur le serveur.
  * Appelée à la reconnexion (`online`), après une connexion, et par le bouton
  * « Synchroniser » de l'interface.
@@ -76,10 +85,14 @@ export async function synchroniserFile(): Promise<BilanSynchronisation> {
   try {
     const reponses = await clientAPI.post<
       { colis: { code_clair?: string } }[]
-    >("/api/v1/logistique/colis/synchroniser", enAttente.map((element) => ({
-      ...element.charge,
-      id_local: element.id_local,
-    })));
+    >(
+      CHEMIN_SYNC,
+      enAttente.map((element) => ({
+        ...element.charge,
+        id_local: element.id_local,
+      })),
+      OPTIONS_SYNC,
+    );
 
     for (let index = 0; index < enAttente.length; index += 1) {
       const element = enAttente[index];
@@ -94,13 +107,21 @@ export async function synchroniserFile(): Promise<BilanSynchronisation> {
     }
     return bilan;
   } catch (erreur) {
+    // Réseau toujours coupé : on garde tout tel quel, sans marquer d'erreur
+    // métier (l'indicateur affichera simplement encore N en attente).
+    if (estErreurReseau(erreur)) {
+      bilan.restants = enAttente.length;
+      return bilan;
+    }
+
     // Un lot peut être refusé (voyage clôturé, permission…). On tente alors
     // colis par colis : un élément invalide ne bloque pas les autres.
     for (const element of enAttente) {
       try {
         await clientAPI.post(
-          "/api/v1/logistique/colis/synchroniser",
+          CHEMIN_SYNC,
           [{ ...element.charge, id_local: element.id_local }],
+          OPTIONS_SYNC,
         );
         await ecrire("file_colis", {
           ...element,
@@ -108,10 +129,15 @@ export async function synchroniserFile(): Promise<BilanSynchronisation> {
         } satisfies ColisEnAttente);
         bilan.envoyes += 1;
       } catch (erreurColis) {
+        // Une coupure en cours de route n'est pas un refus : on réessaiera.
+        const message = estErreurReseau(erreurColis)
+          ? "Réseau indisponible — nouvel essai à la reconnexion"
+          : erreurColis instanceof Error
+            ? erreurColis.message
+            : "Erreur inconnue";
         await ecrire("file_colis", {
           ...element,
-          derniere_erreur:
-            erreurColis instanceof Error ? erreurColis.message : "Erreur inconnue",
+          derniere_erreur: message,
         } satisfies ColisEnAttente);
         bilan.erreurs.push(element.id_local);
       }

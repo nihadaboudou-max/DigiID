@@ -27,6 +27,10 @@ import { IconeCheck, IconeIdentite } from "@/composants/commun/Icones";
 import { useAuthentification } from "@/contextes/authentification";
 import { ErreurAPI } from "@/services/client_api";
 import {
+  MESSAGE_TELEPHONE_INVALIDE,
+  normaliserTelephone,
+} from "@/services/telephone";
+import {
   gareDeLActeur,
   logistiqueAPI,
   type Gare,
@@ -144,10 +148,15 @@ export function EnregistrementSuiviFamilial({
   );
   const chauffeurId = chauffeurImposeId ?? voyageSelectionne?.chauffeur_id ?? null;
 
-  const nombreChiffresTel = (v: string) => v.replace(/\D/g, "").length;
-  const telAcheteurOk = nombreChiffresTel(acheteurTel) >= 6;
-  const telPassagerOk = nombreChiffresTel(telephonePassager) >= 6;
-  const telProcheOk = nombreChiffresTel(procheTelephone) >= 6;
+  // ─── Numéros de téléphone (miroir de la validation serveur) ────────
+  // « Au moins 6 chiffres » laissait passer `123456`, `000000`… : le proche
+  // n'était jamais joignable et les SMS partaient dans le vide.
+  const telAcheteur = normaliserTelephone(acheteurTel);
+  const telPassager = normaliserTelephone(telephonePassager);
+  const telProche = normaliserTelephone(procheTelephone);
+  const telAcheteurOk = telAcheteur !== null;
+  const telPassagerOk = telPassager !== null;
+  const telProcheOk = telProche !== null;
 
   const ageNombre =
     enfantAge.trim() === "" ? null : Number(enfantAge.replace(/\D/g, ""));
@@ -208,16 +217,15 @@ export function EnregistrementSuiviFamilial({
         enfant_age: ageNombre,
         enfant_sexe: enfantSexe || null,
         parent_nom: parentNom.trim() || null,
+        // Numéros normalisés en +229… (le backend refuse le reste).
         telephone_parent:
-          (typePassager === "enfant" ? acheteurTel : telephonePassager).trim() ||
-          null,
+          (typePassager === "enfant" ? telAcheteur : telPassager) ?? null,
         type_passager: typePassager,
-        telephone_passager:
-          typePassager === "adulte" ? telephonePassager.trim() : null,
+        telephone_passager: typePassager === "adulte" ? telPassager : null,
         acheteur_nom: typePassager === "enfant" ? acheteurNom.trim() : null,
-        acheteur_tel: typePassager === "enfant" ? acheteurTel.trim() : null,
+        acheteur_tel: typePassager === "enfant" ? telAcheteur : null,
         proche_nom: procheNom.trim() || null,
-        proche_telephone: procheTelephone.trim(),
+        proche_telephone: telProche ?? "",
         nombre_bagages: nombreBagages,
         gare_depart_id: gareDepartId,
         gare_arrivee_id: gareArriveeId,
@@ -423,9 +431,12 @@ export function EnregistrementSuiviFamilial({
                     value={acheteurTel}
                     onChange={(e) => setAcheteurTel(e.target.value)}
                     inputMode="tel"
-                    placeholder="Ex : 77 123 45 67"
+                    type="tel"
+                    placeholder="+229 01 97 12 34 56"
                     erreur={
-                      telAcheteurOk || acheteurTel === "" ? undefined : "Au moins 6 chiffres"
+                      telAcheteurOk || acheteurTel === ""
+                        ? undefined
+                        : MESSAGE_TELEPHONE_INVALIDE
                     }
                   />
                 </div>
@@ -436,11 +447,12 @@ export function EnregistrementSuiviFamilial({
                   value={telephonePassager}
                   onChange={(e) => setTelephonePassager(e.target.value)}
                   inputMode="tel"
-                  placeholder="Ex : 77 123 45 67"
+                  type="tel"
+                  placeholder="+229 01 97 12 34 56"
                   erreur={
                     telPassagerOk || telephonePassager === ""
                       ? undefined
-                      : "Au moins 6 chiffres"
+                      : MESSAGE_TELEPHONE_INVALIDE
                   }
                 />
               )}
@@ -471,10 +483,13 @@ export function EnregistrementSuiviFamilial({
                   value={procheTelephone}
                   onChange={(e) => setProcheTelephone(e.target.value)}
                   inputMode="tel"
-                  placeholder="Ex : 77 987 65 43"
+                  type="tel"
+                  placeholder="+229 01 97 12 34 56"
                   aide="Prévenu en plus du responsable (départ, approche, arrivée)."
                   erreur={
-                    telProcheOk || procheTelephone === "" ? undefined : "Au moins 6 chiffres"
+                    telProcheOk || procheTelephone === ""
+                      ? undefined
+                      : MESSAGE_TELEPHONE_INVALIDE
                   }
                 />
               </div>

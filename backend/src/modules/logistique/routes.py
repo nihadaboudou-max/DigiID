@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
@@ -1094,11 +1095,35 @@ async def synchroniser_colis_hors_ligne(
             continue
 
         charge = schemas.ColisCreate(**element.model_dump(exclude={"id_local"}))
-        colis, ticket = await service.creer_colis(
-            session, charge, utilisateur_courant
-        )
-        colis.id_local = element.id_local
-        await session.commit()
+        # ``id_local`` est écrit dans la même transaction que le colis : si la
+        # réponse se perd, le rejeu suivant retrouve le colis au lieu d'en créer
+        # un doublon (une affectation après commit laissait cette fenêtre).
+        try:
+            colis, ticket = await service.creer_colis(
+                session, charge, utilisateur_courant, id_local=element.id_local
+            )
+        except IntegrityError:
+            # Deux postes (ou deux rejeux simultanés) ont envoyé le même
+            # ``id_local`` : l'index UNIQUE tranche. On renvoie le colis gagnant
+            # au lieu de casser toute la synchronisation en erreur 500.
+            await session.rollback()
+            gagnant = await session.scalar(
+                select(Colis).where(Colis.id_local == element.id_local).limit(1)
+            )
+            if gagnant is None:
+                raise
+            ticket_gagnant = (
+                await session.get(Ticket, gagnant.ticket_id)
+                if gagnant.ticket_id is not None
+                else None
+            )
+            await _enrichir_colis(session, gagnant)
+            if ticket_gagnant is not None:
+                ticket_gagnant.qr_code_url = construire_url_qr_durable(
+                    ticket_gagnant.qr_token
+                )
+            resultats.append({"colis": gagnant, "ticket": ticket_gagnant})
+            continue
         await _enrichir_colis(session, colis)
         ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
         resultats.append({"colis": colis, "ticket": ticket})

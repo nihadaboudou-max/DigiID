@@ -141,6 +141,25 @@ export class ErreurAPI extends Error {
   }
 }
 
+/**
+ * Vrai si l'échec vient du **réseau** (backend injoignable, coupure), et non
+ * d'un refus métier (409, permission, validation…).
+ *
+ * ⚠️ Indispensable au mode hors-ligne : `appel_api` emballe aussi les pannes
+ * réseau dans `ErreurAPI` (code `RESEAU`, HTTP 0). Un simple
+ * `erreur instanceof ErreurAPI` classait donc une coupure réseau comme une
+ * erreur métier — le colis n'était jamais mis en file et « le hors-ligne ne
+ * marchait pas ».
+ */
+export function estErreurReseau(erreur: unknown): boolean {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
+  if (erreur instanceof ErreurAPI) {
+    return erreur.code_erreur === "RESEAU" || erreur.code_http === 0;
+  }
+  // `fetch` qui rejette (TypeError) ou erreur inconnue non métier.
+  return !(erreur instanceof ErreurAPI);
+}
+
 // -----------------------------------------------------------------------------
 // Fonction principale — fait une requête à l'API
 // -----------------------------------------------------------------------------

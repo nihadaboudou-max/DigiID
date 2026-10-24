@@ -27,8 +27,14 @@ import { BoutonVocal } from "@/composants/accessibilite/BoutonVocal";
 import { PaiementColis } from "@/composants/paiement/PaiementColis";
 import { useLangue, useVoix } from "@/i18n/useLangue";
 import { useAuthentification } from "@/contextes/authentification";
-import { ErreurAPI } from "@/services/client_api";
+import { ErreurAPI, estErreurReseau } from "@/services/client_api";
 import { mettreEnFile } from "@/services/offline/file_colis";
+import { chargerAvecCache } from "@/services/offline/ref_cache";
+import {
+  MESSAGE_TELEPHONE_INVALIDE,
+  formaterTelephone,
+  normaliserTelephone,
+} from "@/services/telephone";
 import {
   gareDeLActeur,
   logistiqueAPI,
@@ -154,10 +160,17 @@ export function EnregistrementColis({
     let annule = false;
     (async () => {
       try {
+        // Le référentiel est mis en cache localement : sans réseau, le
+        // formulaire reste utilisable (gares/voyages resservis depuis
+        // IndexedDB) — sinon écran vide et aucun colis enregistrable.
         const [reponseGares, reponseVoyages, reponseLignes] = await Promise.all([
-          logistiqueAPI.gares.lister(),
-          logistiqueAPI.voyages.lister().catch(() => ({ elements: [] as Voyage[] })),
-          logistiqueAPI.lignes.lister().catch(() => ({ elements: [] as Ligne[] })),
+          chargerAvecCache("gares", () => logistiqueAPI.gares.lister()),
+          chargerAvecCache("voyages", () =>
+            logistiqueAPI.voyages.lister().catch(() => ({ elements: [] as Voyage[] })),
+          ),
+          chargerAvecCache("lignes", () =>
+            logistiqueAPI.lignes.lister().catch(() => ({ elements: [] as Ligne[] })),
+          ),
         ]);
         if (annule) return;
         setGares(reponseGares.elements);
@@ -166,7 +179,8 @@ export function EnregistrementColis({
 
         // Pré-remplit la gare de départ depuis la fiche acteur du receveur.
         if (utilisateur?.id) {
-          const gare = await gareDeLActeur(utilisateur.id);
+          // Hors-ligne, cette fiche n'est pas disponible : ce n'est pas bloquant.
+          const gare = await gareDeLActeur(utilisateur.id).catch(() => null);
           if (!annule && gare) {
             setGareGuichet(gare);
             setGareDepartId(gare.id);
@@ -174,10 +188,13 @@ export function EnregistrementColis({
         }
       } catch (e) {
         if (!annule) {
+          // Hors ligne avec cache : on continue avec le référentiel local.
           setErreur(
-            e instanceof ErreurAPI
-              ? e.message_utilisateur
-              : "Impossible de charger les gares. Réessayez.",
+            estErreurReseau(e)
+              ? "Hors ligne : gares et voyages affichés depuis ce poste. Le colis sera synchronisé au retour du réseau."
+              : e instanceof ErreurAPI
+                ? e.message_utilisateur
+                : "Impossible de charger les gares. Réessayez.",
           );
         }
       } finally {
@@ -202,22 +219,28 @@ export function EnregistrementColis({
   );
   const chauffeurId = chauffeurImposeId ?? voyageSelectionne?.chauffeur_id ?? null;
 
-  const nombreChiffresTel = destinataireTel.replace(/\D/g, "").length;
-  const nombreChiffresTelExpediteur = expediteurTel.replace(/\D/g, "").length;
+  // ─── Numéros de téléphone (miroir de la validation serveur) ────────
+  // Un numéro doit être joignable : sinon le colis est introuvable et les SMS
+  // partent dans le vide. `null` = saisie invalide.
+  const telDestinataire = normaliserTelephone(destinataireTel);
+  const telExpediteur =
+    expediteurTel.trim() === "" ? null : normaliserTelephone(expediteurTel);
 
   const etapeExpediteurValide =
-    expediteurNom.trim().length >= 2 && nombreChiffresTelExpediteur >= 6;
+    expediteurNom.trim().length >= 2 &&
+    (expediteurTel.trim() === "" || telExpediteur !== null);
 
   const etapeDestinataireValide =
     destinataireNom.trim().length >= 2 &&
-    nombreChiffresTel >= 6 &&
+    telDestinataire !== null &&
     !!gareDepartId &&
     !!gareArriveeId &&
     gareDepartId !== gareArriveeId;
 
   // Prix du transport : **facultatif** (vide = non renseigné).
   const fraisNombre = fraisFcfa.trim() === "" ? null : Number(fraisFcfa);
-  const fraisValide = fraisNombre === null || (!Number.isNaN(fraisNombre) && fraisNombre >= 0);
+  const fraisValide =
+    fraisNombre === null || (!Number.isNaN(fraisNombre) && fraisNombre >= 0);
 
   // Nombre d'articles : détermine le frais de service DigiID (barème par tranches).
   const nombreArticlesNombre = Number(nombreArticles.replace(/\D/g, ""));
@@ -256,15 +279,25 @@ export function EnregistrementColis({
 
   async function enregistrer() {
     setErreur(null);
+
+    // Garde-fou : le bouton est déjà désactivé, mais on ne laisse jamais
+    // partir un numéro invalide (source de colis « injoignables »).
+    if (!telDestinataire || (expediteurTel.trim() !== "" && !telExpediteur)) {
+      setErreur(MESSAGE_TELEPHONE_INVALIDE);
+      setEtape(1);
+      return;
+    }
+
     setEnregistrement(true);
     try {
       const poids = poidsKg ? Number(poidsKg.replace(",", ".")) : null;
       const valeur = valeurFcfa ? Number(valeurFcfa.replace(",", ".")) : null;
       const charge = {
         expediteur_nom: expediteurNom.trim() || null,
-        expediteur_tel: expediteurTel.trim() || null,
+        // Numéros **normalisés** : +2290197123456 (ou +226… si étranger).
+        expediteur_tel: telExpediteur,
         destinataire_nom: destinataireNom.trim(),
-        destinataire_tel: destinataireTel.trim(),
+        destinataire_tel: telDestinataire,
         gare_depart_id: gareDepartId,
         gare_arrivee_id: gareArriveeId,
         description: description.trim() || null,
@@ -283,14 +316,14 @@ export function EnregistrementColis({
 
       try {
         setResultat(await logistiqueAPI.colis.creer(charge));
-      } catch (erreurReseau) {
-        // Pas de reseau (ou serveur injoignable) : le colis est enregistre
-        // LOCALEMENT et rejoue a la reconnexion. Une erreur metier (409,
-        // permission...) n'est jamais mise en file : elle doit etre corrigee.
-        const horsLigne =
-          typeof navigator !== "undefined" && navigator.onLine === false;
-        const serveurInjoignable = !(erreurReseau instanceof ErreurAPI);
-        if (!horsLigne && !serveurInjoignable) throw erreurReseau;
+      } catch (erreurEnvoi) {
+        // Pas de réseau (ou serveur injoignable) : le colis est enregistré
+        // LOCALEMENT puis rejoué à la reconnexion.
+        // ⚠️ `estErreurReseau` est indispensable : `client_api` emballe aussi
+        // les pannes réseau dans `ErreurAPI` (code RESEAU / HTTP 0). L'ancien
+        // test `instanceof ErreurAPI` les prenait pour des refus métier et
+        // n'enregistrait donc jamais rien hors-ligne.
+        if (!estErreurReseau(erreurEnvoi)) throw erreurEnvoi;
 
         const enAttente = await mettreEnFile(charge);
         setColisEnFile(enAttente.id_local);
@@ -306,6 +339,57 @@ export function EnregistrementColis({
     }
   }
 
+  // ─── Écran « enregistré hors-ligne » (en attente de synchronisation) ─
+  if (colisEnFile) {
+    return (
+      <div className="space-y-5 apparition" data-vocal-zone>
+        <Alerte variante="avertissement" titre="Colis enregistré sur ce poste">
+          <p className="text-sm">
+            Pas de réseau : le colis de <strong>{destinataireNom}</strong> (
+            {formaterTelephone(telDestinataire)}) est conservé ici et sera envoyé
+            automatiquement dès le retour de la connexion. Le ticket sera généré
+            à ce moment-là.
+          </p>
+        </Alerte>
+
+        <Carte>
+          <dl className="space-y-2 text-sm">
+            <Ligne libelle="Destinataire" valeur={destinataireNom} />
+            <Ligne
+              libelle="Téléphone"
+              valeur={formaterTelephone(telDestinataire)}
+            />
+            <Ligne
+              libelle="Départ"
+              valeur={gareParId.get(gareDepartId)?.nom ?? "—"}
+            />
+            <Ligne
+              libelle="Arrivée"
+              valeur={gareParId.get(gareArriveeId)?.nom ?? "—"}
+            />
+            <Ligne libelle="Référence locale" valeur={colisEnFile.slice(0, 8)} />
+          </dl>
+          <p className="mt-4 flex items-center gap-2 text-xs text-ardoise-clair">
+            <IconeColis className="w-4 h-4" />
+            Synchronisation automatique au retour du réseau (indicateur en bas à
+            droite).
+          </p>
+          <div className="mt-4">
+            <Bouton
+              variante="primaire"
+              onClick={() => {
+                setColisEnFile(null);
+                nouvelEnregistrement();
+              }}
+            >
+              <IconeColis className="w-4 h-4" /> Enregistrer un autre colis
+            </Bouton>
+          </div>
+        </Carte>
+      </div>
+    );
+  }
+
   // ─── Écran de succès : ticket imprimable ───────────────────────────
   if (resultat) {
     return (
@@ -317,7 +401,6 @@ export function EnregistrementColis({
         <Alerte variante="succes" titre={t("colis.succes.titre")}>
           {t("colis.succes.desc")}
         </Alerte>
-
         <TicketImprimable ticket={resultat.ticket} colis={resultat.colis} />
 
         {/* S6 — encaissement des frais + commission du receveur */}
@@ -418,9 +501,10 @@ export function EnregistrementColis({
                   required
                   value={expediteurTel}
                   onChange={(e) => setExpediteurTel(e.target.value)}
-                  placeholder="Ex : 77 123 45 67"
+                  placeholder="+229 01 97 12 34 56"
                   inputMode="tel"
-                  aide="Au moins 6 chiffres — sert à joindre l'expéditeur si besoin."
+                  type="tel"
+                  aide="Format +229 · un numéro invalide est refusé (SMS inutile sinon)."
                 />
                 <div className="flex justify-end">
                   <BoutonVocal
@@ -468,9 +552,10 @@ export function EnregistrementColis({
                   required
                   value={destinataireTel}
                   onChange={(e) => setDestinataireTel(e.target.value)}
-                  placeholder="Ex : 77 123 45 67"
+                  placeholder="+229 01 97 12 34 56"
                   inputMode="tel"
-                  aide="Au moins 6 chiffres — sert à prévenir le destinataire."
+                  type="tel"
+                  aide="Format +229 · sert à prévenir le destinataire à l'arrivée."
                 />
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -330,6 +330,18 @@ class ColisCreate(BaseModel):
     # utilisateur courant et le statut initial = ``enregistre_direct``.
     enregistrement_direct: bool = False
 
+    # ─── Numéros de téléphone (guichet) ──────────────────────────────
+    # Sans contrôle, n'importe quelle chaîne (« 1234 », « abc ») passait : le
+    # colis devenait introuvable par téléphone et les SMS partaient dans le vide.
+    # Les numéros sont normalisés en ``+229…`` ; un numéro étranger explicite
+    # (``+226…``) reste accepté, tout le reste est refusé (HTTP 422).
+    @field_validator("destinataire_tel", "expediteur_tel", mode="before")
+    @classmethod
+    def _valider_telephones(cls, valeur):
+        from src.noyau.telephone import normaliser_numero_tiers
+
+        return normaliser_numero_tiers(valeur)
+
     @model_validator(mode="after")
     def _gares_distinctes(self):
         if self.gare_depart_id == self.gare_arrivee_id:
@@ -517,6 +529,23 @@ class SuiviFamilialCreate(BaseModel):
     # **Enregistrement direct par le chauffeur** : passager monté en route,
     # enregistré par le chauffeur lui-même (statut ``enregistre_direct``).
     enregistrement_direct: bool = False
+
+    # ─── Numéros de téléphone (guichet / chauffeur) ──────────────────
+    # Obligatoires pour joindre les proches : ils étaient libres (« text »)
+    # et donc inutilisables pour les SMS. Normalisés en ``+229…``, refusés
+    # sinon (HTTP 422).
+    @field_validator(
+        "telephone_parent",
+        "telephone_passager",
+        "acheteur_tel",
+        "proche_telephone",
+        mode="before",
+    )
+    @classmethod
+    def _valider_telephones(cls, valeur):
+        from src.noyau.telephone import normaliser_numero_tiers
+
+        return normaliser_numero_tiers(valeur)
 
     @model_validator(mode="after")
     def _valider_contacts(self):

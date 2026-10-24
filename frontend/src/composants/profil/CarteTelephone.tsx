@@ -21,6 +21,9 @@ import { clientAPI, ErreurAPI } from "@/services/client_api";
 
 const INDICATIF = "+229";
 
+/** ⚠️ Ces routes exigent le jeton Bearer (`authentifie: true`). */
+const OPTIONS_AUTH = { authentifie: true } as const;
+
 interface ReponseEnvoi {
   succes: boolean;
   telephone: string;
@@ -65,6 +68,7 @@ export function CarteTelephone() {
       const reponse = await clientAPI.put<ReponseEnvoi>(
         "/api/v1/utilisateur/telephone",
         { telephone: `${INDICATIF}${chiffres}`, canal: "sms" },
+        OPTIONS_AUTH,
       );
       setEnvoi(reponse);
       setEtape("otp");
@@ -81,10 +85,11 @@ export function CarteTelephone() {
     setErreur(null);
     setOccupe(true);
     try {
-      await clientAPI.post("/api/v1/auth/verification/verifier", {
-        code: code.trim(),
-        canal: "sms",
-      });
+      await clientAPI.post(
+        "/api/v1/auth/verification/verifier",
+        { code: code.trim(), canal: "sms" },
+        OPTIONS_AUTH,
+      );
       await rafraichirProfil();
       setEdition(false);
       setEtape("saisie");

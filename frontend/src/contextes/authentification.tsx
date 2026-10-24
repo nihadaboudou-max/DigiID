@@ -23,6 +23,7 @@ import {
   obtenirTokenAcces,
   obtenirTokenRafraichissement,
   effacerJetons,
+  estErreurReseau,
   EVENEMENT_AUTH_EXPIRE,
 } from "@/services/client_api";
 
@@ -33,6 +34,7 @@ import {
   memoriserCompte,
   ouvrirSessionHorsLigne,
   restaurerSessionHorsLigne,
+  synchroniserSessionLocale,
 } from "@/services/offline/session_locale";
 
 interface ContexteAuth {
@@ -70,15 +72,25 @@ export function FournisseurAuthentification({
           try {
             const jetons = await rafraichirJetons();
             token = jetons.token_acces;
-          } catch {
-            // Refresh token invalide ou expiré
+          } catch (erreurRafraichissement) {
+            // Réseau coupé : on ne déconnecte pas, on retombe sur la session
+            // locale mémorisée sur ce poste (guichet sans connexion).
+            const local = await restaurerSessionHorsLigne().catch(() => null);
+            if (local && estErreurReseau(erreurRafraichissement)) {
+              setUtilisateur(local);
+              setEstHorsLigne(true);
+              setChargement(false);
+              return;
+            }
             setUtilisateur(null);
             setChargement(false);
             return;
           }
         } else {
-          // Pas de token ni de refresh → utilisateur non connecté
-          setUtilisateur(null);
+          // Pas de token ni de refresh : session locale éventuelle.
+          const local = await restaurerSessionHorsLigne().catch(() => null);
+          setUtilisateur(local);
+          setEstHorsLigne(local !== null);
           setChargement(false);
           return;
         }
@@ -88,8 +100,23 @@ export function FournisseurAuthentification({
       try {
         const profil = await obtenirMonProfil();
         setUtilisateur(profil);
-      } catch {
-        // Échec : token invalide ou autre erreur
+        setEstHorsLigne(false);
+        // Session locale tenue à jour : c'est elle qui permet de recharger la
+        // page sans réseau sans être renvoyé à l'écran de connexion.
+        await synchroniserSessionLocale(profil).catch(() => undefined);
+      } catch (erreur) {
+        // ⚠️ Coupure réseau ≠ session invalide : auparavant toute erreur
+        // effaçait les jetons, donc un rechargement de page hors-ligne
+        // déconnectait l'agent du guichet. On restaure la session locale.
+        if (estErreurReseau(erreur)) {
+          const local = await restaurerSessionHorsLigne().catch(() => null);
+          if (local) {
+            setUtilisateur(local);
+            setEstHorsLigne(true);
+            return;
+          }
+        }
+        // Token invalide/expiré (ou aucune session locale) : déconnexion.
         setUtilisateur(null);
         effacerJetons();
       } finally {
@@ -186,18 +213,28 @@ export function FournisseurAuthentification({
         await memoriserCompte(reponse.utilisateur, donnees.mot_de_passe).catch(
           () => undefined,
         );
+        // ⚠️ Ouvrir la session locale **dès la connexion en ligne** : sinon un
+        // agent connecté le matin était déconnecté au premier rechargement
+        // après une coupure réseau (aucune session hors-ligne à restaurer).
+        await ouvrirSessionHorsLigne(reponse.utilisateur).catch(
+          () => undefined,
+        );
       } catch (erreur) {
-        // Pas de reseau -> session locale si l'identifiant correspond a un
-        // compte deja connecte sur ce poste (mode offline global, S3).
-        const local = await connecterHorsLigne(
-          donnees.email ?? "",
-          donnees.mot_de_passe,
-        ).catch(() => null);
-        if (local) {
-          setUtilisateur(local);
-          setEstHorsLigne(true);
-          await ouvrirSessionHorsLigne(local).catch(() => undefined);
-          return;
+        // Hors-ligne : session locale si l'identifiant correspond à un compte
+        // déjà connecté sur ce poste (mode offline global, S3). On ne tente
+        // la bascule QUE si l'échec vient du réseau : un mauvais mot de passe
+        // doit rester un refus, pas une ouverture de session locale.
+        if (estErreurReseau(erreur)) {
+          const local = await connecterHorsLigne(
+            donnees.email ?? "",
+            donnees.mot_de_passe,
+          ).catch(() => null);
+          if (local) {
+            setUtilisateur(local);
+            setEstHorsLigne(true);
+            await ouvrirSessionHorsLigne(local).catch(() => undefined);
+            return;
+          }
         }
         throw erreur;
       }
@@ -242,13 +279,16 @@ export function FournisseurAuthentification({
       const profil = await obtenirMonProfil();
       setUtilisateur(profil);
       setEstHorsLigne(false);
-    } catch {
-      // Reseau coupe : on garde la session locale au lieu de deconnecter.
-      const local = await restaurerSessionHorsLigne().catch(() => null);
-      if (local) {
-        setUtilisateur(local);
-        setEstHorsLigne(true);
-        return;
+      await synchroniserSessionLocale(profil).catch(() => undefined);
+    } catch (erreur) {
+      // Réseau coupé : on garde la session locale au lieu de déconnecter.
+      if (estErreurReseau(erreur)) {
+        const local = await restaurerSessionHorsLigne().catch(() => null);
+        if (local) {
+          setUtilisateur(local);
+          setEstHorsLigne(true);
+          return;
+        }
       }
       setUtilisateur(null);
     }

@@ -44,14 +44,29 @@ export function cleTelephone(numero: string): string {
   return `+229${local}`;
 }
 
-/** Mémorise un compte après une connexion en ligne réussie. */
+/** Clé locale d'un compte : le numéro si possible, sinon l'email. */
+export function cleCompte(utilisateur: Utilisateur): string | null {
+  if (utilisateur.telephone) return cleTelephone(utilisateur.telephone);
+  if (utilisateur.email) return `email:${utilisateur.email.trim().toLowerCase()}`;
+  return null;
+}
+
+/**
+ * Mémorise un compte après une connexion en ligne réussie.
+ *
+ * ⚠️ Auparavant, un compte **sans numéro** n'était pas mémorisé du tout :
+ * aucune session locale n'existait, donc le mode hors-ligne était inopérant
+ * pour lui (déconnexion au premier rechargement). On indexe désormais aussi
+ * par email.
+ */
 export async function memoriserCompte(
   utilisateur: Utilisateur,
   motDePasse: string,
 ): Promise<void> {
-  if (!utilisateur.telephone) return;
+  const cle = cleCompte(utilisateur);
+  if (!cle) return;
   const compte: CompteLocal = {
-    cle: cleTelephone(utilisateur.telephone),
+    cle,
     empreinte_mdp: await empreinte(motDePasse),
     utilisateur,
     memorise_le: Date.now(),
@@ -84,9 +99,18 @@ export async function connecterHorsLigne(
     }
   }
 
-  // 2. Par email (formulaire de connexion classique).
-  const { lister } = await import("./base_locale");
+  // 2. Par email (formulaire de connexion classique, ou clé `email:`).
   const cible = identifiant.trim().toLowerCase();
+  const parEmailDirect = await lire<CompteLocal>("comptes", `email:${cible}`);
+  if (
+    parEmailDirect &&
+    Date.now() - parEmailDirect.memorise_le <= DUREE_SESSION_MS &&
+    parEmailDirect.empreinte_mdp === empreinteSaisie
+  ) {
+    return parEmailDirect.utilisateur;
+  }
+
+  const { lister } = await import("./base_locale");
   const comptes = await lister<CompteLocal>("comptes");
   const parEmail = comptes.find(
     (compte) =>
@@ -115,6 +139,19 @@ export async function restaurerSessionHorsLigne(): Promise<Utilisateur | null> {
   );
   if (!session || Date.now() > session.expire_le) return null;
   return session.utilisateur;
+}
+
+/**
+ * Met à jour la session locale après un appel serveur réussi.
+ *
+ * Sans cet appel, la session hors-ligne ne contenait que l'état du jour de la
+ * connexion (ou rien du tout si l'agent n'avait jamais perdu le réseau) : au
+ * premier rechargement sans réseau, il était déconnecté.
+ */
+export async function synchroniserSessionLocale(
+  utilisateur: Utilisateur,
+): Promise<void> {
+  await ouvrirSessionHorsLigne(utilisateur);
 }
 
 /** Ferme la session locale (déconnexion). */

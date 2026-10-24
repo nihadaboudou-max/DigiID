@@ -772,7 +772,10 @@ async def _generer_code_clair(
 
 
 async def creer_colis(
-    session: AsyncSession, donnees: schemas.ColisCreate, utilisateur: Utilisateur
+    session: AsyncSession,
+    donnees: schemas.ColisCreate,
+    utilisateur: Utilisateur,
+    id_local: str | None = None,
 ) -> tuple[Colis, Ticket]:
     """Enregistre un colis et génère son ticket (QR + numéro en clair)."""
     if donnees.gare_depart_id == donnees.gare_arrivee_id:
@@ -838,6 +841,10 @@ async def creer_colis(
     receveur_id = donnees.receveur_id or utilisateur.id
 
     colis = Colis(
+        # Cle d'idempotence du mode hors-ligne, ecrite dans la MEME transaction
+        # que le colis : sinon un colis committe sans id_local peut etre recree
+        # en double au rejeu de la file locale.
+        id_local=id_local,
         expediteur_id=expediteur_id,
         expediteur_nom=(donnees.expediteur_nom or "").strip() or None,
         expediteur_tel=(donnees.expediteur_tel or "").strip() or None,

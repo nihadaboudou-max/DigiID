@@ -43,6 +43,10 @@ export function SynchronisationHorsLigne() {
     setHorsLigne(typeof navigator !== "undefined" && !navigator.onLine);
     void rafraichir();
 
+    // File présente au chargement (poste resté hors-ligne puis rechargé) :
+    // on tente immédiatement le rejeu, sans attendre un événement.
+    void synchroniser();
+
     const surLigne = () => {
       setHorsLigne(false);
       void synchroniser();
