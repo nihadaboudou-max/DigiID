@@ -5,6 +5,7 @@
  * Utilise l'API MediaDevices pour la caméra, avec fallback upload fichier.
  */
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { Bouton } from "@/composants/commun/Bouton";
 import { Alerte } from "@/composants/commun/Alerte";
@@ -18,6 +19,7 @@ type Props = {
 };
 
 export default function UploadPhoto({ onSucces }: Props) {
+  const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -78,6 +80,26 @@ export default function UploadPhoto({ onSucces }: Props) {
     setCapture(canvas.toDataURL("image/jpeg", 0.9));
   }
 
+  /**
+   * Exploite la réponse de l'API : un rejet n'est pas un succès.
+   *
+   * ⚠️ Sans document d'identité, le backend rejette le selfie avec
+   * `action_requise = "ajouter_document_identite"` : on redirige vers la page
+   * des documents plutôt que d'afficher un succès trompeur.
+   */
+  function traiterReponse(resultat: { statut?: string; raison?: string | null; details?: Record<string, unknown> | null }): void {
+    const action = String(resultat.details?.action_requise ?? "");
+    if (action === "ajouter_document_identite") {
+      setErreur(resultat.raison ?? "Ajoute d'abord un document d'identité.");
+      router.push("/documents-identite");
+      return;
+    }
+    if (resultat.statut === "rejete") {
+      setErreur(resultat.raison ?? "Photo rejetée.");
+    }
+    onSucces();
+  }
+
   /** Uploader la photo capturée (convertir dataURL → Blob) */
   async function envoyerCapture() {
     if (!capture) return;
@@ -87,9 +109,9 @@ export default function UploadPhoto({ onSucces }: Props) {
     try {
       const blob = await (await fetch(capture)).blob();
       const fichier = new File([blob], "capture_visage.jpg", { type: "image/jpeg" });
-      await uploaderPhoto(fichier, setProgression);
+      const resultat = await uploaderPhoto(fichier, setProgression);
       arreterCamera();
-      onSucces();
+      traiterReponse(resultat);
     } catch (e) {
       setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur lors de l'envoi.");
     } finally {
@@ -105,8 +127,8 @@ export default function UploadPhoto({ onSucces }: Props) {
     setChargement(true);
     setProgression(0);
     try {
-      await uploaderPhoto(fichier, setProgression);
-      onSucces();
+      const resultat = await uploaderPhoto(fichier, setProgression);
+      traiterReponse(resultat);
     } catch (err) {
       setErreur(err instanceof ErreurAPI ? err.message_utilisateur : "Erreur lors de l'envoi.");
     } finally {

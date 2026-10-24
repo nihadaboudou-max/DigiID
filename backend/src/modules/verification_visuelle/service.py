@@ -138,6 +138,7 @@ async def traiter_upload_photo(
     #    Le selfie est accepté s'il correspond à AU MOINS UN de ces documents.
     document_correspondant: str | None = None
     documents_compares: list[str] = []
+    action_requise: str | None = None
 
     if statut == "approuve":
         from src.modules.verification_visuelle.photo_document import (
@@ -182,13 +183,21 @@ async def traiter_upload_photo(
                     f"| {len(references)} référence(s) comparée(s)"
                 )
         else:
-            # Aucun document exploitable : on ne peut pas comparer. Le selfie
-            # reste validé (liveness + anti-doublon) mais on le trace, car
-            # aucune preuve d'identité n'a pu être confrontée.
+            # Aucun document d'identité avec photo : il n'y a **rien à comparer**.
+            # Le selfie était auparavant approuvé sans preuve d'identité ; on le
+            # rejette et on renvoie l'utilisateur vers la page des documents.
+            statut = "rejete"
+            action_requise = "ajouter_document_identite"
+            raison = (
+                "Aucun document d'identité avec photo (CNI, passeport, permis, "
+                "carte de séjour, carte consulaire) n'est enregistré : la "
+                "comparaison du visage est impossible. Ajoute d'abord un titre "
+                "d'identité, puis reprends une photo."
+            )
+            date_verification = None
             journal.warning(
-                f"VÉRIFICATION VISUELLE SANS RÉFÉRENCE | user={utilisateur.id} — "
-                "aucun document d'identité avec photo du titulaire : le selfie est "
-                "validé sans comparaison biométrique."
+                f"REJET VÉRIFICATION VISUELLE - Aucun document de référence | "
+                f"user={utilisateur.id} — ajoute d'abord un titre d'identité."
             )
 
     journal.info(
@@ -218,6 +227,8 @@ async def traiter_upload_photo(
             # lequel a permis la correspondance.
             "documents_compares": documents_compares,
             "document_correspondant": document_correspondant,
+            # Action à effectuer côté client (redirection vers /documents-identite).
+            "action_requise": action_requise,
         },
         date_verification=date_verification,
     )
