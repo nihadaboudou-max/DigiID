@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.base_donnees.session import obtenir_session
 from src.modeles import Utilisateur
 from src.modules.authentification.dependances import (
-    utilisateur_courant, obtenir_ip_client,
+    admin_courant, utilisateur_courant, obtenir_ip_client,
 )
 from src.modules.documents_identite import service
 from src.modules.documents_identite.schemas import (
@@ -206,3 +206,57 @@ async def synchroniser_profil(
         utilisateur=utilisateur,
     )
     return resultat
+
+
+# =============================================================================
+# 僶. Champs RÉGLEMENTAIRES — réservés à l'administrateur système (S3)
+# -----------------------------------------------------------------------------
+# Le numéro de pièce et les dates de délivrance/expiration sont IMMUABLES côté
+# utilisateur (voir `CHAMPS_NON_MODIFIABLES`). Seul un administrateur peut les
+# corriger — avec un motif, tracé au journal — par exemple après une erreur de
+# saisie ou un renouvellement de titre.
+# =============================================================================
+
+from datetime import date as _date
+
+from pydantic import BaseModel, Field
+
+
+class CorrectionReglementaire(BaseModel):
+    """Correction d'un champ réglementaire par un administrateur."""
+
+    numero_document: Optional[str] = Field(None, max_length=50)
+    date_delivrance: Optional[_date] = None
+    date_expiration: Optional[_date] = None
+    motif: str = Field(..., min_length=3, max_length=255)
+
+
+@routeur_documents.patch(
+    "/{document_id}/reglementaire",
+    response_model=DocumentIdentiteDetail,
+    summary="Corriger un champ réglementaire (administrateur uniquement)",
+)
+async def corriger_champ_reglementaire(
+    document_id: str,
+    donnees: CorrectionReglementaire,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    administrateur: Annotated[Utilisateur, Depends(admin_courant)],
+):
+    """Met à jour le numéro de pièce ou les dates d'un document.
+
+    Réservé aux administrateurs : l'utilisateur ne peut jamais modifier ces
+    champs lui-même (immuabilité réglementaire). Le motif est journalisé.
+    """
+    from uuid import UUID
+    doc = await service.modifier_champs_reglementaires_admin(
+        session=session,
+        document_id=UUID(document_id),
+        numero_document=donnees.numero_document,
+        date_delivrance=donnees.date_delivrance,
+        date_expiration=donnees.date_expiration,
+        motif=f"{donnees.motif} (par {administrateur.id})",
+    )
+    if not doc:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Document introuvable")
+    return doc

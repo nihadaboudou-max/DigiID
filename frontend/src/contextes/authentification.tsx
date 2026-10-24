@@ -27,11 +27,20 @@ import {
 } from "@/services/client_api";
 
 import type { DonneesConnexion, Utilisateur } from "@/types/api";
+import {
+  connecterHorsLigne,
+  effacerSessionHorsLigne,
+  memoriserCompte,
+  ouvrirSessionHorsLigne,
+  restaurerSessionHorsLigne,
+} from "@/services/offline/session_locale";
 
 interface ContexteAuth {
   utilisateur: Utilisateur | null;
   chargement: boolean;
   estConnecte: boolean;
+  /** Vrai quand la session a été ouverte **sans réseau** (données en cache). */
+  estHorsLigne: boolean;
   seConnecter: (donnees: DonneesConnexion) => Promise<void>;
   seDeconnecter: () => Promise<void>;
   rafraichirProfil: () => Promise<void>;
@@ -46,6 +55,7 @@ export function FournisseurAuthentification({
 }) {
   const [utilisateur, setUtilisateur] = useState<Utilisateur | null>(null);
   const [chargement, setChargement] = useState(true);
+  const [estHorsLigne, setEstHorsLigne] = useState(false);
 
   // Au montage : si on a un token, on tente de récupérer le profil
   // ET on écoute le retour arrière (BFCache) pour forcer la revérification
@@ -167,8 +177,30 @@ export function FournisseurAuthentification({
         sessionStorage.clear();
       }
       
-      const reponse = await seConnecterAPI(donnees);
-      setUtilisateur(reponse.utilisateur);
+      try {
+        const reponse = await seConnecterAPI(donnees);
+        setUtilisateur(reponse.utilisateur);
+        setEstHorsLigne(false);
+        // Le compte est memorise pour la prochaine session locale : seul le
+        // SHA-256 du mot de passe est conserve, jamais le mot de passe.
+        await memoriserCompte(reponse.utilisateur, donnees.mot_de_passe).catch(
+          () => undefined,
+        );
+      } catch (erreur) {
+        // Pas de reseau -> session locale si l'identifiant correspond a un
+        // compte deja connecte sur ce poste (mode offline global, S3).
+        const local = await connecterHorsLigne(
+          donnees.email ?? "",
+          donnees.mot_de_passe,
+        ).catch(() => null);
+        if (local) {
+          setUtilisateur(local);
+          setEstHorsLigne(true);
+          await ouvrirSessionHorsLigne(local).catch(() => undefined);
+          return;
+        }
+        throw erreur;
+      }
     } finally {
       setChargement(false);
     }
@@ -191,6 +223,10 @@ export function FournisseurAuthentification({
         localStorage.removeItem("digiid_utilisateur");
       }
       
+      // Fermer la session locale hors-ligne (le compte reste mémorisé pour une
+      // prochaine connexion sans réseau, mais la session est close).
+      await effacerSessionHorsLigne().catch(() => undefined);
+      setEstHorsLigne(false);      
       setChargement(false);
       
       // 🔄 Forcer le rechargement de la page pour vider tous les caches
@@ -205,7 +241,15 @@ export function FournisseurAuthentification({
     try {
       const profil = await obtenirMonProfil();
       setUtilisateur(profil);
+      setEstHorsLigne(false);
     } catch {
+      // Reseau coupe : on garde la session locale au lieu de deconnecter.
+      const local = await restaurerSessionHorsLigne().catch(() => null);
+      if (local) {
+        setUtilisateur(local);
+        setEstHorsLigne(true);
+        return;
+      }
       setUtilisateur(null);
     }
   }
@@ -216,6 +260,7 @@ export function FournisseurAuthentification({
         utilisateur,
         chargement,
         estConnecte: utilisateur !== null,
+        estHorsLigne,
         seConnecter,
         seDeconnecter,
         rafraichirProfil,

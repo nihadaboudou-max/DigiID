@@ -147,6 +147,7 @@ class UtilisateurReponse(BaseModel):
     role: str
     deux_fa_active: bool
     est_email_verifie: bool
+    est_telephone_verifie: bool = False
     score_actuel: Optional[int]
     date_creation: Optional[datetime] = None
     # ✅ CORRECTION : Ajout des champs de cloisonnement pour permettre

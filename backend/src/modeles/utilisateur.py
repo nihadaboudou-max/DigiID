@@ -71,6 +71,27 @@ class Utilisateur(Base, MelangeTracabilite):
     prenom_chiffre: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     nom_chiffre: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     telephone_chiffre: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    # 🔒 CONTRAINTE S3 — un numéro = un seul compte. Le numéro est chiffré
+    # ci-dessus (confidentialité) ; l'empreinte SHA-256 ci-dessous porte
+    # l'unicité et permet de retrouver un compte par téléphone sans déchiffrer
+    # la table (connexion hors-ligne, OTP, recherche guichet).
+    telephone_hash: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        unique=True,
+        index=True,
+        nullable=True,
+        doc="SHA-256 du numéro normalisé +229… — unique dans toute la base",
+    )
+    est_telephone_verifie: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        doc="Numéro validé par OTP/SMS (condition d'activation du compte)",
+    )
+    date_verification_telephone: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        doc="Date de la dernière validation OTP du numéro",
+    )
     photo_profil_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True, doc="URL de la photo de profil (stockée sur S3/MinIO)")
     ville: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     pays: Mapped[Optional[str]] = mapped_column(String(50), default="Bénin")

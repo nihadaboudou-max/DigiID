@@ -33,6 +33,7 @@ from src.noyau.exceptions import (
     ErreurConflit, ErreurValidation, Erreur2FARequis, Erreur2FAInvalide,
     ErreurEmailNonVerifie,
 )
+from src.noyau.telephone import hasher_telephone, normaliser_telephone
 from src.modules.authentification.totp import verifier_code_totp
 from src.modules.authentification.verification_code import (
     CANAL_EMAIL,
@@ -115,8 +116,32 @@ async def inscrire_utilisateur(
             message_utilisateur="Un compte existe déjà avec cet email.",
         )
 
-    # 2-4. Créer l'utilisateur
-    telephone_chiffre = chiffrer_donnee(telephone) if telephone else None
+    # 2-4. Créer l'utilisateur (téléphone validé +229 et unique — S3)
+    telephone_normalise = normaliser_telephone(telephone)
+    telephone_hash = None
+    if telephone_normalise:
+        telephone_hash = hasher_telephone(telephone_normalise)
+        deja_pris = await session.execute(
+            select(Utilisateur.id).where(
+                Utilisateur.telephone_hash == telephone_hash,
+                Utilisateur.est_supprime == False,
+            )
+        )
+        if deja_pris.first() is not None:
+            journal.warning(
+                "Inscription refusée : numéro déjà associé à un compte "
+                f"(hash={telephone_hash[:8]}…)"
+            )
+            raise ErreurConflit(
+                f"Téléphone déjà enregistré : {telephone_hash[:8]}…",
+                message_utilisateur=(
+                    "Ce numéro de téléphone est déjà associé à un compte."
+                ),
+            )
+
+    telephone_chiffre = (
+        chiffrer_donnee(telephone_normalise) if telephone_normalise else None
+    )
     parrainage = None  # Initialiser avant le bloc conditionnel
 
     nouvel_utilisateur = Utilisateur(
@@ -126,6 +151,8 @@ async def inscrire_utilisateur(
         prenom_chiffre=chiffrer_donnee(prenom),
         nom_chiffre=chiffrer_donnee(nom),
         telephone_chiffre=telephone_chiffre,
+        telephone_hash=telephone_hash,
+        est_telephone_verifie=False,
         ville=ville,
         role=role,
         digiid_public=_generer_digiid_public(),

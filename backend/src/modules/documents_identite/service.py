@@ -17,18 +17,74 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import DocumentIdentite, Utilisateur
+from src.modeles.document_identite import normaliser_numero_document
 from src.modules.documents_identite.schemas import (
     DocumentIdentiteCreation,
     DocumentIdentiteDetail,
     DocumentIdentiteModification,
     ListeDocumentsIdentite,
 )
-from src.noyau import journal
 from src.modules.scoring import declencher_recalcul_score
+from src.noyau import journal
+from src.noyau.exceptions import ErreurConflit, ErreurValidation
+
+
+async def verifier_unicite_numero(
+    session: AsyncSession,
+    numero_document: Optional[str],
+    utilisateur_id: Optional[UUID] = None,
+) -> Optional[DocumentIdentite]:
+    """
+    Contrainte S3 — un numéro de pièce ne peut exister qu'une seule fois.
+
+    Retourne le document **d'une autre personne** qui porte déjà ce numéro
+    (``None`` si le numéro est libre ou n'appartient qu'à ``utilisateur_id``).
+    """
+    numero = normaliser_numero_document(numero_document)
+    if not numero:
+        return None
+
+    resultat = await session.execute(
+        select(DocumentIdentite).where(
+            DocumentIdentite.numero_document == numero,
+        ).limit(1)
+    )
+    existant = resultat.scalar_one_or_none()
+    if existant is None:
+        return None
+    if utilisateur_id is not None and existant.utilisateur_id == utilisateur_id:
+        return None
+    return existant
+
+
+async def _refuser_doublon(
+    session: AsyncSession,
+    numero_document: Optional[str],
+    utilisateur: Utilisateur,
+) -> Optional[str]:
+    """Lève ``ErreurConflit`` (HTTP 409) si le numéro appartient à autrui."""
+    existant = await verifier_unicite_numero(
+        session, numero_document, utilisateur.id
+    )
+    if existant is None:
+        return normaliser_numero_document(numero_document)
+
+    journal.warning(
+        f"Doublon de pièce d'identité refusé | numero={existant.numero_document} "
+        f"déjà détenu par {existant.utilisateur_id} | tentative={utilisateur.id}"
+    )
+    raise ErreurConflit(
+        f"Numéro de pièce déjà attribué à un autre compte "
+        f"({existant.numero_document})",
+        message_utilisateur=(
+            "Ce numéro de pièce d'identité est déjà enregistré sur un autre "
+            "compte. Contactez le support si vous pensez qu'il s'agit d'une erreur."
+        ),
+        donnees_supplementaires={"champ": "numero_document"},
+    )
 
 
 def _document_vers_detail(doc: DocumentIdentite) -> DocumentIdentiteDetail:
-    """Convertit un objet ORM en schéma Pydantic."""
     return DocumentIdentiteDetail(
         id=doc.id,
         utilisateur_id=doc.utilisateur_id,
@@ -81,8 +137,11 @@ async def ajouter_document(
         utilisateur_id=utilisateur.id,
         type_document=donnees.type_document,
         source=donnees.source or "manuel",
-        # Copier tous les champs fournis
-        numero_document=donnees.numero_document,
+        # Copier tous les champs fournis (le numéro est normalisé + vérifié
+        # unique AVANT l'écriture : contrainte S3).
+        numero_document=await _refuser_doublon(
+            session, donnees.numero_document, utilisateur
+        ),
         nom_complet=donnees.nom_complet,
         date_naissance=donnees.date_naissance,
         lieu_naissance=donnees.lieu_naissance,
@@ -154,7 +213,7 @@ async def marquer_document_fourni(
     l'extraction du document.
     """
     champs = {
-        "numero_document": numero_document,
+        "numero_document": normaliser_numero_document(numero_document),
         "nom_complet": nom_complet,
         "date_naissance": date_naissance,
         "lieu_naissance": lieu_naissance,
@@ -167,6 +226,18 @@ async def marquer_document_fourni(
     }
 
     try:
+        # 🔒 Unicité stricte : on n'écrase jamais le titre d'une autre personne.
+        doublon = await verifier_unicite_numero(
+            session, numero_document, utilisateur.id
+        )
+        if doublon is not None:
+            journal.warning(
+                f"Document {type_document} non marqué : numéro "
+                f"{doublon.numero_document} déjà détenu par un autre compte "
+                f"({doublon.utilisateur_id}) | tentative={utilisateur.id}"
+            )
+            return None
+
         resultat = await session.execute(
             select(DocumentIdentite)
             .where(
@@ -334,6 +405,72 @@ async def modifier_document(
     # Recalcul score
     await declencher_recalcul_score(
         session, utilisateur, "document_identite_modification", adresse_ip,
+    )
+    return _document_vers_detail(doc)
+
+
+CHAMPS_REGLEMENTAIRES = {
+    "numero_document",
+    "date_expiration",
+    "date_delivrance",
+    "type_document",
+}
+
+
+async def modifier_champs_reglementaires_admin(
+    session: AsyncSession,
+    document_id: UUID,
+    numero_document: Optional[str] = None,
+    date_expiration: Optional[date] = None,
+    date_delivrance: Optional[date] = None,
+    motif: str = "",
+) -> Optional[DocumentIdentiteDetail]:
+    """
+    Mise à jour **réservée à l'administrateur système** des champs
+    réglementaires (numéro de pièce, dates de délivrance/expiration).
+
+    L'utilisateur ne peut pas y accéder : `modifier_document()` les exclut
+    (`CHAMPS_NON_MODIFIABLES`). Passer par ici garantit :
+      - la vérification d'unicité du nouveau numéro (contrainte S3) ;
+      - la traçabilité (journal + motif obligatoire).
+    """
+    if not motif.strip():
+        raise ErreurValidation(
+            "Motif obligatoire pour modifier un champ réglementaire",
+            message_utilisateur="Indiquez le motif de la correction (traçabilité).",
+        )
+
+    resultat = await session.execute(
+        select(DocumentIdentite).where(DocumentIdentite.id == document_id)
+    )
+    doc = resultat.scalar_one_or_none()
+    if doc is None:
+        return None
+
+    if numero_document is not None:
+        numero = normaliser_numero_document(numero_document)
+        doublon = await verifier_unicite_numero(session, numero, doc.utilisateur_id)
+        if doublon is not None:
+            raise ErreurConflit(
+                f"Numéro déjà attribué à un autre document ({numero})",
+                message_utilisateur=(
+                    "Ce numéro de pièce appartient déjà à un autre compte."
+                ),
+            )
+        doc.numero_document = numero
+
+    if date_expiration is not None:
+        doc.date_expiration = date_expiration
+    if date_delivrance is not None:
+        doc.date_delivrance = date_delivrance
+
+    doc.modifie_le = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(doc)
+
+    journal.warning(
+        f"Champs réglementaires modifiés par un administrateur | "
+        f"doc={document_id} user={doc.utilisateur_id} | motif={motif!r}"
     )
     return _document_vers_detail(doc)
 

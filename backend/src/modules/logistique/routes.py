@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
@@ -1056,6 +1057,57 @@ async def enregistrer_colis(
     await _enrichir_colis(session, colis)
     ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
     return {"colis": colis, "ticket": ticket}
+
+
+@routeur_colis.post(
+    "/synchroniser",
+    response_model=list[schemas.ColisEnregistre],
+    summary="Synchroniser les colis saisis hors-ligne (idempotent)",
+)
+@require_permission("logistique.colis.creer")
+async def synchroniser_colis_hors_ligne(
+    donnees: list[schemas.ColisHorsLigne],
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    """Rejoue la file d'attente locale d'un poste guichet.
+
+    Chaque colis porte un ``id_local`` (clé d'idempotence) : si le colis a déjà
+    été créé lors d'une tentative précédente, on renvoie **le même** colis et son
+    ticket au lieu d'en créer un second. Le poste peut donc rejouer sa file
+    autant de fois que nécessaire, même après une coupure au milieu de l'envoi.
+    """
+    resultats: list[dict] = []
+    for element in donnees:
+        deja = await session.execute(
+            select(Colis).where(Colis.id_local == element.id_local).limit(1)
+        )
+        existant = deja.scalar_one_or_none()
+        if existant is not None:
+            ticket_existant = await session.get(Ticket, existant.ticket_id)
+            await _enrichir_colis(session, existant)
+            if ticket_existant is not None:
+                ticket_existant.qr_code_url = construire_url_qr_durable(
+                    ticket_existant.qr_token
+                )
+            resultats.append({"colis": existant, "ticket": ticket_existant})
+            continue
+
+        charge = schemas.ColisCreate(**element.model_dump(exclude={"id_local"}))
+        colis, ticket = await service.creer_colis(
+            session, charge, utilisateur_courant
+        )
+        colis.id_local = element.id_local
+        await session.commit()
+        await _enrichir_colis(session, colis)
+        ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
+        resultats.append({"colis": colis, "ticket": ticket})
+
+    journal.info(
+        f"Synchronisation hors-ligne : {len(resultats)} colis "
+        f"pour {utilisateur_courant.id}"
+    )
+    return resultats
 
 
 @routeur_colis.get("", response_model=schemas.ReponseListe[schemas.ColisResponse],

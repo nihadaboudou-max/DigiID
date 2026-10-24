@@ -385,8 +385,17 @@ class ColisResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ColisHorsLigne(ColisCreate):
+    """Colis saisi **sans réseau** puis rejoué à la reconnexion (S3).
+
+    ``id_local`` est la clé d'idempotence générée par le poste guichet : rejouer
+    la file deux fois ne crée jamais de doublon.
+    """
+
+    id_local: str = Field(..., min_length=8, max_length=64)
+
+
 class ColisEnregistre(BaseModel):
-    """Réponse d'enregistrement d'un colis : le colis + son ticket (QR + code)."""
     colis: ColisResponse
     ticket: TicketResponse
 

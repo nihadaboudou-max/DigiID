@@ -210,6 +210,8 @@ export interface Utilisateur {
   role: RoleUtilisateur;
   deux_fa_active: boolean;
   est_email_verifie: boolean;
+  /** Numéro validé par OTP/SMS (contrainte S3). */
+  est_telephone_verifie?: boolean;
   score_actuel: number | null;
   date_creation?: string;
   est_actif: boolean;

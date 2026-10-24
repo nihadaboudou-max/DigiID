@@ -28,6 +28,7 @@ import { PaiementColis } from "@/composants/paiement/PaiementColis";
 import { useLangue, useVoix } from "@/i18n/useLangue";
 import { useAuthentification } from "@/contextes/authentification";
 import { ErreurAPI } from "@/services/client_api";
+import { mettreEnFile } from "@/services/offline/file_colis";
 import {
   gareDeLActeur,
   logistiqueAPI,
@@ -122,6 +123,8 @@ export function EnregistrementColis({
   const [erreur, setErreur] = useState<string | null>(null);
   const [enregistrement, setEnregistrement] = useState(false);
   const [resultat, setResultat] = useState<ColisEnregistre | null>(null);
+  /** Colis mis en file locale faute de réseau (id_local) — bandeau de succès. */
+  const [colisEnFile, setColisEnFile] = useState<string | null>(null);
 
   // ─── Guidage vocal de l'assistant (S5) ─────────────────────────────
 
@@ -257,7 +260,7 @@ export function EnregistrementColis({
     try {
       const poids = poidsKg ? Number(poidsKg.replace(",", ".")) : null;
       const valeur = valeurFcfa ? Number(valeurFcfa.replace(",", ".")) : null;
-      const reponse = await logistiqueAPI.colis.creer({
+      const charge = {
         expediteur_nom: expediteurNom.trim() || null,
         expediteur_tel: expediteurTel.trim() || null,
         destinataire_nom: destinataireNom.trim(),
@@ -276,8 +279,22 @@ export function EnregistrementColis({
         voyage_id: affecterPlusTard ? null : voyageId || null,
         chauffeur_id: affecterPlusTard ? undefined : (chauffeurId ?? undefined),
         enregistrement_direct: enregistrementDirect || undefined,
-      });
-      setResultat(reponse);
+      };
+
+      try {
+        setResultat(await logistiqueAPI.colis.creer(charge));
+      } catch (erreurReseau) {
+        // Pas de reseau (ou serveur injoignable) : le colis est enregistre
+        // LOCALEMENT et rejoue a la reconnexion. Une erreur metier (409,
+        // permission...) n'est jamais mise en file : elle doit etre corrigee.
+        const horsLigne =
+          typeof navigator !== "undefined" && navigator.onLine === false;
+        const serveurInjoignable = !(erreurReseau instanceof ErreurAPI);
+        if (!horsLigne && !serveurInjoignable) throw erreurReseau;
+
+        const enAttente = await mettreEnFile(charge);
+        setColisEnFile(enAttente.id_local);
+      }
     } catch (e) {
       setErreur(
         e instanceof ErreurAPI

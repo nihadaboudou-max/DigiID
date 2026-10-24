@@ -43,12 +43,21 @@ class Colis(Base, MelangeTracabilite):
         Index("ix_colis_statut", "statut"),
         Index("ix_colis_enregistre_par", "enregistre_par_id"),
         Index("ix_colis_mode_enregistrement", "mode_enregistrement"),
+        # Idempotence du mode hors-ligne (S3) : un colis saisi sans réseau porte
+        # un identifiant généré par le poste guichet ; le rejeu de la file
+        # d'attente ne peut donc pas créer de doublon.
+        Index("uq_colis_id_local", "id_local", unique=True),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     # Ticket porteur (QR + code clair). Identifiant unique côté colis.
+    id_local: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        nullable=True,
+        doc="Clé d'idempotence générée hors-ligne (UUID du poste guichet)",
+    )
     ticket_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("tickets.id", ondelete="SET NULL"),

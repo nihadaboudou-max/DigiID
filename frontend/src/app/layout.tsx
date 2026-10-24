@@ -12,6 +12,7 @@ import { FournisseurAuthentification } from "@/contextes/authentification";
 import { FournisseurNotifications } from "@/contextes/notifications";
 import { ConteneurLayout } from "@/composants/layouts/ConteneurLayout";
 import { AssistantImpression } from "@/composants/commun/AssistantImpression";
+import { SynchronisationHorsLigne } from "@/composants/commun/SynchronisationHorsLigne";
 import { GuideVocal } from "@/composants/accessibilite/GuideVocal";
 
 // Polices Poppins hébergées localement
@@ -51,6 +52,8 @@ export default function LayoutRacine({
               <GuideVocal />
               {/* Impression propre (une page par ticket) même via Ctrl+P. */}
               <AssistantImpression />
+          {/* File de colis hors-ligne : indicateur discret + rejeu automatique. */}
+          <SynchronisationHorsLigne />
             </FournisseurNotifications>
           </FournisseurAuthentification>
         </FournisseurLangue>

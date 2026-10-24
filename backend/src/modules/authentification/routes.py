@@ -57,6 +57,9 @@ def _construire_utilisateur_reponse(utilisateur: Utilisateur) -> UtilisateurRepo
         role=utilisateur.role,
         deux_fa_active=utilisateur.deux_fa_active,
         est_email_verifie=utilisateur.est_email_verifie,
+        est_telephone_verifie=bool(
+            getattr(utilisateur, "est_telephone_verifie", False)
+        ),
         score_actuel=utilisateur.score_actuel,
         date_creation=utilisateur.cree_le,
         # ✅ CORRECTION : Transmettre les IDs de cloisonnement

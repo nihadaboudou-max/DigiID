@@ -8,6 +8,7 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Alerte } from "@/composants/commun/Alerte";
 import { IconeCopier, IconeCheck } from "@/composants/commun/Icones";
 import { EtatVerificationsCitoyen } from "@/composants/verifications";
+import { CarteTelephone } from "@/composants/profil/CarteTelephone";
 import { useEtatVerifications } from "@/crochets/useEtatVerifications";
 import { useAuthentification } from "@/contextes/authentification";
 
@@ -169,6 +170,9 @@ function Contenu() {
           </div>
         </div>
       </Carte>
+
+      {/* Téléphone : complétion + vérification OTP (indicatif +229 imposé). */}
+      <CarteTelephone />
 
       {/* Section identifiant DigiID */}
       <Carte>

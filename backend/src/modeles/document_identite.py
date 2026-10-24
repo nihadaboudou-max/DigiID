@@ -14,11 +14,28 @@ import uuid
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.base_donnees.base import Base, MelangeTracabilite
+
+
+def normaliser_numero_document(valeur: Optional[str]) -> Optional[str]:
+    """
+    Normalise un numéro de pièce avant écriture (S3).
+
+    ``ab 123-45`` et ``AB12345`` désignent le **même** titre : sans cette
+    normalisation, la contrainte d'unicité serait contournable par une simple
+    faute de frappe (espaces, tirets, minuscules).
+    """
+    if valeur is None:
+        return None
+    nettoye = "".join(
+        caractere for caractere in str(valeur).upper()
+        if caractere.isalnum()
+    )
+    return nettoye or None
 
 
 class DocumentIdentite(Base, MelangeTracabilite):
@@ -30,6 +47,16 @@ class DocumentIdentite(Base, MelangeTracabilite):
     """
 
     __tablename__ = "document_identite"
+
+    # 🔒 CONTRAINTE D'UNICITÉ STRICTE (S3) — un numéro de pièce d'identité
+    # (CNI, passeport, permis…) ne peut exister qu'UNE seule fois dans toute la
+    # base : impossible d'enregistrer le même titre sur plusieurs comptes.
+    # Le numéro est normalisé (majuscules, sans espaces) avant écriture par
+    # `normaliser_numero_document()` ; les valeurs vides restent NULL et ne
+    # sont pas concernées par la contrainte (Postgres ignore les NULL).
+    __table_args__ = (
+        UniqueConstraint("numero_document", name="uq_document_numero_document"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
@@ -59,7 +86,11 @@ class DocumentIdentite(Base, MelangeTracabilite):
     )
 
     # --- Champs communs ---
-    numero_document: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    numero_document: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        nullable=True,
+        doc="Numéro de la pièce — STRICTEMENT unique dans toute la base (S3)",
+    )
     nom_complet: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     date_naissance: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     lieu_naissance: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

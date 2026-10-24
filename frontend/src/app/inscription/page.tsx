@@ -197,13 +197,15 @@ export default function PageInscription() {
             />
 
             <ChampSaisie
-              libelle="Téléphone"
+              libelle="Téléphone (obligatoire)"
               type="tel"
               value={donnees.telephone}
               onChange={modifierChamp("telephone")}
-              placeholder="+229 97 12 34 56"
+              placeholder="+229 01 97 12 34 56"
               autoComplete="tel"
-              aide="Numéro au format international. Facultatif mais améliore ton score."
+              required
+              inputMode="tel"
+              aide="Format +229 · un numéro = un seul compte."
             />
 
             <ChampSaisie

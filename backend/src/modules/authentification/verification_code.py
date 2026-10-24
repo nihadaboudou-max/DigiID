@@ -257,6 +257,17 @@ async def verifier_code(
                 resultat_verification["est_email_verifie"] = True
                 journal.info(f"Email vérifié avec succès : utilisateur={utilisateur.id}")
 
+        # 📱 OTP/SMS (ou appel) : le NUMÉRO est prouvé — condition d'activation
+        # du compte (contrainte S3 : « validé par OTP/SMS avant activation »).
+        if canal in (CANAL_SMS, CANAL_APPEL) and not utilisateur.est_telephone_verifie:
+            from datetime import datetime, timezone
+            utilisateur.est_telephone_verifie = True
+            utilisateur.date_verification_telephone = datetime.now(timezone.utc)
+            resultat_verification["est_telephone_verifie"] = True
+            journal.info(
+                f"Téléphone vérifié par OTP ({canal}) : utilisateur={utilisateur.id}"
+            )
+
         # Activer le compte si c'était une inscription (quel que soit le canal : email, SMS ou appel)
         if activer_compte and type_verification == "inscription" and not utilisateur.est_actif:
             utilisateur.est_actif = True
