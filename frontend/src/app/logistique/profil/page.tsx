@@ -367,6 +367,11 @@ function Contenu() {
   }
 
   const estChauffeur = formulaire.type_profil === "chauffeur";
+  // Une information déjà lue sur un document et enregistrée ne se réécrit
+  // plus depuis le dossier : elle sert de preuve pour la vérification.
+  const pieceVerrouillee = !!(dossier?.type_piece || dossier?.numero_piece);
+  const permisVerrouille = !!dossier?.permis_numero;
+  const vehiculeVerrouille = !!dossier?.vehicule_immatriculation;
 
   return (
     <div className="space-y-6 apparition">
@@ -433,12 +438,16 @@ function Contenu() {
               value={formulaire.type_piece ?? ""}
               onChange={(e) => modifier("type_piece", e.target.value)}
               placeholder="Ex : CNI, passeport"
+              disabled={pieceVerrouillee}
+              aide={pieceVerrouillee ? "Lu sur votre pièce : non modifiable." : undefined}
             />
             <ChampSaisie
               libelle="Numéro de la pièce"
               value={formulaire.numero_piece ?? ""}
               onChange={(e) => modifier("numero_piece", e.target.value)}
               placeholder="Ex : 1234567890123"
+              disabled={pieceVerrouillee}
+              aide={pieceVerrouillee ? "Lu sur votre pièce : non modifiable." : undefined}
             />
           </div>
 
@@ -512,12 +521,15 @@ function Contenu() {
                   libelle="Numéro de permis"
                   value={formulaire.permis_numero ?? ""}
                   onChange={(e) => modifier("permis_numero", e.target.value)}
+                  disabled={permisVerrouille}
+                  aide={permisVerrouille ? "Lu sur le permis : non modifiable." : undefined}
                 />
                 <ChampSaisie
                   libelle="Catégorie du permis"
                   value={formulaire.permis_categorie ?? ""}
                   onChange={(e) => modifier("permis_categorie", e.target.value)}
                   placeholder="Ex : C, D"
+                  disabled={permisVerrouille}
                 />
                 <ChampSaisie
                   libelle="Expiration du permis"
@@ -525,6 +537,12 @@ function Contenu() {
                   value={formulaire.permis_expiration ?? ""}
                   onChange={(e) =>
                     modifier("permis_expiration", e.target.value || null)
+                  }
+                  disabled={permisVerrouille}
+                  aide={
+                    formulaire.permis_expiration
+                      ? `Valable jusqu'au ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" }).format(new Date(`${formulaire.permis_expiration}T00:00:00`))}.`
+                      : "Date d'échéance lue sur le permis."
                   }
                 />
               </div>
@@ -537,16 +555,24 @@ function Contenu() {
                     modifier("vehicule_immatriculation", e.target.value)
                   }
                   placeholder="Ex : AB-1234-RB"
+                  disabled={vehiculeVerrouille}
+                  aide={
+                    vehiculeVerrouille
+                      ? "Véhicule lu sur vos documents et déjà affecté à votre compte : non modifiable."
+                      : undefined
+                  }
                 />
                 <ChampSaisie
                   libelle="Marque"
                   value={formulaire.vehicule_marque ?? ""}
                   onChange={(e) => modifier("vehicule_marque", e.target.value)}
+                  disabled={vehiculeVerrouille}
                 />
                 <ChampSaisie
                   libelle="Modèle"
                   value={formulaire.vehicule_modele ?? ""}
                   onChange={(e) => modifier("vehicule_modele", e.target.value)}
+                  disabled={vehiculeVerrouille}
                 />
                 <ChampSaisie
                   libelle="Capacité (places)"
@@ -556,6 +582,7 @@ function Contenu() {
                       ? ""
                       : String(formulaire.vehicule_capacite)
                   }
+                  disabled={vehiculeVerrouille}
                   onChange={(e) => {
                     const chiffres = e.target.value.replace(/\D/g, "");
                     modifier(
@@ -644,6 +671,31 @@ function ResumeDossier({ dossier }: { dossier: ProfilLogistique }) {
           </ul>
         </div>
       )*/}
+
+      {dossier.type_profil === "chauffeur" && (
+        <div className="mt-3 space-y-0.5 text-xs text-ardoise-clair">
+          {dossier.permis_expiration && (
+            <p>
+              Permis valable jusqu&apos;au{" "}
+              <span className="font-semibold text-ardoise">
+                {new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" }).format(
+                  new Date(`${dossier.permis_expiration}T00:00:00`),
+                )}
+              </span>
+              .
+            </p>
+          )}
+          {dossier.vehicule_immatriculation && (
+            <p>
+              Véhicule affecté à votre compte :{" "}
+              <span className="font-semibold text-ardoise">
+                {dossier.vehicule_immatriculation}
+              </span>
+              .
+            </p>
+          )}
+        </div>
+      )}
 
       {dossier.verifie_le && (
         <p className="text-xs text-ardoise-clair mt-3">

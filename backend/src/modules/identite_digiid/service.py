@@ -288,6 +288,60 @@ async def obtenir_profil_logistique(
     return profil
 
 
+async def _attribuer_vehicule_du_profil(
+    session: AsyncSession, profil: ProfilLogistique, utilisateur_id: UUID
+) -> None:
+    """Le véhicule déclaré dans le dossier devient **celui du chauffeur**.
+
+    Sans ce lien, la plaque lue sur la carte verte / la carte grise restait un
+    simple texte : le chauffeur ne retrouvait pas son car à la planification.
+    On réutilise le car existant (même plaque, à la casse et aux tirets près)
+    au lieu d'en créer un doublon.
+    """
+    if profil.type_profil != "chauffeur":
+        return
+    plaque = (profil.vehicule_immatriculation or "").strip().upper()
+    if not plaque:
+        return
+
+    from src.modules.logistique.service import normaliser_immatriculation
+
+    cible = normaliser_immatriculation(plaque)
+    vehicules = list((await session.execute(select(Vehicule))).scalars().all())
+    existant = next(
+        (
+            vehicule
+            for vehicule in vehicules
+            if normaliser_immatriculation(vehicule.immatriculation) == cible
+        ),
+        None,
+    )
+    if existant is None:
+        session.add(
+            Vehicule(
+                immatriculation=plaque,
+                marque=profil.vehicule_marque,
+                capacite=profil.vehicule_capacite,
+                chauffeur_id=utilisateur_id,
+            )
+        )
+        return
+
+    if existant.chauffeur_id not in (None, utilisateur_id):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                f"Le car {existant.immatriculation} est déjà affecté à un autre "
+                "chauffeur. Voyez le gérant de gare pour le transférer."
+            ),
+        )
+    existant.chauffeur_id = utilisateur_id
+    if profil.vehicule_marque:
+        existant.marque = profil.vehicule_marque
+    if profil.vehicule_capacite is not None:
+        existant.capacite = profil.vehicule_capacite
+
+
 async def enregistrer_profil_logistique(
     session: AsyncSession,
     utilisateur: Utilisateur,
@@ -319,6 +373,31 @@ async def enregistrer_profil_logistique(
         "vehicule_capacite",
     )
     valeurs = donnees.model_dump(exclude_unset=True)
+
+    # Une pièce / un permis / une plaque déjà enregistrée ne se réécrit plus
+    # depuis le dossier : ces numéros viennent de l'OCR et servent de preuve.
+    # Seul un gérant de gare peut les corriger (hors de cette route).
+    champs_verrouilles = (
+        "type_piece", "numero_piece", "permis_numero", "permis_categorie",
+        "permis_expiration", "vehicule_immatriculation",
+    )
+    for champ in champs_verrouilles:
+        ancienne = getattr(profil, champ, None)
+        if (
+            champ in valeurs
+            and ancienne not in (None, "")
+            and valeurs[champ] not in (None, "")
+            and str(valeurs[champ]) != str(ancienne)
+        ):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=(
+                    "Les numéros et dates lus sur vos documents ne peuvent plus "
+                    "être modifiés après enregistrement. Contactez le gérant de "
+                    "gare pour une correction."
+                ),
+            )
+
     reinitialiser = False
     for champ in elements_controles:
         if champ in valeurs and valeurs[champ] != getattr(profil, champ):
@@ -333,6 +412,10 @@ async def enregistrer_profil_logistique(
         profil.photo_verifiee = False
         profil.verifie_le = None
         profil.notes = None
+
+    # Le véhicule lu sur les documents est immédiatement le sien : il pourra le
+    # choisir pour planifier un départ, sans repasser par le guichet.
+    await _attribuer_vehicule_du_profil(session, profil, utilisateur.id)
 
     await session.commit()
     await session.refresh(profil)

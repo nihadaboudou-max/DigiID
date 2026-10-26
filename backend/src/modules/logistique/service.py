@@ -750,11 +750,81 @@ async def creer_voyage(session: AsyncSession, donnees: schemas.VoyageCreate) -> 
     if donnees.chauffeur_id is not None:
         await _verifier_existe(session, Utilisateur, donnees.chauffeur_id, "Chauffeur")
     _verifier_date_depart(donnees.date_depart)
+    if donnees.chauffeur_id is not None:
+        await _verifier_conflit_chauffeur(
+            session,
+            donnees.chauffeur_id,
+            donnees.date_depart,
+            donnees.date_arrivee,
+            donnees.ligne_id,
+        )
     voyage = Voyage(**donnees.model_dump())
     session.add(voyage)
     await session.commit()
     await session.refresh(voyage)
     return voyage
+
+
+async def _duree_prevue_minutes(
+    session: AsyncSession, ligne_id: UUID, date_depart: datetime, date_arrivee: datetime | None
+) -> int:
+    if date_arrivee is not None and date_arrivee > date_depart:
+        return int((date_arrivee - date_depart).total_seconds() // 60)
+    ligne = await session.get(Ligne, ligne_id)
+    if ligne is not None and ligne.duree_min and ligne.duree_min > 0:
+        return int(ligne.duree_min)
+    return 120  # durée par défaut d'un trajet interurbain
+
+
+def _en_utc(valeur: datetime) -> datetime:
+    return valeur if valeur.tzinfo is not None else valeur.replace(tzinfo=timezone.utc)
+
+
+async def _verifier_conflit_chauffeur(
+    session: AsyncSession,
+    chauffeur_id: UUID,
+    date_depart: datetime | None,
+    date_arrivee: datetime | None,
+    ligne_id: UUID,
+    *,
+    exclure_voyage_id: UUID | None = None,
+) -> None:
+    """Un chauffeur ne peut pas conduire deux départs en même temps.
+
+    Deux trajets différents à la même heure le même jour sont impossibles : on
+    refuse le chevauchement des plages horaires (durée de la ligne, ou 2 h par
+    défaut quand elle n'est pas renseignée).
+    """
+    if date_depart is None:
+        return
+    debut = _en_utc(date_depart)
+    fin = debut + timedelta(
+        minutes=await _duree_prevue_minutes(session, ligne_id, debut, date_arrivee)
+    )
+    requete = select(Voyage).where(
+        Voyage.chauffeur_id == chauffeur_id,
+        Voyage.statut.in_(("planifie", "en_cours")),
+    )
+    if exclure_voyage_id is not None:
+        requete = requete.where(Voyage.id != exclure_voyage_id)
+    for autre in (await session.execute(requete)).scalars().all():
+        if autre.date_depart is None:
+            continue
+        autre_debut = _en_utc(autre.date_depart)
+        autre_fin = autre_debut + timedelta(
+            minutes=await _duree_prevue_minutes(
+                session, autre.ligne_id, autre_debut, autre.date_arrivee
+            )
+        )
+        if debut < autre_fin and autre_debut < fin:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=(
+                    "Ce chauffeur a déjà un départ sur ce créneau "
+                    f"({autre_debut.strftime('%d/%m %H:%M')}). "
+                    "Choisissez un autre horaire."
+                ),
+            )
 
 
 def _verifier_date_depart(date_depart: datetime | None) -> None:
@@ -905,6 +975,24 @@ async def modifier_voyage(session: AsyncSession, voyage_id: UUID,
             status.HTTP_409_CONFLICT,
             detail="Ce départ a déjà eu lieu (ou est annulé) : sa date est figée.",
         )
+    chauffeur_final = valeurs.get("chauffeur_id", voyage.chauffeur_id)
+    if (
+        chauffeur_final is not None
+        and voyage.statut in ("planifie", "en_cours")
+        and valeurs.get("statut", voyage.statut) != "annule"
+        and any(
+            champ in valeurs
+            for champ in ("date_depart", "date_arrivee", "chauffeur_id", "ligne_id")
+        )
+    ):
+        await _verifier_conflit_chauffeur(
+            session,
+            chauffeur_final,
+            valeurs.get("date_depart", voyage.date_depart),
+            valeurs.get("date_arrivee", voyage.date_arrivee),
+            valeurs.get("ligne_id", voyage.ligne_id),
+            exclure_voyage_id=voyage.id,
+        )
     for champ, valeur in valeurs.items():
         setattr(voyage, champ, valeur)
     await session.commit()
@@ -957,6 +1045,9 @@ async def rejoindre_voyage(
             detail=f"{nom} conduit déjà ce voyage (statut « planifie »). Choisissez un autre départ.",
         )
 
+    await _verifier_conflit_chauffeur(
+        session, chauffeur_id, voyage.date_depart, voyage.date_arrivee, voyage.ligne_id
+    )
     voyage.chauffeur_id = chauffeur_id
     await session.commit()
     await session.refresh(voyage)

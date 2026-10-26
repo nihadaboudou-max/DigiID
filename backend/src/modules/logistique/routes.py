@@ -716,6 +716,11 @@ async def creer_voyage(
         await service.verifier_vehicule_du_chauffeur(
             session, donnees.vehicule_id, utilisateur_courant.id
         )
+        # Le chauffeur planifie **son** départ : on impose son compte pour que
+        # le contrôle anti-chevauchement s'applique même s'il omet le champ.
+        donnees = donnees.model_copy(
+            update={"chauffeur_id": utilisateur_courant.id}
+        )
     voyage = await service.creer_voyage(session, donnees)
     await _auditer_logistique(
         session, requete, utilisateur_courant,

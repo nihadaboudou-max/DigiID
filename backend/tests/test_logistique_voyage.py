@@ -21,6 +21,14 @@ from src.modeles import Utilisateur, Voyage
 from src.modules.logistique import service
 
 
+class _ResultatVide:
+    def scalars(self):
+        return self
+
+    def all(self):
+        return []
+
+
 class SessionFactice:
     """Session minimale : `get` rend ce qu'on lui a préparé, commit/refresh no-op."""
 
@@ -30,6 +38,10 @@ class SessionFactice:
 
     async def get(self, modele, identifiant):
         return self.objets.get((modele, identifiant))
+
+    async def execute(self, requete):
+        # Aucun autre voyage en base : ces tests portent sur les garde-fous.
+        return _ResultatVide()
 
     async def commit(self):
         self.commits += 1
