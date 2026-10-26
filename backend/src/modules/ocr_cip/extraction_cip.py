@@ -51,56 +51,27 @@ def _extraire_apres(texte: str, patterns: List[str], longueur: int = 60) -> Opti
 
 def _extraire_npi(texte: str) -> Optional[str]:
     """NPI = Numéro Personnel d'Identification (pièce du CIP)."""
-    
-    # 1. Chercher explicitement après "Numéro Personnel d'Identification"
-    # Le NPI est souvent sur la même ligne ou la ligne suivante
-    patterns_npi = [
-        r"NUMERO\s*PERSONNEL\s*D['']?\s*IDENTIFICATION\s*[:\-]?\s*([0-9]{10,14})",
-        r"NPI\s*[:\-]?\s*([0-9]{10,14})",
-        r"IDENTIFICATION\s*[:\-]?\s*([0-9]{10,14})",
-    ]
-    
-    for pattern in patterns_npi:
-        match = re.search(pattern, texte)
-        if match:
-            npi = match.group(1).strip()
-            # Vérifier que ce n'est pas une date ou autre
-            if len(npi) >= 10 and len(npi) <= 14:
-                return npi
-    
-    # 2. Repli : chercher un numéro long (10-14 chiffres) près du mot "NPI" ou "IDENTIFICATION"
-    # Mais exclure les numéros qui ressemblent à des dates
-    matches = re.findall(r'\b([0-9]{10,14})\b', texte)
-    for match in matches:
-        # Vérifier si ce numéro est proche de "NPI" ou "IDENTIFICATION"
-        pos_numero = texte.find(match)
-        if pos_numero != -1:
-            # Chercher dans un rayon de 100 caractères
-            debut = max(0, pos_numero - 100)
-            fin = min(len(texte), pos_numero + 50)
-            contexte = texte[debut:fin]
-            
-            if "NPI" in contexte or "IDENTIFICATION" in contexte or "PERSONNEL" in contexte:
-                # Exclure les numéros qui pourraient être des dates (ex: 20112024)
-                if not re.match(r'^\d{2}[01]\d[12]\d{3}$', match):  # Pas un format JJMMYYYY
-                    return match
-    
-    return None
+    # Chercher le bloc après "Numéro Personnel d'Identification"
+    m = re.search(
+        r"NUMERO\s*PERSONNEL\s*D['’]?\s*IDENTIFICATION\s*[:\-]?\s*([^\n]{10,30})",
+        texte,
+    )
+    if m:
+        npi_brut = m.group(1)
+        # NETTOYAGE AGRESSIF : on ne garde QUE les chiffres
+        npi_propre = re.sub(r'[^0-9]', '', npi_brut)
+        
+        # Valider la longueur (un NPI fait généralement entre 10 et 14 chiffres)
+        if 10 <= len(npi_propre) <= 14:
+            return npi_propre
+        else:
+            journal.warning(f"NPI extrait mais longueur invalide : '{npi_propre}'")
 
+    # Repli : chercher une longue suite de chiffres près du mot NPI
+    m_repli = re.search(r"(?:NPI|IDENTIFICATION).{0,40}?([0-9]{10,14})", texte)
+    if m_repli:
+        return re.sub(r'[^0-9]', '', m_repli.group(1))
 
-def _extraire_numero_serie(texte: str) -> Optional[str]:
-    """Numéro de série imprimé en haut à gauche (souvent 13 chiffres)."""
-    # Chercher un numéro en début de texte (haut du document)
-    # Sur le CIP, c'est souvent le premier numéro visible
-    match = re.match(r'^.*?\b([0-9]{12,14})\b', texte, re.DOTALL)
-    if match:
-        return match.group(1)
-    
-    # Repli : chercher n'importe quel numéro de 13 chiffres
-    matches = re.findall(r'\b([0-9]{13})\b', texte)
-    if matches:
-        return matches[0]
-    
     return None
 
 
