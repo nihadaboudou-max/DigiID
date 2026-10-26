@@ -5,8 +5,6 @@ import time
 from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
-import cv2
-import numpy as np
 
 from fastapi import UploadFile
 from sqlalchemy import desc, select
@@ -73,35 +71,6 @@ def _compter_champs_extraits(donnees: DonneesCIPExtraites) -> int:
     return sum(1 for c in champs if c is not None)
 
 
-def _pretraiter_image_cip(image_bytes: bytes) -> bytes:
-    """Améliore la qualité de l'image pour l'OCR (réduction des reflets/bruit)."""
-    try:
-        # Décoder l'image
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        if img is None:
-            return image_bytes
-
-        # 1. Convertir en niveaux de gris
-        gris = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-        # 2. Appliquer un flou gaussien pour réduire le bruit
-        flou = cv2.GaussianBlur(gris, (5, 5), 0)
-
-        # 3. Seuillage adaptatif pour améliorer le contraste (texte vs fond)
-        # Cela aide beaucoup pour les documents avec des reflets inégaux
-        seuil = cv2.adaptiveThreshold(
-            flou, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-        )
-
-        # Réencoder l'image en JPEG
-        _, buffer = cv2.imencode('.jpg', seuil)
-        return buffer.tobytes()
-    except Exception as e:
-        journal.warning(f"Prétraitement CIP échoué : {e}")
-        return image_bytes  # En cas d'erreur, on renvoie l'originale
-
-
 async def traiter_upload_cip(
     session: AsyncSession,
     utilisateur: Utilisateur,
@@ -111,12 +80,9 @@ async def traiter_upload_cip(
     debut = time.time()
     contenu = await _lire_image(fichier)
 
-    # NOUVEAU : Prétraiter l'image avant l'OCR
-    contenu_pretraite = _pretraiter_image_cip(contenu)
-
     # 1. OCR texte
     try:
-        res = analyser_image_cni(contenu_pretraite)
+        res = analyser_image_cni(contenu)
         texte_brut = res.get("texte_brut", "")
         confiance = res.get("confiance_moyenne", 0.0)
     except Exception as e:  # pragma: no cover

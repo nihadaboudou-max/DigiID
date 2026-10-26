@@ -51,26 +51,22 @@ def _extraire_apres(texte: str, patterns: List[str], longueur: int = 60) -> Opti
 
 def _extraire_npi(texte: str) -> Optional[str]:
     """NPI = Numéro Personnel d'Identification (pièce du CIP)."""
-    # Chercher le bloc après "Numéro Personnel d'Identification"
+    for pat in [
+        r"NUMERO\s*PERSONNEL\s*D['’]?\s*IDENTIFICATION",
+        r"N\s*[°O]?\s*PERSONNEL\s*D['’]?\s*IDENTIFICATION",
+        r"\bNPI\b",
+    ]:
+        m = re.search(rf"{pat}\s*[:\-]?\s*([0-9]{{8,14}})", texte)
+        if m:
+            return m.group(1)
+
+    # Repli : suite de 10 chiffres isolée près de « NPI » / « IDENTIFICATION »
     m = re.search(
-        r"NUMERO\s*PERSONNEL\s*D['’]?\s*IDENTIFICATION\s*[:\-]?\s*([^\n]{10,30})",
+        r"(?:NPI|IDENTIFICATION|PERSONNEL).{0,40}?([0-9]{10})",
         texte,
     )
     if m:
-        npi_brut = m.group(1)
-        # NETTOYAGE AGRESSIF : on ne garde QUE les chiffres
-        npi_propre = re.sub(r'[^0-9]', '', npi_brut)
-        
-        # Valider la longueur (un NPI fait généralement entre 10 et 14 chiffres)
-        if 10 <= len(npi_propre) <= 14:
-            return npi_propre
-        else:
-            journal.warning(f"NPI extrait mais longueur invalide : '{npi_propre}'")
-
-    # Repli : chercher une longue suite de chiffres près du mot NPI
-    m_repli = re.search(r"(?:NPI|IDENTIFICATION).{0,40}?([0-9]{10,14})", texte)
-    if m_repli:
-        return re.sub(r'[^0-9]', '', m_repli.group(1))
+        return m.group(1)
 
     return None
 
