@@ -337,6 +337,18 @@ export const logistiqueAPI = {
      */
     affecter: (colisId: string, donnees: { voyage_id: string; chauffeur_id?: string }) =>
       clientAPI.post<Colis>(`${BASE}/colis/${colisId}/affectation`, donnees, opts),
+
+    /** Corrige une fiche colis **avant** la prise en charge (guichet). */
+    modifier: (colisId: string, donnees: Record<string, unknown>) =>
+      clientAPI.patch<Colis>(`${BASE}/colis/${colisId}`, donnees, opts),
+
+    /** Le chauffeur confirme avoir physiquement pris le colis en charge. */
+    confirmerReception: (colisId: string) =>
+      clientAPI.post<Colis>(`${BASE}/colis/${colisId}/reception`, {}, opts),
+
+    /** Le chauffeur dépose le colis au guichet d'arrivée. */
+    remettreGuichet: (colisId: string) =>
+      clientAPI.post<Colis>(`${BASE}/colis/${colisId}/remise-guichet`, {}, opts),
   },
 
   // ─── Suivi familial (enfants voyageant seuls — S7) ────────────────
@@ -396,6 +408,22 @@ export const logistiqueAPI = {
       clientAPI.post<SuiviFamilial>(
         `${BASE}/suivi-familial/${id}/affectation`,
         donnees,
+        opts,
+      ),
+
+    /** Corrige une fiche passager **avant** la prise en charge (guichet). */
+    modifier: (id: string, donnees: Record<string, unknown>) =>
+      clientAPI.patch<SuiviFamilial>(`${BASE}/suivi-familial/${id}`, donnees, opts),
+
+    /** Le chauffeur confirme avoir pris le passager à bord. */
+    confirmerReception: (id: string) =>
+      clientAPI.post<SuiviFamilial>(`${BASE}/suivi-familial/${id}/reception`, {}, opts),
+
+    /** Le chauffeur remet le passager au guichet d'arrivée. */
+    remettreGuichet: (id: string) =>
+      clientAPI.post<SuiviFamilial>(
+        `${BASE}/suivi-familial/${id}/remise-guichet`,
+        {},
         opts,
       ),
   },

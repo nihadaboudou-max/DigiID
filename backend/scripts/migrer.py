@@ -190,6 +190,27 @@ COLONNES_A_VERIFIER = [
     # jamais les colonnes → sans cette ligne, toute requête sur un car échoue.
     ("vehicules", "chauffeur_id",
      "UUID REFERENCES utilisateur(id) ON DELETE SET NULL"),
+
+    # ─── Arrêts intermédiaires + prise en charge / remise guichet ─────
+    # La table ``arrets_ligne`` est créée par ``create_all`` (table manquante),
+    # mais ``create_all`` ne touche **jamais** aux tables existantes : ces
+    # colonnes doivent donc être listées ici pour les bases déjà en service.
+    ("colis", "arret_destination_id",
+     "UUID REFERENCES arrets_ligne(id) ON DELETE SET NULL"),
+    ("colis", "reception_confirmee_le", "TIMESTAMP WITH TIME ZONE"),
+    ("colis", "reception_confirmee_par_id",
+     "UUID REFERENCES utilisateur(id) ON DELETE SET NULL"),
+    ("colis", "remis_guichet_le", "TIMESTAMP WITH TIME ZONE"),
+    ("colis", "remis_guichet_par_id",
+     "UUID REFERENCES utilisateur(id) ON DELETE SET NULL"),
+    ("suivi_familial", "arret_destination_id",
+     "UUID REFERENCES arrets_ligne(id) ON DELETE SET NULL"),
+    ("suivi_familial", "reception_confirmee_le", "TIMESTAMP WITH TIME ZONE"),
+    ("suivi_familial", "reception_confirmee_par_id",
+     "UUID REFERENCES utilisateur(id) ON DELETE SET NULL"),
+    ("suivi_familial", "remis_guichet_le", "TIMESTAMP WITH TIME ZONE"),
+    ("suivi_familial", "remis_guichet_par_id",
+     "UUID REFERENCES utilisateur(id) ON DELETE SET NULL"),
 ]
 
 

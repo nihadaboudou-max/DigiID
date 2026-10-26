@@ -137,7 +137,16 @@ class LigneManifeste(BaseModel):
     contact_masque: Optional[str] = None
     gare_depart_nom: Optional[str] = None
     gare_arrivee_nom: Optional[str] = None
+    # Position de l'arrêt de descente dans la tournée (10000 = terminus).
+    arret_ordre: Optional[int] = None
+    # Arrêt précis de descente : le chauffeur regroupe sa feuille de route par
+    # arrêt ("ce qui descend à Bohicon") et non par heure d'enregistrement.
+    arret_destination_id: Optional[UUID] = None
+    arret_nom: Optional[str] = None
     statut: str
+    # Prise en charge confirmée par le chauffeur, puis dépôt au guichet.
+    reception_confirmee: bool = False
+    remis_guichet: bool = False
     nombre_bagages: int = 1
     nombre_articles: int = 1
     mode_enregistrement: str = "guichet"

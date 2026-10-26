@@ -19,6 +19,7 @@ import { Carte } from "@/composants/commun/Carte";
 import { ErreurAPI } from "@/services/client_api";
 import { imprimer } from "@/services/impression";
 import { identiteAPI } from "@/services/identite_api";
+import { logistiqueAPI } from "@/services/logistique_api";
 import type { LigneManifeste, ManifesteVoyage as TypeManifeste } from "@/types/identite";
 import { LIBELLES_MODE_ENREGISTREMENT } from "@/types/logistique";
 
@@ -38,6 +39,7 @@ export function ManifesteVoyage({
   const [manifeste, setManifeste] = useState<TypeManifeste | null>(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [actionEnCours, setActionEnCours] = useState<string | null>(null);
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -58,6 +60,38 @@ export function ManifesteVoyage({
   useEffect(() => {
     void charger();
   }, [charger, rafraichir]);
+
+  /**
+   * Prise en charge / dépôt au guichet — gestes du **chauffeur uniquement**.
+   *
+   * La remise finale au destinataire reste au guichet : le chauffeur dépose,
+   * le guichet constate. On rafraîchit ensuite le manifeste pour que l'arrêt
+   * suivant ne contienne plus le colis déjà descendu.
+   */
+  async function agir(ligne: LigneManifeste, type: "reception" | "remise") {
+    const cle = `${ligne.type}-${ligne.id}-${type}`;
+    setActionEnCours(cle);
+    setErreur(null);
+    try {
+      if (ligne.type === "colis") {
+        if (type === "reception") await logistiqueAPI.colis.confirmerReception(ligne.id);
+        else await logistiqueAPI.colis.remettreGuichet(ligne.id);
+      } else if (type === "reception") {
+        await logistiqueAPI.suiviFamilial.confirmerReception(ligne.id);
+      } else {
+        await logistiqueAPI.suiviFamilial.remettreGuichet(ligne.id);
+      }
+      await charger();
+    } catch (e) {
+      setErreur(
+        e instanceof ErreurAPI
+          ? e.message_utilisateur
+          : "Impossible d'enregistrer ce geste.",
+      );
+    } finally {
+      setActionEnCours(null);
+    }
+  }
 
   return (
     <Carte
@@ -110,11 +144,15 @@ export function ManifesteVoyage({
                 titre="Colis à bord"
                 lignes={manifeste.colis}
                 vide="Aucun colis embarqué."
+                actionEnCours={actionEnCours}
+                surAction={agir}
               />
               <TableauManifeste
                 titre="Passagers à bord"
                 lignes={manifeste.passagers}
                 vide="Aucun passager enregistré."
+                actionEnCours={actionEnCours}
+                surAction={agir}
               />
             </div>
           )}
@@ -133,10 +171,14 @@ function TableauManifeste({
   titre,
   lignes,
   vide,
+  actionEnCours,
+  surAction,
 }: {
   titre: string;
   lignes: LigneManifeste[];
   vide: string;
+  actionEnCours: string | null;
+  surAction: (ligne: LigneManifeste, type: "reception" | "remise") => void;
 }) {
   if (lignes.length === 0) {
     return (
@@ -147,51 +189,115 @@ function TableauManifeste({
     );
   }
 
+  // Regroupement par arrêt de descente : le chauffeur lit « ce qui descend à
+  // Bohicon » d'un bloc, au lieu de parcourir une liste triée par heure de
+  // saisie. Le terminus (ou l'absence d'arrêt) ferme la marche.
+  const groupes = new Map<string, LigneManifeste[]>();
+  for (const ligne of [...lignes].sort((a, b) => {
+    const ordre = (a.arret_ordre ?? 10_000) - (b.arret_ordre ?? 10_000);
+    return ordre !== 0 ? ordre : a.code.localeCompare(b.code);
+  })) {
+    const libelle = ligne.arret_nom ?? "Terminus / arrêt non précisé";
+    groupes.set(libelle, [...(groupes.get(libelle) ?? []), ligne]);
+  }
+
   return (
     <div>
-      <h4 className="text-sm font-semibold text-ardoise mb-2">
+      <h4 className="text-sm font-semibold text-ardoise mb-3">
         {titre} <span className="text-ardoise-clair">({lignes.length})</span>
       </h4>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-ardoise-clair/20 text-left text-xs uppercase tracking-wider text-ardoise-clair">
-              <th className="py-2 pr-3">Code</th>
-              <th className="py-2 pr-3">Pour</th>
-              <th className="py-2 pr-3">Contact</th>
-              <th className="py-2 pr-3">Sacs</th>
-              <th className="py-2 pr-3">Origine</th>
-              <th className="py-2 pr-3">Statut</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lignes.map((ligne) => (
-              <tr key={`${ligne.type}-${ligne.id}`} className="border-b border-ardoise-clair/10">
-                <td className="py-2 pr-3 font-mono text-xs text-ardoise">
-                  {ligne.code}
-                </td>
-                <td className="py-2 pr-3 text-ardoise">{ligne.libelle}</td>
-                <td className="py-2 pr-3 text-ardoise-clair">
-                  {ligne.contact_masque ?? "—"}
-                </td>
-                <td className="py-2 pr-3 text-ardoise-clair">{ligne.nombre_bagages}</td>
-                <td className="py-2 pr-3">
-                  <Badge
-                    variante={
-                      ligne.mode_enregistrement === "chauffeur_direct"
-                        ? "ocre"
-                        : "neutre"
-                    }
-                  >
-                    {LIBELLES_MODE_ENREGISTREMENT[ligne.mode_enregistrement] ??
-                      ligne.mode_enregistrement}
-                  </Badge>
-                </td>
-                <td className="py-2 pr-3 text-ardoise-clair">{ligne.statut}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="space-y-4">
+        {[...groupes.entries()].map(([arret, lignesArret]) => (
+          <div key={arret}>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-lagune">
+              Descente à {arret} <span className="text-ardoise-clair">({lignesArret.length})</span>
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-ardoise-clair/20 text-left text-xs uppercase tracking-wider text-ardoise-clair">
+                    <th className="py-2 pr-3">Code</th>
+                    <th className="py-2 pr-3">Pour</th>
+                    <th className="py-2 pr-3">Contact</th>
+                    <th className="py-2 pr-3">Sacs</th>
+                    <th className="py-2 pr-3">Origine</th>
+                    <th className="py-2 pr-3">Statut</th>
+                    <th className="py-2 pr-3 no-print">Gestes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lignesArret.map((ligne) => {
+                    const cle = `${ligne.type}-${ligne.id}-reception`;
+                    const cleRemise = `${ligne.type}-${ligne.id}-remise`;
+                    return (
+                      <tr
+                        key={`${ligne.type}-${ligne.id}`}
+                        className="border-b border-ardoise-clair/10"
+                      >
+                        <td className="py-2 pr-3 font-mono text-xs text-ardoise">
+                          {ligne.code}
+                        </td>
+                        <td className="py-2 pr-3 text-ardoise">{ligne.libelle}</td>
+                        <td className="py-2 pr-3 text-ardoise-clair">
+                          {ligne.contact_masque ?? "—"}
+                        </td>
+                        <td className="py-2 pr-3 text-ardoise-clair">
+                          {ligne.nombre_bagages}
+                        </td>
+                        <td className="py-2 pr-3">
+                          <Badge
+                            variante={
+                              ligne.mode_enregistrement === "chauffeur_direct"
+                                ? "ocre"
+                                : "neutre"
+                            }
+                          >
+                            {LIBELLES_MODE_ENREGISTREMENT[ligne.mode_enregistrement] ??
+                              ligne.mode_enregistrement}
+                          </Badge>
+                        </td>
+                        <td className="py-2 pr-3 text-ardoise-clair">
+                          {ligne.statut}
+                          {ligne.reception_confirmee && (
+                            <span className="ml-2 text-xs text-green-700">✓ pris en charge</span>
+                          )}
+                          {ligne.remis_guichet && (
+                            <span className="ml-2 text-xs text-lagune">✓ déposé au guichet</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3 no-print">
+                          {!ligne.reception_confirmee ? (
+                            <Bouton
+                              variante="ghost"
+                              taille="petit"
+                              chargement={actionEnCours === cle}
+                              onClick={() => surAction(ligne, "reception")}
+                            >
+                              Prendre en charge
+                            </Bouton>
+                          ) : !ligne.remis_guichet ? (
+                            <Bouton
+                              variante="secondaire"
+                              taille="petit"
+                              chargement={actionEnCours === cleRemise}
+                              onClick={() => surAction(ligne, "remise")}
+                            >
+                              Déposer au guichet
+                            </Bouton>
+                          ) : (
+                            <span className="text-xs italic text-ardoise-clair">
+                              Au guichet
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

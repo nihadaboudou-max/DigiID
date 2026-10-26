@@ -21,8 +21,12 @@ from src.base_donnees.base import Base, MelangeTracabilite
 TYPES_EVENEMENT_SUIVI = (
     "enregistrement",
     "affectation",
+    # Prise en charge à bord par le chauffeur (fige la fiche).
+    "reception",
     "depart",
     "arrivee",
+    # Le chauffeur remet l'enfant au guichet d'arrivée.
+    "remise_guichet",
     "livraison",
     "incident",
 )

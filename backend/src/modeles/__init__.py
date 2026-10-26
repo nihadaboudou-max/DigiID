@@ -44,7 +44,7 @@ from .base_document import (
 )
 from src.modeles.inspection_document import InspectionDocument
 from src.modeles.logistique import (
-    Gare, Ligne, Vehicule, Voyage, ActeurLogistique, STATUTS_VOYAGE, ROLES_ACTEUR,
+    Gare, Ligne, ArretLigne, Vehicule, Voyage, ActeurLogistique, STATUTS_VOYAGE, ROLES_ACTEUR,
     Ticket, STATUTS_TICKET, TYPES_TICKET,
 
     Colis, STATUTS_COLIS, MODES_ENREGISTREMENT_COLIS,
@@ -119,6 +119,7 @@ __all__ = [
     "InspectionDocument",
     "Gare",
     "Ligne",
+    "ArretLigne",
     "Vehicule",
     "Voyage",
     "ActeurLogistique",

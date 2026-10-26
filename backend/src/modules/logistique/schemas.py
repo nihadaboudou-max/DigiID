@@ -51,6 +51,34 @@ class GareResponse(GareBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ─── Arrêts d'une ligne (trajets avec escales) ─────────────────────
+
+class ArretLigneBase(BaseModel):
+    """Un arrêt intermédiaire : la gare et sa position dans la tournée."""
+    gare_id: UUID
+    ordre: int = Field(..., ge=1, le=100)
+    actif: bool = True
+
+
+class ArretLigneCreate(ArretLigneBase):
+    pass
+
+
+class ArretLigneUpdate(BaseModel):
+    gare_id: Optional[UUID] = None
+    ordre: Optional[int] = Field(None, ge=1, le=100)
+    actif: Optional[bool] = None
+
+
+class ArretLigneResponse(ArretLigneBase):
+    id: UUID
+    ligne_id: UUID
+    gare_nom: Optional[str] = None
+    cree_le: datetime
+    modifie_le: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ─── Ligne ───────────────────────────────────────────────────────────
 
 class LigneCreate(BaseModel):
@@ -59,6 +87,9 @@ class LigneCreate(BaseModel):
     distance_km: Optional[float] = Field(None, ge=0)
     duree_min: Optional[int] = Field(None, ge=0)
     actif: bool = True
+    # Arrêts intermédiaires (facultatif) : on peut créer le trajet et ses
+    # escales en une seule requête — sinon voir ``POST /lignes/{id}/arrets``.
+    arrets: list[ArretLigneCreate] = []
 
     @model_validator(mode="after")
     def _gares_distinctes(self):
@@ -86,6 +117,9 @@ class LigneResponse(BaseModel):
     modifie_le: Optional[datetime] = None
     gare_depart_nom: Optional[str] = None
     gare_arrivee_nom: Optional[str] = None
+    # Arrêts intermédiaires ordonnés (le terminus n'y figure pas : il est porté
+    # par ``gare_arrivee_id``).
+    arrets: list[ArretLigneResponse] = []
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -303,6 +337,9 @@ class ColisCreate(BaseModel):
     expediteur_tel: Optional[str] = Field(None, max_length=30)
     gare_depart_id: UUID
     gare_arrivee_id: UUID
+    # Arrêt précis où le colis doit descendre (facultatif : à défaut, la gare
+    # d'arrivée). Il doit appartenir à la ligne du voyage.
+    arret_destination_id: Optional[UUID] = None
     description: Optional[str] = Field(None, max_length=500)
     poids_kg: Optional[float] = Field(None, ge=0)
     valeur_fcfa: Optional[int] = Field(None, ge=0)
@@ -388,6 +425,14 @@ class ColisResponse(BaseModel):
     expediteur_tel: Optional[str] = None
     receveur_nom: Optional[str] = None
     chauffeur_nom: Optional[str] = None
+    # Arrêt de destination et sa position dans la tournée (tri du chauffeur).
+    arret_destination_id: Optional[UUID] = None
+    arret_destination_nom: Optional[str] = None
+    arret_ordre: Optional[int] = None
+    # Confirmation de prise en charge par le chauffeur + remise au guichet.
+    reception_confirmee_le: Optional[datetime] = None
+    remis_guichet_le: Optional[datetime] = None
+    remis_guichet_par_nom: Optional[str] = None
     # Origine de l'enregistrement : « guichet » ou « chauffeur_direct ».
     mode_enregistrement: str = "guichet"
     enregistre_par_id: Optional[UUID] = None
@@ -410,6 +455,33 @@ class ColisHorsLigne(ColisCreate):
 class ColisEnregistre(BaseModel):
     colis: ColisResponse
     ticket: TicketResponse
+
+
+class ColisUpdate(BaseModel):
+    """Correction d'une fiche colis par le guichet.
+
+    Autorisée **avant** la prise en charge par le chauffeur
+    (``reception_confirmee_le``) et seulement par l'agent qui a enregistré le
+    colis : au-delà, la fiche est figée (le colis est dans le car).
+    """
+    destinataire_nom: Optional[str] = Field(None, min_length=2, max_length=150)
+    destinataire_tel: Optional[str] = Field(None, min_length=6, max_length=30)
+    expediteur_nom: Optional[str] = Field(None, max_length=150)
+    expediteur_tel: Optional[str] = Field(None, max_length=30)
+    description: Optional[str] = Field(None, max_length=500)
+    poids_kg: Optional[float] = Field(None, ge=0)
+    valeur_fcfa: Optional[int] = Field(None, ge=0)
+    nombre_articles: Optional[int] = Field(None, ge=1, le=9999)
+    nombre_bagages: Optional[int] = Field(None, ge=1, le=10)
+    frais_fcfa: Optional[int] = Field(None, ge=0)
+    arret_destination_id: Optional[UUID] = None
+
+    @field_validator("destinataire_tel", "expediteur_tel", mode="before")
+    @classmethod
+    def _valider_telephones(cls, valeur):
+        from src.noyau.telephone import normaliser_numero_tiers
+
+        return normaliser_numero_tiers(valeur)
 
 
 class AffectationRequest(BaseModel):
@@ -521,6 +593,9 @@ class SuiviFamilialCreate(BaseModel):
     nombre_bagages: int = Field(1, ge=1, le=10)
     gare_depart_id: UUID
     gare_arrivee_id: UUID
+    # Arrêt précis où le passager descend (facultatif : à défaut, la gare
+    # d'arrivée). Il doit appartenir à la ligne du voyage.
+    arret_destination_id: Optional[UUID] = None
     # **Attribution obligatoire** : chauffeur précis + voyage précis.
     voyage_id: Optional[UUID] = None
     # **Obligatoire** hors enregistrement direct (voir ``enregistrement_direct``).
@@ -619,6 +694,9 @@ class SuiviFamilialResponse(BaseModel):
     parent_id: Optional[UUID] = None
     gare_depart_id: UUID
     gare_arrivee_id: UUID
+    # Arrêt précis où le passager descend (facultatif : à défaut, la gare
+    # d'arrivée). Il doit appartenir à la ligne du voyage.
+    arret_destination_id: Optional[UUID] = None
     voyage_id: Optional[UUID] = None
     chauffeur_id: Optional[UUID] = None
     statut: str
@@ -638,6 +716,13 @@ class SuiviFamilialResponse(BaseModel):
     enregistre_par_nom: Optional[str] = None
     chauffeur_nom: Optional[str] = None
     nb_evenements: int = 0
+    # Position de l'arrêt de descente dans la tournée (tri du chauffeur).
+    arret_destination_nom: Optional[str] = None
+    arret_ordre: Optional[int] = None
+    # Confirmation de prise en charge + remise au guichet d'arrivée.
+    reception_confirmee_le: Optional[datetime] = None
+    remis_guichet_le: Optional[datetime] = None
+    remis_guichet_par_nom: Optional[str] = None
     # Étiquettes QR générées (une par sac).
     bagages: list[BagageResponse] = []
     model_config = ConfigDict(from_attributes=True)
@@ -647,6 +732,39 @@ class SuiviFamilialEnregistre(BaseModel):
     """Réponse d'enregistrement : le suivi + son ticket (QR + code)."""
     suivi: SuiviFamilialResponse
     ticket: TicketResponse
+
+
+class SuiviFamilialUpdate(BaseModel):
+    """Correction d'une fiche passager par le guichet.
+
+    Même règle que pour un colis : possible uniquement **avant** la prise en
+    charge par le chauffeur et par l'agent qui a enregistré la fiche.
+    """
+    enfant_nom: Optional[str] = Field(None, min_length=2, max_length=150)
+    enfant_age: Optional[int] = Field(None, ge=0, le=120)
+    enfant_sexe: Optional[str] = Field(None, pattern=r"^[MF]$")
+    parent_nom: Optional[str] = Field(None, max_length=150)
+    telephone_parent: Optional[str] = Field(None, min_length=6, max_length=30)
+    telephone_passager: Optional[str] = Field(None, min_length=6, max_length=30)
+    acheteur_nom: Optional[str] = Field(None, max_length=150)
+    acheteur_tel: Optional[str] = Field(None, min_length=6, max_length=30)
+    proche_nom: Optional[str] = Field(None, max_length=150)
+    proche_telephone: Optional[str] = Field(None, min_length=6, max_length=30)
+    nombre_bagages: Optional[int] = Field(None, ge=1, le=10)
+    arret_destination_id: Optional[UUID] = None
+
+    @field_validator(
+        "telephone_parent",
+        "telephone_passager",
+        "acheteur_tel",
+        "proche_telephone",
+        mode="before",
+    )
+    @classmethod
+    def _valider_telephones(cls, valeur):
+        from src.noyau.telephone import normaliser_numero_tiers
+
+        return normaliser_numero_tiers(valeur)
 
 
 class SuiviFamilialEvenementResultat(BaseModel):

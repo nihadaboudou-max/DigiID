@@ -1,0 +1,78 @@
+nts pour obtenir la validation (pilotage du terrain).
+    champs_manquants: list[str] = []
+    model_config = ConfigDict(from_attributes=True)
+
+
+class VerificationProfilRequest(BaseModel):
+    """Validation métier d'un dossier par un gérant de gare / administrateur."""
+    piece_verifiee: bool = False
+    permis_verifie: bool = False
+    photo_verifiee: bool = False
+    notes: Optional[str] = Field(None, max_length=1000)
+
+
+# ─── Manifeste du chauffeur ──────────────────────────────────────────
+
+class LigneManifeste(BaseModel):
+    """Une ligne du manifeste : un colis ou un passager."""
+    id: UUID
+    type: Literal["colis", "passager"]
+    code: str
+    libelle: str                     # destinataire (colis) ou nom du passager
+    contact_masque: Optional[str] = None
+    gare_depart_nom: Optional[str] = None
+    gare_arrivee_nom: Optional[str] = None
+    statut: str
+    nombre_bagages: int = 1
+    nombre_articles: int = 1
+    mode_enregistrement: str = "guichet"
+    enregistre_le: Optional[datetime] = None
+
+
+class VoyageChauffeurResponse(BaseModel):
+    """Voyage affecté à un chauffeur, avec les volumes à transporter."""
+    id: UUID
+    date_depart: Optional[datetime] = None
+    date_arrivee: Optional[datetime] = None
+    statut: str
+    vehicule_immatriculation: Optional[str] = None
+    gare_depart_nom: Optional[str] = None
+    gare_arrivee_nom: Optional[str] = None
+    nb_colis: int = 0
+    nb_passagers: int = 0
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ManifesteVoyageResponse(BaseModel):
+    voyage_id: UUID
+    date_depart: Optional[datetime] = None
+    statut: str
+    vehicule_immatriculation: Optional[str] = None
+    gare_depart_nom: Optional[str] = None
+    gare_arrivee_nom: Optional[str] = None
+    nb_colis: int = 0
+    nb_passagers: int = 0
+    nb_bagages: int = 0
+    colis: list[LigneManifeste] = []
+    passagers: list[LigneManifeste] = []
+
+
+# ─── Voyages du citoyen (ses envois + les voyages de ses proches) ────
+
+class VoyageCitoyen(BaseModel):
+    id: UUID
+    type: Literal["colis", "passager"]
+    code: str
+    libelle: str
+    statut: str
+    gare_depart_nom: Optional[str] = None
+    gare_arrivee_nom: Optional[str] = None
+    date_depart: Optional[datetime] = None
+    vehicule_immatriculation: Optional[str] = None
+    chauffeur_nom: Optional[str] = None
+    nombre_bagages: int = 1
+    lien: Optional[str] = None
+
+
+class MesVoyagesResponse(BaseModel):
+    """Vue « mes voyages » du citoyen : ses envois et les passagers qu'il su

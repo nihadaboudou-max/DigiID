@@ -21,9 +21,13 @@ from src.base_donnees.base import Base, MelangeTracabilite
 TYPES_EVENEMENT_COLIS = (
     "enregistrement",
     "affectation",
+    # Prise en charge physique par le chauffeur (fige la fiche).
+    "reception",
     "depart",
     "mise_en_transit",
     "arrivee",
+    # Le chauffeur dépose le colis au guichet d'arrivée.
+    "remise_guichet",
     "livraison",
     "incident",
 )

@@ -135,7 +135,16 @@ export interface LigneManifeste {
   contact_masque: string | null;
   gare_depart_nom: string | null;
   gare_arrivee_nom: string | null;
+  /** Position de l'arrêt de descente dans la tournée (10000 = terminus). */
+  arret_ordre: number | null;
+  /** Arrêt précis où descendre — sert à regrouper la feuille de route. */
+  arret_destination_id: string | null;
+  arret_nom: string | null;
   statut: string;
+  /** Prise en charge confirmée par le chauffeur. */
+  reception_confirmee: boolean;
+  /** Colis ou passager déposé au guichet d'arrivée. */
+  remis_guichet: boolean;
   nombre_bagages: number;
   nombre_articles: number;
   mode_enregistrement: ModeEnregistrement;

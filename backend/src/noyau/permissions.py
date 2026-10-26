@@ -119,6 +119,9 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
         # Référentiel roulant : enregistrer un car et l'affecter à un chauffeur
         # sur le terrain, sans attendre que le super-admin soit disponible.
         "logistique.vehicule.ecrire", "logistique.vehicule.affecter",
+        # Le trajet (ligne + arrêts) est un acte de référence : gérant de gare
+        # et super-admin seulement. Le chauffeur ne le modifie pas.
+        "logistique.trajet.ecrire",
         "paiement.lire", "paiement.payer",
     }),
     # Le receveur tient le guichet au quotidien : il enregistre les cars qui se
@@ -141,6 +144,8 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
         "logistique.lire", "logistique.scan", "logistique.colis.creer",
         "logistique.profil.ecrire", "logistique.voyage.rejoindre",
         "logistique.planifier",
+        # Seul le chauffeur constate le départ et l'arrivée (il est dans le car).
+        "logistique.voyage.valider",
         "paiement.lire",
     }),
     RoleUtilisateur.COMMERCANT: frozenset({

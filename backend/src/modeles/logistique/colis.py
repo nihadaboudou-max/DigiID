@@ -43,6 +43,8 @@ class Colis(Base, MelangeTracabilite):
         Index("ix_colis_statut", "statut"),
         Index("ix_colis_enregistre_par", "enregistre_par_id"),
         Index("ix_colis_mode_enregistrement", "mode_enregistrement"),
+        # Arrêt de destination précis (arrêt intermédiaire de la ligne).
+        Index("ix_colis_arret_destination", "arret_destination_id"),
         # Idempotence du mode hors-ligne (S3) : un colis saisi sans réseau porte
         # un identifiant généré par le poste guichet ; le rejeu de la file
         # d'attente ne peut donc pas créer de doublon.
@@ -139,6 +141,40 @@ class Colis(Base, MelangeTracabilite):
     frais_fcfa: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     livre_le: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+    # ─── Arrêt de destination (trajets avec arrêts intermédiaires) ───
+    # Le colis ne va pas forcément au terminus : il peut descendre à Dassa.
+    # On référence l'arrêt (et non la gare seule) pour connaître sa position
+    # dans la tournée et trier la feuille de route du chauffeur.
+    arret_destination_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("arrets_ligne.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # ─── Confirmation de réception par le chauffeur ──────────────────
+    # Tant que le chauffeur n'a pas confirmé avoir pris le colis en charge, le
+    # guichet peut encore corriger la fiche. Dès la confirmation, la fiche est
+    # figée : le colis est physiquement dans le car.
+    reception_confirmee_le: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reception_confirmee_par_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("utilisateur.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # ─── Remise au guichet d'arrivée ────────────────────────────────
+    # Le chauffeur ne remet jamais un colis en main propre au destinataire :
+    # il le dépose au guichet, qui constate la remise finale (scan livraison).
+    remis_guichet_le: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    remis_guichet_par_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("utilisateur.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     def __repr__(self) -> str:

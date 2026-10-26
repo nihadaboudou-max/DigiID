@@ -1,0 +1,110 @@
+, "equipe.ecrire",
+        "ong.lire", "ong.ecrire",
+        "beneficiaire.lire", "beneficiaire.ecrire",
+        "statistiques.departement",
+        # Permissions pour créer des agents ONG
+        "agent_ong.creer", "agent_ong.lire", "agent_ong.modifier",
+    }),
+    
+    RoleUtilisateur.CHEF_AGENT: frozenset({
+        "equipe.lire", "equipe.ecrire",
+        "agent.lire", "agent.ecrire",
+        "enrolement.lire", "enrolement.ecrire",
+        "statistiques.departement",
+        # Permissions pour créer des agents terrain
+        "agent_terrain.creer", "agent_terrain.lire", "agent_terrain.modifier",
+    }),
+    
+    # Agents Terrain — accès limité
+    RoleUtilisateur.AGENT_POLICE: frozenset({
+        "police.lire", "police.ecrire",
+        "verification.lire", "verification.ecrire",
+    }),
+    
+    RoleUtilisateur.AGENT_MEDICAL: frozenset({
+        "medical.lire", "medical.ecrire",
+        "dossier.lire", "dossier.ecrire",
+    }),
+    
+    RoleUtilisateur.AGENT_ONG: frozenset({
+        "ong.lire",
+        "beneficiaire.lire", "beneficiaire.ecrire",
+    }),
+    
+    RoleUtilisateur.AGENT_TERRAIN: frozenset({
+        "agent.lire", "agent.ecrire",
+        "enrolement.lire", "enrolement.ecrire",
+    }),
+
+    # ─── Pivot logistique (Plan B) ───
+    # S1 : lire/écrire/supprimer le référentiel.
+    # S2 : créer des colis (logistique.colis.creer) et scanner (logistique.scan).
+    # S6 : encaisser un colis et consulter sa cagnotte (paiement.lire / paiement.payer).
+    RoleUtilisateur.GERANT_GARE: frozenset({
+        "logistique.lire", "logistique.ecrire", "logistique.supprimer",
+        "logistique.colis.creer", "logistique.scan",
+        "logistique.profil.ecrire", "logistique.voyage.rejoindre",
+        "logistique.planifier",
+        # Référentiel roulant : enregistrer un car et l'affecter à un chauffeur
+        # sur le terrain, sans attendre que le super-admin soit disponible.
+        "logistique.vehicule.ecrire", "logistique.vehicule.affecter",
+        "paiement.lire", "paiement.payer",
+    }),
+    # Le receveur tient le guichet au quotidien : il enregistre les cars qui se
+    # présentent le jour même (et les affecte à leur chauffeur) quand le
+    # super-admin ou le gérant de gare n'est pas disponible. Il ne supprime
+    # rien et ne planifie pas de départ : ces gestes restent réservés.
+    RoleUtilisateur.RECEVEUR: frozenset({
+        "logistique.lire", "logistique.colis.creer", "logistique.scan",
+        "logistique.profil.ecrire",
+        "logistique.vehicule.ecrire", "logistique.vehicule.affecter",
+        "paiement.lire", "paiement.payer",
+    }),
+    # Le chauffeur est un **indépendant** : il définit ses propres lignes (trajets
+    # entre les gares existantes), **planifie ses départs** et peut les modifier
+    # ou les annuler. Les gares, elles, ne lui appartiennent pas : ce sont le
+    # gérant de gare et le super-admin qui inscrivent les gares du terrain — on
+    # ne réinvente pas une gare qui existe déjà. Il enregistre par ailleurs ses
+    # propres clients (colis ou passager) : c'est la traçabilité « en route ».
+    RoleUtilisateur.CHAUFFEUR: frozenset({
+        "logistique.lire", "logistique.scan", "logistique.colis.creer",
+        "logistique.profil.ecrire", "logistique.voyage.rejoindre",
+        "logistique.planifier",
+        "paiement.lire",
+    }),
+    RoleUtilisateur.COMMERCANT: frozenset({
+        "logistique.lire", "logistique.colis.creer",
+        "paiement.lire", "paiement.payer",
+    }),
+    
+    # Citoyen — accès à ses propres données uniquement
+    RoleUtilisateur.CITOYEN: frozenset({
+        "profil.lire", "profil.ecrire",
+        "documents.lire", "documents.ecrire",
+        "attestations.lire",
+    }),
+}
+
+
+# ─── Fonctions de vérification ───────────────────────────────────────
+
+def a_permission(role: str, permission: str) -> bool:
+    """
+    Vérifie si un rôle a une permission spécifique.
+    
+    Args:
+        role: Rôle de l'utilisateur (ex: "super_administrateur" ou "super_admin")
+        permission: Permission demandée (ex: "domaine.lire")
+    
+    Returns:
+        True si l'utilisateur a la permission, False sinon
+    """
+    # ✅ Normalisation : accepter les deux variantes du super admin
+    roles_super_admin_compatibles = {"super_admin", "super_administrateur"}
+    if role in roles_super_admin_compatibles:
+        return True
+    
+    permissions_role = PERMISSIONS_PAR_ROLE.get(role, frozenset())
+    
+    # Super Admin a toutes les permissions (fallback)
+    if "*" in permissions_rol

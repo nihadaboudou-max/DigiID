@@ -15,7 +15,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import (
-    Gare, Ligne, Vehicule, Voyage, Utilisateur,
+    Gare, Ligne, ArretLigne, Vehicule, Voyage, Utilisateur,
     Colis, SuiviFamilial, ProfilLogistique,
 )
 from src.modules.identite_digiid import schemas
@@ -432,6 +432,16 @@ async def _colis_du_voyage(session: AsyncSession, voyage_id: UUID) -> list[Colis
     return list(resultat.scalars().all())
 
 
+async def _ordres_arrets_de_ligne(
+    session: AsyncSession, ligne_id: UUID
+) -> dict[UUID, int]:
+    """{arrêt_id: position} pour trier le manifeste par tournée."""
+    resultat = await session.execute(
+        select(ArretLigne).where(ArretLigne.ligne_id == ligne_id)
+    )
+    return {arret.id: arret.ordre for arret in resultat.scalars().all()}
+
+
 async def _passagers_du_voyage(
     session: AsyncSession, voyage_id: UUID
 ) -> list[SuiviFamilial]:
@@ -486,13 +496,35 @@ async def lister_voyages_chauffeur(
 async def construire_manifeste(
     session: AsyncSession, voyage_id: UUID, utilisateur: Utilisateur
 ) -> schemas.ManifesteVoyageResponse:
-    """Manifeste complet d'un voyage : colis **et** passagers, sur un écran."""
+    """Manifeste complet d'un voyage : colis **et** passagers, sur un écran.
+
+    La liste est triée **par ordre d'arrêt** : le chauffeur lit sa feuille de
+    route de haut en bas et descend les colis au bon moment, au lieu de fouiller
+    tout le car à chaque station. Les enregistrements sans arrêt précis (destinés
+    au terminus) sont placés en fin de liste.
+    """
     voyage = await _voyage_du_chauffeur(session, voyage_id, utilisateur)
     vehicule = await session.get(Vehicule, voyage.vehicule_id)
     depart, arrivee = await _libelle_ligne(session, voyage.ligne_id)
 
     colis_liste = await _colis_du_voyage(session, voyage.id)
     passagers_liste = await _passagers_du_voyage(session, voyage.id)
+    ordre_arrets = await _ordres_arrets_de_ligne(session, voyage.ligne_id)
+
+    def _position(enregistrement) -> tuple[int, int]:
+        ordre = ordre_arrets.get(enregistrement.arret_destination_id)
+        return (ordre if ordre is not None else 10_000, 0)
+
+    async def _arret_nom(enregistrement) -> str | None:
+        """Libellé de l'arrêt de descente (repli : gare d'arrivée)."""
+        if enregistrement.arret_destination_id is None:
+            return await _nom_gare(session, enregistrement.gare_arrivee_id)
+        arret = await session.get(ArretLigne, enregistrement.arret_destination_id)
+        return await _nom_gare(session, arret.gare_id) if arret else None
+
+    # ``cree_le`` départage deux enregistrements du même arrêt (ordre stable).
+    colis_liste.sort(key=lambda c: (_position(c)[0], c.cree_le))
+    passagers_liste.sort(key=lambda s: (_position(s)[0], s.cree_le))
 
     lignes_colis = [
         schemas.LigneManifeste(
@@ -503,7 +535,12 @@ async def construire_manifeste(
             contact_masque=_masquer_telephone(colis.destinataire_tel),
             gare_depart_nom=await _nom_gare(session, colis.gare_depart_id),
             gare_arrivee_nom=await _nom_gare(session, colis.gare_arrivee_id),
+            arret_ordre=_position(colis)[0],
+            arret_destination_id=colis.arret_destination_id,
+            arret_nom=await _arret_nom(colis),
             statut=colis.statut,
+            reception_confirmee=colis.reception_confirmee_le is not None,
+            remis_guichet=colis.remis_guichet_le is not None,
             nombre_bagages=colis.nombre_bagages or 1,
             nombre_articles=colis.nombre_articles or 1,
             mode_enregistrement=colis.mode_enregistrement,
@@ -521,7 +558,12 @@ async def construire_manifeste(
             contact_masque=_masquer_telephone(suivi.telephone_parent),
             gare_depart_nom=await _nom_gare(session, suivi.gare_depart_id),
             gare_arrivee_nom=await _nom_gare(session, suivi.gare_arrivee_id),
+            arret_ordre=_position(suivi)[0],
+            arret_destination_id=suivi.arret_destination_id,
+            arret_nom=await _arret_nom(suivi),
             statut=suivi.statut,
+            reception_confirmee=suivi.reception_confirmee_le is not None,
+            remis_guichet=suivi.remis_guichet_le is not None,
             nombre_bagages=suivi.nombre_bagages or 1,
             mode_enregistrement=suivi.mode_enregistrement,
             enregistre_le=suivi.cree_le,

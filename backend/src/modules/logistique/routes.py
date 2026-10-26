@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
 from src.modeles import (
-    Gare, Ligne, Vehicule, Voyage, ActeurLogistique, Utilisateur,
+    Gare, Ligne, ArretLigne, Vehicule, Voyage, ActeurLogistique, Utilisateur,
     Ticket, Colis, ColisEvenement,
     SuiviFamilial, SuiviFamilialEvenement,
 )
@@ -84,6 +84,14 @@ async def _nom_utilisateur(session: AsyncSession, utilisateur_id: UUID | None) -
 async def _enrichir_ligne(session: AsyncSession, ligne: Ligne) -> Ligne:
     ligne.gare_depart_nom = await _nom_gare(session, ligne.gare_depart_id)
     ligne.gare_arrivee_nom = await _nom_gare(session, ligne.gare_arrivee_id)
+    arrets = await service.lister_arrets(session, ligne.id)
+    fiches = []
+    for arret in arrets:
+        fiche = schemas.ArretLigneResponse.model_validate(arret)
+        fiche.gare_nom = await _nom_gare(session, arret.gare_id)
+        fiches.append(fiche)
+    # Objet Pydantic (pas l'attribut ORM) : LigneResponse sérialise sans lazy-load.
+    ligne.arrets = fiches
     return ligne
 
 
@@ -217,6 +225,16 @@ async def _enrichir_colis(session: AsyncSession, colis: Colis) -> Colis:
     colis.code_clair = ticket.code_clair if ticket else None
     colis.qr_token = ticket.qr_token if ticket else None
     colis.qr_code_url = construire_url_qr_durable(ticket.qr_token) if ticket else None
+    # Arrêt de descente : le guichet doit lire la destination réelle, pas
+    # seulement le terminus de la ligne.
+    if colis.arret_destination_id is not None:
+        arret = await session.get(ArretLigne, colis.arret_destination_id)
+        if arret is not None:
+            colis.arret_ordre = arret.ordre
+            colis.arret_destination_nom = await _nom_gare(session, arret.gare_id)
+    colis.remis_guichet_par_nom = await _nom_utilisateur(
+        session, colis.remis_guichet_par_id
+    )
     colis.bagages = await _bagages_enrichis(session, colis_id=colis.id)
     return colis
 
@@ -241,6 +259,14 @@ async def _enrichir_suivi_familial(
     suivi.qr_code_url = construire_url_qr_durable(ticket.qr_token) if ticket else None
     suivi.nb_evenements = await service._compter_evenements_suivi(session, suivi.id)
     suivi.frais_service_fcfa = frais_service_passager()
+    if suivi.arret_destination_id is not None:
+        arret = await session.get(ArretLigne, suivi.arret_destination_id)
+        if arret is not None:
+            suivi.arret_ordre = arret.ordre
+            suivi.arret_destination_nom = await _nom_gare(session, arret.gare_id)
+    suivi.remis_guichet_par_nom = await _nom_utilisateur(
+        session, suivi.remis_guichet_par_id
+    )
     suivi.bagages = await _bagages_enrichis(session, suivi_familial_id=suivi.id)
     return suivi
 
@@ -322,7 +348,7 @@ routeur_lignes = APIRouter(prefix="/lignes", tags=["Logistique — Lignes"])
 
 @routeur_lignes.post("", response_model=schemas.LigneResponse,
                      status_code=status.HTTP_201_CREATED, summary="Créer une ligne")
-@require_permission("logistique.ecrire", "logistique.planifier")
+@require_permission("logistique.trajet.ecrire")
 async def creer_ligne(
     donnees: schemas.LigneCreate,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
@@ -361,7 +387,7 @@ async def obtenir_ligne(
 
 @routeur_lignes.patch("/{ligne_id}", response_model=schemas.LigneResponse,
                       summary="Modifier une ligne")
-@require_permission("logistique.ecrire", "logistique.planifier")
+@require_permission("logistique.trajet.ecrire")
 async def modifier_ligne(
     donnees: schemas.LigneUpdate,
     ligne: Ligne = Depends(obtenir_ligne_ou_404),
@@ -381,6 +407,73 @@ async def supprimer_ligne(
     session: AsyncSession = Depends(obtenir_session),
 ):
     await service.supprimer_ligne(session, ligne.id)
+
+
+# ─── Arrêts intermédiaires d'une ligne ──────────────────────────────
+
+@routeur_lignes.get("/{ligne_id}/arrets",
+                    response_model=list[schemas.ArretLigneResponse],
+                    summary="Arrêts intermédiaires d'une ligne (ordre de la tournée)")
+@require_permission("logistique.lire")
+async def lister_arrets_ligne(
+    ligne_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    arrets = await service.lister_arrets(session, ligne_id)
+    fiches: list[schemas.ArretLigneResponse] = []
+    for arret in arrets:
+        fiche = schemas.ArretLigneResponse.model_validate(arret)
+        fiche.gare_nom = await _nom_gare(session, arret.gare_id)
+        fiches.append(fiche)
+    return fiches
+
+
+@routeur_lignes.post("/{ligne_id}/arrets",
+                     response_model=schemas.ArretLigneResponse,
+                     status_code=status.HTTP_201_CREATED,
+                     summary="Ajouter un arrêt intermédiaire à une ligne")
+@require_permission("logistique.trajet.ecrire")
+async def creer_arret_ligne(
+    ligne_id: UUID,
+    donnees: schemas.ArretLigneCreate,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    arret = await service.creer_arret(session, ligne_id, donnees)
+    fiche = schemas.ArretLigneResponse.model_validate(arret)
+    fiche.gare_nom = await _nom_gare(session, arret.gare_id)
+    return fiche
+
+
+@routeur_lignes.patch("/{ligne_id}/arrets/{arret_id}",
+                      response_model=schemas.ArretLigneResponse,
+                      summary="Modifier un arrêt (gare ou position)")
+@require_permission("logistique.trajet.ecrire")
+async def modifier_arret_ligne(
+    ligne_id: UUID,
+    arret_id: UUID,
+    donnees: schemas.ArretLigneUpdate,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    arret = await service.modifier_arret(session, arret_id, donnees)
+    fiche = schemas.ArretLigneResponse.model_validate(arret)
+    fiche.gare_nom = await _nom_gare(session, arret.gare_id)
+    return fiche
+
+
+@routeur_lignes.delete("/{ligne_id}/arrets/{arret_id}",
+                       status_code=status.HTTP_204_NO_CONTENT,
+                       summary="Retirer un arrêt d'une ligne")
+@require_permission("logistique.trajet.ecrire")
+async def supprimer_arret_ligne(
+    ligne_id: UUID,
+    arret_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    await service.supprimer_arret(session, arret_id)
 
 
 # ─── Véhicules ───────────────────────────────────────────────────────
@@ -659,7 +752,8 @@ async def lister_voyages(
     session: AsyncSession = Depends(obtenir_session),
 ):
     voyages, total = await service.lister_voyages(
-        session, page, par_page, statut, chauffeur_id, ligne_id, a_partir_de
+        session, page, par_page, statut, chauffeur_id, ligne_id, a_partir_de,
+        utilisateur=utilisateur_courant,
     )
     for voyage in voyages:
         await _enrichir_voyage(session, voyage)
@@ -825,7 +919,7 @@ async def quitter_voyage(
 @routeur_voyages.post("/{voyage_id}/depart",
                       response_model=schemas.ActionLotVoyageResponse,
                       summary="Valider le départ (tous les passagers + colis en 1 clic)")
-@require_permission("logistique.scan")
+@require_permission("logistique.voyage.valider")
 async def valider_depart_voyage(
     voyage_id: UUID,
     donnees: schemas.ActionLotVoyageRequest | None = None,
@@ -838,7 +932,7 @@ async def valider_depart_voyage(
 @routeur_voyages.post("/{voyage_id}/arrivee",
                       response_model=schemas.ActionLotVoyageResponse,
                       summary="Marquer arrivés (passagers + colis d'une même gare)")
-@require_permission("logistique.scan")
+@require_permission("logistique.voyage.valider")
 async def marquer_arrivee_voyage(
     voyage_id: UUID,
     donnees: schemas.ActionLotVoyageRequest | None = None,
@@ -1161,7 +1255,8 @@ async def lister_colis(
     session: AsyncSession = Depends(obtenir_session),
 ):
     colis_liste, total = await service.lister_colis(
-        session, page, par_page, statut, gare_id, voyage_id
+        session, page, par_page, statut, gare_id, voyage_id,
+        utilisateur=utilisateur_courant,
     )
     for colis in colis_liste:
         await _enrichir_colis(session, colis)
@@ -1187,6 +1282,58 @@ async def affecter_colis(
     colis = await service.affecter_colis(session, colis_id, donnees, utilisateur_courant)
     await _enrichir_colis(session, colis)
     return colis
+
+
+@routeur_colis.patch("/{colis_id}", response_model=schemas.ColisResponse,
+                    summary="Corriger une fiche colis (avant prise en charge)")
+@require_permission("logistique.colis.creer")
+async def modifier_colis(
+    colis_id: UUID,
+    donnees: schemas.ColisUpdate,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    """Corrige un nom, un téléphone ou l'arrêt de descente.
+
+    Possible uniquement **avant** que le chauffeur confirme la prise en charge,
+    et par l'agent qui a enregistré la fiche (le serveur revérifie les deux).
+    """
+    colis = await service.modifier_colis(
+        session, colis_id, donnees, utilisateur_courant
+    )
+    return await _enrichir_colis(session, colis)
+
+
+@routeur_colis.post("/{colis_id}/reception",
+                   response_model=schemas.ColisResponse,
+                   summary="Chauffeur : confirmer la prise en charge du colis")
+@require_permission("logistique.scan")
+async def confirmer_reception_colis(
+    colis_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    """Fige la fiche : le chauffeur déclare avoir physiquement le colis."""
+    colis = await service.confirmer_reception_colis(
+        session, colis_id, utilisateur_courant
+    )
+    return await _enrichir_colis(session, colis)
+
+
+@routeur_colis.post("/{colis_id}/remise-guichet",
+                   response_model=schemas.ColisResponse,
+                   summary="Chauffeur : déposer le colis au guichet d'arrivée")
+@require_permission("logistique.scan")
+async def remettre_colis_au_guichet(
+    colis_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    """Autorise ensuite le guichet à constater la livraison finale."""
+    colis = await service.remettre_colis_au_guichet(
+        session, colis_id, utilisateur_courant
+    )
+    return await _enrichir_colis(session, colis)
 
 
 @routeur_colis.get("/{colis_id}/evenements",
@@ -1292,7 +1439,8 @@ async def lister_suivi_familial(
     session: AsyncSession = Depends(obtenir_session),
 ):
     suivis, total = await service.lister_suivi_familial(
-        session, page, par_page, statut, voyage_id, recherche
+        session, page, par_page, statut, voyage_id, recherche,
+        utilisateur=utilisateur_courant,
     )
     for suivi in suivis:
         await _enrichir_suivi_familial(session, suivi)
@@ -1316,6 +1464,52 @@ async def affecter_suivi_familial(
     """
     suivi = await service.affecter_suivi_familial(
         session, suivi_id, donnees, utilisateur_courant
+    )
+    return await _enrichir_suivi_familial(session, suivi)
+
+
+@routeur_suivi_familial.patch("/{suivi_id}",
+                             response_model=schemas.SuiviFamilialResponse,
+                             summary="Corriger une fiche passager (avant prise en charge)")
+@require_permission("logistique.colis.creer")
+async def modifier_suivi_familial(
+    suivi_id: UUID,
+    donnees: schemas.SuiviFamilialUpdate,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    suivi = await service.modifier_suivi_familial(
+        session, suivi_id, donnees, utilisateur_courant
+    )
+    return await _enrichir_suivi_familial(session, suivi)
+
+
+@routeur_suivi_familial.post("/{suivi_id}/reception",
+                             response_model=schemas.SuiviFamilialResponse,
+                             summary="Chauffeur : confirmer la prise en charge du passager")
+@require_permission("logistique.scan")
+async def confirmer_reception_suivi(
+    suivi_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    suivi = await service.confirmer_reception_suivi(
+        session, suivi_id, utilisateur_courant
+    )
+    return await _enrichir_suivi_familial(session, suivi)
+
+
+@routeur_suivi_familial.post("/{suivi_id}/remise-guichet",
+                             response_model=schemas.SuiviFamilialResponse,
+                             summary="Chauffeur : déposer le passager au guichet d'arrivée")
+@require_permission("logistique.scan")
+async def remettre_suivi_au_guichet(
+    suivi_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    suivi = await service.remettre_suivi_au_guichet(
+        session, suivi_id, utilisateur_courant
     )
     return await _enrichir_suivi_familial(session, suivi)
 

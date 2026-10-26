@@ -8,9 +8,10 @@ par **SMS au départ puis à l'arrivée**. L'enfant reste identifié dans le tem
 via le ticket polymorphe, exactement comme un colis.
 """
 import uuid
+from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -39,6 +40,7 @@ class SuiviFamilial(Base, MelangeTracabilite):
         Index("ix_suivi_familial_gare_arrivee", "gare_arrivee_id"),
         Index("ix_suivi_familial_statut", "statut"),
         Index("ix_suivi_familial_enregistre_par", "enregistre_par_id"),
+        Index("ix_suivi_familial_arret_destination", "arret_destination_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -122,6 +124,33 @@ class SuiviFamilial(Base, MelangeTracabilite):
     )
     # Agent (receveur) qui a enregistré l'enfant.
     enregistre_par_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("utilisateur.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # ─── Arrêt de destination (trajets avec arrêts intermédiaires) ───
+    arret_destination_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("arrets_ligne.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # ─── Confirmation de réception par le chauffeur ──────────────────
+    # Fige la fiche : après confirmation, le guichet ne peut plus la modifier.
+    reception_confirmee_le: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reception_confirmee_par_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("utilisateur.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # ─── Remise au guichet d'arrivée ────────────────────────────────
+    remis_guichet_le: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    remis_guichet_par_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("utilisateur.id", ondelete="SET NULL"),
         nullable=True,

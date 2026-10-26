@@ -1,0 +1,96 @@
+COLONNES_A_VERIFIER = [
+    # Colonnes existantes
+    ("score_historique", "facteur_attestations", "FLOAT NOT NULL DEFAULT 0.0"),
+    ("dossiers_medicaux", "patient_prenom", "VARCHAR(255)"),
+    ("dossiers_medicaux", "hopital", "VARCHAR(255)"),
+    ("consultations", "hopital", "VARCHAR(255)"),
+    ("consultations", "type_consultation", "VARCHAR(50)"),
+    ("consultations", "poids", "INTEGER"),
+    ("consultations", "taille", "INTEGER"),
+    ("consultations", "temperature", "INTEGER"),
+    ("consultations", "pression_arterielle", "VARCHAR(20)"),
+    ("consultations", "conclusion", "TEXT"),
+    ("consultations", "date_controle", "DATE"),
+    ("ordonnances", "hopital", "VARCHAR(255)"),
+    ("ordonnances", "medecin_nom", "VARCHAR(255)"),
+    ("ordonnances", "statut", "VARCHAR(20) NOT NULL DEFAULT 'active'"),
+    ("verification_visuelle", "est_supprime", "BOOLEAN NOT NULL DEFAULT false"),
+    ("verification_visuelle", "date_suppression", "TIMESTAMP WITH TIME ZONE"),
+
+    # ─── Module Identité : photos CNI / selfie ────────────────────────
+    # ⚠️ CRITIQUE : migrer.py ne lance PAS `alembic upgrade head` sur une base
+    # existante (simple stamp) → ces colonnes doivent être ajoutées ici.
+    ("verification_cni", "photo_chemin", "VARCHAR(500)"),
+    ("verification_cni", "embedding_photo_cni", "JSON"),
+    ("verification_visuelle", "photo_chemin", "VARCHAR(500)"),
+    
+    # ─── Module Identité : Permis & Assurance (date/lieu de naissance) ──
+    # ⚠️ CRITIQUE : migrer.py ne lance PAS `alembic upgrade head` sur une base
+    # existante (simple stamp) → ces colonnes doivent être ajoutées ici.
+    ("permis_conduire", "date_naissance", "DATE"),
+    ("permis_conduire", "lieu_naissance", "VARCHAR(255)"),
+    ("assurances_auto", "date_naissance", "DATE"),
+    ("assurances_auto", "lieu_naissance", "VARCHAR(255)"),
+
+    # ─── Module Police : Cloisonnement ───────────────────────────────
+    ("alertes_police", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("alertes_police", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("notes_internes", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("notes_internes", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("historique_recherches_police", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("historique_recherches_police", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("enrolements_police", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("enrolements_police", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("verifications_police", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("verifications_police", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("signalements_fraude", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("signalements_fraude", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    
+    # ─── Module Police : Colonnes supplémentaires ────────────────────
+    ("verifications_police", "localisation_lat", "FLOAT"),
+    ("verifications_police", "localisation_lng", "FLOAT"),
+    ("verifications_police", "localisation_adresse", "TEXT"),
+    ("verifications_police", "motif_verification", "TEXT"),
+    ("verifications_police", "personne_email", "VARCHAR(255)"),
+    ("verifications_police", "personne_telephone", "VARCHAR(50)"),
+    ("signalements_fraude", "priorite", "VARCHAR(20) DEFAULT 'moyenne'"),
+    ("signalements_fraude", "notes_traitement", "TEXT"),
+    ("signalements_fraude", "traite_par_id", "UUID REFERENCES utilisateur(id) ON DELETE SET NULL"),
+    
+    # ─── Module ONG : Cloisonnement ─────────────────────────────────
+    ("beneficiaires_ong", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("beneficiaires_ong", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("programmes_ong", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("programmes_ong", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("missions_terrain", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("missions_terrain", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    
+    # ─── Module Médical : Cloisonnement ─────────────────────────────
+    ("dossiers_medicaux", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("dossiers_medicaux", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("consultations", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("consultations", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+    ("ordonnances", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("ordonnances", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),    
+    
+    # ─── Module Enrôlement : Cloisonnement ──────────────────────────
+    ("enrolements", "domaine_id", "UUID REFERENCES domaines(id) ON DELETE SET NULL"),
+    ("enrolements", "departement_id", "UUID REFERENCES departements(id) ON DELETE SET NULL"),
+
+    # ─── Pivot logistique : identité DigiID + enregistrement direct ────
+    # ⚠️ CRITIQUE : `create_all` ne crée QUE les tables manquantes, jamais les
+    # colonnes → ces colonnes doivent impérativement être listées ici, sinon
+    # l'application démarre mais toute requête sur ces colonnes échoue.
+    ("utilisateur", "adresse", "VARCHAR(255)"),
+    ("utilisateur", "qr_token_digiid", "VARCHAR(64)"),
+    ("colis", "mode_enregistrement", "VARCHAR(20) NOT NULL DEFAULT 'guichet'"),
+    ("colis", "enregistre_par_id", "UUID REFERENCES utilisateur(id) ON DELETE SET NULL"),
+    ("suivi_familial", "mode_enregistrement", "VARCHAR(20) NOT NULL DEFAULT 'guichet'"),
+    # Un car appartient à un chauffeur (affecté par le super-admin, le gérant de
+    # gare ou le receveur). `create_all` ne crée QUE les tables manquantes,
+    # jamais les colonnes → sans cette ligne, toute requête sur un car échoue.
+    ("vehicules", "chauffeur_id",
+     "UUID REFERENCES utilisateur(id) ON DELETE SET NULL"),
+]
+
+

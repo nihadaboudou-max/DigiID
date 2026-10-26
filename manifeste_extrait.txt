@@ -1,0 +1,157 @@
+et
+
+        ticket = await session.get(Ticket, suivi.ticket_id)
+        if ticket is not None:
+            return ticket.code_clair
+    return str(suivi.id)[:8].upper()
+
+
+async def _colis_du_voyage(session: AsyncSession, voyage_id: UUID) -> list[Colis]:
+    resultat = await session.execute(
+        select(Colis).where(Colis.voyage_id == voyage_id).order_by(Colis.cree_le.asc())
+    )
+    return list(resultat.scalars().all())
+
+
+async def _passagers_du_voyage(
+    session: AsyncSession, voyage_id: UUID
+) -> list[SuiviFamilial]:
+    resultat = await session.execute(
+        select(SuiviFamilial)
+        .where(SuiviFamilial.voyage_id == voyage_id)
+        .order_by(SuiviFamilial.cree_le.asc())
+    )
+    return list(resultat.scalars().all())
+
+
+async def lister_voyages_chauffeur(
+    session: AsyncSession, utilisateur: Utilisateur
+) -> list[schemas.VoyageChauffeurResponse]:
+    """Voyages affectés au chauffeur connecté (avec volumes à transporter).
+
+    Les voyages « en cours » et « planifiés » remontent en premier : c'est ce
+    qu'un chauffeur ouvre en montant dans son véhicule.
+    """
+    resultat = await session.execute(
+        select(Voyage)
+        .where(Voyage.chauffeur_id == utilisateur.id)
+        .order_by(Voyage.date_depart.desc())
+    )
+    voyages = list(resultat.scalars().all())
+
+    reponses: list[schemas.VoyageChauffeurResponse] = []
+    for voyage in voyages:
+        vehicule = await session.get(Vehicule, voyage.vehicule_id)
+        depart, arrivee = await _libelle_ligne(session, voyage.ligne_id)
+        nb_colis = len(await _colis_du_voyage(session, voyage.id))
+        nb_passagers = len(await _passagers_du_voyage(session, voyage.id))
+        reponses.append(
+            schemas.VoyageChauffeurResponse(
+                id=voyage.id,
+                date_depart=voyage.date_depart,
+                date_arrivee=voyage.date_arrivee,
+                statut=voyage.statut,
+                vehicule_immatriculation=vehicule.immatriculation if vehicule else None,
+                gare_depart_nom=depart,
+                gare_arrivee_nom=arrivee,
+                nb_colis=nb_colis,
+                nb_passagers=nb_passagers,
+            )
+        )
+
+    ordre = {"en_cours": 0, "planifie": 1, "termine": 2, "annule": 3}
+    reponses.sort(key=lambda v: (ordre.get(v.statut, 9), -(v.date_depart.timestamp() if v.date_depart else 0)))
+    return reponses
+
+
+async def construire_manifeste(
+    session: AsyncSession, voyage_id: UUID, utilisateur: Utilisateur
+) -> schemas.ManifesteVoyageResponse:
+    """Manifeste complet d'un voyage : colis **et** passagers, sur un écran."""
+    voyage = await _voyage_du_chauffeur(session, voyage_id, utilisateur)
+    vehicule = await session.get(Vehicule, voyage.vehicule_id)
+    depart, arrivee = await _libelle_ligne(session, voyage.ligne_id)
+
+    colis_liste = await _colis_du_voyage(session, voyage.id)
+    passagers_liste = await _passagers_du_voyage(session, voyage.id)
+
+    lignes_colis = [
+        schemas.LigneManifeste(
+            id=colis.id,
+            type="colis",
+            code=await _codes_colis(session, colis),
+            libelle=colis.destinataire_nom,
+            contact_masque=_masquer_telephone(colis.destinataire_tel),
+            gare_depart_nom=await _nom_gare(session, colis.gare_depart_id),
+            gare_arrivee_nom=await _nom_gare(session, colis.gare_arrivee_id),
+            statut=colis.statut,
+            nombre_bagages=colis.nombre_bagages or 1,
+            nombre_articles=colis.nombre_articles or 1,
+            mode_enregistrement=colis.mode_enregistrement,
+            enregistre_le=colis.cree_le,
+        )
+        for colis in colis_liste
+    ]
+
+    lignes_passagers = [
+        schemas.LigneManifeste(
+            id=suivi.id,
+            type="passager",
+            code=await _codes_suivi(session, suivi),
+            libelle=suivi.enfant_nom,
+            contact_masque=_masquer_telephone(suivi.telephone_parent),
+            gare_depart_nom=await _nom_gare(session, suivi.gare_depart_id),
+            gare_arrivee_nom=await _nom_gare(session, suivi.gare_arrivee_id),
+            statut=suivi.statut,
+            nombre_bagages=suivi.nombre_bagages or 1,
+            mode_enregistrement=suivi.mode_enregistrement,
+            enregistre_le=suivi.cree_le,
+        )
+        for suivi in passagers_liste
+    ]
+
+    return schemas.ManifesteVoyageResponse(
+        voyage_id=voyage.id,
+        date_depart=voyage.date_depart,
+        statut=voyage.statut,
+        vehicule_immatriculation=vehicule.immatriculation if vehicule else None,
+        gare_depart_nom=depart,
+        gare_arrivee_nom=arrivee,
+        nb_colis=len(lignes_colis),
+        nb_passagers=len(lignes_passagers),
+        nb_bagages=sum(l.nombre_bagages for l in lignes_colis)
+        + sum(l.nombre_bagages for l in lignes_passagers),
+        colis=lignes_colis,
+        passagers=lignes_passagers,
+    )
+
+
+# ─── Voyages du citoyen (ses envois + les voyages de ses proches) ────
+
+async def _details_voyage(
+    session: AsyncSession, voyage_id: UUID | None
+) -> tuple[datetime | None, str | None, str | None]:
+    """(date_depart, immatriculation, nom du chauffeur) d'un voyage."""
+    if voyage_id is None:
+        return None, None, None
+    voyage = await session.get(Voyage, voyage_id)
+    if voyage is None:
+        return None, None, None
+    vehicule = await session.get(Vehicule, voyage.vehicule_id)
+    chauffeur = await _nom_utilisateur(session, voyage.chauffeur_id)
+    return (
+        voyage.date_depart,
+        vehicule.immatriculation if vehicule else None,
+        chauffeur,
+    )
+
+
+async def mes_voyages(
+    session: AsyncSession, utilisateur: Utilisateur
+) -> schemas.MesVoyagesResponse:
+    """Tout ce qui relie le citoyen au transport : ses envois et ses proches.
+
+    Trois filets successifs (et non un seul) pour ne rien manquer :
+      - colis dont il est **expéditeur** (compte DigiID) ;
+      - colis dont il est **destinataire** (numéro de téléphone identique) ;
+      - passager
