@@ -52,14 +52,26 @@ def classifier_document(texte_brut: str, mrz_lignes: tuple) -> TypeDocument:
     texte_norm = _normaliser_texte(texte_brut)
 
     # ── NIVEAU 0 : Détection explicite prioritaire ──
-    # 0.a) ASSURANCE EN PREMIER. C'est le point clé : une carte grise et une
+    # 0.a) CIP (Certificat d'Identification Personnelle — ANIP / Bénin).
+    #      Avant assurance/CNI : titre + NPI + ANIP sont exclusifs.
+    if (
+        "CERTIFICAT D'IDENTIFICATION PERSONNELLE" in texte_norm
+        or "CERTIFICAT D IDENTIFICATION PERSONNELLE" in texte_norm
+        or "NUMERO PERSONNEL D'IDENTIFICATION" in texte_norm
+        or "NUMERO PERSONNEL D IDENTIFICATION" in texte_norm
+        or re.search(r"\bNPI\b", texte_norm)
+    ):
+        journal.info("Document classifié comme CIP (marqueurs ANIP / NPI)")
+        return TypeDocument.CIP
+
+    # 0.b) ASSURANCE EN PREMIER parmi les docs véhicule. Une carte grise et une
     #      attestation d'assurance partagent des champs véhicule. Dès qu'un
     #      marqueur d'assurance est présent, on tranche pour l'assurance.
     if any(marqueur in texte_norm for marqueur in MARQUEURS_ASSURANCE):
         journal.info("Document classifié comme CARTE_ASSURANCE (marqueur d'assurance prioritaire)")
         return TypeDocument.CARTE_ASSURANCE
 
-    # 0.b) CARTE GRISE uniquement sur un titre explicite ("CARTE GRISE" ou
+    # 0.c) CARTE GRISE uniquement sur un titre explicite ("CARTE GRISE" ou
     #      "CERTIFICAT D'IMMATRICULATION"), jamais sur un simple champ véhicule.
     if MOTIF_CARTE_GRISE.search(texte_norm):
         journal.info("Document classifié comme CARTE_GRISE (titre explicite)")

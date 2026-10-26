@@ -25,6 +25,7 @@ import { ErreurAPI } from "@/services/client_api";
 import {
   libelleLigne,
   logistiqueAPI,
+  type ArretLigne,
   type Ligne,
   type SuiviFamilial,
   type Voyage,
@@ -50,6 +51,7 @@ function Contenu() {
 
   const [voyage, setVoyage] = useState<Voyage | null>(null);
   const [ligne, setLigne] = useState<Ligne | null>(null);
+  const [arrets, setArrets] = useState<ArretLigne[]>([]);
   const [colis, setColis] = useState<Colis[]>([]);
   const [passagers, setPassagers] = useState<SuiviFamilial[]>([]);
   const [chargement, setChargement] = useState(true);
@@ -73,9 +75,22 @@ function Contenu() {
         ]);
         if (annule) return;
         setVoyage(voyageCharge);
-        setLigne(repLignes.elements.find((l) => l.id === voyageCharge.ligne_id) ?? null);
+        const ligneTrouvee =
+          repLignes.elements.find((l) => l.id === voyageCharge.ligne_id) ?? null;
+        setLigne(ligneTrouvee);
         setColis(repColis.elements);
         setPassagers(repPassagers.elements);
+        if (ligneTrouvee) {
+          const listeArrets =
+            ligneTrouvee.arrets?.length
+              ? ligneTrouvee.arrets
+              : await logistiqueAPI.lignes.arrets
+                  .lister(ligneTrouvee.id)
+                  .catch(() => [] as ArretLigne[]);
+          if (!annule) setArrets(listeArrets.filter((a) => a.actif !== false));
+        } else {
+          setArrets([]);
+        }
       } catch (e) {
         if (!annule) {
           setErreur(
@@ -193,11 +208,27 @@ function Contenu() {
         gares={
           ligne
             ? [
-                { id: ligne.gare_depart_id, nom: ligne.gare_depart_nom ?? "Départ" },
-                { id: ligne.gare_arrivee_id, nom: ligne.gare_arrivee_nom ?? "Arrivée" },
+                { id: ligne.gare_arrivee_id, nom: ligne.gare_arrivee_nom ?? "Terminus" },
               ]
             : []
         }
+        pointsArrivee={[
+          ...arrets.map((a) => ({
+            cle: `arret:${a.id}`,
+            libelle: `${a.ordre}. ${a.gare_nom ?? "Arrêt"}`,
+            arret_id: a.id,
+            gare_id: a.gare_id,
+          })),
+          ...(ligne
+            ? [
+                {
+                  cle: `gare:${ligne.gare_arrivee_id}`,
+                  libelle: `Terminus — ${ligne.gare_arrivee_nom ?? "Arrivée"}`,
+                  gare_id: ligne.gare_arrivee_id,
+                },
+              ]
+            : []),
+        ]}
         surSucces={() => setRafraichir((n) => n + 1)}
       />
 

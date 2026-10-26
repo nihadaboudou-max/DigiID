@@ -2,8 +2,9 @@
 "use client";
 
 /**
- * Super-admin — référentiel logistique (gares, lignes, véhicules, voyages, acteurs).
- * Référentiel global (non cloisonné par domaine/département) : réservé au super-admin.
+ * Référentiel logistique (gares, lignes + arrêts, véhicules, voyages, acteurs).
+ * Super-admin et gérant de gare : seuls à définir les trajets et leurs arrêts
+ * intermédiaires ordonnés (`logistique.trajet.ecrire`).
  */
 import { useEffect, useState } from "react";
 
@@ -17,6 +18,7 @@ import { ErreurAPI } from "@/services/client_api";
 import {
   logistiqueAPI as api,
   type Acteur,
+  type ArretLigne,
   type ChauffeurDisponible,
   type Gare,
   type Ligne,
@@ -37,7 +39,9 @@ const nombreOuNull = (v: string) => (v.trim() === "" ? null : Number(v));
 
 export default function PageLogistiqueSuperAdmin() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={["super_administrateur", "super_admin"]}>
+    <EnvelopperEspaceProtege
+      rolesAutorises={["super_administrateur", "super_admin", "gerant_gare"]}
+    >
       <Contenu />
     </EnvelopperEspaceProtege>
   );
@@ -429,7 +433,7 @@ function SectionGare({
   );
 }
 
-// ─── Section Lignes ──────────────────────────────────────────────────
+// ─── Section Lignes (+ arrêts intermédiaires ordonnés) ───────────────
 
 function SectionLigne({
   lignes, optionsGares, rafraichir, supprimer,
@@ -442,6 +446,11 @@ function SectionLigne({
   const { notifier } = useNotifications();
   const [f, setF] = useState({ depart: "", arrivee: "", distance: "", duree: "" });
   const [enCours, setEnCours] = useState(false);
+  const [ligneArretsId, setLigneArretsId] = useState<string | null>(null);
+  const [arrets, setArrets] = useState<ArretLigne[]>([]);
+  const [chargementArrets, setChargementArrets] = useState(false);
+  const [nouvelArret, setNouvelArret] = useState({ gare_id: "", ordre: "" });
+  const [ajoutArret, setAjoutArret] = useState(false);
 
   const soumettre = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -463,36 +472,155 @@ function SectionLigne({
     }
   };
 
+  const chargerArrets = async (ligneId: string) => {
+    setLigneArretsId(ligneId);
+    setChargementArrets(true);
+    try {
+      const liste = await api.lignes.arrets.lister(ligneId);
+      setArrets(liste);
+    } catch (err) {
+      notifier(err instanceof ErreurAPI ? err.message_utilisateur : "Erreur arrêts", "erreur");
+      setArrets([]);
+    } finally {
+      setChargementArrets(false);
+    }
+  };
+
+  const ajouterArret = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ligneArretsId) return;
+    setAjoutArret(true);
+    try {
+      await api.lignes.arrets.creer(ligneArretsId, {
+        gare_id: nouvelArret.gare_id,
+        ordre: Number(nouvelArret.ordre),
+      });
+      notifier("Arrêt ajouté", "succes");
+      setNouvelArret({ gare_id: "", ordre: "" });
+      await chargerArrets(ligneArretsId);
+      rafraichir();
+    } catch (err) {
+      notifier(err instanceof ErreurAPI ? err.message_utilisateur : "Erreur", "erreur");
+    } finally {
+      setAjoutArret(false);
+    }
+  };
+
+  const retirerArret = async (arretId: string) => {
+    if (!ligneArretsId) return;
+    try {
+      await api.lignes.arrets.supprimer(ligneArretsId, arretId);
+      notifier("Arrêt retiré", "succes");
+      await chargerArrets(ligneArretsId);
+      rafraichir();
+    } catch (err) {
+      notifier(err instanceof ErreurAPI ? err.message_utilisateur : "Erreur", "erreur");
+    }
+  };
+
+  const ligneSelectionnee = lignes.find((l) => l.id === ligneArretsId) ?? null;
+  const garesInterdites = new Set(
+    ligneSelectionnee
+      ? [ligneSelectionnee.gare_depart_id, ligneSelectionnee.gare_arrivee_id]
+      : [],
+  );
+  const optionsArret = optionsGares.filter((o) => !garesInterdites.has(o.valeur));
+
   return (
-    <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
-      <Carte>
-        <h2 className="font-semibold mb-3">Nouvelle ligne</h2>
-        <form onSubmit={soumettre} className="space-y-3">
-          <ChampSelect libelle="Gare de départ" value={f.depart} onChange={(v) => setF({ ...f, depart: v })} options={optionsGares} requis />
-          <ChampSelect libelle="Gare d'arrivée" value={f.arrivee} onChange={(v) => setF({ ...f, arrivee: v })} options={optionsGares} requis />
-          <ChampSimple libelle="Distance (km)" type="number" value={f.distance} onChange={(v) => setF({ ...f, distance: v })} />
-          <ChampSimple libelle="Durée (min)" type="number" value={f.duree} onChange={(v) => setF({ ...f, duree: v })} />
-          <Bouton type="submit" variante="primaire" chargement={enCours}>Créer</Bouton>
-        </form>
-      </Carte>
-      <Carte>
-        <h2 className="font-semibold mb-3">{lignes.length} ligne(s)</h2>
-        <TableauSimple entetes={["Départ", "Arrivée", "Distance", "Durée", ""]}>
-          {lignes.length === 0 ? (
-            <LigneVide colonnes={5} message="Aucune ligne." />
+    <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
+        <Carte>
+          <h2 className="font-semibold mb-3">Nouvelle ligne</h2>
+          <form onSubmit={soumettre} className="space-y-3">
+            <ChampSelect libelle="Gare de départ" value={f.depart} onChange={(v) => setF({ ...f, depart: v })} options={optionsGares} requis />
+            <ChampSelect libelle="Gare d'arrivée" value={f.arrivee} onChange={(v) => setF({ ...f, arrivee: v })} options={optionsGares} requis />
+            <ChampSimple libelle="Distance (km)" type="number" value={f.distance} onChange={(v) => setF({ ...f, distance: v })} />
+            <ChampSimple libelle="Durée (min)" type="number" value={f.duree} onChange={(v) => setF({ ...f, duree: v })} />
+            <Bouton type="submit" variante="primaire" chargement={enCours}>Créer</Bouton>
+          </form>
+        </Carte>
+        <Carte>
+          <h2 className="font-semibold mb-3">{lignes.length} ligne(s)</h2>
+          <TableauSimple entetes={["Départ", "Arrivée", "Distance", "Durée", "Arrêts", ""]}>
+            {lignes.length === 0 ? (
+              <LigneVide colonnes={6} message="Aucune ligne." />
+            ) : (
+              lignes.map((l) => (
+                <tr key={l.id}>
+                  <td className={clsCellule}>{l.gare_depart_nom ?? l.gare_depart_id}</td>
+                  <td className={clsCellule}>{l.gare_arrivee_nom ?? l.gare_arrivee_id}</td>
+                  <td className={clsCellule}>{l.distance_km != null ? `${l.distance_km} km` : "—"}</td>
+                  <td className={clsCellule}>{l.duree_min != null ? `${l.duree_min} min` : "—"}</td>
+                  <td className={clsCellule}>
+                    <Bouton
+                      variante="ghost"
+                      taille="petit"
+                      onClick={() => void chargerArrets(l.id)}
+                    >
+                      {l.arrets?.length ?? "…"} arrêt(s)
+                    </Bouton>
+                  </td>
+                  <td className={clsCellule}><BoutonSupprimer onClick={() => supprimer(l.id)} /></td>
+                </tr>
+              ))
+            )}
+          </TableauSimple>
+        </Carte>
+      </div>
+
+      {ligneArretsId && ligneSelectionnee && (
+        <Carte>
+          <h2 className="font-semibold mb-1">
+            Arrêts intermédiaires — {ligneSelectionnee.gare_depart_nom} →{" "}
+            {ligneSelectionnee.gare_arrivee_nom}
+          </h2>
+          <p className="mb-4 text-sm text-ardoise-clair">
+            Ordre de la tournée (1…N). Le terminus n&apos;est pas un arrêt : il est
+            déjà la gare d&apos;arrivée. Les colis/passagers se classent ensuite
+            selon cet ordre sur le manifeste chauffeur.
+          </p>
+          {chargementArrets ? (
+            <p className="text-sm italic text-ardoise-clair">Chargement…</p>
           ) : (
-            lignes.map((l) => (
-              <tr key={l.id}>
-                <td className={clsCellule}>{l.gare_depart_nom ?? l.gare_depart_id}</td>
-                <td className={clsCellule}>{l.gare_arrivee_nom ?? l.gare_arrivee_id}</td>
-                <td className={clsCellule}>{l.distance_km != null ? `${l.distance_km} km` : "—"}</td>
-                <td className={clsCellule}>{l.duree_min != null ? `${l.duree_min} min` : "—"}</td>
-                <td className={clsCellule}><BoutonSupprimer onClick={() => supprimer(l.id)} /></td>
-              </tr>
-            ))
+            <TableauSimple entetes={["Ordre", "Gare", ""]}>
+              {arrets.length === 0 ? (
+                <LigneVide colonnes={3} message="Aucun arrêt intermédiaire." />
+              ) : (
+                arrets.map((a) => (
+                  <tr key={a.id}>
+                    <td className={clsCellule}>{a.ordre}</td>
+                    <td className={clsCellule}>{a.gare_nom ?? a.gare_id}</td>
+                    <td className={clsCellule}>
+                      <BoutonSupprimer onClick={() => void retirerArret(a.id)} />
+                    </td>
+                  </tr>
+                ))
+              )}
+            </TableauSimple>
           )}
-        </TableauSimple>
-      </Carte>
+          <form onSubmit={ajouterArret} className="mt-4 grid gap-3 sm:grid-cols-[1fr_100px_auto]">
+            <ChampSelect
+              libelle="Gare d'escale"
+              value={nouvelArret.gare_id}
+              onChange={(v) => setNouvelArret({ ...nouvelArret, gare_id: v })}
+              options={optionsArret}
+              requis
+            />
+            <ChampSimple
+              libelle="Ordre"
+              type="number"
+              value={nouvelArret.ordre}
+              onChange={(v) => setNouvelArret({ ...nouvelArret, ordre: v })}
+              requis
+            />
+            <div className="flex items-end">
+              <Bouton type="submit" variante="primaire" chargement={ajoutArret}>
+                Ajouter l&apos;arrêt
+              </Bouton>
+            </div>
+          </form>
+        </Carte>
+      )}
     </div>
   );
 }

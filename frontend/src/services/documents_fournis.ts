@@ -29,6 +29,7 @@ import {
 
 export type TypeDocumentFourni =
   | "cni"
+  | "cip"
   | "passeport"
   | "permis"
   | "carte_sejour"
@@ -61,6 +62,7 @@ interface EntreeBrute {
   date_expiration?: string | null;
   // Champs spécifiques selon le type de document
   numero_document?: string | null;
+  npi?: string | null;
   numero_permis?: string | null;
   numero_contrat?: string | null;
   numero_titre?: string | null;
@@ -81,12 +83,14 @@ const SOURCES_OCR: { type: TypeDocumentFourni; url: string }[] = [
   { type: "permis", url: "/api/v1/utilisateur/permis/historique" },
   { type: "carte_sejour", url: "/api/v1/utilisateur/carte-sejour/historique" },
   { type: "carte_consulaire", url: "/api/v1/utilisateur/consulaire/historique" },
+  { type: "cip", url: "/api/v1/utilisateur/cip/historique" },
   { type: "assurance", url: "/api/v1/utilisateur/assurance/historique" },
   { type: "carte_grise", url: "/api/v1/utilisateur/carte-grise/historique" },
 ];
 
 export const LIBELLES_DOCUMENT_FOURNI: Record<TypeDocumentFourni, string> = {
   cni: "Carte Nationale d'Identité",
+  cip: "Certificat d'Identification Personnelle",
   passeport: "Passeport",
   permis: "Permis de conduire",
   carte_sejour: "Carte de séjour",
@@ -102,6 +106,7 @@ export const LIBELLES_DOCUMENT_FOURNI: Record<TypeDocumentFourni, string> = {
  */
 export const TYPES_DOCUMENT_AVEC_PHOTO: ReadonlySet<string> = new Set([
   "cni",
+  "cip",
   "passeport",
   "permis",
   "carte_sejour",
@@ -115,6 +120,7 @@ export const TYPES_DOCUMENT_AVEC_PHOTO: ReadonlySet<string> = new Set([
 /** Clés essayées, dans l'ordre, pour retrouver la référence d'un document. */
 const CLES_REFERENCE = [
   "numero_document",
+  "npi",
   "numero_passeport",
   "numero_permis",
   "numero_titre",

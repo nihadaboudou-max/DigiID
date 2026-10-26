@@ -41,6 +41,8 @@ _ALIAS_COMMUNS: Dict[str, str] = {
     "numero": "numero_document",
     "num_document": "numero_document",
     "n_document": "numero_document",
+    "npi": "numero_document",
+}
     "date_naissance_date": "date_naissance",
     "date_expiration_date": "date_expiration",
     "date_delivrance_date": "date_delivrance",

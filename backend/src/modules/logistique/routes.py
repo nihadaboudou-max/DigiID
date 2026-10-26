@@ -947,7 +947,9 @@ async def marquer_arrivee_voyage(
     donnees = donnees or schemas.ActionLotVoyageRequest()
     return await service.marquer_arrivee_voyage(
         session, voyage_id, utilisateur_courant,
-        gare_id=donnees.gare_id, localisation=donnees.localisation,
+        gare_id=donnees.gare_id,
+        arret_id=donnees.arret_id,
+        localisation=donnees.localisation,
     )
 
 

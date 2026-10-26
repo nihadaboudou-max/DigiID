@@ -310,6 +310,7 @@ def _ajouter_colonnes_documents(engine):
         "cartes_sejour",
         "cartes_consulaires",
         "passeports",
+        "certificats_identification_personnelle",
     ]
 
     with engine.connect() as conn:

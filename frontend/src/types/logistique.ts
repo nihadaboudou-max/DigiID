@@ -166,6 +166,11 @@ export interface DonneesColis {
    * « enregistre_direct ».
    */
   enregistrement_direct?: boolean;
+  /** Arrêt précis de descente sur la ligne (ordre du manifeste chauffeur). */
+  arret_destination_id?: string | null;
+  /** Encaissé **avant** génération du QR (même transaction backend). */
+  moyen_paiement?: "especes" | "wave";
+  telephone_paiement?: string | null;
 }
 
 /** Payload d'un scan (QR ou repli code clair). */
@@ -376,6 +381,11 @@ export interface DonneesSuiviFamilial {
   /** Enregistrement direct par le chauffeur (client monté en route). */
   enregistrement_direct?: boolean;
   parent_id?: string | null;
+  /** Arrêt précis de descente sur la ligne. */
+  arret_destination_id?: string | null;
+  /** Encaissé **avant** génération du QR. */
+  moyen_paiement?: "especes" | "wave";
+  telephone_paiement?: string | null;
 }
 
 // ─── Actions groupées du chauffeur (départ / arrivée / pré-alerte) ───
@@ -384,6 +394,8 @@ export interface DonneesSuiviFamilial {
 export interface DonneesActionLot {
   /** Gare ciblée (optionnelle) : pour « Arrivés », ne traiter qu'une gare. */
   gare_id?: string | null;
+  /** Arrêt intermédiaire : prioritaire sur gare_id. */
+  arret_id?: string | null;
   localisation?: string | null;
 }
 
@@ -395,6 +407,7 @@ export interface ResultatActionLot {
   voyage_id: string;
   nb_passagers: number;
   nb_colis: number;
+  arret_id?: string | null;
 }
 
 /** Payload d'une pré-alerte d'arrivée (« Prévenir de l'approche »). */

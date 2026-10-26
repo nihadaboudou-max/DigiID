@@ -10,6 +10,7 @@ interface DocumentTypeSelectorProps {
 const DOCUMENT_TYPES = [
   { value: TypeDocument.CNI_BIOMETRIQUE, label: "CNI Biométrique", icon: "" },
   { value: TypeDocument.CNI_PAPIER, label: "CNI Papier", icon: "📄" },
+  { value: TypeDocument.CIP, label: "CIP (ANIP)", icon: "🪪" },
   { value: TypeDocument.PASSEPORT, label: "Passeport", icon: "📘" },
   { value: TypeDocument.PERMIS_CONDUIRE, label: "Permis de Conduire", icon: "" },
   { value: TypeDocument.CARTE_ASSURANCE, label: "Carte d'Assurance", icon: "🛡️" },

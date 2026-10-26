@@ -151,6 +151,9 @@ class LigneManifeste(BaseModel):
     nombre_articles: int = 1
     mode_enregistrement: str = "guichet"
     enregistre_le: Optional[datetime] = None
+    # Passager uniquement : « enfant » peut être confié au guichet ; « adulte »
+    # termine son trajet à l'arrivée.
+    type_passager: Optional[Literal["enfant", "adulte"]] = None
 
 
 class VoyageChauffeurResponse(BaseModel):

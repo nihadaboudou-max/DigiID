@@ -101,6 +101,7 @@ from src.modules.ocr_assurance.routes import routeur_assurance
 from src.modules.ocr_carte_grise.routes import routeur_carte_grise
 from src.modules.ocr_carte_sejour.routes import routeur_carte_sejour
 from src.modules.ocr_consulaire.routes import routeur_consulaire
+from src.modules.ocr_cip.routes import routeur_cip
 from src.modules.ocr_passeport.routes import routeur_passeport
 
 ## Module Inspection de Documents — routeur pour l'upload et l'analyse OCR des documents d'identité
@@ -207,10 +208,11 @@ routeur_v1.include_router(routeur_permis)  # Module OCR Permis de Conduire
 # Module OCR Assurance Automobile — routeur pour l'upload et l'analyse OCR des assurances automobiles
 routeur_v1.include_router(routeur_assurance)  # Module OCR Assurance Automobile
 
-# Modules OCR Carte Grise / Carte de Séjour / Consulaire
+# Modules OCR Carte Grise / Carte de Séjour / Consulaire / CIP
 routeur_v1.include_router(routeur_carte_grise)
 routeur_v1.include_router(routeur_carte_sejour)
 routeur_v1.include_router(routeur_consulaire)
+routeur_v1.include_router(routeur_cip)
 routeur_v1.include_router(routeur_passeport)
 
 ## Module Inspection de Documents — routeur pour l'upload et l'analyse OCR des documents d'identité

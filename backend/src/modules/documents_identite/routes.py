@@ -40,7 +40,7 @@ async def lister_mes_documents(
     utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
     type_document: Optional[str] = Query(
         None,
-        regex="^(cni|passeport|permis|assurance|carte_sejour|carte_consulaire|carte_grise)$",
+        regex="^(cni|cip|passeport|permis|assurance|carte_sejour|carte_consulaire|carte_grise)$",
     ),
 ):
     """Retourne tous les documents d'identité actifs de l'utilisateur.

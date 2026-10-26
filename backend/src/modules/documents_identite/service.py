@@ -293,7 +293,7 @@ async def lister_documents(
     """
     Liste tous les documents actifs de l'utilisateur.
 
-    Optionnellement filtré par type_document (cni, passeport, permis,
+    Optionnellement filtré par type_document (cni, cip, passeport, permis,
     assurance, carte_sejour, carte_consulaire, carte_grise).
     """
     query = select(DocumentIdentite).where(
@@ -601,6 +601,7 @@ TYPES_TITRE_IDENTITE_AVEC_PHOTO = (
     "passeport",
     "carte_sejour",
     "carte_consulaire",
+    "cip",
     "permis",
 )
 

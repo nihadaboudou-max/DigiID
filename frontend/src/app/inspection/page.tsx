@@ -20,6 +20,7 @@ import { champsDocument } from "@/composants/inspection/champsParType";
 const LIBELLES_TYPE_DOCUMENT: Record<TypeDocument, string> = {
   [TypeDocument.CNI_BIOMETRIQUE]: "CNI Biométrique",
   [TypeDocument.CNI_PAPIER]: "CNI Papier",
+  [TypeDocument.CIP]: "CIP (ANIP)",
   [TypeDocument.PASSEPORT]: "Passeport",
   [TypeDocument.PERMIS_CONDUIRE]: "Permis de conduire",
   [TypeDocument.CARTE_ASSURANCE]: "Carte d'assurance",
@@ -55,6 +56,7 @@ const CLASSES_STATUT: Record<StatutVerification, string> = {
 const OPTIONS_TYPE_DOCUMENT: { valeur: TypeDocument; libelle: string }[] = [
   { valeur: TypeDocument.CNI_BIOMETRIQUE, libelle: "CNI Biométrique" },
   { valeur: TypeDocument.CNI_PAPIER, libelle: "CNI Papier" },
+  { valeur: TypeDocument.CIP, libelle: "CIP (ANIP)" },
   { valeur: TypeDocument.PASSEPORT, libelle: "Passeport" },
   { valeur: TypeDocument.PERMIS_CONDUIRE, libelle: "Permis de conduire" },
   { valeur: TypeDocument.CARTE_ASSURANCE, libelle: "Carte d'assurance" },

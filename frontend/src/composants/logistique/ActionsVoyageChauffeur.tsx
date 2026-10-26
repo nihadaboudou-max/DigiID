@@ -9,7 +9,7 @@
  *   1. « Valider le Départ »       → tous les passagers + colis passent en route.
  *   2. « Prévenir de l'approche »  → SMS de pré-alerte (familles, proches,
  *      destinataires) ~45 min avant l'arrivée, pour qu'ils se déplacent à temps.
- *   3. « Arrivés »                 → tous les passagers + colis d'une gare arrivés.
+ *   3. « Arrivés »                 → colis/passagers de l'arrêt (ou gare) ciblé.
  *
  * Chaque action reste traçable (un événement par passager/colis) et idempotente.
  */
@@ -25,10 +25,21 @@ import { logistiqueAPI } from "@/services/logistique_api";
 
 type Action = "depart" | "approche" | "arrivee";
 
+/** Point de descente proposé pour « Arrivés » (arrêt intermédiaire ou terminus). */
+export interface PointArrivee {
+  /** Clé unique : `arret:{id}` ou `gare:{id}`. */
+  cle: string;
+  libelle: string;
+  arret_id?: string | null;
+  gare_id?: string | null;
+}
+
 interface Props {
   voyageId: string;
-  /** Gares connues du voyage (issues de la ligne) pour cibler « Arrivés ». */
+  /** Gares connues du voyage (repli si pas d'arrêts structurés). */
   gares?: { id: string; nom: string }[];
+  /** Arrêts ordonnés + terminus — prioritaire pour cibler « Arrivés ». */
+  pointsArrivee?: PointArrivee[];
   /** Appelé après une action réussie (rafraîchit les listes). */
   surSucces?: () => void;
 }
@@ -54,19 +65,34 @@ const CONFIG: Record<
   },
   arrivee: {
     titre: "Marquer arrivés ?",
-    description: "Les passagers et colis de la gare sélectionnée seront marqués arrivés.",
+    description:
+      "Les passagers et colis de l'arrêt (ou de la gare) sélectionné seront marqués arrivés.",
     messageAlerte:
-      "Un SMS d'arrivée sera envoyé aux familles et aux destinataires concernés.",
+      "Un SMS d'arrivée sera envoyé aux familles et aux destinataires concernés. Ensuite seulement vous pourrez confier colis/enfants au guichet.",
     texteBouton: "Marquer arrivés",
   },
 };
 
-export function ActionsVoyageChauffeur({ voyageId, gares = [], surSucces }: Props) {
+export function ActionsVoyageChauffeur({
+  voyageId,
+  gares = [],
+  pointsArrivee = [],
+  surSucces,
+}: Props) {
   const [action, setAction] = useState<Action | null>(null);
-  const [gareArriveeId, setGareArriveeId] = useState<string>("");
+  const [pointCle, setPointCle] = useState<string>("");
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [succes, setSucces] = useState<string | null>(null);
+
+  const optionsArrivee: PointArrivee[] =
+    pointsArrivee.length > 0
+      ? pointsArrivee
+      : gares.map((g) => ({
+          cle: `gare:${g.id}`,
+          libelle: g.nom,
+          gare_id: g.id,
+        }));
 
   async function confirmer() {
     if (!action) return;
@@ -80,8 +106,10 @@ export function ActionsVoyageChauffeur({ voyageId, gares = [], surSucces }: Prop
         const r = await logistiqueAPI.voyages.preAlerte(voyageId, {});
         setSucces(r.message);
       } else {
+        const point = optionsArrivee.find((p) => p.cle === pointCle);
         const r = await logistiqueAPI.voyages.marquerArrivee(voyageId, {
-          gare_id: gareArriveeId || null,
+          arret_id: point?.arret_id ?? null,
+          gare_id: point?.arret_id ? null : (point?.gare_id ?? null),
         });
         setSucces(r.message);
       }
@@ -147,25 +175,27 @@ export function ActionsVoyageChauffeur({ voyageId, gares = [], surSucces }: Prop
           </Bouton>
         </div>
 
-        {gares.length > 0 && (
+        {optionsArrivee.length > 0 && (
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-ardoise">
-              Gare pour « Arrivés »
+              Arrêt / gare pour « Arrivés »
             </label>
             <select
               className="champ-saisie"
-              value={gareArriveeId}
-              onChange={(e) => setGareArriveeId(e.target.value)}
+              value={pointCle}
+              onChange={(e) => setPointCle(e.target.value)}
             >
-              <option value="">Toutes les gares du voyage</option>
-              {gares.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.nom}
+              <option value="">Tous les arrêts du voyage</option>
+              {optionsArrivee.map((p) => (
+                <option key={p.cle} value={p.cle}>
+                  {p.libelle}
                 </option>
               ))}
             </select>
             <p className="text-xs italic text-ardoise-clair">
-              Laissez sur « toutes les gares » pour marquer l&apos;ensemble du voyage.
+              Choisissez l&apos;arrêt où vous êtes : seuls les colis et passagers
+              destinés à cet arrêt passent « arrivés ». Ensuite seulement, dépôt
+              au guichet (colis / enfants).
             </p>
           </div>
         )}

@@ -4,6 +4,7 @@
 export enum TypeDocument {
   CNI_BIOMETRIQUE = "cni_biometrique",
   CNI_PAPIER = "cni_papier",
+  CIP = "cip",
   PASSEPORT = "passeport",
   PERMIS_CONDUIRE = "permis_conduire",
   CARTE_ASSURANCE = "carte_assurance",

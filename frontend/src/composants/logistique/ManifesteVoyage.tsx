@@ -266,29 +266,13 @@ function TableauManifeste({
                           )}
                         </td>
                         <td className="py-2 pr-3 no-print">
-                          {!ligne.reception_confirmee ? (
-                            <Bouton
-                              variante="ghost"
-                              taille="petit"
-                              chargement={actionEnCours === cle}
-                              onClick={() => surAction(ligne, "reception")}
-                            >
-                              Prendre en charge
-                            </Bouton>
-                          ) : !ligne.remis_guichet ? (
-                            <Bouton
-                              variante="secondaire"
-                              taille="petit"
-                              chargement={actionEnCours === cleRemise}
-                              onClick={() => surAction(ligne, "remise")}
-                            >
-                              Déposer au guichet
-                            </Bouton>
-                          ) : (
-                            <span className="text-xs italic text-ardoise-clair">
-                              Au guichet
-                            </span>
-                          )}
+                          <GestesManifeste
+                            ligne={ligne}
+                            actionEnCours={actionEnCours}
+                            cleReception={cle}
+                            cleRemise={cleRemise}
+                            surAction={surAction}
+                          />
                         </td>
                       </tr>
                     );
@@ -300,6 +284,89 @@ function TableauManifeste({
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * Gestes chauffeur sur une ligne du manifeste.
+ *
+ * - « Prendre en charge » : ajouts mid-route ou confirmation individuelle.
+ * - « Déposer au guichet » : uniquement **après arrivée** à destination.
+ *   Colis : si le chauffeur ne livre pas lui-même.
+ *   Passager enfant : si le responsable n'est pas à l'heure.
+ *   Passager adulte : trajet terminé à l'arrivée — pas de dépôt guichet.
+ */
+function GestesManifeste({
+  ligne,
+  actionEnCours,
+  cleReception,
+  cleRemise,
+  surAction,
+}: {
+  ligne: LigneManifeste;
+  actionEnCours: string | null;
+  cleReception: string;
+  cleRemise: string;
+  surAction: (ligne: LigneManifeste, type: "reception" | "remise") => void;
+}) {
+  if (!ligne.reception_confirmee) {
+    return (
+      <Bouton
+        variante="ghost"
+        taille="petit"
+        chargement={actionEnCours === cleReception}
+        onClick={() => surAction(ligne, "reception")}
+      >
+        Prendre en charge
+      </Bouton>
+    );
+  }
+
+  if (ligne.remis_guichet) {
+    return (
+      <span className="text-xs italic text-ardoise-clair">Au guichet</span>
+    );
+  }
+
+  const adulteArrive =
+    ligne.type === "passager" &&
+    ligne.type_passager === "adulte" &&
+    ligne.statut === "arrive";
+  if (adulteArrive) {
+    return (
+      <span className="text-xs italic text-ardoise-clair">
+        Trajet terminé
+      </span>
+    );
+  }
+
+  const peutDeposerAuGuichet =
+    ligne.statut === "arrive" &&
+    (ligne.type === "colis" || ligne.type_passager === "enfant");
+
+  if (peutDeposerAuGuichet) {
+    return (
+      <Bouton
+        variante="secondaire"
+        taille="petit"
+        chargement={actionEnCours === cleRemise}
+        onClick={() => surAction(ligne, "remise")}
+      >
+        Déposer au guichet
+      </Bouton>
+    );
+  }
+
+  if (ligne.statut === "arrive") {
+    return (
+      <span className="text-xs italic text-ardoise-clair">Arrivé</span>
+    );
+  }
+
+  return (
+    <span className="text-xs italic text-ardoise-clair">
+      En route — attendre « Arrivés »
+    </span>
   );
 }
 

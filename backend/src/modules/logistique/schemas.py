@@ -351,6 +351,10 @@ class ColisCreate(BaseModel):
     # Prix du transport — **facultatif** : DigiID n'encaisse pas ce montant (les
     # frais de service sont payés séparément par le client).
     frais_fcfa: Optional[int] = Field(None, ge=0)
+    # Moyen de paiement **choisi à l'inscription** : le QR n'est généré qu'après
+    # l'encaissement (espèces immédiat, Wave en attente de validation).
+    moyen_paiement: Literal["especes", "wave"] = "especes"
+    telephone_paiement: Optional[str] = Field(None, max_length=30)
     # Si non fournis, l'expéditeur ET le receveur = utilisateur courant (guichet).
     expediteur_id: Optional[UUID] = None
     receveur_id: Optional[UUID] = None
@@ -372,7 +376,9 @@ class ColisCreate(BaseModel):
     # colis devenait introuvable par téléphone et les SMS partaient dans le vide.
     # Les numéros sont normalisés en ``+229…`` ; un numéro étranger explicite
     # (``+226…``) reste accepté, tout le reste est refusé (HTTP 422).
-    @field_validator("destinataire_tel", "expediteur_tel", mode="before")
+    @field_validator(
+        "destinataire_tel", "expediteur_tel", "telephone_paiement", mode="before"
+    )
     @classmethod
     def _valider_telephones(cls, valeur):
         from src.noyau.telephone import normaliser_numero_tiers
@@ -433,6 +439,10 @@ class ColisResponse(BaseModel):
     reception_confirmee_le: Optional[datetime] = None
     remis_guichet_le: Optional[datetime] = None
     remis_guichet_par_nom: Optional[str] = None
+    remis_guichet_a_id: Optional[UUID] = None
+    remis_guichet_a_nom: Optional[str] = None
+    # Moyen de paiement choisi à l'inscription (aucun encaissement après coup).
+    moyen_paiement: Optional[str] = None
     # Origine de l'enregistrement : « guichet » ou « chauffeur_direct ».
     mode_enregistrement: str = "guichet"
     enregistre_par_id: Optional[UUID] = None
@@ -591,6 +601,9 @@ class SuiviFamilialCreate(BaseModel):
     proche_telephone: str = Field(..., min_length=6, max_length=30)
     # Nombre de sacs (1 à 10) — traçabilité, **sans impact** sur le prix.
     nombre_bagages: int = Field(1, ge=1, le=10)
+    # Moyen de paiement **choisi à l'inscription** (avant la génération du QR).
+    moyen_paiement: Literal["especes", "wave"] = "especes"
+    telephone_paiement: Optional[str] = Field(None, max_length=30)
     gare_depart_id: UUID
     gare_arrivee_id: UUID
     # Arrêt précis où le passager descend (facultatif : à défaut, la gare
@@ -614,6 +627,7 @@ class SuiviFamilialCreate(BaseModel):
         "telephone_passager",
         "acheteur_tel",
         "proche_telephone",
+        "telephone_paiement",
         mode="before",
     )
     @classmethod
@@ -723,6 +737,9 @@ class SuiviFamilialResponse(BaseModel):
     reception_confirmee_le: Optional[datetime] = None
     remis_guichet_le: Optional[datetime] = None
     remis_guichet_par_nom: Optional[str] = None
+    remis_guichet_a_id: Optional[UUID] = None
+    remis_guichet_a_nom: Optional[str] = None
+    moyen_paiement: Optional[str] = None
     # Étiquettes QR générées (une par sac).
     bagages: list[BagageResponse] = []
     model_config = ConfigDict(from_attributes=True)
@@ -835,6 +852,10 @@ class ActionLotVoyageRequest(BaseModel):
     # Gare ciblée (optionnelle) : pour « Arrivés », ne traiter que les colis et
     # passagers destinés à cette gare d'arrivée. Par défaut, tous.
     gare_id: Optional[UUID] = None
+    # Arrêt intermédiaire ciblé : prioritaire sur gare_id. Le chauffeur marque
+    # arrivés uniquement les passagers/colis qui descendent à cet arrêt, sans
+    # terminer le voyage (il reste en route vers le terminus).
+    arret_id: Optional[UUID] = None
     localisation: Optional[str] = Field(None, max_length=200)
 
 
@@ -846,6 +867,17 @@ class ActionLotVoyageResponse(BaseModel):
     voyage_id: Optional[UUID] = None
     nb_passagers: int = 0
     nb_colis: int = 0
+    # Arrêt intermédiaire effectivement traité (None = toutes les gares).
+    arret_id: Optional[UUID] = None
+
+
+class RemiseGuichetRequest(BaseModel):
+    """Corps optionnel (ignoré) : le dépôt au guichet ne désigne personne.
+
+    Le chauffeur confie le colis / l'enfant au guichet d'arrivée collectivement,
+    sans choisir un agent. Conservé pour compatibilité clients anciens.
+    """
+    agent_id: Optional[UUID] = None
 
 
 class PreAlerteRequest(BaseModel):

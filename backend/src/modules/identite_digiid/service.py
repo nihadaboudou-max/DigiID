@@ -650,6 +650,7 @@ async def construire_manifeste(
             nombre_bagages=suivi.nombre_bagages or 1,
             mode_enregistrement=suivi.mode_enregistrement,
             enregistre_le=suivi.cree_le,
+            type_passager=suivi.type_passager,
         )
         for suivi in passagers_liste
     ]

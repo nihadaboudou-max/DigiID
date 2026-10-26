@@ -9,6 +9,14 @@ Organisés par type de document, avec des regex robustes pour tolérer les erreu
 # L'ordre est important : les types les plus spécifiques sont vérifiés en premier.
 # =============================================================================
 PATTERNS_CLASSIFICATION = {
+    # CIP (Bénin / ANIP) AVANT la CNI : le titre « Certificat d'Identification
+    # Personnelle » et le NPI sont des marqueurs exclusifs.
+    "cip": [
+        r"CERTIFICAT\s*D[''`]?\s*IDENTIFICATION\s*PERSONNELLE",
+        r"NUMERO\s*PERSONNEL\s*D[''`]?\s*IDENTIFICATION",
+        r"\bNPI\b",
+        r"\bANIP\b",
+    ],
     # ORDRE CRITIQUE : l'assurance AVANT la carte grise. Les deux documents
     # partagent des champs vehicule ("1ere mise en circulation", "puissance
     # fiscale", n° de chassis/VIN, immatriculation) ; sans cet ordre, une
@@ -78,6 +86,20 @@ PATTERNS_CLASSIFICATION = {
 # PATTERNS D'EXTRACTION PAR TYPE (Pour documents sans MRZ)
 # =============================================================================
 PATTERNS_EXTRACTION = {
+    "cip": {
+        "numero_document": [
+            r"(?:NUMERO\s*PERSONNEL\s*D[''`]?\s*IDENTIFICATION|NPI)\s*[:\-]?\s*([0-9]{8,14})",
+        ],
+        "date_expiration": [
+            r"EXPIRE\s*LE\s*[:\-]?\s*(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})",
+        ],
+        "nom_pere": [
+            r"PERE\s*[:\-]?\s*([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s\-]{1,50})",
+        ],
+        "nom_mere": [
+            r"MERE\s*[:\-]?\s*([A-ZÀ-Ÿ][A-ZÀ-Ÿ\s\-]{1,50})",
+        ],
+    },
     "permis_conduire": {
         "numero_document": [
             r"(?:N[°O]|NUM[ÉE]RO|PERMIS)\s*[:\-]?\s*([A-Z0-9\-]{8,20})",

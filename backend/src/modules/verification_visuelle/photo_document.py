@@ -41,6 +41,8 @@ TYPES_DOCUMENT_AVEC_PHOTO: frozenset[str] = frozenset({
     "cni",
     "cni_biometrique",
     "cni_papier",
+    # CIP Bénin (ANIP) — photo + embedding
+    "cip",
     # Autres titres d'identité (tables spécialisées — embedding_photo_document)
     "passeport",
     "permis",
@@ -63,6 +65,7 @@ LIBELLES_DOCUMENT: dict[str, str] = {
     "cni": "Carte Nationale d'Identité",
     "cni_biometrique": "Carte Nationale d'Identité",
     "cni_papier": "Carte Nationale d'Identité",
+    "cip": "Certificat d'Identification Personnelle",
     "passeport": "Passeport",
     "permis": "Permis de conduire",
     "permis_conduire": "Permis de conduire",
@@ -257,7 +260,13 @@ async def charger_references_faciales(
     Sont exclus : l'attestation d'assurance et la carte grise, qui ne
     contiennent pas forcément d'image de la personne.
     """
-    from src.modeles import CarteConsulaire, CarteSejour, Passeport, PermisConduire
+    from src.modeles import (
+        CarteConsulaire,
+        CarteSejour,
+        CertificatIdentificationPersonnelle,
+        Passeport,
+        PermisConduire,
+    )
     from src.modeles.verification_cni import VerificationCNI
 
     references: list[tuple[str, list[float]]] = []
@@ -287,6 +296,7 @@ async def charger_references_faciales(
         ("permis_conduire", PermisConduire),
         ("carte_sejour", CarteSejour),
         ("carte_consulaire", CarteConsulaire),
+        ("cip", CertificatIdentificationPersonnelle),
     )
     for type_document, modele in modeles:
         try:
@@ -337,6 +347,7 @@ async def charger_embedding_par_document_id(
     from src.modeles import (
         CarteConsulaire,
         CarteSejour,
+        CertificatIdentificationPersonnelle,
         DocumentIdentite,
         Passeport,
         PermisConduire,
@@ -387,6 +398,7 @@ async def charger_embedding_par_document_id(
         ("permis_conduire", PermisConduire),
         ("carte_sejour", CarteSejour),
         ("carte_consulaire", CarteConsulaire),
+        ("cip", CertificatIdentificationPersonnelle),
     ):
         try:
             resultat = await session.execute(

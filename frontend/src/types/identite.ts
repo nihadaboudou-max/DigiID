@@ -149,6 +149,8 @@ export interface LigneManifeste {
   nombre_articles: number;
   mode_enregistrement: ModeEnregistrement;
   enregistre_le: string | null;
+  /** Passager : enfant (peut attendre au guichet) / adulte (fin à l'arrivée). */
+  type_passager?: "enfant" | "adulte" | null;
 }
 
 /** Manifeste complet d'un voyage (colis + passagers). */

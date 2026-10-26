@@ -87,6 +87,7 @@ type TypeScan = "auto" | "piece" | "permis" | "assurance" | "carte_grise";
 const LIBELLES_PIECE: Partial<Record<TypeDocument, string>> = {
   [TypeDocument.CNI_BIOMETRIQUE]: "CNI",
   [TypeDocument.CNI_PAPIER]: "CNI",
+  [TypeDocument.CIP]: "CIP",
   [TypeDocument.PASSEPORT]: "Passeport",
   [TypeDocument.CARTE_SEJOUR]: "Carte de séjour",
   [TypeDocument.CARTE_CONSULAIRE]: "Carte consulaire",
@@ -316,6 +317,10 @@ function Contenu() {
       }
       if ("categories" in donnees) {
         appliquerPermis(donnees, extraits);
+        return;
+      }
+      if ("npi" in donnees) {
+        appliquerPiece(TypeDocument.CIP, donnees, extraits);
         return;
       }
       if ("numero_document" in donnees || "numero_passeport" in donnees) {

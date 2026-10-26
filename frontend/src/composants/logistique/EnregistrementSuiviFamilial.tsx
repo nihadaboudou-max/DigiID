@@ -33,6 +33,7 @@ import {
 import {
   gareDeLActeur,
   logistiqueAPI,
+  type ArretLigne,
   type Gare,
   type Ligne,
   type SuiviFamilialEnregistre,
@@ -43,6 +44,7 @@ import { formaterFcfa } from "./format";
 import { RechercheCarteDigiID } from "./RechercheCarteDigiID";
 import { SelectionVoyage, libelleVoyage } from "./SelectionVoyage";
 import { TicketSuiviFamilialImprimable } from "./TicketSuiviFamilialImprimable";
+import { LIBELLES_MOYEN, type MoyenPaiement } from "@/types/paiement";
 
 type TypePassager = "enfant" | "adulte";
 
@@ -97,6 +99,10 @@ export function EnregistrementSuiviFamilial({
   const [voyageId, setVoyageId] = useState(voyageImposeId ?? "");
   /** Au guichet, on ignore souvent quel car partira : report d'affectation. */
   const [affecterPlusTard, setAffecterPlusTard] = useState(false);
+  const [arretDestinationId, setArretDestinationId] = useState("");
+  const [arretsLigne, setArretsLigne] = useState<ArretLigne[]>([]);
+  const [moyenPaiement, setMoyenPaiement] = useState<MoyenPaiement>("especes");
+  const [telephonePaiement, setTelephonePaiement] = useState("");
 
   // État d'envoi
   const [erreur, setErreur] = useState<string | null>(null);
@@ -147,6 +153,38 @@ export function EnregistrementSuiviFamilial({
     [voyages, voyageId],
   );
   const chauffeurId = chauffeurImposeId ?? voyageSelectionne?.chauffeur_id ?? null;
+  const ligneVoyage = useMemo(
+    () =>
+      voyageSelectionne
+        ? lignes.find((l) => l.id === voyageSelectionne.ligne_id) ?? null
+        : null,
+    [lignes, voyageSelectionne],
+  );
+
+  useEffect(() => {
+    let annule = false;
+    const ligneId = voyageSelectionne?.ligne_id;
+    if (!ligneId) {
+      setArretsLigne([]);
+      return;
+    }
+    const deja = ligneVoyage?.arrets;
+    if (deja && deja.length > 0) {
+      setArretsLigne(deja.filter((a) => a.actif !== false));
+      return;
+    }
+    (async () => {
+      try {
+        const liste = await logistiqueAPI.lignes.arrets.lister(ligneId);
+        if (!annule) setArretsLigne(liste.filter((a) => a.actif !== false));
+      } catch {
+        if (!annule) setArretsLigne([]);
+      }
+    })();
+    return () => {
+      annule = true;
+    };
+  }, [voyageSelectionne?.ligne_id, ligneVoyage?.arrets]);
 
   // ─── Numéros de téléphone (miroir de la validation serveur) ────────
   // « Au moins 6 chiffres » laissait passer `123456`, `000000`… : le proche
@@ -170,6 +208,14 @@ export function EnregistrementSuiviFamilial({
       ? acheteurNom.trim().length >= 2 && telAcheteurOk
       : telPassagerOk;
 
+  const destinationArretValide =
+    affecterPlusTard || !voyageSelectionne ? true : arretDestinationId !== "";
+  const paiementValide =
+    moyenPaiement === "especes" ||
+    (moyenPaiement === "wave" &&
+      normaliserTelephone(telephonePaiement) !== null &&
+      telephonePaiement.trim() !== "");
+
   const formulaireValide =
     enfantNom.trim().length >= 2 &&
     ageValide &&
@@ -178,6 +224,8 @@ export function EnregistrementSuiviFamilial({
     !!gareDepartId &&
     !!gareArriveeId &&
     gareDepartId !== gareArriveeId &&
+    destinationArretValide &&
+    paiementValide &&
     (voyageImposeId
       ? true
       : affecterPlusTard || (!!voyageId && !!chauffeurId));
@@ -198,6 +246,9 @@ export function EnregistrementSuiviFamilial({
     setVoyageId(voyageImposeId ?? "");
     setAffecterPlusTard(false);
     setGareArriveeId("");
+    setArretDestinationId("");
+    setMoyenPaiement("especes");
+    setTelephonePaiement("");
     setGareDepartId(gareGuichet?.id ?? "");
     setErreur(null);
   }
@@ -229,9 +280,18 @@ export function EnregistrementSuiviFamilial({
         nombre_bagages: nombreBagages,
         gare_depart_id: gareDepartId,
         gare_arrivee_id: gareArriveeId,
+        arret_destination_id:
+          arretDestinationId && arretDestinationId !== "terminus"
+            ? arretDestinationId
+            : null,
         voyage_id: affecterPlusTard ? null : voyageId || null,
         chauffeur_id: affecterPlusTard ? undefined : (chauffeurId ?? undefined),
         enregistrement_direct: enregistrementDirect || undefined,
+        moyen_paiement: moyenPaiement,
+        telephone_paiement:
+          moyenPaiement === "wave"
+            ? (normaliserTelephone(telephonePaiement) ?? telephonePaiement.trim())
+            : null,
       });
       setResultat(reponse);
     } catch (e) {
@@ -600,6 +660,79 @@ export function EnregistrementSuiviFamilial({
 
               <ControleurBagages valeur={nombreBagages} onChange={setNombreBagages} />
 
+              {!affecterPlusTard && voyageSelectionne && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-ardoise">
+                    Arrêt de destination <span className="text-terre">*</span>
+                  </label>
+                  <select
+                    className="champ-saisie"
+                    value={arretDestinationId}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setArretDestinationId(v);
+                      if (v === "terminus" && ligneVoyage) {
+                        setGareArriveeId(ligneVoyage.gare_arrivee_id);
+                      } else {
+                        const arret = arretsLigne.find((a) => a.id === v);
+                        if (arret) setGareArriveeId(arret.gare_id);
+                      }
+                    }}
+                  >
+                    <option value="">— Choisir l&apos;arrêt de descente —</option>
+                    {arretsLigne.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.ordre}. {a.gare_nom ?? "Arrêt"}
+                      </option>
+                    ))}
+                    {ligneVoyage && (
+                      <option value="terminus">
+                        Terminus — {ligneVoyage.gare_arrivee_nom ?? "Arrivée"}
+                      </option>
+                    )}
+                  </select>
+                  <p className="text-xs italic text-ardoise-clair">
+                    Positionne le passager dans la feuille de route du chauffeur.
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-3 rounded-xl border border-lagune/20 bg-lagune/5 px-4 py-3">
+                <p className="text-sm font-semibold text-ardoise">
+                  Moyen de paiement ({formaterFcfa(FRAIS_SERVICE_PASSAGER_FCFA)})
+                </p>
+                <p className="text-xs text-ardoise-clair">
+                  Encaissement avant génération du ticket QR.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {(["especes", "wave"] as MoyenPaiement[]).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setMoyenPaiement(m)}
+                      className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                        moyenPaiement === m
+                          ? "border-lagune bg-lagune text-white"
+                          : "border-ardoise/20 bg-white text-ardoise hover:bg-lagune/10"
+                      }`}
+                    >
+                      {LIBELLES_MOYEN[m] ?? m}
+                    </button>
+                  ))}
+                </div>
+                {moyenPaiement === "wave" && (
+                  <ChampSaisie
+                    libelle="Téléphone Wave"
+                    required
+                    value={telephonePaiement}
+                    onChange={(e) => setTelephonePaiement(e.target.value)}
+                    inputMode="tel"
+                    type="tel"
+                    placeholder="+229 01 97 12 34 56"
+                  />
+                )}
+              </div>
+
               <div className="flex flex-col gap-3 border-t border-ardoise-clair/20 pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-ardoise">
                   Frais de service :{" "}
@@ -607,7 +740,7 @@ export function EnregistrementSuiviFamilial({
                     {formaterFcfa(FRAIS_SERVICE_PASSAGER_FCFA)}
                   </strong>{" "}
                   <span className="text-xs text-ardoise-clair">
-                    (fixe par passager, quel que soit le nombre de sacs)
+                    (fixe · payé avant le QR)
                   </span>
                 </p>
                 <Bouton
@@ -616,7 +749,7 @@ export function EnregistrementSuiviFamilial({
                   disabled={enregistrement || !formulaireValide}
                   onClick={enregistrer}
                 >
-                  <IconeCheck className="h-4 w-4" /> Enregistrer &amp; activer le suivi{" "}
+                  <IconeCheck className="h-4 w-4" /> Payer &amp; activer le suivi{" "}
                   {libellePassager}
                 </Bouton>
               </div>

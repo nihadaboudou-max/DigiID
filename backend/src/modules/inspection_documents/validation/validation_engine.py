@@ -102,6 +102,23 @@ def valider_document(donnees: DonneesDocumentExtraites) -> ResultatValidation:
         scores["numero_police"] = bool(num_police)
         if not scores["numero_police"]:
             erreurs.append("Numéro de police manquant")
+
+    elif donnees.type_document == TypeDocument.CIP:
+        # CIP : NPI obligatoire + présence QR + photo titulaire
+        npi = donnees.numero_document or donnees.donnees_specifiques.get("npi")
+        scores["npi"] = bool(npi) and _valider_format_numero(str(npi))
+        if not scores["npi"]:
+            erreurs.append("NPI (Numéro Personnel d'Identification) manquant ou invalide")
+
+        qr_ok = bool(donnees.donnees_specifiques.get("qr_code_detecte"))
+        scores["qr_code"] = qr_ok
+        if not qr_ok:
+            erreurs.append("QR code absent ou illisible sur le CIP")
+
+        visage_ok = bool(donnees.donnees_specifiques.get("embedding_visage_present"))
+        scores["embedding_visage"] = visage_ok
+        if not visage_ok:
+            erreurs.append("Visage du titulaire non détecté sur le CIP")
     
     # ── Résultat global ──
     est_valide = all(scores.values())

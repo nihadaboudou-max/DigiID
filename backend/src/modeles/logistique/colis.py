@@ -139,6 +139,9 @@ class Colis(Base, MelangeTracabilite):
     # vide est donc normal et volontaire (aucune surveillance du revenu du
     # transporteur).
     frais_fcfa: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Moyen de paiement choisi **à l'inscription** (avant le QR) : espèces au
+    # guichet ou Wave. La transaction est créée dans la même transaction SQL.
+    moyen_paiement: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     livre_le: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -172,6 +175,13 @@ class Colis(Base, MelangeTracabilite):
         DateTime(timezone=True), nullable=True
     )
     remis_guichet_par_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("utilisateur.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Agent de guichet **désigné à l'avance** par le chauffeur pour recevoir le
+    # colis. Il est notifié et retrouve le colis dans son tableau « À réceptionner ».
+    remis_guichet_a_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("utilisateur.id", ondelete="SET NULL"),
         nullable=True,

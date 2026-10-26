@@ -13,6 +13,7 @@ from src.modules.inspection_documents.adaptateurs import (
     adapter_assurance,
     adapter_carte_grise,
     adapter_carte_sejour,
+    adapter_cip,
     adapter_cni,
     adapter_consulaire,
     adapter_passeport,
@@ -28,6 +29,7 @@ from src.noyau.exceptions import ErreurValidation # ✅ AJOUT : Pour ne pas aval
 ADAPTATEURS = {
     TypeDocument.CNI_BIOMETRIQUE: adapter_cni,
     TypeDocument.CNI_PAPIER: adapter_cni,
+    TypeDocument.CIP: adapter_cip,
     TypeDocument.PERMIS_CONDUIRE: adapter_permis,
     TypeDocument.PASSEPORT: adapter_passeport,
     TypeDocument.CARTE_ASSURANCE: adapter_assurance,
@@ -103,6 +105,7 @@ async def _enregistrer_historique(
         numero_document=_extraire_champ(
             donnees,
             "numero_document",
+            "npi",
             "numero_immatriculation",
             "numero_police",
             "numero_chassis",

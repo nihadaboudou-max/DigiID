@@ -37,6 +37,17 @@ export interface Gare {
   cree_le: string;
 }
 
+/** Arrêt intermédiaire d'une ligne (ordre de la tournée). */
+export interface ArretLigne {
+  id: string;
+  ligne_id: string;
+  gare_id: string;
+  ordre: number;
+  actif: boolean;
+  gare_nom: string | null;
+  cree_le: string;
+}
+
 export interface Ligne {
   id: string;
   gare_depart_id: string;
@@ -46,6 +57,8 @@ export interface Ligne {
   actif: boolean;
   gare_depart_nom: string | null;
   gare_arrivee_nom: string | null;
+  /** Arrêts intermédiaires ordonnés (terminus = gare_arrivee_id). */
+  arrets?: ArretLigne[];
   cree_le: string;
 }
 
@@ -153,6 +166,24 @@ export const logistiqueAPI = {
     modifier: (id: string, d: Record<string, unknown>) =>
       clientAPI.patch<Ligne>(`${BASE}/lignes/${id}`, d, opts),
     supprimer: (id: string) => clientAPI.delete(`${BASE}/lignes/${id}`, opts),
+    arrets: {
+      lister: (ligneId: string) =>
+        clientAPI.get<ArretLigne[]>(`${BASE}/lignes/${ligneId}/arrets`, opts),
+      creer: (ligneId: string, d: { gare_id: string; ordre: number; actif?: boolean }) =>
+        clientAPI.post<ArretLigne>(`${BASE}/lignes/${ligneId}/arrets`, d, opts),
+      modifier: (
+        ligneId: string,
+        arretId: string,
+        d: { gare_id?: string; ordre?: number; actif?: boolean },
+      ) =>
+        clientAPI.patch<ArretLigne>(
+          `${BASE}/lignes/${ligneId}/arrets/${arretId}`,
+          d,
+          opts,
+        ),
+      supprimer: (ligneId: string, arretId: string) =>
+        clientAPI.delete(`${BASE}/lignes/${ligneId}/arrets/${arretId}`, opts),
+    },
   },
   vehicules: {
     lister: () => clientAPI.get<ReponseListe<Vehicule>>(`${BASE}/vehicules?par_page=100`, opts),

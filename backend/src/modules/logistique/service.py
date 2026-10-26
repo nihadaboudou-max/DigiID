@@ -53,11 +53,20 @@ async def _verifier_trajet_du_voyage(
 
     Sans ce garde-fou, on pouvait affecter un colis Cotonou → Parakou à un car
     Parakou → Cotonou : le destinataire aurait attendu un colis parti à l'opposé.
+
+    Les **arrêts intermédiaires** sont acceptés : un colis peut monter à Dassa
+    et descendre à Parakou, ou monter à Cotonou et descendre à Bohicon. Seul
+    l'ordre dans la tournée compte (départ avant arrivée).
     """
     ligne = await session.get(Ligne, voyage.ligne_id)
     if ligne is None:
         return
-    if ligne.gare_depart_id == gare_depart_id and ligne.gare_arrivee_id == gare_arrivee_id:
+    try:
+        ordre_depart = await _ordre_gare_sur_ligne(session, ligne, gare_depart_id)
+        ordre_arrivee = await _ordre_gare_sur_ligne(session, ligne, gare_arrivee_id)
+    except HTTPException:
+        ordre_depart = ordre_arrivee = None
+    if ordre_depart is not None and ordre_arrivee is not None and ordre_depart < ordre_arrivee:
         return
     depart = await session.get(Gare, ligne.gare_depart_id)
     arrivee = await session.get(Gare, ligne.gare_arrivee_id)
@@ -283,6 +292,14 @@ def _exiger_fiche_modifiable(objet, utilisateur: Utilisateur) -> None:
             ),
         )
     statut = getattr(objet, "statut", None)
+    if getattr(objet, "remis_guichet_le", None) is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                "Le chauffeur a déjà déposé cet enregistrement au guichet : "
+                "la fiche est figée."
+            ),
+        )
     if statut in ("en_transit", "en_route", "arrive", "livre", "annule"):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -325,6 +342,45 @@ async def _libelle_voyage(session: AsyncSession, voyage: Voyage) -> str:
         else None
     )
     return " · ".join(partie for partie in (quand, immatriculation) if partie)
+
+
+async def _encaisser_frais_service(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    *,
+    moyen: str,
+    telephone: str | None,
+    colis_id: UUID | None = None,
+    montant_fcfa: int | None = None,
+) -> dict:
+    """Encaisse les frais de service **avant** de rendre le QR au client.
+
+    Pour un colis, le barème dépend du nombre d'articles ; pour un passager, le
+    frais est fixe. L'appel se fait dans la même transaction SQL que la fiche :
+    un échec de paiement annule aussi le ticket (pas de QR gratuit).
+    """
+    from src.modules.paiement import schemas as schemas_paiement
+    from src.modules.paiement import service as service_paiement
+
+    if colis_id is not None:
+        demande = schemas_paiement.TransactionCreate(
+            type="COLIS",
+            colis_id=colis_id,
+            moyen=moyen,
+            telephone=telephone,
+            idempotency_key=f"colis:{colis_id}",
+        )
+    else:
+        demande = schemas_paiement.TransactionCreate(
+            type="BAGAGE",
+            montant_fcfa=montant_fcfa or 0,
+            moyen=moyen,
+            telephone=telephone,
+            idempotency_key=f"passager:{utilisateur.id}:{datetime.now(timezone.utc).timestamp()}",
+        )
+    return await service_paiement.creer_transaction(
+        session, demande, utilisateur, commit=False
+    )
 
 
 async def _paginer(session: AsyncSession, requete, page: int, par_page: int):
@@ -1215,11 +1271,10 @@ async def creer_colis(
             # Le trajet se juge sur l'arrêt (position dans la ligne) et non sur
             # le terminus : un colis peut descendre avant la fin de la ligne.
             ligne = await session.get(Ligne, voyage.ligne_id)
-            if ligne is not None and ligne.gare_depart_id != donnees.gare_depart_id:
-                raise HTTPException(
-                    status.HTTP_400_BAD_REQUEST,
-                    detail="Ce voyage ne part pas de la gare de départ déclarée.",
-                )
+            if ligne is not None:
+                # On accepte aussi une montée **à un arrêt intermédiaire** :
+                # il suffit que le départ précède la descente dans la tournée.
+                await _ordre_gare_sur_ligne(session, ligne, donnees.gare_depart_id)
             await _verifier_arret_du_voyage(
                 session, voyage, arret_destination_id, donnees.gare_depart_id
             )
@@ -1298,6 +1353,7 @@ async def creer_colis(
         mode_enregistrement=mode_enregistrement,
         enregistre_par_id=utilisateur.id,
         frais_fcfa=donnees.frais_fcfa,
+        moyen_paiement=donnees.moyen_paiement,
     )
     session.add(colis)
     await session.flush()  # -> colis.id disponible
@@ -1320,6 +1376,17 @@ async def creer_colis(
     await session.flush()  # -> ticket.id disponible
 
     colis.ticket_id = ticket.id
+
+    # Paiement **avant remise du QR** : espèces = encaissé tout de suite ;
+    # Wave = en attente, mais la fiche et le ticket existent déjà dans la même
+    # transaction (le client peut suivre, le guichet voit le statut du paiement).
+    await _encaisser_frais_service(
+        session,
+        utilisateur,
+        moyen=donnees.moyen_paiement,
+        telephone=donnees.telephone_paiement,
+        colis_id=colis.id,
+    )
 
     evenement = ColisEvenement(
         colis_id=colis.id,
@@ -1503,11 +1570,13 @@ async def confirmer_reception_colis(
 async def remettre_colis_au_guichet(
     session: AsyncSession, colis_id: UUID, utilisateur: Utilisateur
 ) -> Colis:
-    """Le chauffeur dépose le colis au guichet de la gare d'arrivée.
+    """Le chauffeur dépose le colis au guichet d'arrivée (sans nommer d'agent).
 
-    Le chauffeur ne remet jamais un colis en main propre au destinataire : c'est
-    le guichet qui constate la remise finale (scan « livraison »). Ce geste
-    autorise ce scan et trace qui a déposé le colis, quand.
+    Prérequis : le colis doit être **arrivé** à sa destination (geste « Arrivés »
+    sur l'arrêt / la gare). Si le chauffeur ne livre pas lui-même, il confie le
+    colis au guichet, qui prend ensuite en charge la remise au destinataire
+    (scan « livraison »). Aucun agent n'est désigné : le guichet de la gare
+    d'arrivée assume collectivement.
     """
     colis = await obtenir_colis(session, colis_id)
     if colis.chauffeur_id != utilisateur.id:
@@ -1521,6 +1590,14 @@ async def remettre_colis_au_guichet(
             detail=(
                 "Confirmez d'abord la prise en charge du colis avant de le "
                 "déposer au guichet."
+            ),
+        )
+    if colis.statut != "arrive":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                "Marquez d'abord l'arrivée à la destination (geste « Arrivés ») "
+                "avant de déposer le colis au guichet."
             ),
         )
     if colis.remis_guichet_le is None:
@@ -2058,6 +2135,7 @@ async def creer_suivi_familial(
         statut=statut_initial,
         mode_enregistrement=mode_enregistrement,
         enregistre_par_id=utilisateur.id,
+        moyen_paiement=donnees.moyen_paiement,
     )
     session.add(suivi)
     await session.flush()  # -> suivi.id disponible
@@ -2079,6 +2157,17 @@ async def creer_suivi_familial(
     session.add(ticket)
     await session.flush()  # -> ticket.id disponible
     suivi.ticket_id = ticket.id
+
+    # Frais de service **fixe** du passager, encaissé avant le QR.
+    from src.modules.paiement.tarification import frais_service_passager
+
+    await _encaisser_frais_service(
+        session,
+        utilisateur,
+        moyen=donnees.moyen_paiement,
+        telephone=donnees.telephone_paiement,
+        montant_fcfa=frais_service_passager(),
+    )
 
     evenement = SuiviFamilialEvenement(
         suivi_familial_id=suivi.id,
@@ -2276,10 +2365,12 @@ async def confirmer_reception_suivi(
 async def remettre_suivi_au_guichet(
     session: AsyncSession, suivi_id: UUID, utilisateur: Utilisateur
 ) -> SuiviFamilial:
-    """Le chauffeur remet l'enfant au guichet de la gare d'arrivée.
+    """Le chauffeur confie un **enfant** au guichet d'arrivée (sans nommer d'agent).
 
-    La remise finale à la famille est constatée par le guichet (scan
-    « livraison »), jamais par le chauffeur lui-même.
+    Un adulte termine son trajet à l'arrivée : on ne le laisse pas au guichet.
+    Un enfant peut y attendre si le responsable n'est pas à l'heure ; la remise
+    finale à la famille est alors constatée par le guichet (scan « livraison »).
+    Prérequis : statut « arrivé » (geste « Arrivés » sur l'arrêt / la gare).
     """
     suivi = await obtenir_suivi_familial(session, suivi_id)
     if suivi.chauffeur_id != utilisateur.id:
@@ -2287,12 +2378,28 @@ async def remettre_suivi_au_guichet(
             status.HTTP_403_FORBIDDEN,
             detail="Ce passager ne vous est pas affecté : seul son chauffeur peut le déposer.",
         )
+    if suivi.type_passager != "enfant":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                "Un passager adulte termine son trajet à l'arrivée : "
+                "seul un enfant peut être confié au guichet."
+            ),
+        )
     if suivi.reception_confirmee_le is None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail=(
                 "Confirmez d'abord la prise en charge du passager avant de le "
                 "déposer au guichet."
+            ),
+        )
+    if suivi.statut != "arrive":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                "Marquez d'abord l'arrivée à la destination (geste « Arrivés ») "
+                "avant de confier l'enfant au guichet."
             ),
         )
     if suivi.remis_guichet_le is None:
@@ -2405,6 +2512,21 @@ async def enregistrer_evenement_suivi(
                 "suivi": suivi,
                 "evenement": existant,
             }
+
+    # Enfant confié au guichet : la famille ne récupère qu'après dépôt chauffeur.
+    if (
+        donnees.type_evenement == "livraison"
+        and suivi.type_passager == "enfant"
+        and suivi.chauffeur_id is not None
+        and suivi.remis_guichet_le is None
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                "Le chauffeur n'a pas encore confié cet enfant au guichet : "
+                "la remise à la famille ne peut pas être constatée."
+            ),
+        )
 
     maintenant = donnees.horodatage or datetime.now(timezone.utc)
     evenement = SuiviFamilialEvenement(
@@ -2566,54 +2688,92 @@ async def valider_depart_voyage(
     }
 
 
+def _destine_a_larret(
+    enregistrement,
+    *,
+    arret_id: UUID | None,
+    gare_id: UUID | None,
+) -> bool:
+    """True si le colis/passager descend à l'arrêt (ou gare) ciblé.
+
+    ``arret_id`` est prioritaire : on ne touche que ceux positionnés sur cet
+    arrêt précis. Sinon ``gare_id`` filtre par gare d'arrivée. Sans les deux,
+    tout le voyage est concerné.
+    """
+    if arret_id is not None:
+        if enregistrement.arret_destination_id is not None:
+            return enregistrement.arret_destination_id == arret_id
+        # Anciens enregistrements sans arrêt : on matche sur la gare de l'arrêt.
+        return gare_id is not None and enregistrement.gare_arrivee_id == gare_id
+    if gare_id is not None:
+        return enregistrement.gare_arrivee_id == gare_id
+    return True
+
+
 async def marquer_arrivee_voyage(
     session: AsyncSession,
     voyage_id: UUID,
     utilisateur: Utilisateur,
     gare_id: UUID | None = None,
+    arret_id: UUID | None = None,
     localisation: str | None = None,
 ) -> dict:
-    """« Arrivés » en lot : tous les passagers et colis d'une même gare d'un clic.
+    """« Arrivés » en lot : passagers et colis d'un arrêt (ou d'une gare).
 
-    Sans ``gare_id``, on marque arrivés tous les colis et passagers du voyage.
+    ``arret_id`` prime sur ``gare_id`` : le chauffeur marque arrivés uniquement
+    ceux qui descendent à cet arrêt, sans terminer le voyage. Sans filtre, on
+    marque arrivés tous les colis et passagers encore en route.
     """
-    await obtenir_voyage(session, voyage_id)
+    voyage = await obtenir_voyage(session, voyage_id)
     maintenant = datetime.now(timezone.utc)
-    lieu = await _libelle_gare(session, gare_id)
+
+    gare_effective = gare_id
+    if arret_id is not None:
+        arret = await session.get(ArretLigne, arret_id)
+        if arret is None or arret.actif is False:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, detail="Arrêt introuvable ou inactif."
+            )
+        if arret.ligne_id != voyage.ligne_id:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Cet arrêt n'appartient pas au trajet de ce voyage.",
+            )
+        gare_effective = arret.gare_id
+
+    lieu = await _libelle_gare(session, gare_effective)
 
     nb_colis = 0
     for colis in await _colis_du_voyage(session, voyage_id):
         if colis.statut not in ("enregistre", "enregistre_direct", "en_transit"):
             continue
-        if gare_id is not None and colis.gare_arrivee_id != gare_id:
+        if not _destine_a_larret(colis, arret_id=arret_id, gare_id=gare_effective):
             continue
+        gare_evt = gare_effective or colis.gare_arrivee_id
         session.add(ColisEvenement(
             colis_id=colis.id, type_evenement="arrivee", acteur_id=utilisateur.id,
-            gare_id=gare_id or colis.gare_arrivee_id, localisation=localisation,
+            gare_id=gare_evt, localisation=localisation,
             horodatage=maintenant,
         ))
         colis.statut = "arrive"
         ticket = await obtenir_ticket_du_colis(session, colis)
-        await _notifier_scan_colis(
-            session, colis, ticket, "arrivee", gare_id or colis.gare_arrivee_id
-        )
+        await _notifier_scan_colis(session, colis, ticket, "arrivee", gare_evt)
         nb_colis += 1
 
     nb_passagers = 0
     for suivi in await _passagers_du_voyage(session, voyage_id):
         if suivi.statut not in ("enregistre", "enregistre_direct", "en_route"):
             continue
-        if gare_id is not None and suivi.gare_arrivee_id != gare_id:
+        if not _destine_a_larret(suivi, arret_id=arret_id, gare_id=gare_effective):
             continue
+        gare_evt = gare_effective or suivi.gare_arrivee_id
         session.add(SuiviFamilialEvenement(
             suivi_familial_id=suivi.id, type_evenement="arrivee",
-            acteur_id=utilisateur.id, gare_id=gare_id or suivi.gare_arrivee_id,
+            acteur_id=utilisateur.id, gare_id=gare_evt,
             localisation=localisation, horodatage=maintenant,
         ))
         suivi.statut = "arrive"
-        await _notifier_suivi(
-            session, suivi, "arrivee", gare_id or suivi.gare_arrivee_id
-        )
+        await _notifier_suivi(session, suivi, "arrivee", gare_evt)
         nb_passagers += 1
 
     await session.commit()
@@ -2622,8 +2782,10 @@ async def marquer_arrivee_voyage(
         "voyage_id": voyage_id,
         "nb_colis": nb_colis,
         "nb_passagers": nb_passagers,
+        "arret_id": arret_id,
         "message": (
-            f"Arrivée enregistrée : {nb_passagers} passager(s) et {nb_colis} colis.{lieu and ' ' + lieu or ''}"
+            f"Arrivée enregistrée : {nb_passagers} passager(s) et {nb_colis} colis."
+            f"{' ' + lieu if lieu else ''}"
         ),
     }
 

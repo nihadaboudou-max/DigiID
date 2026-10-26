@@ -36,6 +36,7 @@ from .assurance_auto import AssuranceAuto
 from .carte_grise import CarteGrise
 from .carte_sejour import CarteSejour
 from .consulaire import CarteConsulaire
+from .cip import CertificatIdentificationPersonnelle
 from .passeport import Passeport
 from .base_document import (
     BaseDocumentInspection,
@@ -112,6 +113,7 @@ __all__ = [
     "CarteGrise",
     "CarteSejour",
     "CarteConsulaire",
+    "CertificatIdentificationPersonnelle",
     "Passeport",
     "BaseDocumentInspection",
     "TABLE_PAR_TYPE",

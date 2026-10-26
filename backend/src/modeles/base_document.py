@@ -37,6 +37,7 @@ from sqlalchemy.sql import func
 TABLE_PAR_TYPE: dict[str, str] = {
     "cni_biometrique": "verification_cni",
     "cni_papier": "verification_cni",
+    "cip": "certificats_identification_personnelle",
     "passeport": "passeports",
     "permis_conduire": "permis_conduire",
     "carte_assurance": "assurances_auto",

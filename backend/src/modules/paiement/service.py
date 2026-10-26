@@ -376,11 +376,17 @@ async def creer_transaction(
     session: AsyncSession,
     donnees: schemas.TransactionCreate,
     utilisateur: Utilisateur,
+    *,
+    commit: bool = True,
 ) -> dict:
     """
     Ordonne un paiement. Pour les espèces, le paiement réussit immédiatement et
     la commission est créditée tout de suite ; pour le mobile money, la
     transaction reste « en attente » jusqu'à confirmation.
+
+    ``commit=False`` : le service logistique intégré crée le colis, le ticket et
+    la transaction dans **une seule** transaction SQL — jamais de QR sans
+    paiement, jamais de paiement sans fiche.
     """
     # 1. Idempotence : même clé -> on renvoie la transaction déjà créée.
     if donnees.idempotency_key:
@@ -498,8 +504,11 @@ async def creer_transaction(
     if resultat.statut == "reussi":
         await _verser_commission(session, transaction)
 
-    await session.commit()
-    await session.refresh(transaction)
+    if commit:
+        await session.commit()
+        await session.refresh(transaction)
+    else:
+        await session.flush()
     if resultat.instruction:
         message = resultat.instruction
     elif resultat.statut == "reussi":

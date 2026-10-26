@@ -12,9 +12,9 @@
  * il ne sert qu'à l'information du guichet (on ne veut pas donner l'impression
  * de surveiller les recettes du transporteur). Les **frais de service DigiID**
  * dépendent du **nombre d'articles** (100 / 200 / 350 / 500 FCFA) et sont
- * encaissés séparément, après le ticket.
+ * encaissés **à la fin de l'inscription**, avant génération du QR.
  *
- * À l'enregistrement, le backend génère le ticket (numéro en clair + QR durable).
+ * À l'enregistrement, le backend encaisse puis génère le ticket (QR durable).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -24,7 +24,6 @@ import { Carte } from "@/composants/commun/Carte";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { IconeCheck, IconeColis, IconeTicket } from "@/composants/commun/Icones";
 import { BoutonVocal } from "@/composants/accessibilite/BoutonVocal";
-import { PaiementColis } from "@/composants/paiement/PaiementColis";
 import { useLangue, useVoix } from "@/i18n/useLangue";
 import { useAuthentification } from "@/contextes/authentification";
 import { ErreurAPI, estErreurReseau } from "@/services/client_api";
@@ -38,6 +37,7 @@ import {
 import {
   gareDeLActeur,
   logistiqueAPI,
+  type ArretLigne,
   type ColisEnregistre,
   type Gare,
   type Ligne,
@@ -48,7 +48,11 @@ import { formaterFcfa } from "./format";
 import { RechercheCarteDigiID } from "./RechercheCarteDigiID";
 import { SelectionVoyage, libelleVoyage } from "./SelectionVoyage";
 import { TicketImprimable } from "./TicketImprimable";
-import { fraisServicePourArticles } from "@/types/paiement";
+import {
+  fraisServicePourArticles,
+  LIBELLES_MOYEN,
+  type MoyenPaiement,
+} from "@/types/paiement";
 
 type Etape = 1 | 2 | 3 | 4;
 
@@ -124,6 +128,12 @@ export function EnregistrementColis({
    * cette case enregistre le colis tout de suite, l'affectation venant après.
    */
   const [affecterPlusTard, setAffecterPlusTard] = useState(false);
+  /** Arrêt précis de descente (null = terminus ou gare libre). */
+  const [arretDestinationId, setArretDestinationId] = useState("");
+  const [arretsLigne, setArretsLigne] = useState<ArretLigne[]>([]);
+  /** Paiement inclus à l'inscription, avant le QR. */
+  const [moyenPaiement, setMoyenPaiement] = useState<MoyenPaiement>("especes");
+  const [telephonePaiement, setTelephonePaiement] = useState("");
 
   // État d'envoi
   const [erreur, setErreur] = useState<string | null>(null);
@@ -218,6 +228,39 @@ export function EnregistrementColis({
     [voyages, voyageId],
   );
   const chauffeurId = chauffeurImposeId ?? voyageSelectionne?.chauffeur_id ?? null;
+  const ligneVoyage = useMemo(
+    () =>
+      voyageSelectionne
+        ? lignes.find((l) => l.id === voyageSelectionne.ligne_id) ?? null
+        : null,
+    [lignes, voyageSelectionne],
+  );
+
+  // Arrêts de la ligne du voyage (pour associer la destination précise).
+  useEffect(() => {
+    let annule = false;
+    const ligneId = voyageSelectionne?.ligne_id;
+    if (!ligneId) {
+      setArretsLigne([]);
+      return;
+    }
+    const deja = ligneVoyage?.arrets;
+    if (deja && deja.length > 0) {
+      setArretsLigne(deja.filter((a) => a.actif !== false));
+      return;
+    }
+    (async () => {
+      try {
+        const liste = await logistiqueAPI.lignes.arrets.lister(ligneId);
+        if (!annule) setArretsLigne(liste.filter((a) => a.actif !== false));
+      } catch {
+        if (!annule) setArretsLigne([]);
+      }
+    })();
+    return () => {
+      annule = true;
+    };
+  }, [voyageSelectionne?.ligne_id, ligneVoyage?.arrets]);
 
   // ─── Numéros de téléphone (miroir de la validation serveur) ────────
   // Un numéro doit être joignable : sinon le colis est introuvable et les SMS
@@ -254,7 +297,19 @@ export function EnregistrementColis({
   const attributionValide = voyageImposeId
     ? true
     : affecterPlusTard || (!!voyageId && !!chauffeurId);
-  const etapeDetailsValide = fraisValide && nombreArticlesValide && attributionValide;
+  // Voyage connu : destination = arrêt intermédiaire ou terminus (clé « terminus »).
+  const destinationArretValide =
+    affecterPlusTard || !voyageSelectionne ? true : arretDestinationId !== "";
+  const telPaiementWave =
+    moyenPaiement === "wave" ? normaliserTelephone(telephonePaiement) : true;
+  const paiementValide =
+    moyenPaiement === "especes" ||
+    (moyenPaiement === "wave" && telPaiementWave !== null && telephonePaiement.trim() !== "");
+  const etapeDetailsValide =
+    fraisValide &&
+    nombreArticlesValide &&
+    attributionValide &&
+    destinationArretValide;
 
   /** Réinitialise le formulaire pour un nouvel enregistrement. */
   function nouvelEnregistrement() {
@@ -273,6 +328,9 @@ export function EnregistrementColis({
     setVoyageId(voyageImposeId ?? "");
     setAffecterPlusTard(false);
     setGareArriveeId("");
+    setArretDestinationId("");
+    setMoyenPaiement("especes");
+    setTelephonePaiement("");
     setGareDepartId(gareGuichet?.id ?? "");
     setErreur(null);
   }
@@ -300,6 +358,10 @@ export function EnregistrementColis({
         destinataire_tel: telDestinataire,
         gare_depart_id: gareDepartId,
         gare_arrivee_id: gareArriveeId,
+        arret_destination_id:
+          arretDestinationId && arretDestinationId !== "terminus"
+            ? arretDestinationId
+            : null,
         description: description.trim() || null,
         poids_kg: poids !== null && !Number.isNaN(poids) ? poids : null,
         valeur_fcfa: valeur !== null && !Number.isNaN(valeur) ? valeur : null,
@@ -312,6 +374,12 @@ export function EnregistrementColis({
         voyage_id: affecterPlusTard ? null : voyageId || null,
         chauffeur_id: affecterPlusTard ? undefined : (chauffeurId ?? undefined),
         enregistrement_direct: enregistrementDirect || undefined,
+        // Paiement **avant** QR : même transaction côté serveur.
+        moyen_paiement: moyenPaiement,
+        telephone_paiement:
+          moyenPaiement === "wave"
+            ? (normaliserTelephone(telephonePaiement) ?? telephonePaiement.trim())
+            : null,
       };
 
       try {
@@ -403,8 +471,11 @@ export function EnregistrementColis({
         </Alerte>
         <TicketImprimable ticket={resultat.ticket} colis={resultat.colis} />
 
-        {/* S6 — encaissement des frais + commission du receveur */}
-        <PaiementColis colis={resultat.colis} />
+        <Alerte variante="info" titre="Frais de service encaissés">
+          Paiement enregistré avec l&apos;inscription (
+          {LIBELLES_MOYEN[moyenPaiement] ?? moyenPaiement}
+          ) — le QR a été généré ensuite.
+        </Alerte>
 
         <div className="no-print flex flex-wrap gap-3">
           <BoutonVocal
@@ -694,6 +765,44 @@ export function EnregistrementColis({
 
                 <ControleurBagages valeur={nombreBagages} onChange={setNombreBagages} />
 
+                {!affecterPlusTard && voyageSelectionne && (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium text-ardoise">
+                      Arrêt de destination <span className="text-terre">*</span>
+                    </label>
+                    <select
+                      className="champ-saisie"
+                      value={arretDestinationId}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setArretDestinationId(v);
+                        if (v === "terminus" && ligneVoyage) {
+                          setGareArriveeId(ligneVoyage.gare_arrivee_id);
+                        } else {
+                          const arret = arretsLigne.find((a) => a.id === v);
+                          if (arret) setGareArriveeId(arret.gare_id);
+                        }
+                      }}
+                    >
+                      <option value="">— Choisir l&apos;arrêt de descente —</option>
+                      {arretsLigne.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.ordre}. {a.gare_nom ?? "Arrêt"}
+                        </option>
+                      ))}
+                      {ligneVoyage && (
+                        <option value="terminus">
+                          Terminus — {ligneVoyage.gare_arrivee_nom ?? "Arrivée"}
+                        </option>
+                      )}
+                    </select>
+                    <p className="text-xs italic text-ardoise-clair">
+                      Positionne le colis dans la feuille de route du chauffeur
+                      selon l&apos;ordre des arrêts.
+                    </p>
+                  </div>
+                )}
+
                 {voyageImposeId && (
                   <div className="rounded-xl border border-ocre/30 bg-ocre/5 px-4 py-3">
                     <p className="text-sm font-medium text-ardoise">
@@ -816,12 +925,60 @@ export function EnregistrementColis({
                   }
                 />
                 <Ligne
-                  libelle="Frais de service DigiID (estimé)"
+                  libelle="Arrêt de destination"
+                  valeur={
+                    arretDestinationId === "terminus"
+                      ? `Terminus — ${ligneVoyage?.gare_arrivee_nom ?? gareParId.get(gareArriveeId)?.nom ?? "—"}`
+                      : arretsLigne.find((a) => a.id === arretDestinationId)?.gare_nom ??
+                        gareParId.get(gareArriveeId)?.nom ??
+                        "—"
+                  }
+                />
+                <Ligne
+                  libelle="Frais de service DigiID"
                   valeur={`${formaterFcfa(
                     fraisService.frais_fcfa,
                   )} (dont ${formaterFcfa(fraisService.part_receveur_fcfa)} receveur)`}
                 />
               </dl>
+
+              {/* Paiement inclus avant validation → QR généré ensuite */}
+              <div className="mt-5 space-y-3 rounded-xl border border-lagune/20 bg-lagune/5 px-4 py-3">
+                <p className="text-sm font-semibold text-ardoise">
+                  Moyen de paiement des frais de service
+                </p>
+                <p className="text-xs text-ardoise-clair">
+                  Encaissement avant génération du ticket QR.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {(["especes", "wave"] as MoyenPaiement[]).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setMoyenPaiement(m)}
+                      className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                        moyenPaiement === m
+                          ? "border-lagune bg-lagune text-white"
+                          : "border-ardoise/20 bg-white text-ardoise hover:bg-lagune/10"
+                      }`}
+                    >
+                      {LIBELLES_MOYEN[m] ?? m}
+                    </button>
+                  ))}
+                </div>
+                {moyenPaiement === "wave" && (
+                  <ChampSaisie
+                    libelle="Téléphone Wave"
+                    required
+                    value={telephonePaiement}
+                    onChange={(e) => setTelephonePaiement(e.target.value)}
+                    inputMode="tel"
+                    type="tel"
+                    placeholder="+229 01 97 12 34 56"
+                    aide="Numéro Wave du payeur."
+                  />
+                )}
+              </div>
 
               <div className="flex justify-between mt-6">
                 <BoutonVocal
@@ -841,11 +998,12 @@ export function EnregistrementColis({
                     enregistrement ||
                     !etapeExpediteurValide ||
                     !etapeDestinataireValide ||
-                    !etapeDetailsValide
+                    !etapeDetailsValide ||
+                    !paiementValide
                   }
                   onClick={enregistrer}
                 >
-                  <IconeCheck className="w-4 h-4" /> {t("btn.enregistrer")}
+                  <IconeCheck className="w-4 h-4" /> Payer &amp; {t("btn.enregistrer")}
                 </BoutonVocal>
               </div>
             </Carte>

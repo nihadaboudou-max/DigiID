@@ -3,6 +3,7 @@
 Schémas Pydantic unifiés pour le module d'inspection de documents.
 Supporte tous les types de documents d'identité :
 - CNI (biométrique et papier)
+- CIP (Certificat d'Identification Personnelle — ANIP / Bénin)
 - Passeports
 - Permis de conduire
 - Cartes d'assurance (auto, vie)
@@ -23,6 +24,7 @@ class TypeDocument(str, Enum):
     """Types de documents supportés."""
     CNI_BIOMETRIQUE = "cni_biometrique"
     CNI_PAPIER = "cni_papier"
+    CIP = "cip"  # Certificat d'Identification Personnelle (Bénin / ANIP)
     PASSEPORT = "passeport"
     PERMIS_CONDUIRE = "permis_conduire"
     CARTE_ASSURANCE = "carte_assurance"

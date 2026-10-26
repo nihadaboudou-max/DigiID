@@ -26,6 +26,7 @@ _LIBELLES = {
     "carte_grise": "carte grise",
     "carte_sejour": "titre de séjour",
     "consulaire": "carte consulaire",
+    "cip": "certificat d'identification personnelle",
 }
 
 SEUIL_JOURS = 30
