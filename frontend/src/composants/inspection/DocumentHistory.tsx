@@ -55,6 +55,7 @@ export default function DocumentHistory() {
     const labels: Record<TypeDocument, string> = {
       [TypeDocument.CNI_BIOMETRIQUE]: "CNI Biométrique",
       [TypeDocument.CNI_PAPIER]: "CNI Papier",
+      [TypeDocument.CIP]: "CIP (ANIP)",
       [TypeDocument.PASSEPORT]: "Passeport",
       [TypeDocument.PERMIS_CONDUIRE]: "Permis",
       [TypeDocument.CARTE_ASSURANCE]: "Assurance",
