@@ -13,6 +13,8 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import { obtenirStatistiques, type StatistiquesCompletes } from "@/services/super_admin_v2";
 import { ErreurAPI } from "@/services/client_api";
+import { paiementAPI } from "@/services/paiement_api";
+import type { StatistiquesPlateforme } from "@/types/paiement";
 
 // ---- Cartes technologies ----
 
@@ -105,7 +107,10 @@ export default function TableauDeBordSuperAdmin() {
 
 function Contenu() {
   const [stats, setStats] = useState<StatistiquesCompletes | null>(null);
+  const [finances, setFinances] = useState<StatistiquesPlateforme | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [erreurFinances, setErreurFinances] = useState<string | null>(null);
+  const [chargementFinances, setChargementFinances] = useState(true);
   const [chargement, setChargement] = useState(true);
 
   useEffect(() => {
@@ -119,6 +124,22 @@ function Contenu() {
         if (actif) setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur inconnue");
       } finally {
         if (actif) setChargement(false);
+      }
+
+      try {
+        const donneesFinancieres = await paiementAPI.statistiquesPlateforme();
+        if (actif) {
+          setFinances(donneesFinancieres);
+          setErreurFinances(null);
+        }
+      } catch (e) {
+        if (actif) {
+          setErreurFinances(
+            e instanceof ErreurAPI ? e.message_utilisateur : "Chargement des paiements impossible",
+          );
+        }
+      } finally {
+        if (actif) setChargementFinances(false);
       }
     };
 
@@ -192,6 +213,102 @@ function Contenu() {
         <KPI libelle="Sessions" valeur={sessions.sessions_actives} couleur="lagune" />
         <KPI libelle="Audits aujourd'hui" valeur={stats.evenements_aujourd_hui} couleur="terre" />
       </div>
+
+      <section className="space-y-3" aria-labelledby="titre-finances">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 id="titre-finances" className="text-base font-bold text-ardoise">
+              Paiements et recettes
+            </h2>
+            <p className="text-xs text-ardoise-clair">
+              Transactions réussies sur la plateforme.
+            </p>
+          </div>
+          <Link
+            href="/super-admin/statistiques"
+            className="text-sm font-semibold text-lagune hover:underline"
+          >
+            Voir les statistiques →
+          </Link>
+        </div>
+
+        {erreurFinances ? (
+          <div role="alert" className="rounded-xl border border-terre/20 bg-terre/5 p-4 text-sm text-terre">
+            Impossible de charger les paiements : {erreurFinances}
+          </div>
+        ) : chargementFinances ? (
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4" aria-label="Chargement des paiements">
+            {[1, 2, 3, 4].map((item) => (
+              <div key={item} className="carte h-20 animate-pulse bg-sable-clair/50" />
+            ))}
+          </div>
+        ) : finances ? (
+          <>
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              <KPI
+                libelle="Paiements réussis"
+                valeur={finances.transactions_reussies}
+                couleur="lagune"
+              />
+              <KPI
+                libelle="Montant encaissé"
+                valeur={`${finances.montant_total_encaisse_fcfa.toLocaleString("fr-FR")} FCFA`}
+                couleur="succes"
+              />
+              <KPI
+                libelle="Revenu plateforme"
+                valeur={`${finances.revenu_plateforme_fcfa.toLocaleString("fr-FR")} FCFA`}
+                couleur="ocre"
+              />
+              <KPI
+                libelle="Commissions agents"
+                valeur={`${finances.commissions_fcfa.toLocaleString("fr-FR")} FCFA`}
+                couleur="terre"
+              />
+            </div>
+
+            <Carte titre="Agents par revenu généré">
+              {finances.top_acteurs.length === 0 ? (
+                <p className="py-2 text-sm text-ardoise-clair">
+                  Aucun paiement réussi pour le moment.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[36rem] text-sm">
+                    <thead>
+                      <tr className="border-b border-ardoise-clair/20 text-left text-xs uppercase text-ardoise-clair">
+                        <th className="py-2 pr-3">Rang</th>
+                        <th className="py-2 pr-3">Agent</th>
+                        <th className="py-2 pr-3 text-right">Transactions</th>
+                        <th className="py-2 text-right">Revenu plateforme</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {finances.top_acteurs.map((agent, index) => (
+                        <tr
+                          key={agent.acteur_id}
+                          className="border-b border-ardoise-clair/10 last:border-0"
+                        >
+                          <td className="py-2 pr-3 font-semibold">{index + 1}</td>
+                          <td className="py-2 pr-3 font-medium text-ardoise">
+                            {agent.nom_complet}
+                          </td>
+                          <td className="py-2 pr-3 text-right">
+                            {agent.transactions_reussies}
+                          </td>
+                          <td className="py-2 text-right font-semibold text-lagune">
+                            {agent.revenu_plateforme_fcfa.toLocaleString("fr-FR")} FCFA
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Carte>
+          </>
+        ) : null}
+      </section>
 
       {/* Cartes technologies */}
       <section className="space-y-2">

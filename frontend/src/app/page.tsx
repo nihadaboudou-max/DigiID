@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Bouton } from "@/composants/commun/Bouton";
+import { Logo } from "@/composants/commun/Logo";
 import { SelecteurLangue } from "@/composants/accessibilite/SelecteurLangue";
 import { PiedDePage } from "@/composants/layouts/PiedDePage";
 
@@ -30,7 +31,10 @@ export default function PageAccueil() {
   return (
     <main className="flex-grow">
       <section className="border-b border-ardoise-clair/10 bg-white px-6 py-3">
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto flex max-w-contenu flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Link href="/" aria-label="DigiID — accueil" className="self-center sm:self-auto">
+            <Logo taille="moyen" />
+          </Link>
           <SelecteurLangue variante="ligne" />
         </div>
       </section>
@@ -46,8 +50,10 @@ export default function PageAccueil() {
               <span className="text-lagune"> suivis simplement.</span>
             </h1>
             <p className="mx-auto max-w-xl text-lg leading-relaxed text-ardoise-clair md:mx-0">
-              Gérez les voyages, les colis et les passagers depuis un seul espace,
-              du départ jusqu’à l’arrivée.
+              DigiID transforme l'identité numérique des transporteurs et des
+              expéditeurs en un outil de traçabilité qui sécurise les échanges. Elle
+              donne aussi aux petites activités sans plateforme dédiée des outils
+              simples pour gérer trajets, colis, paiements et clients.
             </p>
             <div className="flex flex-col justify-center gap-3 sm:flex-row md:justify-start">
               <Link href="/connexion">
