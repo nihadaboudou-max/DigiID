@@ -198,14 +198,17 @@
  * Animations
  * ============================================================================ */
 
+/* Terminer sur `transform: none` (pas translateY(0)/scale(1)) : un transform
+   non-none crée un containing block et casse position:fixed des enfants
+   (modales collées en haut de page après scroll). */
 @keyframes apparition {
   from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: none; }
 }
 
 @keyframes apparition-echelle {
   from { opacity: 0; transform: scale(0.95); }
-  to   { opacity: 1; transform: scale(1); }
+  to   { opacity: 1; transform: none; }
 }
 
 @keyframes fondu {
@@ -215,7 +218,7 @@
 
 @keyframes glisse-droite {
   from { opacity: 0; transform: translateX(-8px); }
-  to   { opacity: 1; transform: translateX(0); }
+  to   { opacity: 1; transform: none; }
 }
 
 @keyframes pulse-dot {
