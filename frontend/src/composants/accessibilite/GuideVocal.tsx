@@ -33,8 +33,7 @@ export function GuideVocal() {
   const [guide, setGuide] = useState(false);
   const [enLecture, setEnLecture] = useState(false);
   const [lent, setLent] = useState(false);
-  /** Barre latérale présente ? (décalage desktop pour ne pas la recouvrir) */
-  const [avecMenu, setAvecMenu] = useState(false);
+  const [panneauOuvert, setPanneauOuvert] = useState(false);
 
   // Restauration des préférences au premier rendu client.
   useEffect(() => {
@@ -56,18 +55,16 @@ export function GuideVocal() {
     return activerEcouteInteractive();
   }, [guide, pathname]);
 
+  useEffect(() => {
+    setPanneauOuvert(false);
+  }, [pathname]);
+
   // Le navigateur met parfois la voix en pause au retour d'onglet.
   useEffect(() => {
     const auRetour = () => gestionnaireAudio.reprendre();
     document.addEventListener("visibilitychange", auRetour);
     return () => document.removeEventListener("visibilitychange", auRetour);
   }, []);
-
-  // Décalage horizontal : sur les pages connectées, la barre de navigation est
-  // collée à gauche — la commande vocale se place juste à sa droite.
-  useEffect(() => {
-    setAvecMenu(Boolean(document.querySelector("aside")));
-  }, [pathname]);
 
   function ecouterCettePage() {
     if (muet) definirMuet(false);
@@ -100,68 +97,81 @@ export function GuideVocal() {
     );
   }
 
-  const classePilule =
-    "flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium shadow-lg transition-colors";
-
   return (
     <div
-      className={`fixed bottom-4 left-4 z-40 flex flex-col items-start gap-2 print:hidden ${
-        avecMenu ? "md:left-[16rem]" : ""
-      }`}
+      className="fixed bottom-4 right-4 z-40 flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2 print:hidden"
       data-vocal-ignorer
-      role="group"
-      aria-label={t("guide.groupe")}
     >
-      <button
-        type="button"
-        onClick={ecouterCettePage}
-        aria-pressed={enLecture}
-        aria-label={t("guide.ecouter")}
-        className={`${classePilule} bg-lagune text-white hover:bg-lagune-fonce`}
+      <div
+        id="panneau-guide-vocal"
+        hidden={!panneauOuvert}
+        role="group"
+        aria-label={t("guide.groupe")}
+        className="flex w-[min(20rem,calc(100vw-2rem))] max-h-[min(70vh,28rem)] max-w-full flex-col items-stretch gap-2 overflow-y-auto rounded-2xl border border-ardoise-clair/20 bg-white p-3 shadow-xl"
       >
-        <span aria-hidden="true">{enLecture ? "🔊" : "🔈"}</span>
-        {t("guide.ecouter")}
-      </button>
-
-      {enLecture && (
         <button
           type="button"
-          onClick={arreter}
-          aria-label={t("guide.arreter")}
-          className={`${classePilule} bg-white text-lagune ring-1 ring-lagune/20 hover:bg-sable-clair`}
+          onClick={ecouterCettePage}
+          aria-pressed={enLecture}
+          aria-label={t("guide.ecouter")}
+          className="flex items-center gap-2 rounded-xl bg-lagune px-4 py-3 text-left text-sm font-medium text-white hover:bg-lagune-fonce"
         >
-          <span aria-hidden="true">⏹</span>
-          {t("guide.arreter")}
+          <span aria-hidden="true">{enLecture ? "🔊" : "🔈"}</span>
+          {t("guide.ecouter")}
         </button>
-      )}
+
+        {enLecture && (
+          <button
+            type="button"
+            onClick={arreter}
+            aria-label={t("guide.arreter")}
+            className="flex items-center gap-2 rounded-xl px-4 py-3 text-left text-sm font-medium text-lagune ring-1 ring-lagune/20 hover:bg-sable-clair"
+          >
+            <span aria-hidden="true">⏹</span>
+            {t("guide.arreter")}
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={basculerGuide}
+          aria-pressed={guide}
+          aria-label={guide ? t("guide.desactiver") : t("guide.activer")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-3 text-left text-sm font-medium ${
+            guide
+              ? "bg-ocre text-ardoise hover:brightness-95"
+              : "text-lagune ring-1 ring-lagune/20 hover:bg-sable-clair"
+          }`}
+        >
+          <span aria-hidden="true">🧑‍🏫</span>
+          {guide ? t("guide.actif") : t("guide.activer")}
+        </button>
+
+        {guide && (
+          <button
+            type="button"
+            onClick={basculerVitesse}
+            aria-pressed={lent}
+            aria-label={lent ? t("guide.vitesse_normale") : t("guide.vitesse_lente")}
+            className="flex items-center gap-2 rounded-xl px-4 py-3 text-left text-sm font-medium text-lagune ring-1 ring-lagune/20 hover:bg-sable-clair"
+          >
+            <span aria-hidden="true">🐢</span>
+            {lent ? t("guide.vitesse_normale") : t("guide.vitesse_lente")}
+          </button>
+        )}
+      </div>
 
       <button
         type="button"
-        onClick={basculerGuide}
-        aria-pressed={guide}
-        aria-label={guide ? t("guide.desactiver") : t("guide.activer")}
-        className={`${classePilule} ${
-          guide
-            ? "bg-ocre text-ardoise hover:brightness-95"
-            : "bg-white text-lagune ring-1 ring-lagune/20 hover:bg-sable-clair"
-        }`}
+        onClick={() => setPanneauOuvert((ouvert) => !ouvert)}
+        aria-expanded={panneauOuvert}
+        aria-controls="panneau-guide-vocal"
+        aria-label={panneauOuvert ? "Fermer le guide vocal" : "Ouvrir le guide vocal"}
+        className="flex min-h-11 items-center gap-2 rounded-full bg-lagune px-4 py-3 text-sm font-semibold text-white shadow-lg transition-colors hover:bg-lagune-fonce focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lagune"
       >
         <span aria-hidden="true">🧑‍🏫</span>
-        {guide ? t("guide.actif") : t("guide.activer")}
+        <span>{panneauOuvert ? "Fermer" : "Guide vocal"}</span>
       </button>
-
-      {guide && (
-        <button
-          type="button"
-          onClick={basculerVitesse}
-          aria-pressed={lent}
-          aria-label={lent ? t("guide.vitesse_normale") : t("guide.vitesse_lente")}
-          className={`${classePilule} bg-white text-sm text-lagune ring-1 ring-lagune/20 hover:bg-sable-clair`}
-        >
-          <span aria-hidden="true">🐢</span>
-          {lent ? t("guide.vitesse_normale") : t("guide.vitesse_lente")}
-        </button>
-      )}
     </div>
   );
 }
