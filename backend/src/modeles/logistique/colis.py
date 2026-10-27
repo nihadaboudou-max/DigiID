@@ -140,7 +140,7 @@ class Colis(Base, MelangeTracabilite):
     # transporteur).
     frais_fcfa: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # Moyen de paiement choisi **à l'inscription** (avant le QR) : espèces au
-    # guichet ou Wave. La transaction est créée dans la même transaction SQL.
+    # guichet ou opérateur mobile money. La transaction est créée avec le colis.
     moyen_paiement: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     livre_le: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True

@@ -53,7 +53,8 @@ interface Proprietes {
 
 const MOYENS_PAR_DEFAUT: MoyenPaiementInfo[] = [
   { code: "especes", libelle: "Espèces (guichet)", immediat: true },
-  { code: "wave", libelle: "Wave (mobile money)", immediat: false },
+  { code: "mtn", libelle: "MTN MoMo", immediat: false },
+  { code: "moov", libelle: "Moov Money", immediat: false },
 ];
 
 /** Statuts pour lesquels un paiement occupe déjà le colis. */
@@ -109,7 +110,7 @@ export function PaiementColis({ colis, onPaiementEffectue }: Proprietes) {
   const fraisFcfa = tarifs?.frais_fcfa ?? fraisLocal.frais_fcfa;
   const partReceveur = tarifs?.part_receveur_fcfa ?? fraisLocal.part_receveur_fcfa;
   const telephoneValide =
-    moyen !== "wave" || telephone.replace(/\D/g, "").length >= 6;
+    moyen === "especes" || telephone.replace(/\D/g, "").length >= 6;
 
   async function regler() {
     if (!telephoneValide) return;
@@ -124,7 +125,7 @@ export function PaiementColis({ colis, onPaiementEffectue }: Proprietes) {
         type: "COLIS",
         colis_id: colis.id,
         moyen,
-        telephone: moyen === "wave" ? telephone.trim() : null,
+        telephone: moyen === "especes" ? null : telephone.trim(),
         idempotency_key: cleUtilisee,
       });
       setResultat(reponse);
@@ -377,14 +378,14 @@ export function PaiementColis({ colis, onPaiementEffectue }: Proprietes) {
           </div>
         </div>
 
-        {moyen === "wave" && (
+        {moyen !== "especes" && (
           <ChampSaisie
             libelle="Numéro mobile money"
             value={telephone}
             onChange={(e) => setTelephone(e.target.value)}
             inputMode="tel"
             placeholder="Ex : 77 123 45 67"
-            aide="Le client reçoit une demande de validation sur son téléphone (mode démo)."
+            aide={`Paiement ${LIBELLES_MOYEN[moyen]} simulé : aucun débit réel tant que l'intégration opérateur n'est pas activée.`}
             erreur={telephoneValide ? undefined : "Au moins 6 chiffres"}
           />
         )}

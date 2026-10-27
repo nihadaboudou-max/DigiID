@@ -240,6 +240,44 @@ class TestArretDestination:
         assert erreur.value.status_code == 400
 
 
+class TestVoyageOuvert:
+    @pytest.mark.parametrize("statut", ["termine", "annule"])
+    def test_refuse_lajout_sur_un_voyage_ferme(self, statut):
+        voyage = type("VoyageFactice", (), {"statut": statut})()
+
+        with pytest.raises(HTTPException) as erreur:
+            service._exiger_voyage_ouvert(voyage)
+
+        assert erreur.value.status_code == 409
+
+    @pytest.mark.parametrize("statut", ["planifie", "en_cours"])
+    def test_accepte_lajout_sur_un_voyage_ouvert(self, statut):
+        voyage = type("VoyageFactice", (), {"statut": statut})()
+
+        service._exiger_voyage_ouvert(voyage)
+
+
+def test_creation_ligne_ne_depend_pas_du_moyen_de_paiement():
+    ligne = schemas.LigneCreate(
+        gare_depart_id=uuid.uuid4(),
+        gare_arrivee_id=uuid.uuid4(),
+    )
+
+    assert ligne.gare_depart_id != ligne.gare_arrivee_id
+
+
+@pytest.mark.parametrize("moyen", ["mtn", "moov"])
+def test_colis_mobile_money_exige_un_telephone_de_paiement(moyen):
+    with pytest.raises(ValueError, match="téléphone mobile money"):
+        schemas.ColisCreate(
+            destinataire_nom="Awa",
+            destinataire_tel="+2290197123456",
+            gare_depart_id=uuid.uuid4(),
+            gare_arrivee_id=uuid.uuid4(),
+            moyen_paiement=moyen,
+        )
+
+
 class TestConfirmationReception:
     def test_remise_au_guichet_exige_la_prise_en_charge(self):
         chauffeur = _utilisateur(RoleUtilisateur.CHAUFFEUR.value)

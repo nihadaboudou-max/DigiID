@@ -14,6 +14,9 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Alerte } from "@/composants/commun/Alerte";
 import { obtenirStatistiquesAdmin, type StatsAdmin } from "@/services/admin";
 import { clientAPI, ErreurAPI } from "@/services/client_api";
+import { paiementAPI } from "@/services/paiement_api";
+import type { StatistiquesPlateforme } from "@/types/paiement";
+import { useAuthentification } from "@/contextes/authentification";
 import {
   IconeUtilisateur, IconeBouclier, IconeStatistique,
   IconeAlerte, IconeJournal, IconeParametres,
@@ -79,9 +82,11 @@ export default function TableauDeBordAdmin() {
 }
 
 function Contenu() {
+  const { utilisateur } = useAuthentification();
   const [dashboard, setDashboard] = useState<TableauDeBord | null>(null);
   const [stats, setStats] = useState<StatsAdmin | null>(null);
   const [monitoring, setMonitoring] = useState<ResumeMonitoring | null>(null);
+  const [finances, setFinances] = useState<StatistiquesPlateforme | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   const [chargement, setChargement] = useState(true);
 
@@ -89,12 +94,20 @@ function Contenu() {
     let actif = true;
     const charger = async () => {
       try {
-        const [d, s, m] = await Promise.all([
+        const [d, s, m, f] = await Promise.all([
           clientAPI.get<TableauDeBord>("/api/v1/admin/tableau-de-bord", { authentifie: true }),
           obtenirStatistiquesAdmin(),
           obtenirResumeMonitoring(),
+          utilisateur?.role === "super_administrateur"
+            ? paiementAPI.statistiquesPlateforme()
+            : Promise.resolve(null),
         ]);
-        if (actif) { setDashboard(d); setStats(s); setMonitoring(m); }
+        if (actif) {
+          setDashboard(d);
+          setStats(s);
+          setMonitoring(m);
+          setFinances(f);
+        }
       } catch (e) {
         if (actif) {
           setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
@@ -106,7 +119,7 @@ function Contenu() {
     charger();
     const intervalle = setInterval(charger, 15000);
     return () => { actif = false; clearInterval(intervalle); };
-  }, []);
+  }, [utilisateur?.role]);
 
   if (chargement) {
     return (
@@ -165,6 +178,90 @@ function Contenu() {
           <CarteKPI libelle="Connectés maintenant" valeur={monitoring.utilisateurs_connectes} icone="🟢" couleur="succes" />
         )}
       </div>
+
+      {finances && (
+        <section className="space-y-4">
+          <div className="section-header">
+            <h2>Finances de la plateforme</h2>
+            <p className="text-sm text-ardoise-clair">
+              Paiements réussis uniquement · classement par part plateforme générée.
+            </p>
+          </div>
+          <div className="grille-kpi">
+            <CarteKPI
+              libelle="Total des paiements encaissés"
+              valeur={`${finances.montant_total_encaisse_fcfa.toLocaleString("fr-FR")} FCFA`}
+              icone="💳"
+              couleur="lagune"
+            />
+            <CarteKPI
+              libelle="Revenu de la plateforme"
+              valeur={`${finances.revenu_plateforme_fcfa.toLocaleString("fr-FR")} FCFA`}
+              icone="📈"
+              couleur="succes"
+            />
+            <CarteKPI
+              libelle="Commissions agents"
+              valeur={`${finances.commissions_fcfa.toLocaleString("fr-FR")} FCFA`}
+              icone="🤝"
+              couleur="ocre"
+            />
+            <CarteKPI
+              libelle="Soldes des cagnottes"
+              valeur={`${finances.solde_total_cagnottes_fcfa.toLocaleString("fr-FR")} FCFA`}
+              icone="👛"
+              couleur="terre"
+            />
+          </div>
+          <Carte titre="Agents qui génèrent le plus de revenus plateforme">
+            {finances.top_acteurs.length === 0 ? (
+              <p className="py-4 text-sm italic text-ardoise-clair">
+                Aucun paiement réussi enregistré pour le moment.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-ardoise-clair/20 text-left text-xs uppercase text-ardoise-clair">
+                      <th className="py-2 pr-3">Rang</th>
+                      <th className="py-2 pr-3">Agent</th>
+                      <th className="py-2 pr-3 text-right">Transactions</th>
+                      <th className="py-2 pr-3 text-right">Montant encaissé</th>
+                      <th className="py-2 pr-3 text-right">Revenu plateforme généré</th>
+                      <th className="py-2 text-right">Commissions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {finances.top_acteurs.map((agent, index) => (
+                      <tr
+                        key={agent.acteur_id}
+                        className="border-b border-ardoise-clair/10 last:border-0"
+                      >
+                        <td className="py-2 pr-3 font-semibold">{index + 1}</td>
+                        <td className="py-2 pr-3 font-medium text-ardoise">
+                          {agent.nom_complet}
+                        </td>
+                        <td className="py-2 pr-3 text-right">
+                          {agent.transactions_reussies}
+                        </td>
+                        <td className="py-2 pr-3 text-right whitespace-nowrap">
+                          {agent.montant_encaisse_fcfa.toLocaleString("fr-FR")} FCFA
+                        </td>
+                        <td className="py-2 pr-3 text-right font-semibold whitespace-nowrap text-lagune">
+                          {agent.revenu_plateforme_fcfa.toLocaleString("fr-FR")} FCFA
+                        </td>
+                        <td className="py-2 text-right whitespace-nowrap">
+                          {agent.commissions_fcfa.toLocaleString("fr-FR")} FCFA
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Carte>
+        </section>
+      )}
 
       {/* Modules */}
       <section>

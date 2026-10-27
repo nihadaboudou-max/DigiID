@@ -45,8 +45,10 @@ class MouvementResponse(BaseModel):
 
 # ─── Transactions ────────────────────────────────────────────────────
 
-TypeTransaction = Literal["COLIS", "BAGAGE", "ABONNEMENT", "API", "REVERSEMENT"]
-MoyenPaiement = Literal["especes", "wave"]
+TypeTransaction = Literal[
+    "COLIS", "PASSAGER", "BAGAGE", "ABONNEMENT", "API", "REVERSEMENT"
+]
+MoyenPaiement = Literal["especes", "mtn", "moov"]
 
 
 class TransactionCreate(BaseModel):
@@ -67,6 +69,8 @@ class TransactionCreate(BaseModel):
     def _colis_requis(self):
         if self.type == "COLIS" and self.colis_id is None:
             raise ValueError("Un paiement de type COLIS doit référencer 'colis_id'")
+        if self.moyen in ("mtn", "moov") and not self.telephone:
+            raise ValueError("Le numéro de téléphone mobile money est obligatoire")
         return self
 
 
@@ -138,3 +142,21 @@ class TarifsColisResponse(BaseModel):
     part_receveur_fcfa: int
     part_plateforme_fcfa: int
     bareme: list[PalierTarifaire]
+
+
+class ActeurStatistiquesFinancieres(BaseModel):
+    acteur_id: UUID
+    nom_complet: str
+    transactions_reussies: int
+    montant_encaisse_fcfa: int
+    revenu_plateforme_fcfa: int
+    commissions_fcfa: int
+
+
+class StatistiquesPlateformeResponse(BaseModel):
+    transactions_reussies: int
+    montant_total_encaisse_fcfa: int
+    revenu_plateforme_fcfa: int
+    commissions_fcfa: int
+    solde_total_cagnottes_fcfa: int
+    top_acteurs: list[ActeurStatistiquesFinancieres]

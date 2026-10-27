@@ -45,6 +45,19 @@ async def tarifs_courants(
     return await service.tarifs_pour(nombre_articles)
 
 
+@routeur_paiement.get(
+    "/statistiques/plateforme",
+    response_model=schemas.StatistiquesPlateformeResponse,
+    summary="Statistiques financières globales (super-administrateur)",
+)
+@require_permission("paiement.statistiques")
+async def statistiques_plateforme(
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    return await service.statistiques_plateforme(session)
+
+
 # ─── Portefeuille : le mien ──────────────────────────────────────────
 
 @routeur_paiement.get(

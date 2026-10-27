@@ -352,6 +352,7 @@ async def _encaisser_frais_service(
     telephone: str | None,
     colis_id: UUID | None = None,
     montant_fcfa: int | None = None,
+    idempotency_key: str | None = None,
 ) -> dict:
     """Encaisse les frais de service **avant** de rendre le QR au client.
 
@@ -372,15 +373,23 @@ async def _encaisser_frais_service(
         )
     else:
         demande = schemas_paiement.TransactionCreate(
-            type="BAGAGE",
+            type="PASSAGER",
             montant_fcfa=montant_fcfa or 0,
             moyen=moyen,
             telephone=telephone,
-            idempotency_key=f"passager:{utilisateur.id}:{datetime.now(timezone.utc).timestamp()}",
+            idempotency_key=idempotency_key,
         )
     return await service_paiement.creer_transaction(
         session, demande, utilisateur, commit=False
     )
+
+
+def _exiger_voyage_ouvert(voyage: Voyage) -> None:
+    if voyage.statut in ("termine", "annule"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Impossible d'enregistrer un client sur un voyage terminé ou annulé.",
+        )
 
 
 async def _paginer(session: AsyncSession, requete, page: int, par_page: int):
@@ -1277,6 +1286,7 @@ async def creer_colis(
     voyage = None
     if donnees.voyage_id is not None:
         voyage = await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
+        _exiger_voyage_ouvert(voyage)
         if arret_destination_id is not None:
             # Le trajet se juge sur l'arrêt (position dans la ligne) et non sur
             # le terminus : un colis peut descendre avant la fin de la ligne.
@@ -1388,8 +1398,8 @@ async def creer_colis(
     colis.ticket_id = ticket.id
 
     # Paiement **avant remise du QR** : espèces = encaissé tout de suite ;
-    # Wave = en attente, mais la fiche et le ticket existent déjà dans la même
-    # transaction (le client peut suivre, le guichet voit le statut du paiement).
+    # Mobile money = en attente ; les moyens opérateur restent simulés jusqu'à
+    # l'intégration de leurs API.
     await _encaisser_frais_service(
         session,
         utilisateur,
@@ -2108,6 +2118,7 @@ async def creer_suivi_familial(
     voyage = None
     if donnees.voyage_id is not None:
         voyage = await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
+        _exiger_voyage_ouvert(voyage)
         if arret_destination_id is not None:
             ligne = await session.get(Ligne, voyage.ligne_id)
             if ligne is not None and ligne.gare_depart_id != donnees.gare_depart_id:
@@ -2214,6 +2225,7 @@ async def creer_suivi_familial(
         moyen=donnees.moyen_paiement,
         telephone=donnees.telephone_paiement,
         montant_fcfa=frais_service_passager(),
+        idempotency_key=f"passager:{suivi.id}",
     )
 
     evenement = SuiviFamilialEvenement(

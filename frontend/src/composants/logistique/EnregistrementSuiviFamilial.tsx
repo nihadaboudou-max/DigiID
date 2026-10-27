@@ -101,7 +101,7 @@ export function EnregistrementSuiviFamilial({
   const [affecterPlusTard, setAffecterPlusTard] = useState(false);
   const [arretDestinationId, setArretDestinationId] = useState("");
   const [arretsLigne, setArretsLigne] = useState<ArretLigne[]>([]);
-  const [moyenPaiement, setMoyenPaiement] = useState<MoyenPaiement>("especes");
+  const [moyenPaiement, setMoyenPaiement] = useState<MoyenPaiement | null>(null);
   const [telephonePaiement, setTelephonePaiement] = useState("");
 
   // État d'envoi
@@ -120,7 +120,11 @@ export function EnregistrementSuiviFamilial({
         ]);
         if (annule) return;
         setGares(reponseGares.elements);
-        setVoyages(reponseVoyages.elements);
+        setVoyages(
+          reponseVoyages.elements.filter(
+            (voyage) => !["termine", "annule"].includes(voyage.statut),
+          ),
+        );
         setLignes(reponseLignes.elements);
 
         if (utilisateur?.id) {
@@ -212,7 +216,7 @@ export function EnregistrementSuiviFamilial({
     affecterPlusTard || !voyageSelectionne ? true : arretDestinationId !== "";
   const paiementValide =
     moyenPaiement === "especes" ||
-    (moyenPaiement === "wave" &&
+    ((moyenPaiement === "mtn" || moyenPaiement === "moov") &&
       normaliserTelephone(telephonePaiement) !== null &&
       telephonePaiement.trim() !== "");
 
@@ -247,7 +251,7 @@ export function EnregistrementSuiviFamilial({
     setAffecterPlusTard(false);
     setGareArriveeId("");
     setArretDestinationId("");
-    setMoyenPaiement("especes");
+    setMoyenPaiement(null);
     setTelephonePaiement("");
     setGareDepartId(gareGuichet?.id ?? "");
     setErreur(null);
@@ -255,6 +259,10 @@ export function EnregistrementSuiviFamilial({
 
   async function enregistrer() {
     setErreur(null);
+    if (!moyenPaiement || !paiementValide) {
+      setErreur("Choisissez un moyen de paiement valide avant de confirmer l'enregistrement.");
+      return;
+    }
     if (!attributionFacultative && !voyageImposeId && !chauffeurId) {
       setErreur(
         "Sélectionnez un voyage affecté à un chauffeur, ou cochez « affecter le chauffeur plus tard ».",
@@ -289,7 +297,7 @@ export function EnregistrementSuiviFamilial({
         enregistrement_direct: enregistrementDirect || undefined,
         moyen_paiement: moyenPaiement,
         telephone_paiement:
-          moyenPaiement === "wave"
+          moyenPaiement === "mtn" || moyenPaiement === "moov"
             ? (normaliserTelephone(telephonePaiement) ?? telephonePaiement.trim())
             : null,
       });
@@ -317,7 +325,8 @@ export function EnregistrementSuiviFamilial({
           famille sera prévenue par SMS au départ, à l&apos;approche puis à l&apos;arrivée.
           {" "}
           <strong>
-            Frais de service : {formaterFcfa(resultat.suivi.frais_service_fcfa)}.
+            Frais : {formaterFcfa(resultat.suivi.frais_service_fcfa)} — moyen choisi :{" "}
+            {moyenPaiement ? LIBELLES_MOYEN[moyenPaiement] ?? moyenPaiement : "—"}.
           </strong>
         </Alerte>
 
@@ -705,11 +714,12 @@ export function EnregistrementSuiviFamilial({
                   Encaissement avant génération du ticket QR.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {(["especes", "wave"] as MoyenPaiement[]).map((m) => (
+                  {(["especes", "mtn", "moov"] as MoyenPaiement[]).map((m) => (
                     <button
                       key={m}
                       type="button"
                       onClick={() => setMoyenPaiement(m)}
+                      aria-pressed={moyenPaiement === m}
                       className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
                         moyenPaiement === m
                           ? "border-lagune bg-lagune text-white"
@@ -720,15 +730,21 @@ export function EnregistrementSuiviFamilial({
                     </button>
                   ))}
                 </div>
-                {moyenPaiement === "wave" && (
+                {!moyenPaiement && (
+                  <p className="text-xs font-medium text-terre">
+                    Sélectionnez le moyen utilisé avant de valider.
+                  </p>
+                )}
+                {(moyenPaiement === "mtn" || moyenPaiement === "moov") && (
                   <ChampSaisie
-                    libelle="Téléphone Wave"
+                    libelle={`Téléphone ${LIBELLES_MOYEN[moyenPaiement]}`}
                     required
                     value={telephonePaiement}
                     onChange={(e) => setTelephonePaiement(e.target.value)}
                     inputMode="tel"
                     type="tel"
                     placeholder="+229 01 97 12 34 56"
+                    aide={`Numéro du payeur pour ${LIBELLES_MOYEN[moyenPaiement]}. Paiement simulé en attendant l'intégration opérateur.`}
                   />
                 )}
               </div>
@@ -760,4 +776,3 @@ export function EnregistrementSuiviFamilial({
     </div>
   );
 }
-

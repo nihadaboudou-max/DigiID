@@ -126,8 +126,9 @@ class ParametresApplication(BaseSettings):
     # bagages transportés (le nombre de sacs sert à la traçabilité et à la
     # vérification anti-fraude à l'arrivée, il n'impacte jamais le prix).
     frais_service_passager_fcfa: int = 100
-    # Opérateur mobile money activé (mode mock en développement) : "wave".
-    operateur_mobile_money: str = "wave"
+    # Opérateurs mobile money proposés au Bénin (mode mock, sans débit réel).
+    # Nom conservé pour compatibilité .env ; valeurs proposées en mode mock.
+    operateur_mobile_money: str = "mtn,moov"
 
                     # --- 2FA ---
     activer_2fa_obligatoire_admin: bool = True

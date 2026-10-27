@@ -134,6 +134,65 @@ async def tarifs_pour(nombre_articles: int = 1) -> dict:
     }
 
 
+async def statistiques_plateforme(session: AsyncSession) -> dict:
+    """Agrège les encaissements validés, revenus plateforme et cagnotte des agents."""
+    filtres_reussis = (TransactionPaiement.statut == "reussi",)
+    totaux = await session.execute(
+        select(
+            func.count(TransactionPaiement.id),
+            func.coalesce(func.sum(TransactionPaiement.montant_fcfa), 0),
+            func.coalesce(func.sum(TransactionPaiement.frais_plateforme), 0),
+            func.coalesce(func.sum(TransactionPaiement.commission_receveur), 0),
+        ).where(*filtres_reussis)
+    )
+    nb_transactions, montant_total, revenu_plateforme, commissions = totaux.one()
+    solde_cagnottes = await session.scalar(
+        select(func.coalesce(func.sum(Portefeuille.solde_fcfa), 0))
+    )
+    lignes_acteurs = await session.execute(
+        select(
+            Utilisateur,
+            func.count(TransactionPaiement.id),
+            func.coalesce(func.sum(TransactionPaiement.montant_fcfa), 0),
+            func.coalesce(func.sum(TransactionPaiement.frais_plateforme), 0),
+            func.coalesce(func.sum(TransactionPaiement.commission_receveur), 0),
+        )
+        .join(Utilisateur, Utilisateur.id == TransactionPaiement.payeur_id)
+        .where(
+            *filtres_reussis,
+            TransactionPaiement.payeur_id.is_not(None),
+        )
+        .group_by(Utilisateur.id)
+        .order_by(
+            func.sum(TransactionPaiement.frais_plateforme).desc(),
+            func.sum(TransactionPaiement.montant_fcfa).desc(),
+        )
+        .limit(10)
+    )
+
+    from src.modules.identite_digiid.service import nom_complet
+
+    return {
+        "transactions_reussies": int(nb_transactions or 0),
+        "montant_total_encaisse_fcfa": int(montant_total or 0),
+        "revenu_plateforme_fcfa": int(revenu_plateforme or 0),
+        "commissions_fcfa": int(commissions or 0),
+        "solde_total_cagnottes_fcfa": int(solde_cagnottes or 0),
+        "top_acteurs": [
+            {
+                "acteur_id": utilisateur.id,
+                "nom_complet": nom_complet(utilisateur),
+                "transactions_reussies": int(nb or 0),
+                "montant_encaisse_fcfa": int(montant or 0),
+                "revenu_plateforme_fcfa": int(part_plateforme or 0),
+                "commissions_fcfa": int(part_commissions or 0),
+            }
+            for utilisateur, nb, montant, part_plateforme, part_commissions
+            in lignes_acteurs.all()
+        ],
+    }
+
+
 async def _generer_reference(session: AsyncSession) -> str:
     """Génère une référence de paiement unique : ``PAY-<ANNEE>-NNNNNN``."""
     annee = datetime.now(timezone.utc).year
@@ -411,7 +470,7 @@ async def creer_transaction(
                 status.HTTP_404_NOT_FOUND, detail="Colis introuvable"
             )
 
-    # 3. Montant : frais de service issu du barème (COLIS) ou montant libre.
+    # 3. Montant : frais de service tarifé (COLIS/PASSAGER) ou montant libre.
     #    ⚠️ Pour un COLIS, ``donnees.montant_fcfa`` est ignoré : seul le barème
     #    fait foi, et le prix de transport du colis n'est jamais encaissé.
     frais_plateforme = 0
@@ -437,6 +496,9 @@ async def creer_transaction(
         frais_plateforme = frais.part_plateforme_fcfa
         commission_receveur = frais.part_receveur_fcfa
         beneficiaire_id = colis.receveur_id
+    elif donnees.type == "PASSAGER":
+        montant = int(donnees.montant_fcfa or 0)
+        frais_plateforme = montant
     else:
         montant = int(donnees.montant_fcfa or 0)
 

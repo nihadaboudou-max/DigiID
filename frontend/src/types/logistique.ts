@@ -169,7 +169,7 @@ export interface DonneesColis {
   /** Arrêt précis de descente sur la ligne (ordre du manifeste chauffeur). */
   arret_destination_id?: string | null;
   /** Encaissé **avant** génération du QR (même transaction backend). */
-  moyen_paiement?: "especes" | "wave";
+  moyen_paiement?: "especes" | "mtn" | "moov";
   telephone_paiement?: string | null;
 }
 
@@ -384,7 +384,7 @@ export interface DonneesSuiviFamilial {
   /** Arrêt précis de descente sur la ligne. */
   arret_destination_id?: string | null;
   /** Encaissé **avant** génération du QR. */
-  moyen_paiement?: "especes" | "wave";
+  moyen_paiement?: "especes" | "mtn" | "moov";
   telephone_paiement?: string | null;
 }
 

@@ -13,6 +13,7 @@ import Link from "next/link";
 
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
+import { Alerte } from "@/composants/commun/Alerte";
 import { IconeIdentite } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { EnregistrementSuiviFamilial } from "@/composants/logistique/EnregistrementSuiviFamilial";
@@ -45,10 +46,17 @@ function Contenu() {
   const [voyageId, setVoyageId] = useState("");
 
   useEffect(() => {
-    if (!voyageId && voyages.length === 1) setVoyageId(voyages[0].id);
+    const ouverts = voyages.filter(
+      (v) => v.statut !== "termine" && v.statut !== "annule",
+    );
+    if (!voyageId && ouverts.length === 1) setVoyageId(ouverts[0].id);
   }, [voyages, voyageId]);
 
   const voyage = voyages.find((v) => v.id === voyageId) ?? null;
+  const voyagesOuverts = voyages.filter(
+    (v) => v.statut !== "termine" && v.statut !== "annule",
+  );
+  const voyageClos = voyage?.statut === "termine" || voyage?.statut === "annule";
 
   return (
     <div className="space-y-5 apparition">
@@ -81,16 +89,26 @@ function Contenu() {
         </p>
       ) : voyages.length === 0 ? (
         <AucunVoyageAffecte />
+      ) : voyagesOuverts.length === 0 ? (
+        <Alerte variante="info" titre="Aucun voyage ouvert">
+          Tous vos voyages sont terminés ou annulés. Le formulaire d&apos;enregistrement
+          de passager n&apos;est disponible que pour un voyage planifié ou en cours.
+        </Alerte>
       ) : (
         <>
           <SelecteurMonVoyage
-            voyages={voyages}
+            voyages={voyagesOuverts}
             lignes={lignes}
             valeur={voyageId}
             surChangement={setVoyageId}
           />
 
-          {voyage ? (
+          {voyageClos ? (
+            <Alerte variante="avertissement" titre="Voyage terminé">
+              Il n&apos;est plus possible d&apos;ajouter un passager à ce voyage.
+              Sélectionnez un voyage planifié ou en cours.
+            </Alerte>
+          ) : voyage ? (
             <>
               <EncartVoyageImpose voyage={voyage} lignes={lignes} />
               <EnregistrementSuiviFamilial

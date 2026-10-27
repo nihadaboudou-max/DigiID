@@ -132,7 +132,7 @@ export function EnregistrementColis({
   const [arretDestinationId, setArretDestinationId] = useState("");
   const [arretsLigne, setArretsLigne] = useState<ArretLigne[]>([]);
   /** Paiement inclus à l'inscription, avant le QR. */
-  const [moyenPaiement, setMoyenPaiement] = useState<MoyenPaiement>("especes");
+  const [moyenPaiement, setMoyenPaiement] = useState<MoyenPaiement | null>(null);
   const [telephonePaiement, setTelephonePaiement] = useState("");
 
   // État d'envoi
@@ -184,7 +184,11 @@ export function EnregistrementColis({
         ]);
         if (annule) return;
         setGares(reponseGares.elements);
-        setVoyages(reponseVoyages.elements);
+        setVoyages(
+          reponseVoyages.elements.filter(
+            (voyage) => !["termine", "annule"].includes(voyage.statut),
+          ),
+        );
         setLignes(reponseLignes.elements);
 
         // Pré-remplit la gare de départ depuis la fiche acteur du receveur.
@@ -300,11 +304,15 @@ export function EnregistrementColis({
   // Voyage connu : destination = arrêt intermédiaire ou terminus (clé « terminus »).
   const destinationArretValide =
     affecterPlusTard || !voyageSelectionne ? true : arretDestinationId !== "";
-  const telPaiementWave =
-    moyenPaiement === "wave" ? normaliserTelephone(telephonePaiement) : true;
+  const telephoneMobileMoneyValide =
+    moyenPaiement === "mtn" || moyenPaiement === "moov"
+      ? normaliserTelephone(telephonePaiement)
+      : true;
   const paiementValide =
     moyenPaiement === "especes" ||
-    (moyenPaiement === "wave" && telPaiementWave !== null && telephonePaiement.trim() !== "");
+    ((moyenPaiement === "mtn" || moyenPaiement === "moov") &&
+      telephoneMobileMoneyValide !== null &&
+      telephonePaiement.trim() !== "");
   const etapeDetailsValide =
     fraisValide &&
     nombreArticlesValide &&
@@ -329,7 +337,7 @@ export function EnregistrementColis({
     setAffecterPlusTard(false);
     setGareArriveeId("");
     setArretDestinationId("");
-    setMoyenPaiement("especes");
+    setMoyenPaiement(null);
     setTelephonePaiement("");
     setGareDepartId(gareGuichet?.id ?? "");
     setErreur(null);
@@ -337,6 +345,10 @@ export function EnregistrementColis({
 
   async function enregistrer() {
     setErreur(null);
+    if (!moyenPaiement || !paiementValide) {
+      setErreur("Choisissez un moyen de paiement valide avant de confirmer l'enregistrement.");
+      return;
+    }
 
     // Garde-fou : le bouton est déjà désactivé, mais on ne laisse jamais
     // partir un numéro invalide (source de colis « injoignables »).
@@ -377,7 +389,7 @@ export function EnregistrementColis({
         // Paiement **avant** QR : même transaction côté serveur.
         moyen_paiement: moyenPaiement,
         telephone_paiement:
-          moyenPaiement === "wave"
+          moyenPaiement === "mtn" || moyenPaiement === "moov"
             ? (normaliserTelephone(telephonePaiement) ?? telephonePaiement.trim())
             : null,
       };
@@ -471,10 +483,10 @@ export function EnregistrementColis({
         </Alerte>
         <TicketImprimable ticket={resultat.ticket} colis={resultat.colis} />
 
-        <Alerte variante="info" titre="Frais de service encaissés">
-          Paiement enregistré avec l&apos;inscription (
-          {LIBELLES_MOYEN[moyenPaiement] ?? moyenPaiement}
-          ) — le QR a été généré ensuite.
+        <Alerte variante="info" titre="Paiement associé à l'enregistrement">
+          Moyen de paiement choisi : (
+          {moyenPaiement ? LIBELLES_MOYEN[moyenPaiement] ?? moyenPaiement : "—"}
+          ). Le QR a été généré ensuite.
         </Alerte>
 
         <div className="no-print flex flex-wrap gap-3">
@@ -951,11 +963,12 @@ export function EnregistrementColis({
                   Encaissement avant génération du ticket QR.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {(["especes", "wave"] as MoyenPaiement[]).map((m) => (
+                  {(["especes", "mtn", "moov"] as MoyenPaiement[]).map((m) => (
                     <button
                       key={m}
                       type="button"
                       onClick={() => setMoyenPaiement(m)}
+                      aria-pressed={moyenPaiement === m}
                       className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
                         moyenPaiement === m
                           ? "border-lagune bg-lagune text-white"
@@ -966,16 +979,21 @@ export function EnregistrementColis({
                     </button>
                   ))}
                 </div>
-                {moyenPaiement === "wave" && (
+                {!moyenPaiement && (
+                  <p className="text-xs font-medium text-terre">
+                    Sélectionnez le moyen utilisé avant de valider.
+                  </p>
+                )}
+                {(moyenPaiement === "mtn" || moyenPaiement === "moov") && (
                   <ChampSaisie
-                    libelle="Téléphone Wave"
+                    libelle={`Téléphone ${LIBELLES_MOYEN[moyenPaiement]}`}
                     required
                     value={telephonePaiement}
                     onChange={(e) => setTelephonePaiement(e.target.value)}
                     inputMode="tel"
                     type="tel"
                     placeholder="+229 01 97 12 34 56"
-                    aide="Numéro Wave du payeur."
+                    aide={`Numéro du payeur pour ${LIBELLES_MOYEN[moyenPaiement]}. Paiement simulé en attendant l'intégration opérateur.`}
                   />
                 )}
               </div>

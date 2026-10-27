@@ -352,8 +352,8 @@ class ColisCreate(BaseModel):
     # frais de service sont payés séparément par le client).
     frais_fcfa: Optional[int] = Field(None, ge=0)
     # Moyen de paiement **choisi à l'inscription** : le QR n'est généré qu'après
-    # l'encaissement (espèces immédiat, Wave en attente de validation).
-    moyen_paiement: Literal["especes", "wave"] = "especes"
+    # l'encaissement (espèces immédiat, mobile money en mode prototype).
+    moyen_paiement: Literal["especes", "mtn", "moov"]
     telephone_paiement: Optional[str] = Field(None, max_length=30)
     # Si non fournis, l'expéditeur ET le receveur = utilisateur courant (guichet).
     expediteur_id: Optional[UUID] = None
@@ -389,6 +389,8 @@ class ColisCreate(BaseModel):
     def _gares_distinctes(self):
         if self.gare_depart_id == self.gare_arrivee_id:
             raise ValueError("Les gares de départ et d'arrivée doivent être différentes")
+        if self.moyen_paiement in ("mtn", "moov") and not self.telephone_paiement:
+            raise ValueError("Le numéro de téléphone mobile money est obligatoire")
         # En **enregistrement direct**, le chauffeur connaît forcément son
         # voyage : il est donc obligatoire. Au guichet, on autorise l'inverse —
         # enregistrer d'abord, affecter le voyage/chauffeur ensuite (voir
@@ -602,7 +604,7 @@ class SuiviFamilialCreate(BaseModel):
     # Nombre de sacs (1 à 10) — traçabilité, **sans impact** sur le prix.
     nombre_bagages: int = Field(1, ge=1, le=10)
     # Moyen de paiement **choisi à l'inscription** (avant la génération du QR).
-    moyen_paiement: Literal["especes", "wave"] = "especes"
+    moyen_paiement: Literal["especes", "mtn", "moov"]
     telephone_paiement: Optional[str] = Field(None, max_length=30)
     gare_depart_id: UUID
     gare_arrivee_id: UUID
@@ -640,6 +642,8 @@ class SuiviFamilialCreate(BaseModel):
     def _valider_contacts(self):
         if self.gare_depart_id == self.gare_arrivee_id:
             raise ValueError("Les gares de départ et d'arrivée doivent être différentes")
+        if self.moyen_paiement in ("mtn", "moov") and not self.telephone_paiement:
+            raise ValueError("Le numéro de téléphone mobile money est obligatoire")
         if self.type_passager == "adulte":
             if not self.telephone_passager:
                 raise ValueError("Le numéro du passager adulte est obligatoire")

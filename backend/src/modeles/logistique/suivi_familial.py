@@ -116,7 +116,7 @@ class SuiviFamilial(Base, MelangeTracabilite):
         String(20), nullable=False, default="guichet", server_default="guichet"
     )
     # Moyen de paiement choisi **à l'inscription** (avant le QR) : espèces au
-    # guichet ou Wave. Le guichet ne demande plus l'argent après coup.
+    # guichet ou opérateur mobile money. Le guichet ne demande plus l'argent après coup.
     moyen_paiement: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     # Garde-fous : un SMS de départ / d'arrivée ne part qu'une seule fois.
     sms_depart_envoye: Mapped[bool] = mapped_column(

@@ -45,8 +45,14 @@ export interface MouvementPortefeuille {
 // ─── Transactions ────────────────────────────────────────────────────
 
 export type StatutTransaction = "en_attente" | "reussi" | "echoue" | "rembourse";
-export type MoyenPaiement = "especes" | "wave";
-export type TypeTransaction = "COLIS" | "BAGAGE" | "ABONNEMENT" | "API" | "REVERSEMENT";
+export type MoyenPaiement = "especes" | "mtn" | "moov";
+export type TypeTransaction =
+  | "COLIS"
+  | "PASSAGER"
+  | "BAGAGE"
+  | "ABONNEMENT"
+  | "API"
+  | "REVERSEMENT";
 
 export interface TransactionPaiement {
   id: string;
@@ -78,6 +84,24 @@ export interface Commission {
   portefeuille_id: string | null;
   verse_le: string | null;
   cree_le: string;
+}
+
+export interface ActeurStatistiquesFinancieres {
+  acteur_id: string;
+  nom_complet: string;
+  transactions_reussies: number;
+  montant_encaisse_fcfa: number;
+  revenu_plateforme_fcfa: number;
+  commissions_fcfa: number;
+}
+
+export interface StatistiquesPlateforme {
+  transactions_reussies: number;
+  montant_total_encaisse_fcfa: number;
+  revenu_plateforme_fcfa: number;
+  commissions_fcfa: number;
+  solde_total_cagnottes_fcfa: number;
+  top_acteurs: ActeurStatistiquesFinancieres[];
 }
 
 /** Résultat d'un paiement : transaction + commission + cagnotte bénéficiaire. */
@@ -156,7 +180,8 @@ export function fraisServicePourArticles(nombreArticles: number): PalierTarifair
 
 export const LIBELLES_MOYEN: Record<string, string> = {
   especes: "Espèces (guichet)",
-  wave: "Wave (mobile money)",
+  mtn: "MTN MoMo",
+  moov: "Moov Money",
 };
 
 export const LIBELLES_STATUT_TRANSACTION: Record<StatutTransaction, string> = {

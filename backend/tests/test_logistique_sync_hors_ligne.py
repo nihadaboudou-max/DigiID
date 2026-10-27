@@ -128,6 +128,7 @@ def _element(id_local: str, gare_depart_id, gare_arrivee_id) -> schemas.ColisHor
         destinataire_tel="0197123456",
         gare_depart_id=gare_depart_id,
         gare_arrivee_id=gare_arrivee_id,
+        moyen_paiement="especes",
     )
 
 

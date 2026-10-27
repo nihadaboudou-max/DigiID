@@ -19,8 +19,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from src.base_donnees.base import Base, MelangeTracabilite
 
-# Types de paiement supportés (S6 : COLIS ; le reste arrive en S7)
-TYPES_TRANSACTION = ("COLIS", "BAGAGE", "ABONNEMENT", "API", "REVERSEMENT")
+# Types de paiement supportés.
+TYPES_TRANSACTION = ("COLIS", "PASSAGER", "BAGAGE", "ABONNEMENT", "API", "REVERSEMENT")
 
 # Statuts d'une transaction
 STATUTS_TRANSACTION = ("en_attente", "reussi", "echoue", "rembourse")
@@ -28,8 +28,8 @@ STATUTS_TRANSACTION = ("en_attente", "reussi", "echoue", "rembourse")
 # Statuts « actifs » : un paiement dans cet état existe bel et bien pour l'objet.
 STATUTS_TRANSACTION_ACTIFS = ("en_attente", "reussi")
 
-# Moyens de paiement : espèces au guichet + 1 opérateur mobile money (mock).
-MOYENS_PAIEMENT = ("especes", "wave")
+# Moyens de paiement : espèces au guichet + opérateurs mobiles béninois (mock).
+MOYENS_PAIEMENT = ("especes", "mtn", "moov")
 
 
 class TransactionPaiement(Base, MelangeTracabilite):

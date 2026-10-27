@@ -9,6 +9,7 @@ import type {
   MouvementPortefeuille,
   Portefeuille,
   ResultatPaiement,
+  StatistiquesPlateforme,
   TarifsColis,
   TransactionPaiement,
 } from "@/types/paiement";
@@ -16,6 +17,7 @@ import type {
 export type {
   Commission, DonneesPaiement, MoyenPaiementInfo, MouvementPortefeuille,
   Portefeuille, ResultatPaiement, TarifsColis, TransactionPaiement,
+  StatistiquesPlateforme,
 } from "@/types/paiement";
 
 export interface ReponseListe<T> {
@@ -39,6 +41,13 @@ function construireQuery(filtres?: Record<string, unknown>): string {
 }
 
 export const paiementAPI = {
+  /** Totaux globaux et classement des agents (super-administrateur seulement). */
+  statistiquesPlateforme: () =>
+    clientAPI.get<StatistiquesPlateforme>(
+      `${BASE}/statistiques/plateforme`,
+      opts,
+    ),
+
   /** Catalogue des moyens de paiement (espèces, mobile money mock). */
   moyens: () => clientAPI.get<MoyenPaiementInfo[]>(`${BASE}/moyens`, opts),
 

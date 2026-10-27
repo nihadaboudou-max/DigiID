@@ -2,16 +2,16 @@
 """
 Abstraction « fournisseur de paiement » (S6).
 
-Deux fournisseurs pour la démo :
+Trois moyens de paiement pour le prototype :
 
 - ``EspecesProvider`` : encaissement au guichet, **immédiat** (paiement réussi
   dès l'initiation, aucune dépendance réseau).
-- ``WaveProvider`` : opérateur mobile money — **mode MOCK** en développement
-  (aucun appel réseau, aucun secret). En production, brancher l'API réelle de
-  Wave dans ``initier`` (les clés restent dans le .env, jamais en base).
+- ``MtnMomoProvider`` et ``MoovMoneyProvider`` : opérateurs mobiles béninois —
+  **mode MOCK** (aucun appel réseau, aucune collecte réelle). En production,
+  brancher les API opérateurs dans ``initier``.
 
 Le reste du code (service, routes) ne dépend QUE de l'interface
-``FournisseurPaiement`` : ajouter Orange Money / MTN / Moov revient à écrire
+``FournisseurPaiement`` : ajouter Orange Money revient à écrire
 un nouvel adaptateur, sans toucher au cœur.
 """
 from __future__ import annotations
@@ -57,28 +57,47 @@ class EspecesProvider(FournisseurPaiement):
         )
 
 
-class WaveProvider(FournisseurPaiement):
+class MtnMomoProvider(FournisseurPaiement):
     """
-    Wave (mobile money) — **mode MOCK**.
+    MTN MoMo — **mode MOCK**.
 
-    En développement, aucun appel réseau n'est fait : on renvoie une demande
-    « en attente » que l'endpoint de confirmation simulera. Le passage en
-    production consiste à implémenter l'appel réel ici (clé via .env).
+    Aucun appel réseau n'est fait : la transaction reste en attente, sans
+    prélèvement réel. L'API MTN doit être intégrée avant toute mise en production.
     """
 
-    code = "wave"
-    libelle = "Wave (mobile money)"
+    code = "mtn"
+    libelle = "MTN MoMo"
     immediat = False
 
     def initier(self, montant_fcfa, telephone, reference) -> ResultatInitiation:
-        reference_externe = f"WAVE-MOCK-{secrets.token_hex(4).upper()}"
+        reference_externe = f"MTN-MOCK-{secrets.token_hex(4).upper()}"
         return ResultatInitiation(
             statut="en_attente",
             reference_externe=reference_externe,
             instruction=(
-                f"Demande envoyée au {telephone or 'numéro du payeur'} (réf. "
-                f"{reference_externe}). Le client valide {montant_fcfa} FCFA sur "
-                f"son téléphone. Mode démo : la confirmation peut être simulée."
+                f"Paiement MTN MoMo simulé pour {telephone or 'le numéro du payeur'} "
+                f"({montant_fcfa} FCFA, réf. {reference_externe}). Aucun débit réel "
+                "n'a été effectué : l'intégration MTN n'est pas encore activée."
+            ),
+        )
+
+
+class MoovMoneyProvider(FournisseurPaiement):
+    """Moov Money — mode MOCK, sans appel réseau ni débit réel."""
+
+    code = "moov"
+    libelle = "Moov Money"
+    immediat = False
+
+    def initier(self, montant_fcfa, telephone, reference) -> ResultatInitiation:
+        reference_externe = f"MOOV-MOCK-{secrets.token_hex(4).upper()}"
+        return ResultatInitiation(
+            statut="en_attente",
+            reference_externe=reference_externe,
+            instruction=(
+                f"Paiement Moov Money simulé pour {telephone or 'le numéro du payeur'} "
+                f"({montant_fcfa} FCFA, réf. {reference_externe}). Aucun débit réel "
+                "n'a été effectué : l'intégration Moov n'est pas encore activée."
             ),
         )
 
@@ -86,7 +105,8 @@ class WaveProvider(FournisseurPaiement):
 # Registre des fournisseurs disponibles
 FOURNISSEURS: dict[str, FournisseurPaiement] = {
     EspecesProvider.code: EspecesProvider(),
-    WaveProvider.code: WaveProvider(),
+    MtnMomoProvider.code: MtnMomoProvider(),
+    MoovMoneyProvider.code: MoovMoneyProvider(),
 }
 
 
