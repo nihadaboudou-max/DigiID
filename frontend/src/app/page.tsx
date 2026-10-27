@@ -31,11 +31,26 @@ export default function PageAccueil() {
   return (
     <main className="flex-grow">
       <section className="border-b border-ardoise-clair/10 bg-white px-6 py-3">
-        <div className="mx-auto flex max-w-contenu flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex max-w-contenu flex-wrap items-center justify-between gap-3">
           <Link href="/" aria-label="DigiID — accueil" className="self-center sm:self-auto">
             <Logo taille="moyen" />
           </Link>
-          <SelecteurLangue variante="ligne" />
+          <nav aria-label="Compte" className="order-2 flex items-center gap-2 sm:order-3">
+            <Link
+              href="/connexion"
+              className="rounded-lg px-3 py-2 text-sm font-medium text-ardoise-clair transition-colors hover:bg-sable hover:text-lagune"
+            >
+              Connexion
+            </Link>
+            <Link href="/inscription">
+              <Bouton variante="primaire" taille="petit">
+                Inscription
+              </Bouton>
+            </Link>
+          </nav>
+          <div className="order-3 w-full sm:order-2 sm:w-auto">
+            <SelecteurLangue variante="ligne" />
+          </div>
         </div>
       </section>
 
