@@ -205,6 +205,7 @@ function Contenu() {
       {/* Actions groupées : départ / pré-alerte / arrivée (passagers + colis) */}
       <ActionsVoyageChauffeur
         voyageId={voyage.id}
+        dateDepart={voyage.date_depart}
         statut={voyage.statut}
         nbColis={colis.filter((c) => c.statut !== "annule").length}
         nbPassagers={passagers.filter((p) => p.statut !== "annule").length}

@@ -38,6 +38,8 @@ export interface PointArrivee {
 
 interface Props {
   voyageId: string;
+  /** Date planifiée, utilisée pour empêcher un départ avant le jour prévu. */
+  dateDepart: string;
   /** Statut courant du voyage — pilote quels boutons sont actifs. */
   statut: StatutVoyage | string;
   /** Nombre de colis non annulés à bord. */
@@ -83,6 +85,7 @@ const CONFIG: Record<
 
 export function ActionsVoyageChauffeur({
   voyageId,
+  dateDepart,
   statut,
   nbColis,
   nbPassagers,
@@ -98,8 +101,15 @@ export function ActionsVoyageChauffeur({
 
   const chargeABord = nbColis + nbPassagers > 0;
   const voyageClos = statut === "termine" || statut === "annule";
+  const dateDepartUtc = new Date(dateDepart);
+  const jourDepartUtc = Number.isNaN(dateDepartUtc.getTime())
+    ? null
+    : dateDepartUtc.toISOString().slice(0, 10);
+  const jourActuelUtc = new Date().toISOString().slice(0, 10);
+  const jourDepartAtteint = jourDepartUtc !== null && jourActuelUtc >= jourDepartUtc;
   const peutDepart =
-    chargeABord && (statut === "planifie" || statut === "en_cours");
+    chargeABord &&
+    (statut === "en_cours" || (statut === "planifie" && jourDepartAtteint));
   const peutApproche = chargeABord && statut === "en_cours";
   const peutArrivee = chargeABord && statut === "en_cours";
 
@@ -114,6 +124,11 @@ export function ActionsVoyageChauffeur({
 
   async function confirmer() {
     if (!action) return;
+    if (action === "depart" && statut === "planifie" && !jourDepartAtteint) {
+      setErreur("Le départ ne peut être validé qu'à partir du jour planifié.");
+      setAction(null);
+      return;
+    }
     setChargement(true);
     setErreur(null);
     try {
@@ -168,6 +183,19 @@ export function ActionsVoyageChauffeur({
             Aucun passager ni colis à bord pour l&apos;instant. Les actions
             (départ, pré-alerte, arrivée) s&apos;activeront dès qu&apos;un
             chargement est affecté à ce voyage.
+          </Alerte>
+        )}
+
+        {statut === "planifie" && !jourDepartAtteint && (
+          <Alerte variante="avertissement" titre="Départ pas encore autorisé">
+            Ce voyage est planifié pour le{" "}
+            {jourDepartUtc
+              ? new Intl.DateTimeFormat("fr-FR", {
+                  dateStyle: "long",
+                  timeZone: "UTC",
+                }).format(dateDepartUtc)
+              : "une date invalide"}
+            . Vous pourrez valider le départ à partir de ce jour.
           </Alerte>
         )}
 

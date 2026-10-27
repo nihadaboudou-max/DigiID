@@ -2667,6 +2667,16 @@ async def valider_depart_voyage(
                 f"Ce voyage est « {voyage.statut} » : le départ ne peut plus être validé."
             ),
         )
+    if voyage.statut == "planifie" and voyage.date_depart is not None:
+        depart_prevu = _en_utc(voyage.date_depart)
+        if depart_prevu.date() > datetime.now(timezone.utc).date():
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=(
+                    "Le départ ne peut être validé qu'à partir du jour planifié "
+                    f"({depart_prevu.strftime('%d/%m/%Y')})."
+                ),
+            )
 
     colis_voyage = await _colis_du_voyage(session, voyage_id)
     passagers_voyage = await _passagers_du_voyage(session, voyage_id)

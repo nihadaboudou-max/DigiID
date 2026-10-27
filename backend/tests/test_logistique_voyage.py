@@ -12,7 +12,7 @@ ce qu'on veut prouver ici — les garde-fous, pas le SQL :
 """
 import asyncio
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi import HTTPException
@@ -205,6 +205,34 @@ class TestAnnulerEtCharge:
         assert "annuler" in erreur.value.detail.lower()
 
     def test_depart_refuse_si_car_vide(self):
+        voyage = _voyage(statut="planifie")
+        session = SessionFactice({(Voyage, voyage.id): voyage})
+        chauffeur = _utilisateur("Awa", "Fall")
+
+        with pytest.raises(HTTPException) as erreur:
+            asyncio.run(
+                service.valider_depart_voyage(session, voyage.id, chauffeur)
+            )
+
+        assert erreur.value.status_code == 409
+        assert "aucun passager ni colis" in erreur.value.detail.lower()
+
+    def test_depart_refuse_avant_le_jour_planifie(self):
+        voyage = _voyage(statut="planifie")
+        voyage.date_depart = datetime.now(timezone.utc) + timedelta(days=1)
+        session = SessionFactice({(Voyage, voyage.id): voyage})
+        chauffeur = _utilisateur("Awa", "Fall")
+
+        with pytest.raises(HTTPException) as erreur:
+            asyncio.run(
+                service.valider_depart_voyage(session, voyage.id, chauffeur)
+            )
+
+        assert erreur.value.status_code == 409
+        assert "jour planifié" in erreur.value.detail.lower()
+        assert session.commits == 0
+
+    def test_depart_le_jour_planifie_poursuit_les_controles_existants(self):
         voyage = _voyage(statut="planifie")
         session = SessionFactice({(Voyage, voyage.id): voyage})
         chauffeur = _utilisateur("Awa", "Fall")
