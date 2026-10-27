@@ -30,12 +30,12 @@ const SERVICES = [
 export default function PageAccueil() {
   return (
     <main className="flex-grow">
-      <section className="border-b border-ardoise-clair/10 bg-white px-6 py-3">
-        <div className="mx-auto flex max-w-contenu flex-wrap items-center justify-between gap-3">
-          <Link href="/" aria-label="DigiID — accueil" className="self-center sm:self-auto">
+      <header className="border-b border-ardoise-clair/10 bg-white px-6 py-3">
+        <div className="mx-auto flex max-w-contenu items-center justify-between gap-3">
+          <Link href="/" aria-label="DigiID — accueil">
             <Logo taille="moyen" />
           </Link>
-          <nav aria-label="Compte" className="order-2 flex items-center gap-2 sm:order-3">
+          <nav aria-label="Compte" className="flex items-center gap-2">
             <Link
               href="/connexion"
               className="rounded-lg px-3 py-2 text-sm font-medium text-ardoise-clair transition-colors hover:bg-sable hover:text-lagune"
@@ -48,9 +48,15 @@ export default function PageAccueil() {
               </Bouton>
             </Link>
           </nav>
-          <div className="order-3 w-full sm:order-2 sm:w-auto">
-            <SelecteurLangue variante="ligne" />
-          </div>
+        </div>
+      </header>
+
+      <section
+        aria-label="Choix de la langue"
+        className="border-b border-ardoise-clair/10 bg-white px-6 py-3"
+      >
+        <div className="mx-auto max-w-contenu">
+          <SelecteurLangue variante="ligne" />
         </div>
       </section>
 
