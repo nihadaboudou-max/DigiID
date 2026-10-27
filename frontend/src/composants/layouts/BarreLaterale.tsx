@@ -7,7 +7,7 @@
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState, useId } from "react";
 import clsx from "clsx";
 
 import { useAuthentification } from "@/contextes/authentification";
@@ -81,8 +81,9 @@ function LienNav({ href, libelle, Icone, actif }: Lien & { actif: boolean }) {
   return (
     <Link
       href={href}
+      aria-current={actif ? "page" : undefined}
       className={clsx(
-        "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 group",
+        "flex min-h-11 items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lagune/50 focus-visible:ring-offset-2",
         actif
           ? "bg-sable text-lagune font-semibold shadow-sm"
           : "text-ardoise-clair hover:bg-sable/60 hover:text-ardoise",
@@ -122,6 +123,16 @@ function GroupePlie({
   initialOuvert: boolean;
 }) {
   const [ouvert, setOuvert] = useState(initialOuvert);
+  const contenuId = useId();
+  const contenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (ouvert) {
+      contenuRef.current?.removeAttribute("inert");
+    } else {
+      contenuRef.current?.setAttribute("inert", "");
+    }
+  }, [ouvert]);
 
   return (
     <div className="space-y-1">
@@ -129,8 +140,10 @@ function GroupePlie({
       <button
         type="button"
         onClick={() => setOuvert(!ouvert)}
+        aria-expanded={ouvert}
+        aria-controls={contenuId}
         className={clsx(
-          "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 text-left",
+          "w-full min-h-11 flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lagune/50 focus-visible:ring-offset-2",
           estActif
             ? "bg-sable/80 text-lagune font-semibold"
             : "text-ardoise-clair hover:bg-sable/40",
@@ -164,6 +177,9 @@ function GroupePlie({
 
       {/* Sous-menus avec animation */}
       <div
+        id={contenuId}
+        ref={contenuRef}
+        aria-hidden={!ouvert}
         className={clsx(
           "ml-3 pl-3 border-l-2 border-ardoise-clair/10 space-y-2 overflow-hidden transition-all duration-300",
           ouvert ? "max-h-96 opacity-100" : "max-h-0 opacity-0",
@@ -467,7 +483,7 @@ export function BarreLaterale() {
   };
 
   return (
-    <aside className="flex flex-col w-60 h-screen sticky top-0 bg-white border-r border-ardoise-clair/10 shadow-sm">
+    <aside className="flex min-h-0 flex-col w-60 h-[100dvh] sticky top-0 bg-white border-r border-ardoise-clair/10 shadow-sm">
       {/* En-tête section — profil utilisateur */}
       <div className="px-4 pt-5 pb-4 border-b border-ardoise-clair/10">
         <div className="flex items-center gap-3">
@@ -491,7 +507,7 @@ export function BarreLaterale() {
       </div>
 
       {/* Barre de navigation — scrollable */}
-      <nav className="flex-1 overflow-y-auto px-2.5 py-3 space-y-1">
+      <nav aria-label="Navigation principale" className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2.5 py-3 space-y-1 [&_a]:min-h-11 [&_button]:min-h-11 [&_a:focus-visible]:outline-none [&_a:focus-visible]:ring-2 [&_a:focus-visible]:ring-lagune/50 [&_a:focus-visible]:ring-offset-2 [&_button:focus-visible]:outline-none [&_button:focus-visible]:ring-2 [&_button:focus-visible]:ring-lagune/50 [&_button:focus-visible]:ring-offset-2">
         {/* Liens principaux du rôle (caché pour citoyen : groupes thématiques) */}
         {liens.length > 0 && (
           <div className="space-y-0.5">

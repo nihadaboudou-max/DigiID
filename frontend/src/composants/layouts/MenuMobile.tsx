@@ -6,7 +6,7 @@ Palette : Lagune, Ocre, Sable, Ardoise.
 */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import clsx from "clsx";
 import { useAuthentification } from "@/contextes/authentification";
 import {
@@ -166,12 +166,25 @@ function SectionPlieMobile({
   children: React.ReactNode;
 }) {
   const [ouvert, setOuvert] = useState(initialOuvert);
+  const contenuId = useId();
+  const contenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (ouvert) {
+      contenuRef.current?.removeAttribute("inert");
+    } else {
+      contenuRef.current?.setAttribute("inert", "");
+    }
+  }, [ouvert]);
+
   return (
     <div className="mb-2">
       <button
         type="button"
         onClick={() => setOuvert(!ouvert)}
-        className="w-full flex items-center justify-between px-3 py-2 text-xs uppercase font-bold tracking-wider"
+        aria-expanded={ouvert}
+        aria-controls={contenuId}
+        className="w-full min-h-11 flex items-center justify-between px-3 py-2 text-xs uppercase font-bold tracking-wider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lagune/50 focus-visible:ring-offset-2"
       >
         <span className={couleur}>{titre}</span>
         <IconeFlecheBas
@@ -183,6 +196,9 @@ function SectionPlieMobile({
         />
       </button>
       <div
+        id={contenuId}
+        ref={contenuRef}
+        aria-hidden={!ouvert}
         className={clsx(
           "overflow-hidden transition-all duration-300",
           ouvert ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0",
@@ -196,8 +212,76 @@ function SectionPlieMobile({
 
 export function BoutonMenuMobile() {
   const [ouvert, setOuvert] = useState(false);
+  const boutonOuvrirRef = useRef<HTMLButtonElement>(null);
+  const panneauRef = useRef<HTMLElement>(null);
   const pathname = usePathname();
   const { utilisateur } = useAuthentification();
+
+  useEffect(() => {
+    if (!ouvert || !utilisateur || !panneauRef.current) return;
+
+    const panneau = panneauRef.current;
+    const overflowPrecedent = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const elementsNavigables = () =>
+      Array.from(
+        panneau.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => !element.closest("[inert]"));
+
+    elementsNavigables()[0]?.focus();
+
+    function gererClavier(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOuvert(false);
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const elements = elementsNavigables();
+      const premier = elements[0];
+      const dernier = elements[elements.length - 1];
+
+      if (!premier || !dernier) {
+        event.preventDefault();
+        panneau.focus();
+      } else if (
+        event.shiftKey &&
+        (document.activeElement === premier || !panneau.contains(document.activeElement))
+      ) {
+        event.preventDefault();
+        dernier.focus();
+      } else if (
+        !event.shiftKey &&
+        (document.activeElement === dernier || !panneau.contains(document.activeElement))
+      ) {
+        event.preventDefault();
+        premier.focus();
+      }
+    }
+
+    function fermerSurGrandEcran() {
+      if (window.matchMedia("(min-width: 768px)").matches) {
+        setOuvert(false);
+      }
+    }
+
+    document.addEventListener("keydown", gererClavier);
+    window.addEventListener("resize", fermerSurGrandEcran);
+
+    return () => {
+      document.removeEventListener("keydown", gererClavier);
+      window.removeEventListener("resize", fermerSurGrandEcran);
+      document.body.style.overflow = overflowPrecedent;
+      if (boutonOuvrirRef.current?.isConnected) {
+        boutonOuvrirRef.current.focus({ preventScroll: true });
+      }
+    };
+  }, [ouvert, utilisateur]);
 
   if (!utilisateur) return null;
 
@@ -296,10 +380,14 @@ export function BoutonMenuMobile() {
   return (
     <>
       <button
+        ref={boutonOuvrirRef}
         type="button"
         onClick={() => setOuvert(true)}
-        className="md:hidden text-ardoise p-2 -m-2 hover:bg-sable rounded-lg transition-colors"
+        className="md:hidden min-h-11 min-w-11 flex items-center justify-center text-ardoise p-2 -m-2 hover:bg-sable rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lagune/50 focus-visible:ring-offset-2"
         aria-label="Ouvrir le menu"
+        aria-haspopup="dialog"
+        aria-expanded={ouvert}
+        aria-controls="navigation-mobile"
       >
         <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
           <line x1="3" y1="6" x2="21" y2="6" />
@@ -310,15 +398,21 @@ export function BoutonMenuMobile() {
 
       {ouvert && (
         <div
-          className="md:hidden fixed inset-0 z-50 bg-ardoise/60 backdrop-blur-sm"
+          className="md:hidden fixed inset-0 z-[60] flex bg-ardoise/60 backdrop-blur-sm"
           onClick={() => setOuvert(false)}
         >
           <aside
-            className="w-72 max-w-[80vw] h-full bg-white shadow-xl apparition overflow-y-auto"
+            ref={panneauRef}
+            id="navigation-mobile"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titre-navigation-mobile"
+            tabIndex={-1}
+            className="flex h-[100dvh] min-h-0 w-80 max-w-[88vw] flex-col bg-white shadow-2xl apparition focus:outline-none"
             onClick={(e) => e.stopPropagation()}
           >
             {/* En-tête avec avatar */}
-            <div className="p-5 border-b border-ardoise-clair/10">
+            <div className="flex-shrink-0 border-b border-ardoise-clair/10 px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] sm:px-5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className={clsx(
@@ -328,10 +422,10 @@ export function BoutonMenuMobile() {
                     {initiales}
                   </div>
                   <div>
-                    <p className={clsx("text-xs uppercase tracking-wider font-bold", couleurSection)}>
+                    <p id="titre-navigation-mobile" className={clsx("text-xs uppercase tracking-wider font-bold", couleurSection)}>
                       {titreSection}
                     </p>
-                    <p className="text-sm text-ardoise truncate max-w-[140px]">
+                    <p className="max-w-[min(55vw,14rem)] truncate text-sm text-ardoise">
                       {utilisateur.prenom || utilisateur.email}
                     </p>
                   </div>
@@ -340,7 +434,7 @@ export function BoutonMenuMobile() {
                   type="button"
                   onClick={() => setOuvert(false)}
                   aria-label="Fermer"
-                  className="text-ardoise-clair hover:text-ardoise p-1.5 hover:bg-sable rounded-lg transition-colors"
+                  className="flex min-h-11 min-w-11 items-center justify-center rounded-lg p-1.5 text-ardoise-clair transition-colors hover:bg-sable hover:text-ardoise focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lagune/50 focus-visible:ring-offset-2"
                 >
                   <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <line x1="18" y1="6" x2="6" y2="18" />
@@ -351,7 +445,10 @@ export function BoutonMenuMobile() {
             </div>
 
             {/* Navigation */}
-            <nav className="p-3">
+            <nav
+              aria-label="Navigation principale"
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-4 [&_a]:min-h-11 [&_button]:min-h-11 [&_a:focus-visible]:outline-none [&_a:focus-visible]:ring-2 [&_a:focus-visible]:ring-lagune/50 [&_a:focus-visible]:ring-offset-2 [&_button:focus-visible]:outline-none [&_button:focus-visible]:ring-2 [&_button:focus-visible]:ring-lagune/50 [&_button:focus-visible]:ring-offset-2"
+            >
               {/* ============================================================ */}
               {/* SUPER ADMIN — Menu épuré (PAS de sections citoyen) */}
               {/* ============================================================ */}

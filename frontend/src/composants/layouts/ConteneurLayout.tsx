@@ -29,15 +29,26 @@ export function ConteneurLayout({ children }: { children: React.ReactNode }) {
   const estPagePublique = PAGES_SANS_LAYOUT.some(
     (p) => pathname === p || pathname.startsWith(p)
   );
+  const estAccueil = pathname === "/";
 
-  // Pages publiques ou en chargement → pas de layout
-  if (estPagePublique || chargement) {
+  // Pages publiques / accueil marketing / chargement → pas de chrome app
+  // (évite double header + padding qui écrasent le responsive mobile)
+  if (estPagePublique || estAccueil || chargement) {
+    // Accueil connecté : garder seulement l'en-tête (menu hamburger), sans sidebar
+    if (estAccueil && utilisateur && !chargement) {
+      return (
+        <div className="min-h-screen bg-sable-clair flex flex-col">
+          <EnTete />
+          <div className="flex-1 min-w-0 overflow-x-clip">{children}</div>
+        </div>
+      );
+    }
     return <>{children}</>;
   }
 
-  // Utilisateur connecté → afficher le layout avec barre latérale
+  // Espace connecté → layout avec barre latérale (desktop) / menu hamburger (mobile)
   return (
-    <div className="flex min-h-screen bg-sable-clair">
+    <div className="flex min-h-screen bg-sable-clair overflow-x-clip">
       {/* Barre latérale — visible sur desktop (md et plus) */}
       <div className="hidden md:block flex-shrink-0">
         <BarreLaterale />
@@ -45,19 +56,11 @@ export function ConteneurLayout({ children }: { children: React.ReactNode }) {
 
       {/* Contenu principal */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* En-tête */}
         <EnTete />
 
-                {/* Menu mobile — MASQUÉ (doublon) : l'icône est déjà dans l'EnTete ci-dessus.
-            Dé-commenter ce bloc (et l'import ci-dessus) pour le réafficher.
-        <div className="md:hidden px-4 py-3 border-b border-ardoise-clair/10 bg-white">
-          <BoutonMenuMobile />
-        </div>
-        */}
-
-        {/* Contenu de la page avec padding approprié */}
-        <main className="flex-1 p-4 md:p-6 lg:p-8">
-          <div className="max-w-7xl mx-auto">
+        {/* Contenu : padding réduit sur mobile pour maximiser la largeur utile */}
+        <main className="flex-1 px-3 py-4 sm:p-4 md:p-6 lg:p-8 pb-24 md:pb-8">
+          <div className="max-w-7xl mx-auto w-full min-w-0">
             {children}
           </div>
         </main>
