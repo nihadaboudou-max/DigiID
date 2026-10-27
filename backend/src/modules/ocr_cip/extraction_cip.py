@@ -49,33 +49,111 @@ def _extraire_apres(texte: str, patterns: List[str], longueur: int = 60) -> Opti
     return None
 
 
-def _extraire_npi(texte: str) -> Optional[str]:
-    """NPI = Numéro Personnel d'Identification (pièce du CIP)."""
-    for pat in [
-        r"NUMERO\s*PERSONNEL\s*D['’]?\s*IDENTIFICATION",
-        r"N\s*[°O]?\s*PERSONNEL\s*D['’]?\s*IDENTIFICATION",
-        r"\bNPI\b",
-    ]:
-        m = re.search(rf"{pat}\s*[:\-]?\s*([0-9]{{8,14}})", texte)
-        if m:
-            return m.group(1)
+# Confusions OCR fréquentes sur les chiffres du CIP (ex. 7G0 → 790).
+_OCR_CHIFFRE = str.maketrans({
+    "O": "0", "Q": "0", "D": "0",
+    "I": "1", "L": "1", "|": "1",
+    "Z": "2",
+    "A": "4",
+    "S": "5",
+    "B": "8",
+    "G": "9",  # 7G046… → 79046… (cas réel ANIP)
+    "T": "7",
+})
 
-    # Repli : suite de 10 chiffres isolée près de « NPI » / « IDENTIFICATION »
+_LABELS_NPI = [
+    # Texte collé par l'OCR : « NuméroPersonneldidentification »
+    r"NUMERO\s*PERSONNEL\s*D['’]?\s*IDENTIFICATION",
+    r"NUMEROPERSONNELD['’]?IDENTIFICATION",
+    r"N\s*[°O]?\s*PERSONNEL\s*D['’]?\s*IDENTIFICATION",
+    r"\bNPI\b",
+]
+
+
+def _vers_chiffres_ocr(jeton: str) -> str:
+    """Normalise un jeton OCR (lettres confondues) en chiffres uniquement."""
+    return (jeton or "").upper().translate(_OCR_CHIFFRE)
+
+
+def _candidat_npi(jeton: str, exclus: Optional[set] = None) -> Optional[str]:
+    """
+    NPI Bénin = typiquement 10 chiffres.
+    Accepte 8–11 chiffres après correction OCR ; exclut les n° de série (12–14).
+    """
+    exclus = exclus or set()
+    brut = re.sub(r"[^0-9A-Z]", "", (jeton or "").upper())
+    if not brut:
+        return None
+
+    corrige = _vers_chiffres_ocr(brut)
+    chiffres = re.sub(r"[^0-9]", "", corrige)
+    if not chiffres:
+        return None
+
+    # Fenêtre exacte de 10 chiffres (format NPI), hors numéro de série.
+    for m in re.finditer(r"(?<!\d)(\d{10})(?!\d)", chiffres):
+        c = m.group(1)
+        if c not in exclus and not any(c in s for s in exclus):
+            return c
+    for m in re.finditer(r"\d{10}", chiffres):
+        c = m.group(0)
+        if any(c in s for s in exclus):
+            continue
+        return c
+
+    if 8 <= len(chiffres) <= 11 and chiffres not in exclus:
+        return chiffres[:10] if len(chiffres) == 11 else chiffres
+    return None
+
+
+def _numeros_serie_dans(texte: str) -> set:
+    """Numéros de série / doc (12–14 chiffres), à ne pas confondre avec le NPI."""
+    return {m.group(1) for m in re.finditer(r"(?<!\d)([0-9]{12,14})(?!\d)", texte)}
+
+
+def _extraire_npi(texte: str) -> Optional[str]:
+    """NPI = Numéro Personnel d'Identification (pièce du CIP, ~10 chiffres)."""
+    series = _numeros_serie_dans(texte)
+
+    for pat in _LABELS_NPI:
+        # Après le label : jeton alphanumérique (OCR mélange lettres / tirets).
+        m = re.search(
+            rf"{pat}\s*[:\-.\s]*([0-9A-Z][0-9A-Z\s\-.]{{5,22}})",
+            texte,
+        )
+        if m:
+            npi = _candidat_npi(m.group(1), exclus=series)
+            if npi:
+                return npi
+
+    # Repli : fenêtre juste après le libellé, tolérante aux lettres OCR.
     m = re.search(
-        r"(?:NPI|IDENTIFICATION|PERSONNEL).{0,40}?([0-9]{10})",
+        r"(?:NPI|IDENTIFICATION|PERSONNEL).{0,50}?"
+        r"([0-9A-Z](?:[0-9A-Z\s\-.]{6,20}))",
         texte,
     )
     if m:
-        return m.group(1)
+        npi = _candidat_npi(m.group(1), exclus=series)
+        if npi:
+            return npi
+
+    # Dernier repli : 10 chiffres isolés qui ne font pas partie d'un n° de série.
+    for m in re.finditer(r"(?<!\d)([0-9]{10})(?!\d)", texte):
+        c = m.group(1)
+        if any(c in s for s in series):
+            continue
+        return c
 
     return None
 
 
-def _extraire_numero_serie(texte: str) -> Optional[str]:
+def _extraire_numero_serie(texte: str, npi: Optional[str] = None) -> Optional[str]:
     """Numéro de série imprimé près de la photo (souvent 13 chiffres)."""
-    m = re.search(r"\b([0-9]{12,14})\b", texte)
-    if m:
-        return m.group(1)
+    for m in re.finditer(r"(?<!\d)([0-9]{12,14})(?!\d)", texte):
+        serie = m.group(1)
+        if npi and (serie == npi or npi in serie):
+            continue
+        return serie
     return None
 
 
@@ -157,9 +235,7 @@ def extraire_donnees_cip(
     texte = _nettoyer_texte(texte_brut)
 
     npi = _extraire_npi(texte)
-    numero_serie = _extraire_numero_serie(texte)
-    if numero_serie and npi and numero_serie == npi:
-        numero_serie = None
+    numero_serie = _extraire_numero_serie(texte, npi=npi)
 
     nom_famille = _extraire_apres(texte, [r"\bNOM\b"], 40)
     prenoms = _extraire_apres(texte, [r"PRENOM\s*\(?S?\)?", r"PRENOMS"], 50)

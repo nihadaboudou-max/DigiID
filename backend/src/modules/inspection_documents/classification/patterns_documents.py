@@ -88,7 +88,8 @@ PATTERNS_CLASSIFICATION = {
 PATTERNS_EXTRACTION = {
     "cip": {
         "numero_document": [
-            r"(?:NUMERO\s*PERSONNEL\s*D[''`]?\s*IDENTIFICATION|NPI)\s*[:\-]?\s*([0-9]{8,14})",
+            # NPI souvent collé + lettres OCR (ex. 7G04642765 → 7904642765)
+            r"(?:NUMERO\s*PERSONNEL\s*D[''`]?\s*IDENTIFICATION|NUMEROPERSONNELD[''`]?IDENTIFICATION|NPI)\s*[:\-.\s]*([0-9A-Z][0-9A-Z\s\-.]{5,22})",
         ],
         "date_expiration": [
             r"EXPIRE\s*LE\s*[:\-]?\s*(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})",
