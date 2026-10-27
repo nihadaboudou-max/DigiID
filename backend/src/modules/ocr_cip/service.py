@@ -47,9 +47,39 @@ async def _lire_image(fichier: UploadFile) -> bytes:
     return contenu
 
 
+_MOIS_FR_PARSER = {
+    "janvier": 1, "fevrier": 2, "février": 2, "mars": 3, "avril": 4,
+    "mai": 5, "juin": 6, "juillet": 7, "aout": 8, "août": 8,
+    "septembre": 9, "octobre": 10, "ectobre": 10, "novembre": 11, "decembre": 12,
+    "décembre": 12,
+}
+
+
 def _parser_date(chaine_date: Optional[str], est_expiration: bool = False) -> Optional[date]:
     if not chaine_date:
         return None
+    # Format texte CIP : « 12 octobre 2002 »
+    m_fr = re.search(
+        r"(\d{1,2})\s*([A-Za-zÉéÈèÊêÀàÙùÔôÎîÛûÇç]{3,12})\s*(\d{4})",
+        chaine_date,
+        flags=re.IGNORECASE,
+    )
+    if m_fr:
+        jj, mois_nom, aaaa = m_fr.group(1), m_fr.group(2).lower(), m_fr.group(3)
+        mois_nom = (
+            mois_nom.replace("é", "e").replace("è", "e").replace("ê", "e")
+            .replace("à", "a").replace("ù", "u").replace("ô", "o")
+            .replace("î", "i").replace("û", "u").replace("ç", "c")
+        )
+        mois = _MOIS_FR_PARSER.get(mois_nom) or _MOIS_FR_PARSER.get(
+            mois_nom.replace("é", "e")
+        )
+        if mois:
+            try:
+                return date(int(aaaa), mois, int(jj))
+            except ValueError:
+                pass
+
     trouves = re.findall(r"\d{1,2}[./-]\d{1,2}[./-]\d{2,4}", chaine_date)
     if not trouves:
         return None
@@ -160,6 +190,9 @@ async def traiter_upload_cip(
         # QR ou visage manquant seul → partiel via « en_attente » (pas de rejet dur)
         statut = "en_attente"
 
+    # Contenu QR déjà assaini dans extraire_donnees_cip (évite NUL / binaire → échec INSERT).
+    qr_contenu_safe = donnees.qr_code_contenu
+
     nouvelle = CertificatIdentificationPersonnelle(
         utilisateur_id=utilisateur.id,
         type_document="cip",
@@ -186,7 +219,7 @@ async def traiter_upload_cip(
         date_delivrance=_parser_date(donnees.date_delivrance),
         date_expiration=date_expiration,
         qr_code_detecte=qr_detecte,
-        qr_code_contenu=qr_contenu,
+        qr_code_contenu=qr_contenu_safe,
         texte_brut=texte_brut[:5000] if texte_brut else None,
         taux_confiance_ocr=confiance,
         statut=statut,
@@ -197,9 +230,20 @@ async def traiter_upload_cip(
             "embedding_visage": embedding_present,
         },
     )
-    session.add(nouvelle)
-    await session.commit()
-    await session.refresh(nouvelle)
+    try:
+        session.add(nouvelle)
+        await session.commit()
+        await session.refresh(nouvelle)
+    except Exception as e:
+        await session.rollback()
+        journal.error(f"CIP : échec enregistrement BDD | npi={donnees.npi} | {e}")
+        raise ErreurValidation(
+            f"Échec persistence CIP : {e}",
+            message_utilisateur=(
+                "Le CIP a été lu mais n'a pas pu être enregistré. "
+                "Réessaie avec une photo plus nette, ou contacte le support."
+            ),
+        ) from e
 
     # Photo + embedding facial du titulaire
     from src.modules.verification_visuelle.photo_document import enregistrer_photo_document
