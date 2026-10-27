@@ -14,6 +14,7 @@ import type {
   ContactDigiID,
   DonneesProfilLogistique,
   DonneesVerificationProfil,
+  GuichetDisponible,
   ManifesteVoyage,
   MesVoyages,
   ProfilLogistique,
@@ -25,6 +26,7 @@ export type {
   ContactDigiID,
   DonneesProfilLogistique,
   DonneesVerificationProfil,
+  GuichetDisponible,
   ManifesteVoyage,
   LigneManifeste,
   MesVoyages,
@@ -84,6 +86,14 @@ export const identiteAPI = {
       clientAPI.post<ProfilLogistique>(
         `${BASE}/profil-logistique/${utilisateurId}/verification`,
         d,
+        opts,
+      ),
+  },
+  guichetiers: {
+    /** Receveurs et gérants actifs du guichet de la gare de destination. */
+    lister: (gareId: string) =>
+      clientAPI.get<GuichetDisponible[]>(
+        `${BASE}/profil-logistique/guichetiers?gare_id=${encodeURIComponent(gareId)}`,
         opts,
       ),
   },

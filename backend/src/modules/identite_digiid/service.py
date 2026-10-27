@@ -33,7 +33,11 @@ from src.noyau import dechiffrer_donnee, journal
 CHEMIN_QR_CARTE = "guichet/carte"
 
 # Préfixes lisibles des identifiants publics de dossier logistique.
-PREFIXES_IDENTIFIANT = {"chauffeur": "CHF-", "receveur": "REC-"}
+PREFIXES_IDENTIFIANT = {
+    "chauffeur": "CHF-",
+    "receveur": "REC-",
+    "gerant_gare": "GER-",
+}
 
 
 # ─── Utilitaires ─────────────────────────────────────────────────────
@@ -230,6 +234,8 @@ async def _resoudre_qr_dynamique(
 def _champs_manquants(profil: ProfilLogistique) -> list[str]:
     """Liste des éléments encore à fournir/valider (pilotage du terrain)."""
     manquants: list[str] = []
+    if profil.type_profil in ("receveur", "gerant_gare") and not profil.gare_id:
+        manquants.append("gare_id")
     if not profil.numero_piece:
         manquants.append("numero_piece")
     if not profil.piece_verifiee:
@@ -252,6 +258,7 @@ async def enrichir_profil(
     """Ajoute les libellés lisibles + la liste des éléments restant à valider."""
     profil.utilisateur_nom = await _nom_utilisateur(session, profil.utilisateur_id)
     profil.verifie_par_nom = await _nom_utilisateur(session, profil.verifie_par_id)
+    profil.gare_nom = await _nom_gare(session, profil.gare_id)
     profil.champs_manquants = _champs_manquants(profil)
     return profil
 
@@ -356,6 +363,27 @@ async def enregistrer_profil_logistique(
     profil = await session.scalar(
         select(ProfilLogistique).where(ProfilLogistique.utilisateur_id == utilisateur.id)
     )
+    est_guichet = utilisateur.role in ("receveur", "gerant_gare")
+    if est_guichet and donnees.type_profil != utilisateur.role:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Le type de dossier ne correspond pas à votre rôle de guichet.",
+        )
+    if (
+        donnees.type_profil in ("receveur", "gerant_gare")
+        and donnees.gare_id is None
+    ):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Sélectionnez votre gare d'appartenance.",
+        )
+    if donnees.type_profil in ("receveur", "gerant_gare") and donnees.gare_id is not None:
+        gare = await session.get(Gare, donnees.gare_id)
+        if gare is None or not gare.actif:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="La gare sélectionnée est introuvable ou inactive.",
+            )
     if profil is None:
         profil = ProfilLogistique(
             utilisateur_id=utilisateur.id,
@@ -363,6 +391,7 @@ async def enregistrer_profil_logistique(
             identifiant_public=await _generer_identifiant_public(
                 session, donnees.type_profil
             ),
+            gare_id=donnees.gare_id,
         )
         session.add(profil)
 
@@ -413,6 +442,9 @@ async def enregistrer_profil_logistique(
         profil.verifie_le = None
         profil.notes = None
 
+    if "gare_id" in valeurs:
+        profil.gare_id = valeurs["gare_id"]
+
     # Le véhicule lu sur les documents est immédiatement le sien : il pourra le
     # choisir pour planifier un départ, sans repasser par le guichet.
     await _attribuer_vehicule_du_profil(session, profil, utilisateur.id)
@@ -420,6 +452,41 @@ async def enregistrer_profil_logistique(
     await session.commit()
     await session.refresh(profil)
     return await enrichir_profil(session, profil)
+
+
+async def lister_guichetiers(
+    session: AsyncSession, gare_id: UUID
+) -> list[schemas.GuichetDisponible]:
+    """Liste les receveurs et gérants actifs rattachés à une gare."""
+    gare = await session.get(Gare, gare_id)
+    if gare is None or not gare.actif:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail="Gare introuvable ou inactive.",
+        )
+
+    resultats = await session.execute(
+        select(ProfilLogistique, Utilisateur)
+        .join(Utilisateur, Utilisateur.id == ProfilLogistique.utilisateur_id)
+        .where(
+            ProfilLogistique.gare_id == gare_id,
+            ProfilLogistique.type_profil.in_(("receveur", "gerant_gare")),
+            Utilisateur.role.in_(("receveur", "gerant_gare")),
+            Utilisateur.est_actif.is_(True),
+        )
+        .order_by(Utilisateur.cree_le.asc())
+        .limit(100)
+    )
+    return [
+        schemas.GuichetDisponible(
+            utilisateur_id=utilisateur.id,
+            nom_complet=nom_complet(utilisateur),
+            role=utilisateur.role,
+            gare_id=gare.id,
+            gare_nom=f"{gare.nom} ({gare.ville})",
+        )
+        for _, utilisateur in resultats.all()
+    ]
 
 
 async def verifier_profil_logistique(
@@ -618,12 +685,16 @@ async def construire_manifeste(
             contact_masque=_masquer_telephone(colis.destinataire_tel),
             gare_depart_nom=await _nom_gare(session, colis.gare_depart_id),
             gare_arrivee_nom=await _nom_gare(session, colis.gare_arrivee_id),
+            gare_arrivee_id=colis.gare_arrivee_id,
             arret_ordre=_position(colis)[0],
             arret_destination_id=colis.arret_destination_id,
             arret_nom=await _arret_nom(colis),
             statut=colis.statut,
             reception_confirmee=colis.reception_confirmee_le is not None,
             remis_guichet=colis.remis_guichet_le is not None,
+            remis_guichet_a_nom=await _nom_utilisateur(
+                session, colis.remis_guichet_a_id
+            ),
             nombre_bagages=colis.nombre_bagages or 1,
             nombre_articles=colis.nombre_articles or 1,
             mode_enregistrement=colis.mode_enregistrement,
@@ -641,12 +712,16 @@ async def construire_manifeste(
             contact_masque=_masquer_telephone(suivi.telephone_parent),
             gare_depart_nom=await _nom_gare(session, suivi.gare_depart_id),
             gare_arrivee_nom=await _nom_gare(session, suivi.gare_arrivee_id),
+            gare_arrivee_id=suivi.gare_arrivee_id,
             arret_ordre=_position(suivi)[0],
             arret_destination_id=suivi.arret_destination_id,
             arret_nom=await _arret_nom(suivi),
             statut=suivi.statut,
             reception_confirmee=suivi.reception_confirmee_le is not None,
             remis_guichet=suivi.remis_guichet_le is not None,
+            remis_guichet_a_nom=await _nom_utilisateur(
+                session, suivi.remis_guichet_a_id
+            ),
             nombre_bagages=suivi.nombre_bagages or 1,
             mode_enregistrement=suivi.mode_enregistrement,
             enregistre_le=suivi.cree_le,

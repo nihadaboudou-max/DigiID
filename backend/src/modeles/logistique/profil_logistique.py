@@ -25,7 +25,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from src.base_donnees.base import Base, MelangeTracabilite
 
 # Type de professionnel concerné par un dossier logistique.
-TYPES_PROFIL_LOGISTIQUE = ("chauffeur", "receveur")
+TYPES_PROFIL_LOGISTIQUE = ("chauffeur", "receveur", "gerant_gare")
 
 # Statut de vérification métier du dossier.
 STATUTS_VERIFICATION_PROFIL = ("en_attente", "verifie", "rejete")
@@ -54,6 +54,13 @@ class ProfilLogistique(Base, MelangeTracabilite):
     )
     # Métier déclaré : chauffeur ou receveur (guichetier).
     type_profil: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Gare d'affectation des receveurs et gérants de gare.
+    gare_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("gares.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     # Identifiant public lisible du dossier, ex. « CHF-4F2A19 » (partagé aux usagers).
     identifiant_public: Mapped[str] = mapped_column(String(20), nullable=False)
 

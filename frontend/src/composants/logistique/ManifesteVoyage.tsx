@@ -16,11 +16,16 @@ import { Alerte } from "@/composants/commun/Alerte";
 import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
+import { Modal } from "@/composants/commun/Modal";
 import { ErreurAPI } from "@/services/client_api";
 import { imprimer } from "@/services/impression";
 import { identiteAPI } from "@/services/identite_api";
 import { logistiqueAPI } from "@/services/logistique_api";
-import type { LigneManifeste, ManifesteVoyage as TypeManifeste } from "@/types/identite";
+import type {
+  GuichetDisponible,
+  LigneManifeste,
+  ManifesteVoyage as TypeManifeste,
+} from "@/types/identite";
 import { LIBELLES_MODE_ENREGISTREMENT } from "@/types/logistique";
 
 interface Proprietes {
@@ -40,6 +45,12 @@ export function ManifesteVoyage({
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [actionEnCours, setActionEnCours] = useState<string | null>(null);
+  const [ligneEnRemise, setLigneEnRemise] = useState<LigneManifeste | null>(null);
+  const [guichetiers, setGuichetiers] = useState<GuichetDisponible[]>([]);
+  const [agentChoisi, setAgentChoisi] = useState("");
+  const [rechercheAgent, setRechercheAgent] = useState("");
+  const [chargementGuichetiers, setChargementGuichetiers] = useState(false);
+  const [erreurGuichetiers, setErreurGuichetiers] = useState<string | null>(null);
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -68,18 +79,43 @@ export function ManifesteVoyage({
    * le guichet constate. On rafraîchit ensuite le manifeste pour que l'arrêt
    * suivant ne contienne plus le colis déjà descendu.
    */
+  async function choisirAgentGuichet(ligne: LigneManifeste) {
+    if (!ligne.gare_arrivee_id) {
+      setErreur("La gare d'arrivée de cet élément est inconnue.");
+      return;
+    }
+    setLigneEnRemise(ligne);
+    setGuichetiers([]);
+    setAgentChoisi("");
+    setRechercheAgent("");
+    setErreurGuichetiers(null);
+    setChargementGuichetiers(true);
+    try {
+      setGuichetiers(await identiteAPI.guichetiers.lister(ligne.gare_arrivee_id));
+    } catch (e) {
+      setErreurGuichetiers(
+        e instanceof ErreurAPI
+          ? e.message_utilisateur
+          : "Impossible de charger le personnel de cette gare.",
+      );
+    } finally {
+      setChargementGuichetiers(false);
+    }
+  }
+
   async function agir(ligne: LigneManifeste, type: "reception" | "remise") {
+    if (type === "remise") {
+      await choisirAgentGuichet(ligne);
+      return;
+    }
     const cle = `${ligne.type}-${ligne.id}-${type}`;
     setActionEnCours(cle);
     setErreur(null);
     try {
       if (ligne.type === "colis") {
-        if (type === "reception") await logistiqueAPI.colis.confirmerReception(ligne.id);
-        else await logistiqueAPI.colis.remettreGuichet(ligne.id);
-      } else if (type === "reception") {
-        await logistiqueAPI.suiviFamilial.confirmerReception(ligne.id);
+        await logistiqueAPI.colis.confirmerReception(ligne.id);
       } else {
-        await logistiqueAPI.suiviFamilial.remettreGuichet(ligne.id);
+        await logistiqueAPI.suiviFamilial.confirmerReception(ligne.id);
       }
       await charger();
     } catch (e) {
@@ -92,6 +128,40 @@ export function ManifesteVoyage({
       setActionEnCours(null);
     }
   }
+
+  async function confirmerRemise() {
+    if (!ligneEnRemise || !agentChoisi) return;
+    const ligne = ligneEnRemise;
+    setActionEnCours(`${ligne.type}-${ligne.id}-remise`);
+    setErreurGuichetiers(null);
+    try {
+      if (ligne.type === "colis") {
+        await logistiqueAPI.colis.remettreGuichet(ligne.id, agentChoisi);
+      } else {
+        await logistiqueAPI.suiviFamilial.remettreGuichet(ligne.id, agentChoisi);
+      }
+      setLigneEnRemise(null);
+      await charger();
+    } catch (e) {
+      setErreurGuichetiers(
+        e instanceof ErreurAPI
+          ? e.message_utilisateur
+          : "Impossible d'enregistrer la remise au guichet.",
+      );
+    } finally {
+      setActionEnCours(null);
+    }
+  }
+
+  const guichetiersFiltres = guichetiers.filter((agent) =>
+    agent.utilisateur_id === agentChoisi ||
+    agent.nom_complet
+      .toLocaleLowerCase("fr")
+      .includes(rechercheAgent.trim().toLocaleLowerCase("fr")),
+  );
+  const remiseEnCours = ligneEnRemise
+    ? `${ligneEnRemise.type}-${ligneEnRemise.id}-remise`
+    : null;
 
   return (
     <Carte
@@ -163,6 +233,95 @@ export function ManifesteVoyage({
           </p>
         </div>
       )}
+      <Modal
+        ouvert={ligneEnRemise !== null}
+        surFermeture={() => {
+          if (actionEnCours !== remiseEnCours) setLigneEnRemise(null);
+        }}
+        titre="Confier au guichet"
+        description={
+          ligneEnRemise
+            ? `Choisissez la personne qui reçoit ${
+                ligneEnRemise.type === "passager" ? "l'enfant" : "le colis"
+              } à ${ligneEnRemise.gare_arrivee_nom ?? "la gare d'arrivée"}.`
+            : undefined
+        }
+      >
+        <div className="space-y-4">
+          {erreurGuichetiers && (
+            <Alerte variante="erreur" titre="Remise impossible">
+              {erreurGuichetiers}
+            </Alerte>
+          )}
+          {chargementGuichetiers ? (
+            <p className="py-4 text-center text-sm text-ardoise-clair">
+              Chargement du personnel de la gare…
+            </p>
+          ) : guichetiers.length === 0 && !erreurGuichetiers ? (
+            <Alerte variante="avertissement" titre="Aucun agent disponible">
+              Aucun receveur ou gérant actif n&apos;est rattaché à cette gare.
+              Demandez à l&apos;agent de compléter son dossier professionnel.
+            </Alerte>
+          ) : guichetiers.length > 0 ? (
+            <>
+              <label className="block space-y-1">
+                <span className="text-sm font-medium text-ardoise">
+                  Rechercher par nom
+                </span>
+                <input
+                  type="search"
+                  value={rechercheAgent}
+                  onChange={(e) => setRechercheAgent(e.target.value)}
+                  placeholder="Nom du receveur ou du gérant"
+                  className="champ-saisie"
+                  autoFocus
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-sm font-medium text-ardoise">
+                  Personne qui reçoit <span className="text-terre">*</span>
+                </span>
+                <select
+                  value={agentChoisi}
+                  onChange={(e) => setAgentChoisi(e.target.value)}
+                  className="champ-saisie"
+                  required
+                >
+                  <option value="">Choisir une personne</option>
+                  {guichetiersFiltres.map((agent) => (
+                    <option key={agent.utilisateur_id} value={agent.utilisateur_id}>
+                      {agent.nom_complet} —{" "}
+                      {agent.role === "receveur" ? "Receveur" : "Gérant de gare"}
+                    </option>
+                  ))}
+                </select>
+                {guichetiersFiltres.length === 0 && (
+                  <span className="text-xs text-ardoise-clair">
+                    Aucun nom ne correspond à cette recherche.
+                  </span>
+                )}
+              </label>
+              <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+                <Bouton
+                  variante="ghost"
+                  onClick={() => setLigneEnRemise(null)}
+                  disabled={actionEnCours === remiseEnCours}
+                >
+                  Annuler
+                </Bouton>
+                <Bouton
+                  variante="primaire"
+                  onClick={() => void confirmerRemise()}
+                  disabled={!agentChoisi || actionEnCours === remiseEnCours}
+                  chargement={actionEnCours === remiseEnCours}
+                >
+                  Confirmer la remise
+                </Bouton>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </Modal>
     </Carte>
   );
 }
@@ -262,7 +421,12 @@ function TableauManifeste({
                             <span className="ml-2 text-xs text-green-700">✓ pris en charge</span>
                           )}
                           {ligne.remis_guichet && (
-                            <span className="ml-2 text-xs text-lagune">✓ déposé au guichet</span>
+                            <span className="ml-2 text-xs text-lagune">
+                              ✓ déposé au guichet
+                              {ligne.remis_guichet_a_nom
+                                ? ` à ${ligne.remis_guichet_a_nom}`
+                                : ""}
+                            </span>
                           )}
                         </td>
                         <td className="py-2 pr-3 no-print">

@@ -109,6 +109,20 @@ async def mon_profil_logistique(
     return await service.enrichir_profil(session, profil)
 
 
+@routeur_profils.get(
+    "/guichetiers",
+    response_model=list[schemas.GuichetDisponible],
+    summary="Lister les guichetiers rattachés à une gare",
+)
+@require_permission("logistique.lire")
+async def lister_guichetiers(
+    gare_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    return await service.lister_guichetiers(session, gare_id)
+
+
 @routeur_profils.put(
     "/mien",
     response_model=schemas.ProfilLogistiqueResponse,

@@ -874,12 +874,8 @@ class ActionLotVoyageResponse(BaseModel):
 
 
 class RemiseGuichetRequest(BaseModel):
-    """Corps optionnel (ignoré) : le dépôt au guichet ne désigne personne.
-
-    Le chauffeur confie le colis / l'enfant au guichet d'arrivée collectivement,
-    sans choisir un agent. Conservé pour compatibilité clients anciens.
-    """
-    agent_id: Optional[UUID] = None
+    """Personne du guichet à qui le chauffeur confie le colis / l'enfant."""
+    agent_id: UUID
 
 
 class PreAlerteRequest(BaseModel):

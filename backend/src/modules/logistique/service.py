@@ -1577,16 +1577,42 @@ async def confirmer_reception_colis(
     return colis
 
 
+async def _verifier_agent_guichet(
+    session: AsyncSession, agent_id: UUID, gare_id: UUID
+) -> Utilisateur:
+    agent = await session.get(Utilisateur, agent_id)
+    if (
+        agent is None
+        or not agent.est_actif
+        or agent.role not in ("receveur", "gerant_gare")
+    ):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="La personne choisie n'est pas un receveur ou gérant actif.",
+        )
+    profil = await session.scalar(
+        select(ProfilLogistique).where(
+            ProfilLogistique.utilisateur_id == agent_id,
+            ProfilLogistique.type_profil == agent.role,
+            ProfilLogistique.gare_id == gare_id,
+        )
+    )
+    if profil is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Cette personne n'est pas rattachée à la gare d'arrivée.",
+        )
+    return agent
+
+
 async def remettre_colis_au_guichet(
-    session: AsyncSession, colis_id: UUID, utilisateur: Utilisateur
+    session: AsyncSession, colis_id: UUID, utilisateur: Utilisateur, agent_id: UUID
 ) -> Colis:
-    """Le chauffeur dépose le colis au guichet d'arrivée (sans nommer d'agent).
+    """Le chauffeur confie le colis à un agent du guichet de la gare d'arrivée.
 
     Prérequis : le colis doit être **arrivé** à sa destination (geste « Arrivés »
-    sur l'arrêt / la gare). Si le chauffeur ne livre pas lui-même, il confie le
-    colis au guichet, qui prend ensuite en charge la remise au destinataire
-    (scan « livraison »). Aucun agent n'est désigné : le guichet de la gare
-    d'arrivée assume collectivement.
+    sur l'arrêt / la gare). Le receveur ou gérant désigné prend ensuite en charge
+    la remise au destinataire (scan « livraison »).
     """
     colis = await obtenir_colis(session, colis_id)
     if colis.chauffeur_id != utilisateur.id:
@@ -1610,9 +1636,11 @@ async def remettre_colis_au_guichet(
                 "avant de déposer le colis au guichet."
             ),
         )
+    await _verifier_agent_guichet(session, agent_id, colis.gare_arrivee_id)
     if colis.remis_guichet_le is None:
         colis.remis_guichet_le = datetime.now(timezone.utc)
         colis.remis_guichet_par_id = utilisateur.id
+        colis.remis_guichet_a_id = agent_id
         session.add(
             ColisEvenement(
                 colis_id=colis.id,
@@ -1624,6 +1652,15 @@ async def remettre_colis_au_guichet(
         )
         await session.commit()
         await session.refresh(colis)
+    elif colis.remis_guichet_a_id is None:
+        colis.remis_guichet_a_id = agent_id
+        await session.commit()
+        await session.refresh(colis)
+    elif colis.remis_guichet_a_id != agent_id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Ce colis a déjà été confié à un autre agent de guichet.",
+        )
     return colis
 
 
@@ -2373,9 +2410,9 @@ async def confirmer_reception_suivi(
 
 
 async def remettre_suivi_au_guichet(
-    session: AsyncSession, suivi_id: UUID, utilisateur: Utilisateur
+    session: AsyncSession, suivi_id: UUID, utilisateur: Utilisateur, agent_id: UUID
 ) -> SuiviFamilial:
-    """Le chauffeur confie un **enfant** au guichet d'arrivée (sans nommer d'agent).
+    """Le chauffeur confie un **enfant** à un agent du guichet d'arrivée.
 
     Un adulte termine son trajet à l'arrivée : on ne le laisse pas au guichet.
     Un enfant peut y attendre si le responsable n'est pas à l'heure ; la remise
@@ -2412,9 +2449,11 @@ async def remettre_suivi_au_guichet(
                 "avant de confier l'enfant au guichet."
             ),
         )
+    await _verifier_agent_guichet(session, agent_id, suivi.gare_arrivee_id)
     if suivi.remis_guichet_le is None:
         suivi.remis_guichet_le = datetime.now(timezone.utc)
         suivi.remis_guichet_par_id = utilisateur.id
+        suivi.remis_guichet_a_id = agent_id
         session.add(
             SuiviFamilialEvenement(
                 suivi_familial_id=suivi.id,
@@ -2426,6 +2465,15 @@ async def remettre_suivi_au_guichet(
         )
         await session.commit()
         await session.refresh(suivi)
+    elif suivi.remis_guichet_a_id is None:
+        suivi.remis_guichet_a_id = agent_id
+        await session.commit()
+        await session.refresh(suivi)
+    elif suivi.remis_guichet_a_id != agent_id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Cet enfant a déjà été confié à un autre agent de guichet.",
+        )
     return suivi
 
 

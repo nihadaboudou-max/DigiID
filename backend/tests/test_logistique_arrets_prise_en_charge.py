@@ -14,7 +14,14 @@ import uuid
 import pytest
 from fastapi import HTTPException
 
-from src.modeles import ArretLigne, Colis, Ligne, Utilisateur
+from src.modeles import (
+    ArretLigne,
+    Colis,
+    Ligne,
+    ProfilLogistique,
+    SuiviFamilial,
+    Utilisateur,
+)
 from src.modules.logistique import schemas, service
 from src.noyau.constantes_roles import RoleUtilisateur
 
@@ -240,7 +247,9 @@ class TestConfirmationReception:
         session = SessionFactice({(Colis, colis.id): colis})
         with pytest.raises(HTTPException) as erreur:
             asyncio.run(
-                service.remettre_colis_au_guichet(session, colis.id, chauffeur)
+                service.remettre_colis_au_guichet(
+                    session, colis.id, chauffeur, uuid.uuid4()
+                )
             )
         assert erreur.value.status_code == 409
 
@@ -265,3 +274,112 @@ class TestConfirmationReception:
                 service.confirmer_reception_colis(session, colis.id, chauffeur)
             )
         assert erreur.value.status_code == 403
+
+
+class SessionGuichetFactice(SessionFactice):
+    """Session qui renvoie un profil ciblé pour vérifier l'affectation de gare."""
+
+    def __init__(
+        self, objets: dict, profil: ProfilLogistique | None, gare_id: uuid.UUID
+    ):
+        super().__init__(objets)
+        self.profil = profil
+        self.gare_id = gare_id
+
+    async def scalar(self, requete):
+        if self.profil is not None and self.profil.gare_id == self.gare_id:
+            return self.profil
+        return None
+
+
+class TestRemiseAuGuichet:
+    @staticmethod
+    def _agent(gare_id):
+        agent = _utilisateur(RoleUtilisateur.RECEVEUR.value)
+        agent.est_actif = True
+        profil = ProfilLogistique(
+            utilisateur_id=agent.id,
+            type_profil="receveur",
+            identifiant_public="REC-TEST",
+            gare_id=gare_id,
+        )
+        return agent, profil
+
+    def test_remise_colis_enregistre_le_receveur_choisi(self):
+        chauffeur = _utilisateur(RoleUtilisateur.CHAUFFEUR.value)
+        gare_id = uuid.uuid4()
+        agent, profil = self._agent(gare_id)
+        colis = _colis(
+            chauffeur_id=chauffeur.id,
+            gare_arrivee_id=gare_id,
+            statut="arrive",
+            reception_confirmee_le=object(),
+        )
+        session = SessionGuichetFactice(
+            {(Colis, colis.id): colis, (Utilisateur, agent.id): agent},
+            profil,
+            gare_id,
+        )
+
+        resultat = asyncio.run(
+            service.remettre_colis_au_guichet(session, colis.id, chauffeur, agent.id)
+        )
+
+        assert resultat.remis_guichet_a_id == agent.id
+        assert resultat.remis_guichet_le is not None
+
+    def test_remise_refuse_un_receveur_dune_autre_gare(self):
+        chauffeur = _utilisateur(RoleUtilisateur.CHAUFFEUR.value)
+        gare_arrivee = uuid.uuid4()
+        agent, profil = self._agent(uuid.uuid4())
+        colis = _colis(
+            chauffeur_id=chauffeur.id,
+            gare_arrivee_id=gare_arrivee,
+            statut="arrive",
+            reception_confirmee_le=object(),
+        )
+        session = SessionGuichetFactice(
+            {(Colis, colis.id): colis, (Utilisateur, agent.id): agent},
+            profil,
+            gare_arrivee,
+        )
+
+        with pytest.raises(HTTPException) as erreur:
+            asyncio.run(
+                service.remettre_colis_au_guichet(
+                    session, colis.id, chauffeur, agent.id
+                )
+            )
+
+        assert erreur.value.status_code == 409
+
+    def test_remise_enfant_enregistre_le_receveur_choisi(self):
+        chauffeur = _utilisateur(RoleUtilisateur.CHAUFFEUR.value)
+        gare_id = uuid.uuid4()
+        agent, profil = self._agent(gare_id)
+        suivi = SuiviFamilial()
+        suivi.id = uuid.uuid4()
+        suivi.chauffeur_id = chauffeur.id
+        suivi.gare_arrivee_id = gare_id
+        suivi.type_passager = "enfant"
+        suivi.statut = "arrive"
+        suivi.reception_confirmee_le = object()
+        suivi.remis_guichet_le = None
+        suivi.remis_guichet_a_id = None
+        session = SessionGuichetFactice(
+            {
+                (SuiviFamilial, suivi.id): suivi,
+                (Utilisateur, agent.id): agent,
+            },
+            profil,
+            gare_id,
+        )
+
+        resultat = asyncio.run(
+            service.remettre_suivi_au_guichet(
+                session, suivi.id, chauffeur, agent.id
+            )
+        )
+
+        assert resultat.remis_guichet_a_id == agent.id
+        assert resultat.remis_guichet_le is not None

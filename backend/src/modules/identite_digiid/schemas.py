@@ -74,7 +74,8 @@ class ContactDigiIDResponse(BaseModel):
 # ─── Profil logistique (dossier professionnel) ───────────────────────
 
 class ProfilLogistiqueCreate(BaseModel):
-    type_profil: Literal["chauffeur", "receveur"]
+    type_profil: Literal["chauffeur", "receveur", "gerant_gare"]
+    gare_id: Optional[UUID] = None
     type_piece: Optional[str] = Field(None, max_length=30)
     numero_piece: Optional[str] = Field(None, max_length=60)
     permis_numero: Optional[str] = Field(None, max_length=60)
@@ -91,6 +92,8 @@ class ProfilLogistiqueResponse(BaseModel):
     utilisateur_id: UUID
     identifiant_public: str
     type_profil: str
+    gare_id: Optional[UUID] = None
+    gare_nom: Optional[str] = None
     type_piece: Optional[str] = None
     numero_piece: Optional[str] = None
     piece_verifiee: bool
@@ -118,6 +121,14 @@ class ProfilLogistiqueResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class GuichetDisponible(BaseModel):
+    utilisateur_id: UUID
+    nom_complet: str
+    role: Literal["receveur", "gerant_gare"]
+    gare_id: UUID
+    gare_nom: str
+
+
 class VerificationProfilRequest(BaseModel):
     """Validation métier d'un dossier par un gérant de gare / administrateur."""
     piece_verifiee: bool = False
@@ -137,6 +148,7 @@ class LigneManifeste(BaseModel):
     contact_masque: Optional[str] = None
     gare_depart_nom: Optional[str] = None
     gare_arrivee_nom: Optional[str] = None
+    gare_arrivee_id: Optional[UUID] = None
     # Position de l'arrêt de descente dans la tournée (10000 = terminus).
     arret_ordre: Optional[int] = None
     # Arrêt précis de descente : le chauffeur regroupe sa feuille de route par
@@ -147,6 +159,7 @@ class LigneManifeste(BaseModel):
     # Prise en charge confirmée par le chauffeur, puis dépôt au guichet.
     reception_confirmee: bool = False
     remis_guichet: bool = False
+    remis_guichet_a_nom: Optional[str] = None
     nombre_bagages: int = 1
     nombre_articles: int = 1
     mode_enregistrement: str = "guichet"

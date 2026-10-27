@@ -48,7 +48,7 @@ export interface ContactDigiID {
 
 // ─── Profil logistique (dossier professionnel) ───────────────────────
 
-export type TypeProfilLogistique = "chauffeur" | "receveur";
+export type TypeProfilLogistique = "chauffeur" | "receveur" | "gerant_gare";
 export type StatutVerificationProfil = "en_attente" | "verifie" | "rejete";
 
 export interface ProfilLogistique {
@@ -56,6 +56,8 @@ export interface ProfilLogistique {
   utilisateur_id: string;
   identifiant_public: string;
   type_profil: TypeProfilLogistique;
+  gare_id: string | null;
+  gare_nom: string | null;
   type_piece: string | null;
   numero_piece: string | null;
   piece_verifiee: boolean;
@@ -84,6 +86,7 @@ export interface ProfilLogistique {
 /** Payload de création / mise à jour du dossier professionnel. */
 export interface DonneesProfilLogistique {
   type_profil: TypeProfilLogistique;
+  gare_id?: string | null;
   type_piece?: string | null;
   numero_piece?: string | null;
   permis_numero?: string | null;
@@ -93,6 +96,14 @@ export interface DonneesProfilLogistique {
   vehicule_marque?: string | null;
   vehicule_modele?: string | null;
   vehicule_capacite?: number | null;
+}
+
+export interface GuichetDisponible {
+  utilisateur_id: string;
+  nom_complet: string;
+  role: "receveur" | "gerant_gare";
+  gare_id: string;
+  gare_nom: string;
 }
 
 /** Payload de validation d'un dossier par un gérant de gare. */
@@ -115,6 +126,7 @@ export const LIBELLES_VERIFICATION_PROFIL: Record<
 
 /** Libellés des éléments contrôlés (affichage « champs manquants »). */
 export const LIBELLES_CHAMPS_PROFIL: Record<string, string> = {
+  gare_id: "Gare d'appartenance",
   numero_piece: "Numéro de pièce d'identité",
   piece_verifiee: "Pièce d'identité vérifiée",
   permis_numero: "Numéro de permis",
@@ -135,6 +147,7 @@ export interface LigneManifeste {
   contact_masque: string | null;
   gare_depart_nom: string | null;
   gare_arrivee_nom: string | null;
+  gare_arrivee_id: string | null;
   /** Position de l'arrêt de descente dans la tournée (10000 = terminus). */
   arret_ordre: number | null;
   /** Arrêt précis où descendre — sert à regrouper la feuille de route. */
@@ -145,6 +158,7 @@ export interface LigneManifeste {
   reception_confirmee: boolean;
   /** Colis ou passager déposé au guichet d'arrivée. */
   remis_guichet: boolean;
+  remis_guichet_a_nom: string | null;
   nombre_bagages: number;
   nombre_articles: number;
   mode_enregistrement: ModeEnregistrement;

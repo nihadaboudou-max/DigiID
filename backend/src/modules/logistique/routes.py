@@ -235,6 +235,9 @@ async def _enrichir_colis(session: AsyncSession, colis: Colis) -> Colis:
     colis.remis_guichet_par_nom = await _nom_utilisateur(
         session, colis.remis_guichet_par_id
     )
+    colis.remis_guichet_a_nom = await _nom_utilisateur(
+        session, colis.remis_guichet_a_id
+    )
     colis.bagages = await _bagages_enrichis(session, colis_id=colis.id)
     return colis
 
@@ -266,6 +269,9 @@ async def _enrichir_suivi_familial(
             suivi.arret_destination_nom = await _nom_gare(session, arret.gare_id)
     suivi.remis_guichet_par_nom = await _nom_utilisateur(
         session, suivi.remis_guichet_par_id
+    )
+    suivi.remis_guichet_a_nom = await _nom_utilisateur(
+        session, suivi.remis_guichet_a_id
     )
     suivi.bagages = await _bagages_enrichis(session, suivi_familial_id=suivi.id)
     return suivi
@@ -1333,12 +1339,13 @@ async def confirmer_reception_colis(
 @require_permission("logistique.scan")
 async def remettre_colis_au_guichet(
     colis_id: UUID,
+    donnees: schemas.RemiseGuichetRequest,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
-    """Autorise ensuite le guichet à constater la livraison finale."""
+    """Enregistre le receveur ou gérant qui prend le colis en charge."""
     colis = await service.remettre_colis_au_guichet(
-        session, colis_id, utilisateur_courant
+        session, colis_id, utilisateur_courant, donnees.agent_id
     )
     return await _enrichir_colis(session, colis)
 
@@ -1512,11 +1519,12 @@ async def confirmer_reception_suivi(
 @require_permission("logistique.scan")
 async def remettre_suivi_au_guichet(
     suivi_id: UUID,
+    donnees: schemas.RemiseGuichetRequest,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     suivi = await service.remettre_suivi_au_guichet(
-        session, suivi_id, utilisateur_courant
+        session, suivi_id, utilisateur_courant, donnees.agent_id
     )
     return await _enrichir_suivi_familial(session, suivi)
 

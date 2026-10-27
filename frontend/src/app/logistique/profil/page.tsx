@@ -2,10 +2,9 @@
 /**
  * Mon dossier professionnel logistique.
  *
- * Le plan prévoit que chaque acteur du transport (chauffeur, receveur) tienne un
- * dossier vérifiable : pièce d'identité, permis de conduire et véhicule. Le
- * gérant de gare valide ensuite les éléments — un dossier « vérifié » inspire
- * confiance aux familles qui confient un enfant ou un colis.
+ * Chaque acteur du transport (chauffeur, receveur ou gérant de gare) tient un
+ * dossier vérifiable. Les agents de guichet indiquent aussi leur gare
+ * d'appartenance afin que les remises de colis et d'enfants soient attribuées.
  *
  * Règle importante : **modifier un élément contrôlé remet le dossier en attente**.
  * On ne peut pas se faire valider puis changer discrètement d'immatriculation.
@@ -18,7 +17,7 @@
  * individuels (`/permis/upload`, `/assurance/upload`…) qui obligeaient à choisir
  * le document à l'avance.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { Alerte } from "@/composants/commun/Alerte";
@@ -29,7 +28,9 @@ import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { ChampOCR } from "@/composants/logistique/ChampOCR";
 import { StatutVerification, UploadPhoto } from "@/composants/verification-visuelle";
+import { useAuthentification } from "@/contextes/authentification";
 import { clientAPI, ErreurAPI } from "@/services/client_api";
+import { logistiqueAPI, type Gare } from "@/services/logistique_api";
 import { uploadDocument } from "@/services/inspectionApi";
 import { obtenirStatutVerification, type VerificationDetail } from "@/services/verification_visuelle";
 import { TypeDocument } from "@/types/inspection";
@@ -62,6 +63,7 @@ export default function PageMonDossierLogistique() {
 
 const FORMULAIRE_VIDE: DonneesProfilLogistique = {
   type_profil: "chauffeur",
+  gare_id: null,
   type_piece: "",
   numero_piece: "",
   permis_numero: "",
@@ -112,6 +114,7 @@ function versDateISO(valeur: string | null | undefined): string | null {
 }
 
 function Contenu() {
+  const { utilisateur } = useAuthentification();
   const [dossier, setDossier] = useState<ProfilLogistique | null>(null);
   const [formulaire, setFormulaire] =
     useState<DonneesProfilLogistique>(FORMULAIRE_VIDE);
@@ -124,6 +127,32 @@ function Contenu() {
   const [erreurOCR, setErreurOCR] = useState<string | null>(null);
   /** Type de document à scanner (auto-détection par défaut). */
   const [typeScan, setTypeScan] = useState<TypeScan>("auto");
+  const [gares, setGares] = useState<Gare[]>([]);
+  const [rechercheGare, setRechercheGare] = useState("");
+
+  const garesFiltrees = useMemo(() => {
+    const terme = rechercheGare.trim().toLocaleLowerCase("fr");
+    if (!terme) return gares;
+    return gares.filter((gare) =>
+      gare.id === formulaire.gare_id ||
+      `${gare.nom} ${gare.ville} ${gare.code}`
+        .toLocaleLowerCase("fr")
+        .includes(terme),
+    );
+  }, [formulaire.gare_id, gares, rechercheGare]);
+
+  const typesProfilDisponibles: [TypeProfilLogistique, string][] =
+    utilisateur?.role === "receveur"
+      ? [["receveur", "Receveur"]]
+      : utilisateur?.role === "gerant_gare"
+        ? [["gerant_gare", "Gérant de gare"]]
+        : utilisateur?.role === "chauffeur"
+          ? [["chauffeur", "Chauffeur"]]
+          : [
+              ["chauffeur", "Chauffeur"],
+              ["receveur", "Receveur"],
+              ["gerant_gare", "Gérant de gare"],
+            ];
 
   useEffect(() => {
     let annule = false;
@@ -134,7 +163,15 @@ function Contenu() {
         if (annule) return;
         setDossier(existant);
         setFormulaire({
-          type_profil: existant.type_profil,
+          type_profil:
+            utilisateur?.role === "gerant_gare"
+              ? "gerant_gare"
+              : utilisateur?.role === "receveur"
+                ? "receveur"
+                : utilisateur?.role === "chauffeur"
+                  ? "chauffeur"
+                  : existant.type_profil,
+          gare_id: existant.gare_id ?? null,
           type_piece: existant.type_piece ?? "",
           numero_piece: existant.numero_piece ?? "",
           permis_numero: existant.permis_numero ?? "",
@@ -148,7 +185,20 @@ function Contenu() {
       } catch (e) {
         // 404 = aucun dossier : ce n'est pas une erreur, c'est le premier passage.
         if (e instanceof ErreurAPI && e.code_http === 404) {
-          if (!annule) setDossier(null);
+          if (!annule) {
+            setDossier(null);
+            setFormulaire((precedent) => ({
+              ...precedent,
+              type_profil:
+                utilisateur?.role === "gerant_gare"
+                  ? "gerant_gare"
+                  : utilisateur?.role === "receveur"
+                    ? "receveur"
+                    : utilisateur?.role === "chauffeur"
+                      ? "chauffeur"
+                      : precedent.type_profil,
+            }));
+          }
         } else if (!annule) {
           setErreur(
             e instanceof ErreurAPI
@@ -158,6 +208,48 @@ function Contenu() {
         }
       } finally {
         if (!annule) setChargement(false);
+      }
+    })();
+    return () => {
+      annule = true;
+    };
+  }, [utilisateur?.role]);
+
+  useEffect(() => {
+    let annule = false;
+    (async () => {
+      try {
+        const premierePage = await logistiqueAPI.gares.lister({
+          est_actif: true,
+          page: 1,
+          par_page: 100,
+        });
+        const nombrePages = Math.ceil(
+          premierePage.total / premierePage.par_page,
+        );
+        const autresPages = await Promise.all(
+          Array.from({ length: Math.max(0, nombrePages - 1) }, (_, index) =>
+            logistiqueAPI.gares.lister({
+              est_actif: true,
+              page: index + 2,
+              par_page: 100,
+            }),
+          ),
+        );
+        if (!annule) {
+          setGares([
+            ...premierePage.elements,
+            ...autresPages.flatMap((page) => page.elements),
+          ]);
+        }
+      } catch (e) {
+        if (!annule) {
+          setErreur(
+            e instanceof ErreurAPI
+              ? e.message_utilisateur
+              : "Impossible de charger la liste des gares.",
+          );
+        }
       }
     })();
     return () => {
@@ -343,6 +435,14 @@ function Contenu() {
   async function enregistrer() {
     setErreur(null);
     setSucces(null);
+    if (
+      (formulaire.type_profil === "receveur" ||
+        formulaire.type_profil === "gerant_gare") &&
+      !formulaire.gare_id
+    ) {
+      setErreur("Sélectionnez votre gare d'appartenance avant l'enregistrement.");
+      return;
+    }
     setEnregistrement(true);
     try {
       const reponse = await identiteAPI.profils.enregistrer(formulaire);
@@ -372,6 +472,7 @@ function Contenu() {
   }
 
   const estChauffeur = formulaire.type_profil === "chauffeur";
+  const estGuichet = !estChauffeur;
   // Une information déjà lue sur un document et enregistrée ne se réécrit
   // plus depuis le dossier : elle sert de preuve pour la vérification.
   const pieceVerrouillee = !!(dossier?.type_piece || dossier?.numero_piece);
@@ -419,23 +520,78 @@ function Contenu() {
             <label className="text-sm font-medium text-ardoise">
               Mon activité <span className="text-terre">*</span>
             </label>
-            <div className="flex gap-2">
-              {(["chauffeur", "receveur"] as TypeProfilLogistique[]).map((valeur) => (
+            <div className="flex flex-wrap gap-2">
+              {typesProfilDisponibles.map(([valeur, libelle]) => (
                 <button
                   key={valeur}
                   type="button"
-                  onClick={() => modifier("type_profil", valeur)}
+                  onClick={() => {
+                    modifier("type_profil", valeur);
+                    if (valeur === "chauffeur") modifier("gare_id", null);
+                  }}
                   className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
                     formulaire.type_profil === valeur
                       ? "border-lagune bg-lagune-teinte text-lagune"
                       : "border-ardoise/20 bg-white text-ardoise hover:bg-lagune-teinte/40"
                   }`}
                 >
-                  {valeur === "chauffeur" ? "Chauffeur" : "Receveur"}
+                  {libelle}
                 </button>
               ))}
             </div>
           </div>
+
+          {estGuichet && (
+            <div className="space-y-2 rounded-xl border border-lagune/20 bg-lagune/5 p-4">
+              <div>
+                <label
+                  htmlFor="recherche-gare"
+                  className="mb-1 block text-sm font-medium text-ardoise"
+                >
+                  Rechercher une gare
+                </label>
+                <input
+                  id="recherche-gare"
+                  type="search"
+                  value={rechercheGare}
+                  onChange={(e) => setRechercheGare(e.target.value)}
+                  placeholder="Nom, ville ou code de gare"
+                  className="champ-saisie"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="gare-appartenance"
+                  className="mb-1 block text-sm font-medium text-ardoise"
+                >
+                  Ma gare d&apos;appartenance <span className="text-terre">*</span>
+                </label>
+                <select
+                  id="gare-appartenance"
+                  value={formulaire.gare_id ?? ""}
+                  onChange={(e) => modifier("gare_id", e.target.value || null)}
+                  className="champ-saisie"
+                  required
+                >
+                  <option value="">Choisir une gare</option>
+                  {garesFiltrees.map((gare) => (
+                    <option key={gare.id} value={gare.id}>
+                      {gare.nom} — {gare.ville} ({gare.code})
+                    </option>
+                  ))}
+                </select>
+                {gares.length === 0 && (
+                  <p className="mt-1 text-xs text-terre">
+                    Aucune gare active n&apos;est disponible. Contactez un administrateur.
+                  </p>
+                )}
+              </div>
+              <p className="text-xs text-ardoise-clair">
+                Cette gare permettra d&apos;identifier les agents du guichet qui
+                peuvent recevoir les colis et enfants à destination.
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <ChampSaisie
@@ -650,7 +806,14 @@ function ResumeDossier({ dossier }: { dossier: ProfilLogistique }) {
         )}
       </div>
 
-      <ul className="text-sm space-y-1.5">
+        {dossier.gare_nom && (
+          <p className="mb-3 text-sm text-ardoise-clair">
+            Gare d&apos;appartenance :{" "}
+            <span className="font-semibold text-ardoise">{dossier.gare_nom}</span>
+          </p>
+        )}
+
+        <ul className="text-sm space-y-1.5">
         <Element valide={dossier.piece_verifiee} libelle="Pièce d'identité" />
         {dossier.type_profil === "chauffeur" && (
           <>

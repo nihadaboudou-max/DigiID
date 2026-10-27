@@ -150,7 +150,20 @@ const opts = { authentifie: true } as const;
 
 export const logistiqueAPI = {
   gares: {
-    lister: () => clientAPI.get<ReponseListe<Gare>>(`${BASE}/gares?par_page=100`, opts),
+    lister: (filtres?: {
+      est_actif?: boolean;
+      page?: number;
+      par_page?: number;
+    }) => {
+      const qs = new URLSearchParams({
+        page: String(filtres?.page ?? 1),
+        par_page: String(filtres?.par_page ?? 100),
+      });
+      if (filtres?.est_actif !== undefined) {
+        qs.set("est_actif", String(filtres.est_actif));
+      }
+      return clientAPI.get<ReponseListe<Gare>>(`${BASE}/gares?${qs.toString()}`, opts);
+    },
     creer: (d: Record<string, unknown>) => clientAPI.post<Gare>(`${BASE}/gares`, d, opts),
     supprimer: (id: string) => clientAPI.delete(`${BASE}/gares/${id}`, opts),
   },
@@ -378,8 +391,12 @@ export const logistiqueAPI = {
       clientAPI.post<Colis>(`${BASE}/colis/${colisId}/reception`, {}, opts),
 
     /** Le chauffeur dépose le colis au guichet d'arrivée. */
-    remettreGuichet: (colisId: string) =>
-      clientAPI.post<Colis>(`${BASE}/colis/${colisId}/remise-guichet`, {}, opts),
+    remettreGuichet: (colisId: string, agentId: string) =>
+      clientAPI.post<Colis>(
+        `${BASE}/colis/${colisId}/remise-guichet`,
+        { agent_id: agentId },
+        opts,
+      ),
   },
 
   // ─── Suivi familial (enfants voyageant seuls — S7) ────────────────
@@ -451,10 +468,10 @@ export const logistiqueAPI = {
       clientAPI.post<SuiviFamilial>(`${BASE}/suivi-familial/${id}/reception`, {}, opts),
 
     /** Le chauffeur remet le passager au guichet d'arrivée. */
-    remettreGuichet: (id: string) =>
+    remettreGuichet: (id: string, agentId: string) =>
       clientAPI.post<SuiviFamilial>(
         `${BASE}/suivi-familial/${id}/remise-guichet`,
-        {},
+        { agent_id: agentId },
         opts,
       ),
   },
