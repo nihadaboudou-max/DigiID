@@ -212,10 +212,10 @@ function Contenu() {
     )
     .sort(triChronologique);
 
-  /** Départs libres (les miens exclus : je les vois déjà ci-dessus). */
+  /** Départs libres : planifiés et sans chauffeur (les miens sont déjà ci-dessus). */
   const depart = voyages
     .filter((v) => v.statut === "planifie")
-    .filter((v) => v.chauffeur_id !== utilisateur?.id)
+    .filter((v) => !v.chauffeur_id)
     .filter((v) => !ligneChoisie || v.ligne_id === ligneChoisie)
     .filter((v) => {
       const bornes = bornesDuJour(jour);
@@ -298,6 +298,13 @@ function Contenu() {
   };
 
   const annulerVoyage = async (voyage: Voyage) => {
+    if (voyage.statut !== "planifie") {
+      notifier(
+        "Un voyage déjà en route ou terminé ne peut plus être annulé.",
+        "erreur",
+      );
+      return;
+    }
     setActionEnCours(voyage.id);
     try {
       await logistiqueAPI.voyages.modifier(voyage.id, { statut: "annule" });
@@ -586,21 +593,19 @@ function Contenu() {
                               variante="ghost"
                               taille="petit"
                               chargement={actionEnCours === voyage.id}
+                              onClick={() => retirer(voyage)}
+                            >
+                              Me retirer
+                            </Bouton>
+                            <Bouton
+                              variante="ghost"
+                              taille="petit"
+                              chargement={actionEnCours === voyage.id}
                               onClick={() => annulerVoyage(voyage)}
                             >
                               Annuler le départ
                             </Bouton>
                           </>
-                        )}
-                        {voyage.statut === "en_cours" && (
-                          <Bouton
-                            variante="ghost"
-                            taille="petit"
-                            chargement={actionEnCours === voyage.id}
-                            onClick={() => retirer(voyage)}
-                          >
-                            Me retirer
-                          </Bouton>
                         )}
                       </div>
                     )}

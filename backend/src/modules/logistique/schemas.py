@@ -869,6 +869,8 @@ class ActionLotVoyageResponse(BaseModel):
     nb_colis: int = 0
     # Arrêt intermédiaire effectivement traité (None = toutes les gares).
     arret_id: Optional[UUID] = None
+    # Statut du voyage après l'action (ex. planifie → en_cours → termine).
+    statut_voyage: Optional[str] = None
 
 
 class RemiseGuichetRequest(BaseModel):

@@ -181,3 +181,38 @@ class TestQuitterVoyage:
 
         assert erreur.value.status_code == 409
         assert "déjà commencé" in erreur.value.detail
+
+
+class TestAnnulerEtCharge:
+    """Annulation et actions groupées : garde-fous métier."""
+
+    def test_annulation_refusee_si_en_cours(self):
+        from src.modules.logistique import schemas
+
+        voyage = _voyage(statut="en_cours")
+        session = SessionFactice({(Voyage, voyage.id): voyage})
+
+        with pytest.raises(HTTPException) as erreur:
+            asyncio.run(
+                service.modifier_voyage(
+                    session,
+                    voyage.id,
+                    schemas.VoyageUpdate(statut="annule"),
+                )
+            )
+
+        assert erreur.value.status_code == 409
+        assert "annuler" in erreur.value.detail.lower()
+
+    def test_depart_refuse_si_car_vide(self):
+        voyage = _voyage(statut="planifie")
+        session = SessionFactice({(Voyage, voyage.id): voyage})
+        chauffeur = _utilisateur("Awa", "Fall")
+
+        with pytest.raises(HTTPException) as erreur:
+            asyncio.run(
+                service.valider_depart_voyage(session, voyage.id, chauffeur)
+            )
+
+        assert erreur.value.status_code == 409
+        assert "aucun passager ni colis" in erreur.value.detail.lower()

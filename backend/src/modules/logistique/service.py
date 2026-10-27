@@ -1024,6 +1024,16 @@ async def modifier_voyage(session: AsyncSession, voyage_id: UUID,
         await _verifier_existe(session, Utilisateur, valeurs["chauffeur_id"], "Chauffeur")
     if "date_depart" in valeurs:
         _verifier_date_depart(valeurs["date_depart"])
+    # Annulation : uniquement un départ encore « planifié ». Un car en route
+    # (ou déjà terminé) ne s'annule pas — les colis/passagers à bord en dépendent.
+    if valeurs.get("statut") == "annule" and voyage.statut != "planifie":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                f"Ce voyage est « {voyage.statut} » : on ne peut plus l'annuler. "
+                "Terminez le trajet ou contactez le gérant de gare."
+            ),
+        )
     # Un car déjà parti ne se replanifie pas dans le passé (l'historique de
     # suivi et les SMS déjà envoyés perdraient leur sens).
     if voyage.statut in ("en_cours", "termine", "annule") and "date_depart" in valeurs:
@@ -2625,6 +2635,22 @@ async def _passagers_du_voyage(
     return list(resultat.scalars().all())
 
 
+def _exiger_charge_a_bord(
+    colis: list, passagers: list, *, action: str
+) -> None:
+    """Refuse une action groupée si le car est vide (aucun passager ni colis)."""
+    actifs_colis = [c for c in colis if getattr(c, "statut", None) != "annule"]
+    actifs_passagers = [p for p in passagers if getattr(p, "statut", None) != "annule"]
+    if not actifs_colis and not actifs_passagers:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                f"Impossible de {action} : aucun passager ni colis à bord. "
+                "Attendez le chargement au guichet, ou enregistrez un client monté en route."
+            ),
+        )
+
+
 async def valider_depart_voyage(
     session: AsyncSession, voyage_id: UUID, utilisateur: Utilisateur
 ) -> dict:
@@ -2634,10 +2660,24 @@ async def valider_depart_voyage(
     voyage **et** fait passer tous les passagers en route (SMS au parent).
     """
     voyage = await obtenir_voyage(session, voyage_id)
+    if voyage.statut in ("termine", "annule"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                f"Ce voyage est « {voyage.statut} » : le départ ne peut plus être validé."
+            ),
+        )
+
+    colis_voyage = await _colis_du_voyage(session, voyage_id)
+    passagers_voyage = await _passagers_du_voyage(session, voyage_id)
+    _exiger_charge_a_bord(
+        colis_voyage, passagers_voyage, action="valider le départ"
+    )
+
     maintenant = datetime.now(timezone.utc)
 
     nb_colis = 0
-    for colis in await _colis_du_voyage(session, voyage_id):
+    for colis in colis_voyage:
         if colis.statut not in ("enregistre", "enregistre_direct"):
             continue
         session.add(ColisEvenement(
@@ -2659,7 +2699,7 @@ async def valider_depart_voyage(
         nb_colis += 1
 
     nb_passagers = 0
-    for suivi in await _passagers_du_voyage(session, voyage_id):
+    for suivi in passagers_voyage:
         if suivi.statut not in ("enregistre", "enregistre_direct"):
             continue
         session.add(SuiviFamilialEvenement(
@@ -2674,6 +2714,15 @@ async def valider_depart_voyage(
         await _notifier_suivi(session, suivi, "depart", suivi.gare_depart_id)
         nb_passagers += 1
 
+    if nb_colis == 0 and nb_passagers == 0:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                "Rien de nouveau à faire partir : tous les passagers et colis "
+                "sont déjà en route, arrivés, ou annulés."
+            ),
+        )
+
     if voyage.statut == "planifie":
         voyage.statut = "en_cours"
     await session.commit()
@@ -2682,6 +2731,7 @@ async def valider_depart_voyage(
         "voyage_id": voyage_id,
         "nb_colis": nb_colis,
         "nb_passagers": nb_passagers,
+        "statut_voyage": voyage.statut,
         "message": (
             f"Départ validé : {nb_passagers} passager(s) et {nb_colis} colis en route."
         ),
@@ -2725,6 +2775,28 @@ async def marquer_arrivee_voyage(
     marque arrivés tous les colis et passagers encore en route.
     """
     voyage = await obtenir_voyage(session, voyage_id)
+    if voyage.statut in ("termine", "annule"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                f"Ce voyage est « {voyage.statut} » : plus d'arrivée à enregistrer."
+            ),
+        )
+    if voyage.statut == "planifie":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                "Validez d'abord le départ : on ne marque l'arrivée que pour un "
+                "car déjà en route."
+            ),
+        )
+
+    colis_voyage = await _colis_du_voyage(session, voyage_id)
+    passagers_voyage = await _passagers_du_voyage(session, voyage_id)
+    _exiger_charge_a_bord(
+        colis_voyage, passagers_voyage, action="marquer l'arrivée"
+    )
+
     maintenant = datetime.now(timezone.utc)
 
     gare_effective = gare_id
@@ -2744,7 +2816,7 @@ async def marquer_arrivee_voyage(
     lieu = await _libelle_gare(session, gare_effective)
 
     nb_colis = 0
-    for colis in await _colis_du_voyage(session, voyage_id):
+    for colis in colis_voyage:
         if colis.statut not in ("enregistre", "enregistre_direct", "en_transit"):
             continue
         if not _destine_a_larret(colis, arret_id=arret_id, gare_id=gare_effective):
@@ -2761,7 +2833,7 @@ async def marquer_arrivee_voyage(
         nb_colis += 1
 
     nb_passagers = 0
-    for suivi in await _passagers_du_voyage(session, voyage_id):
+    for suivi in passagers_voyage:
         if suivi.statut not in ("enregistre", "enregistre_direct", "en_route"):
             continue
         if not _destine_a_larret(suivi, arret_id=arret_id, gare_id=gare_effective):
@@ -2776,6 +2848,26 @@ async def marquer_arrivee_voyage(
         await _notifier_suivi(session, suivi, "arrivee", gare_evt)
         nb_passagers += 1
 
+    if nb_colis == 0 and nb_passagers == 0:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                "Aucun passager ni colis à marquer arrivés pour cet arrêt. "
+                "Vérifiez la sélection ou le manifeste."
+            ),
+        )
+
+    # Plus personne / rien en charge (sur les instances déjà chargées) → terminé.
+    encore_en_charge = any(
+        c.statut not in ("arrive", "livre", "annule") for c in colis_voyage
+    ) or any(
+        p.statut not in ("arrive", "annule") for p in passagers_voyage
+    )
+    if not encore_en_charge:
+        voyage.statut = "termine"
+        if voyage.date_arrivee is None:
+            voyage.date_arrivee = maintenant
+
     await session.commit()
     return {
         "type_action": "arrivee",
@@ -2783,9 +2875,11 @@ async def marquer_arrivee_voyage(
         "nb_colis": nb_colis,
         "nb_passagers": nb_passagers,
         "arret_id": arret_id,
+        "statut_voyage": voyage.statut,
         "message": (
             f"Arrivée enregistrée : {nb_passagers} passager(s) et {nb_colis} colis."
             f"{' ' + lieu if lieu else ''}"
+            + (" Le voyage est terminé." if voyage.statut == "termine" else "")
         ),
     }
 
@@ -2802,12 +2896,26 @@ async def envoyer_pre_alerte_voyage(
     proches de confiance (et l'acheteur pour un enfant) **ainsi que** les
     destinataires des colis, pour qu'ils se rendent à la gare à temps.
     """
-    await obtenir_voyage(session, voyage_id)
+    voyage = await obtenir_voyage(session, voyage_id)
+    if voyage.statut in ("termine", "annule"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                f"Ce voyage est « {voyage.statut} » : plus de pré-alerte à envoyer."
+            ),
+        )
+
+    colis_voyage = await _colis_du_voyage(session, voyage_id)
+    passagers_voyage = await _passagers_du_voyage(session, voyage_id)
+    _exiger_charge_a_bord(
+        colis_voyage, passagers_voyage, action="envoyer la pré-alerte"
+    )
+
     nb_sms = 0
     nb_passagers = 0
     nb_colis = 0
 
-    for colis in await _colis_du_voyage(session, voyage_id):
+    for colis in colis_voyage:
         if colis.statut in ("livre", "annule"):
             continue
         ticket = await obtenir_ticket_du_colis(session, colis)
@@ -2829,7 +2937,7 @@ async def envoyer_pre_alerte_voyage(
             nb_sms += 1
         nb_colis += 1
 
-    for suivi in await _passagers_du_voyage(session, voyage_id):
+    for suivi in passagers_voyage:
         if suivi.statut in ("arrive", "annule"):
             continue
         ticket = await obtenir_ticket_du_suivi(session, suivi)

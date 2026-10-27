@@ -12,6 +12,7 @@
  *   3. « Arrivés »                 → colis/passagers de l'arrêt (ou gare) ciblé.
  *
  * Chaque action reste traçable (un événement par passager/colis) et idempotente.
+ * Garde-fous UI : pas d'action sur un car vide, et boutons alignés sur le statut.
  */
 import { useState } from "react";
 
@@ -22,6 +23,7 @@ import { ModalConfirmation } from "@/composants/commun/ModalConfirmation";
 import { IconeCheck, IconeCloche } from "@/composants/commun/Icones";
 import { ErreurAPI } from "@/services/client_api";
 import { logistiqueAPI } from "@/services/logistique_api";
+import type { StatutVoyage } from "@/types/logistique";
 
 type Action = "depart" | "approche" | "arrivee";
 
@@ -36,6 +38,12 @@ export interface PointArrivee {
 
 interface Props {
   voyageId: string;
+  /** Statut courant du voyage — pilote quels boutons sont actifs. */
+  statut: StatutVoyage | string;
+  /** Nombre de colis non annulés à bord. */
+  nbColis: number;
+  /** Nombre de passagers non annulés à bord. */
+  nbPassagers: number;
   /** Gares connues du voyage (repli si pas d'arrêts structurés). */
   gares?: { id: string; nom: string }[];
   /** Arrêts ordonnés + terminus — prioritaire pour cibler « Arrivés ». */
@@ -75,6 +83,9 @@ const CONFIG: Record<
 
 export function ActionsVoyageChauffeur({
   voyageId,
+  statut,
+  nbColis,
+  nbPassagers,
   gares = [],
   pointsArrivee = [],
   surSucces,
@@ -84,6 +95,13 @@ export function ActionsVoyageChauffeur({
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [succes, setSucces] = useState<string | null>(null);
+
+  const chargeABord = nbColis + nbPassagers > 0;
+  const voyageClos = statut === "termine" || statut === "annule";
+  const peutDepart =
+    chargeABord && (statut === "planifie" || statut === "en_cours");
+  const peutApproche = chargeABord && statut === "en_cours";
+  const peutArrivee = chargeABord && statut === "en_cours";
 
   const optionsArrivee: PointArrivee[] =
     pointsArrivee.length > 0
@@ -145,9 +163,25 @@ export function ActionsVoyageChauffeur({
           </Alerte>
         )}
 
+        {!chargeABord && !voyageClos && (
+          <Alerte variante="info" titre="Car vide">
+            Aucun passager ni colis à bord pour l&apos;instant. Les actions
+            (départ, pré-alerte, arrivée) s&apos;activeront dès qu&apos;un
+            chargement est affecté à ce voyage.
+          </Alerte>
+        )}
+
+        {voyageClos && (
+          <Alerte variante="info" titre="Voyage clos">
+            Ce voyage est « {statut} » : plus aucune action groupée n&apos;est
+            possible.
+          </Alerte>
+        )}
+
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <Bouton
             variante="succes"
+            disabled={!peutDepart}
             onClick={() => {
               setSucces(null);
               setAction("depart");
@@ -157,6 +191,7 @@ export function ActionsVoyageChauffeur({
           </Bouton>
           <Bouton
             variante="secondaire"
+            disabled={!peutApproche}
             onClick={() => {
               setSucces(null);
               setAction("approche");
@@ -166,6 +201,7 @@ export function ActionsVoyageChauffeur({
           </Bouton>
           <Bouton
             variante="primaire"
+            disabled={!peutArrivee}
             onClick={() => {
               setSucces(null);
               setAction("arrivee");
@@ -184,6 +220,7 @@ export function ActionsVoyageChauffeur({
               className="champ-saisie"
               value={pointCle}
               onChange={(e) => setPointCle(e.target.value)}
+              disabled={!peutArrivee}
             >
               <option value="">Tous les arrêts du voyage</option>
               {optionsArrivee.map((p) => (

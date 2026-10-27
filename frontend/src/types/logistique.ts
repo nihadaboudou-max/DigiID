@@ -408,6 +408,8 @@ export interface ResultatActionLot {
   nb_passagers: number;
   nb_colis: number;
   arret_id?: string | null;
+  /** Statut du voyage après l'action (planifie → en_cours → termine). */
+  statut_voyage?: string | null;
 }
 
 /** Payload d'une pré-alerte d'arrivée (« Prévenir de l'approche »). */
