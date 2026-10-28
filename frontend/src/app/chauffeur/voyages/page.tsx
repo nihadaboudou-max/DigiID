@@ -212,6 +212,15 @@ function Contenu() {
     )
     .sort(triChronologique);
 
+  /** Voyages terminés ou annulés : historique personnel du chauffeur. */
+  const historique = voyages
+    .filter(
+      (v) =>
+        v.chauffeur_id === utilisateur?.id &&
+        (v.statut === "termine" || v.statut === "annule"),
+    )
+    .sort((a, b) => triChronologique(b, a));
+
   /** Départs libres : planifiés et sans chauffeur (les miens sont déjà ci-dessus). */
   const depart = voyages
     .filter((v) => v.statut === "planifie")
@@ -664,6 +673,56 @@ function Contenu() {
           </ul>
         )}
       </Carte>
+
+      <div id="historique" className="scroll-mt-24">
+        <Carte
+          titre="Historique de mes voyages"
+          description={`${historique.length} voyage(s) terminé(s) ou annulé(s).`}
+        >
+          {chargement ? (
+            <p className="py-5 text-center text-sm italic text-ardoise-clair">
+              Chargement de l&apos;historique…
+            </p>
+          ) : historique.length === 0 ? (
+            <p className="py-5 text-center text-sm text-ardoise-clair">
+              Vos voyages terminés apparaîtront ici.
+            </p>
+          ) : (
+            <ul className="divide-y divide-ardoise-clair/10">
+              {historique.map((voyage) => {
+                const statut = STATUTS[voyage.statut] ?? {
+                  libelle: voyage.statut,
+                  variante: "neutre" as BadgeVariante,
+                };
+                return (
+                  <li key={voyage.id}>
+                    <Link
+                      href={`/chauffeur/voyages/${voyage.id}`}
+                      className="flex flex-col gap-2 rounded-lg px-2 py-3 transition-colors hover:bg-sable-clair sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold text-ardoise">
+                          {trajetDe(voyage)}
+                        </span>
+                        <span className="mt-1 block text-xs text-ardoise-clair">
+                          {formaterDateHeure(voyage.date_depart)}
+                          {voyage.vehicule_immatriculation
+                            ? ` · Car ${voyage.vehicule_immatriculation}`
+                            : ""}
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <Badge variante={statut.variante}>{statut.libelle}</Badge>
+                        <span className="text-sm font-medium text-lagune">Détails →</span>
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Carte>
+      </div>
 
       {/* ─── Départs libres ───────────────────────────────────────── */}
       <Carte

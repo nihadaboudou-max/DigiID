@@ -481,22 +481,33 @@ function Contenu() {
 
   return (
     <div className="space-y-6 apparition">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <header className="flex flex-col gap-4 rounded-2xl border border-ardoise-clair/10 bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-bold text-ardoise">
-            Mon dossier professionnel
+            {estChauffeur ? "Mon profil chauffeur" : "Mon dossier professionnel"}
           </h1>
           <p className="text-sm text-ardoise-clair">
-            Pièce d&apos;identité, permis et véhicule : les éléments que le gérant de
-            gare contrôle avant de vous laisser transporter des colis ou des enfants.
+            {estChauffeur
+              ? "Gérez vos informations, votre permis et votre véhicule."
+              : "Gérez les informations de votre activité et votre identité."}
           </p>
         </div>
-        <Link href="/identite/carte">
-          <Bouton variante="ghost" taille="petit">
-            Ma carte DigiID
-          </Bouton>
-        </Link>
-      </div>
+        <div className="flex flex-wrap gap-2">
+          {estChauffeur && (
+            <>
+              <Link href="/chauffeur/voyages">
+                <Bouton variante="ghost" taille="petit">Mes voyages</Bouton>
+              </Link>
+              <Link href="/chauffeur/colis">
+                <Bouton variante="ghost" taille="petit">Mes colis</Bouton>
+              </Link>
+            </>
+          )}
+          <Link href="/identite/carte">
+            <Bouton variante="secondaire" taille="petit">Ma carte DigiID</Bouton>
+          </Link>
+        </div>
+      </header>
 
       {erreur && (
         <Alerte variante="erreur" titre="Erreur">
@@ -512,11 +523,24 @@ function Contenu() {
       {dossier && <ResumeDossier dossier={dossier} />}
 
       <Carte
-        titre={dossier ? "Mettre à jour mes informations" : "Créer mon dossier"}
-        description="Modifier un élément contrôlé (pièce, permis, immatriculation) remet automatiquement le dossier en attente de vérification."
+        titre={
+          estChauffeur
+            ? dossier ? "Mon dossier chauffeur" : "Créer mon dossier chauffeur"
+            : dossier ? "Mettre à jour mes informations" : "Créer mon dossier"
+        }
+        description={
+          estChauffeur
+            ? "Complétez les rubriques ci-dessous pour faire vérifier votre profil."
+            : "Les changements de pièce ou de gare peuvent demander une nouvelle vérification."
+        }
       >
         <div className="space-y-4">
-          <div className="flex flex-col gap-1.5">
+          <section className="space-y-3 rounded-xl border border-ardoise-clair/10 bg-sable-clair/50 p-4">
+            <div>
+              <h4 className="font-semibold text-ardoise">1. Mon activité</h4>
+              <p className="text-xs text-ardoise-clair">Choisissez le profil associé à votre compte.</p>
+            </div>
+            <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-ardoise">
               Mon activité <span className="text-terre">*</span>
             </label>
@@ -539,10 +563,10 @@ function Contenu() {
                 </button>
               ))}
             </div>
-          </div>
+            </div>
 
-          {estGuichet && (
-            <div className="space-y-2 rounded-xl border border-lagune/20 bg-lagune/5 p-4">
+            {estGuichet && (
+              <div className="space-y-2 rounded-xl border border-lagune/20 bg-lagune/5 p-4">
               <div>
                 <label
                   htmlFor="recherche-gare"
@@ -590,10 +614,16 @@ function Contenu() {
                 Cette gare permettra d&apos;identifier les agents du guichet qui
                 peuvent recevoir les colis et enfants à destination.
               </p>
-            </div>
-          )}
+              </div>
+            )}
+          </section>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <section className="space-y-3 rounded-xl border border-ardoise-clair/10 p-4">
+            <div>
+              <h4 className="font-semibold text-ardoise">2. Mon identité</h4>
+              <p className="text-xs text-ardoise-clair">Les informations servent à vérifier votre dossier.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <ChampSaisie
               libelle="Type de pièce d'identité"
               value={formulaire.type_piece ?? ""}
@@ -610,7 +640,7 @@ function Contenu() {
               disabled={pieceVerrouillee}
               aide={pieceVerrouillee ? "Lu sur votre pièce : non modifiable." : undefined}
             />
-          </div>
+            </div>
 
           {/* Scan OCR (extraction universelle) : remplit les champs selon le
               document — pièce d'identité pour tout le monde, et en plus permis /
@@ -674,9 +704,14 @@ function Contenu() {
               </p>
             )}
           </div>
+          </section>
 
           {estChauffeur && (
-            <>
+            <section className="space-y-4 rounded-xl border border-ardoise-clair/10 bg-sable-clair/50 p-4">
+              <div>
+                <h4 className="font-semibold text-ardoise">3. Mon permis</h4>
+                <p className="text-xs text-ardoise-clair">Vérifiez les informations inscrites sur votre permis.</p>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <ChampSaisie
                   libelle="Numéro de permis"
@@ -708,6 +743,8 @@ function Contenu() {
                 />
               </div>
 
+              <div className="border-t border-ardoise-clair/10 pt-4">
+                <h4 className="mb-3 font-semibold text-ardoise">4. Mon véhicule</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <ChampSaisie
                   libelle="Immatriculation"
@@ -753,10 +790,14 @@ function Contenu() {
                   }}
                 />
               </div>
-            </>
+              </div>
+            </section>
           )}
 
-          <div className="flex justify-end">
+          <div className="flex flex-col-reverse gap-3 border-t border-ardoise-clair/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-ardoise-clair">
+              Les informations déjà vérifiées ne peuvent pas toujours être modifiées.
+            </p>
             <Bouton
               variante="primaire"
               chargement={enregistrement}

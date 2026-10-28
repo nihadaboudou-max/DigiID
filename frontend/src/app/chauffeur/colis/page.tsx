@@ -16,7 +16,7 @@ import { Alerte } from "@/composants/commun/Alerte";
 import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
-import { IconeColis, IconeScan } from "@/composants/commun/Icones";
+import { IconeColis } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { formaterDateHeure } from "@/composants/logistique/format";
 import { useMesVoyages } from "@/composants/logistique/MonVoyageDuJour";
@@ -44,7 +44,7 @@ function Contenu() {
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [recherche, setRecherche] = useState("");
-  const [filtre, setFiltre] = useState<"" | "en_transit" | "livre">("");
+  const [filtre, setFiltre] = useState<"" | StatutColis>("");
 
   const charger = useCallback(async () => {
     if (voyages.length === 0) {
@@ -158,18 +158,22 @@ function Contenu() {
           <select
             className="champ-saisie"
             value={filtre}
-            onChange={(e) => setFiltre(e.target.value as "" | "en_transit" | "livre")}
+            onChange={(e) => setFiltre(e.target.value as "" | StatutColis)}
           >
-            <option value="">Tous</option>
+            <option value="">Tous les statuts</option>
+            <option value="enregistre">Enregistrés</option>
+            <option value="enregistre_direct">Enregistrés en route</option>
             <option value="en_transit">En transit</option>
+            <option value="arrive">Arrivés</option>
             <option value="livre">Livrés</option>
+            <option value="annule">Annulés</option>
           </select>
         </div>
       </div>
 
       <Carte
         titre={`${colisFiltres.length} colis`}
-        description="Seuls les colis rattachés à l'un de vos cars apparaissent ici."
+        description="Sélectionnez un colis pour consulter sa fiche et son suivi."
       >
         {chargement || chargementVoyages ? (
           <p className="py-8 text-center text-sm italic text-ardoise-clair">
@@ -180,92 +184,52 @@ function Contenu() {
             Aucun colis pour ces critères.
           </p>
         ) : (
-          <ul className="space-y-3">
-            {colisFiltres.map((c) => (
-              <li
-                key={c.id}
-                className="rounded-xl border border-ardoise-clair/10 bg-white p-4"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-ardoise">
-                        {c.destinataire_nom}
-                      </p>
-                      <Badge
-                        variante={VARIANTES_STATUT_COLIS[c.statut] ?? "neutre"}
-                      >
-                        {LIBELLES_STATUT_COLIS[c.statut] ?? c.statut}
-                      </Badge>
-                      {c.statut === "annule" && <Badge variante="terre">Annulé</Badge>}
-                    </div>
-                    <p className="mt-1 text-sm text-ardoise">
-                      {c.gare_depart_nom ?? "?"}{" "}
-                      <span className="text-ocre">→</span>{" "}
-                      {c.gare_arrivee_nom ?? "?"}
-                      {ligneDu(c.voyage_id) ? (
-                        <span className="text-xs text-ardoise-clair">
-                          {" "}
-                          ({ligneDu(c.voyage_id)})
-                        </span>
-                      ) : null}
-                    </p>
-                    <p className="mt-1 text-xs text-ardoise-clair">
-                      Destinataire : {c.destinataire_tel}
-                      {c.description ? ` · ${c.description}` : ""}
-                    </p>
-                    <p className="mt-0.5 font-mono text-xs text-ardoise-clair">
-                      {c.code_clair ? (
-                        <Link
-                          href={`/chauffeur/colis/${encodeURIComponent(c.code_clair)}`}
-                          className="text-lagune hover:underline"
-                        >
-                          {c.code_clair}
-                        </Link>
-                      ) : (
-                        "code en attente"
-                      )}{" "}
-                      · {c.nombre_articles} article(s) · {formaterDateHeure(c.cree_le)}
-                    </p>
-                  </div>
+          <ul className="divide-y divide-ardoise-clair/10">
+            {colisFiltres.map((c) => {
+              const ligne = ligneDu(c.voyage_id);
+              const contenu = (
+                <span className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-ardoise">
+                      {c.destinataire_nom}
+                    </span>
+                    <Badge variante={VARIANTES_STATUT_COLIS[c.statut] ?? "neutre"}>
+                      {LIBELLES_STATUT_COLIS[c.statut] ?? c.statut}
+                    </Badge>
+                  </span>
+                  <span className="text-sm text-ardoise-clair">
+                    {ligne ?? `${c.gare_depart_nom ?? "?"} → ${c.gare_arrivee_nom ?? "?"}`}
+                  </span>
+                  <span className="text-xs text-ardoise-clair">
+                    {c.code_clair ?? "Code en attente"} · {c.nombre_articles} article(s)
+                    {" · "}{formaterDateHeure(c.cree_le)}
+                  </span>
+                </span>
+              );
 
-                  <div className="flex flex-col items-stretch gap-2">
-                    {c.statut !== "livre" && c.statut !== "annule" && (
-                      <Link
-                        href={`/chauffeur/scan?code=${encodeURIComponent(
-                          c.code_clair ?? "",
-                        )}&type=livraison`}
-                      >
-                        <Bouton variante="primaire" taille="petit" className="w-full">
-                          <IconeScan className="h-4 w-4" /> Remettre au destinataire
-                        </Bouton>
-                      </Link>
-                    )}
-                    {c.code_clair && (
-                      <Link href={`/chauffeur/colis/${encodeURIComponent(c.code_clair)}`}>
-                        <Bouton variante="ghost" taille="petit" className="w-full">
-                          <IconeColis className="h-4 w-4" /> Voir la fiche
-                        </Bouton>
-                      </Link>
-                    )}
-                    {c.voyage_id && (
-                      <Link href={`/chauffeur/voyages/${c.voyage_id}`}>
-                        <Bouton variante="ghost" taille="petit" className="w-full">
-                          <IconeColis className="h-4 w-4" /> Mon car
-                        </Bouton>
-                      </Link>
-                    )}
-                    <Bouton
-                      variante="ghost"
-                      taille="petit"
-                      onClick={() => void charger()}
+              return (
+                <li key={c.id}>
+                  {c.code_clair ? (
+                    <Link
+                      href={`/chauffeur/colis/${encodeURIComponent(c.code_clair)}`}
+                      className="flex items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-sable-clair focus-visible:outline focus-visible:outline-2 focus-visible:outline-lagune"
                     >
-                      Actualiser
-                    </Bouton>
-                  </div>
-                </div>
-              </li>
-            ))}
+                      {contenu}
+                      <span className="shrink-0 text-sm font-medium text-lagune">
+                        Détails →
+                      </span>
+                    </Link>
+                  ) : (
+                    <div className="flex items-center gap-3 px-2 py-3">
+                      {contenu}
+                      <span className="shrink-0 text-xs text-ardoise-clair">
+                        En attente
+                      </span>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </Carte>
