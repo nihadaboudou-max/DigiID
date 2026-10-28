@@ -1304,10 +1304,11 @@ async def _notifier_comptes_colis(
     colis: Colis,
     titre: str,
     message: str,
+    acteur_id: UUID | None = None,
 ) -> None:
     identifiants = {
         identifiant
-        for identifiant in (colis.expediteur_id, colis.destinataire_id)
+        for identifiant in (colis.expediteur_id, colis.destinataire_id, acteur_id)
         if identifiant is not None
     }
     if not identifiants:
@@ -1517,7 +1518,8 @@ async def creer_colis(
         session,
         colis,
         "Colis enregistré",
-        f"Votre colis {ticket.code_clair} a été enregistré. Touchez pour consulter le ticket.",
+        f"Le colis {ticket.code_clair} a été enregistré. Touchez pour consulter le ticket.",
+        acteur_id=utilisateur.id,
     )
 
     await session.commit()

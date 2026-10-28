@@ -179,13 +179,22 @@ export function CarteTelephone() {
 
       {edition && etape === "otp" && (
         <div className="mt-4 space-y-3">
-          <ChampSaisie
-            libelle={`Code reçu par SMS${envoi?.destination_masquee ? ` (${envoi.destination_masquee})` : ""}`}
-            value={code}
-            onChange={(evenement) => setCode(evenement.target.value)}
-            placeholder="123456"
-            inputMode="numeric"
-          />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <ChampSaisie
+              libelle={`Code reçu par SMS${envoi?.destination_masquee ? ` (${envoi.destination_masquee})` : ""}`}
+              value={code}
+              onChange={(evenement) => setCode(evenement.target.value)}
+              placeholder="123456"
+              inputMode="numeric"
+              className="flex-1"
+            />
+            {envoi?.code_dev && (
+              <p className="rounded-lg border border-ambre/30 bg-ambre/10 px-3 py-2 text-sm text-ardoise sm:mb-1">
+                Code temporaire (SMS indisponible) :{" "}
+                <code className="font-bold tracking-wider">{envoi.code_dev}</code>
+              </p>
+            )}
+          </div>
           <div className="flex gap-2">
             <Bouton
               variante="primaire"
@@ -204,11 +213,6 @@ export function CarteTelephone() {
               Numéro
             </Bouton>
           </div>
-          {envoi?.code_dev && (
-            <p className="text-xs text-ardoise-clair">
-              Code de test : <code>{envoi.code_dev}</code>
-            </p>
-          )}
         </div>
       )}
 

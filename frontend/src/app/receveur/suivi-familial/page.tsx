@@ -141,7 +141,7 @@ function Contenu() {
         </div>
         <Link href="/receveur/suivi-familial/nouveau">
           <Bouton variante="primaire">
-            <IconeIdentite className="h-4 w-4" /> Enregistrer un enfant
+            <IconeIdentite className="h-4 w-4" /> Enregistrer un voyageur
           </Bouton>
         </Link>
       </div>

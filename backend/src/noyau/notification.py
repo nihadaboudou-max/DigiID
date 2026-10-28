@@ -519,8 +519,11 @@ def envoyer_email_renvoyer_invitation(
 # =============================================================================
 
 def envoyer_sms(telephone: str, message: str) -> bool:
-    journal.info(f"[SMS][MOCK] A: {telephone}\nMessage: {message}")
-    return True
+    journal.warning(
+        f"[SMS][MOCK] Aucun fournisseur SMS configuré : message non envoyé "
+        f"à {telephone}\nMessage: {message}"
+    )
+    return False
 
 
 def envoyer_sms_verification(telephone: str, code: str) -> bool:

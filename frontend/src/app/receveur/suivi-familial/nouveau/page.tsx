@@ -37,7 +37,7 @@ function Contenu() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-ardoise">
-            Nouvel enfant suivi
+            Nouvel suivi
           </h1>
           <p className="text-sm text-ardoise-clair">
             Enregistrez l&apos;enfant : le parent reçoit un SMS de confirmation,
