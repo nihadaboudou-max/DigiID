@@ -13,12 +13,19 @@
       (FastAPI)          (Next.js)
               │
         db / redis
+       celery worker + beat
 ```
 
 Tout est **dans le dépôt** : config nginx (`nginx/default.conf.template`),
 orchestration (`docker-compose.yml`), script de déploiement (`deploy.sh`).
 Le **nom de domaine et les chemins de certificat sont centralisés dans `.env`**
 (`DOMAINE`, `CHEMIN_CERTIFICAT_FULLCHAIN`, `CHEMIN_CERTIFICAT_CLE`).
+
+Le worker Celery et Celery Beat partagent le dossier `backend/media` avec l'API.
+Beat lance périodiquement la suppression des photos de colis plus anciennes
+que sept jours après livraison. En production, ce dossier doit être persistant
+et partagé entre ces conteneurs ; un stockage éphémère ne garantit pas cette
+conservation.
 
 ---
 
@@ -88,7 +95,7 @@ cd ~/DigiID && ./deploy.sh
 1. Vérifie `.env` et les ressources disque/mémoire (alerte < 5 Go libres)
 2. `git fetch` + `git reset --hard origin/main`
 3. Nettoie le cache Next.js
-4. `docker compose build --progress plain --no-cache backend frontend`
+4. `docker compose build --progress plain --no-cache backend worker_celery beat_celery frontend`
 5. **`docker compose down`** — arrête les anciens conteneurs AVANT de vérifier les ports
    (sans cela, l'ancien nginx Docker occupe déjà 80/443 et bloque le redéploiement)
 6. Vérifie que les certificats SSL existent sur l'hôte (sinon nginx crash-loop)
@@ -101,7 +108,7 @@ cd ~/DigiID && ./deploy.sh
 ```bash
 cd ~/DigiID
 git fetch origin && git reset --hard origin/main
-docker compose build --progress plain --no-cache backend frontend
+docker compose build --progress plain --no-cache backend worker_celery beat_celery frontend
 docker compose down   # ← obligatoire : libère les ports 80/443 occupés par l'ancien nginx
 docker compose up -d
 docker exec digiid_nginx nginx -t

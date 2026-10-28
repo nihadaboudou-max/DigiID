@@ -223,6 +223,7 @@ export function estErreurReseau(erreur: unknown): boolean {
 
 interface OptionsRequete extends RequestInit {
   authentifie?: boolean;
+  typeReponse?: "json" | "blob";
   /** Interne — évite une boucle infinie lors du retry après refresh. */
   _retry?: boolean;
   /** Paramètres de requête (query string) */
@@ -233,11 +234,20 @@ async function appel_api<T>(
   chemin: string,
   options: OptionsRequete = {},
 ): Promise<T> {
-  const { authentifie = false, headers = {}, _retry = false, params, ...reste } = options;
+  const {
+    authentifie = false,
+    headers = {},
+    _retry = false,
+    params,
+    typeReponse = "json",
+    ...reste
+  } = options;
 
   // Construction des en-têtes
+  const corpsFormulaire =
+    typeof FormData !== "undefined" && reste.body instanceof FormData;
   const enTetes: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(corpsFormulaire ? {} : { "Content-Type": "application/json" }),
     ...(headers as Record<string, string>),
   };
 
@@ -280,6 +290,10 @@ async function appel_api<T>(
       messageErreurConnexion(),
       0,
     );
+  }
+
+  if (typeReponse === "blob" && reponse.ok) {
+    return (await reponse.blob()) as T;
   }
 
   // Réponse 204 No Content : pas de body à parser
@@ -381,8 +395,23 @@ export const clientAPI = {
     appel_api<T>(chemin, {
       ...options,
       method: "POST",
-      body: donnees ? JSON.stringify(donnees) : undefined,
+      body:
+        typeof FormData !== "undefined" && donnees instanceof FormData
+          ? donnees
+          : donnees
+            ? JSON.stringify(donnees)
+            : undefined,
     }),
+
+  postFormData: <T>(chemin: string, donnees: FormData, options?: OptionsRequete) =>
+    appel_api<T>(chemin, {
+      ...options,
+      method: "POST",
+      body: donnees,
+    }),
+
+  getBlob: (chemin: string, options?: OptionsRequete) =>
+    appel_api<Blob>(chemin, { ...options, method: "GET", typeReponse: "blob" }),
 
   patch: <T>(chemin: string, donnees?: unknown, options?: OptionsRequete) =>
     appel_api<T>(chemin, {

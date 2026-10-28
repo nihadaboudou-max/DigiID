@@ -15,8 +15,10 @@ from src.modeles import (
     SuiviFamilial, SuiviFamilialEvenement, NotificationLogistique, Bagage,
 )
 from src.modules.logistique import schemas
+from src.modules.gamification.service_notifications import creer_notification
 from src.noyau import dechiffrer_donnee, journal
 from src.noyau.constantes_roles import RoleUtilisateur
+from src.noyau.telephone import hasher_telephone
 from src.modules.qr_dynamique.service import (
     generer_token_durable,
     construire_url_qr_durable,
@@ -28,6 +30,7 @@ from src.noyau.notification import (
     construire_message_pre_alerte,
     masquer_telephone,
 )
+from src.modules.logistique.stockage_colis import chemin_photo_colis
 
 
 # ─── Utilitaires ─────────────────────────────────────────────────────
@@ -1277,6 +1280,49 @@ async def _generer_code_clair(
     return code
 
 
+async def _compte_par_telephone(
+    session: AsyncSession, telephone: str | None
+) -> Utilisateur | None:
+    if not telephone:
+        return None
+    return await session.scalar(
+        select(Utilisateur).where(
+            Utilisateur.telephone_hash == hasher_telephone(telephone),
+            Utilisateur.est_actif.is_(True),
+        )
+    )
+
+
+async def _notifier_comptes_colis(
+    session: AsyncSession,
+    colis: Colis,
+    titre: str,
+    message: str,
+) -> None:
+    identifiants = {
+        identifiant
+        for identifiant in (colis.expediteur_id, colis.destinataire_id)
+        if identifiant is not None
+    }
+    if not identifiants:
+        return
+
+    utilisateurs = await session.scalars(
+        select(Utilisateur).where(Utilisateur.id.in_(identifiants))
+    )
+    lien = f"/horaires?colis={colis.id}"
+    for utilisateur in utilisateurs:
+        await creer_notification(
+            session,
+            utilisateur,
+            type_notification="info",
+            categorie="logistique_colis",
+            titre=titre,
+            message=message,
+            lien_action=lien,
+        )
+
+
 async def creer_colis(
     session: AsyncSession,
     donnees: schemas.ColisCreate,
@@ -1363,12 +1409,33 @@ async def creer_colis(
             status.HTTP_400_BAD_REQUEST,
             detail="Le chauffeur indiqué ne correspond pas au chauffeur du voyage",
         )
-    if donnees.expediteur_id is not None:
+    expediteur = (
         await _verifier_existe(session, Utilisateur, donnees.expediteur_id, "Expéditeur")
+        if donnees.expediteur_id is not None
+        else await _compte_par_telephone(session, donnees.expediteur_tel)
+    )
+    destinataire = (
+        await _verifier_existe(session, Utilisateur, donnees.destinataire_id, "Destinataire")
+        if donnees.destinataire_id is not None
+        else await _compte_par_telephone(session, donnees.destinataire_tel)
+    )
+    if expediteur is not None and donnees.expediteur_tel and (
+        expediteur.telephone_hash != hasher_telephone(donnees.expediteur_tel)
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Le DigiID de l'expéditeur ne correspond pas au téléphone saisi.",
+        )
+    if destinataire is not None and (
+        destinataire.telephone_hash != hasher_telephone(donnees.destinataire_tel)
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Le DigiID du destinataire ne correspond pas au téléphone saisi.",
+        )
     if donnees.receveur_id is not None:
         await _verifier_existe(session, Utilisateur, donnees.receveur_id, "Receveur")
 
-    expediteur_id = donnees.expediteur_id or utilisateur.id
     receveur_id = donnees.receveur_id or utilisateur.id
 
     colis = Colis(
@@ -1376,11 +1443,12 @@ async def creer_colis(
         # que le colis : sinon un colis committe sans id_local peut etre recree
         # en double au rejeu de la file locale.
         id_local=id_local,
-        expediteur_id=expediteur_id,
+        expediteur_id=expediteur.id if expediteur else None,
         expediteur_nom=(donnees.expediteur_nom or "").strip() or None,
         expediteur_tel=(donnees.expediteur_tel or "").strip() or None,
         destinataire_nom=donnees.destinataire_nom.strip(),
         destinataire_tel=donnees.destinataire_tel.strip(),
+        destinataire_id=destinataire.id if destinataire else None,
         description=donnees.description,
         poids_kg=donnees.poids_kg,
         valeur_fcfa=donnees.valeur_fcfa,
@@ -1439,6 +1507,12 @@ async def creer_colis(
         horodatage=datetime.now(timezone.utc),
     )
     session.add(evenement)
+    await _notifier_comptes_colis(
+        session,
+        colis,
+        "Colis enregistré",
+        f"Votre colis {ticket.code_clair} a été enregistré. Touchez pour consulter le ticket.",
+    )
 
     await session.commit()
     await session.refresh(colis)
@@ -1965,6 +2039,19 @@ async def enregistrer_scan(
     #    transit, arrivée, livraison. Traçé dans ``notifications_logistique``.
     await _notifier_scan_colis(
         session, colis, ticket, donnees.type_evenement, donnees.gare_id
+    )
+    messages_evenement = {
+        "depart": ("Colis en route", "vient de prendre le départ"),
+        "mise_en_transit": ("Colis en transit", "est maintenant en transit"),
+        "arrivee": ("Colis arrivé", "est arrivé à destination"),
+        "livraison": ("Colis livré", "a été remis au destinataire"),
+    }
+    titre, progression = messages_evenement[donnees.type_evenement]
+    await _notifier_comptes_colis(
+        session,
+        colis,
+        titre,
+        f"Votre colis {ticket.code_clair} {progression}. Touchez pour consulter le ticket.",
     )
 
     # 6. Compte prépayé de l'agent : sur un colis réglé **en espèces**, 100 FCFA
@@ -2788,6 +2875,13 @@ async def valider_depart_voyage(
         ticket = await obtenir_ticket_du_colis(session, colis)
         if ticket is not None:
             ticket.statut = "en_transit"
+            await _notifier_comptes_colis(
+                session,
+                colis,
+                "Colis en route",
+                f"Votre colis {ticket.code_clair} vient de prendre le départ. "
+                "Touchez pour consulter le ticket.",
+            )
         await _notifier_scan_colis(session, colis, ticket, "depart", colis.gare_depart_id)
         nb_colis += 1
 
@@ -2923,6 +3017,14 @@ async def marquer_arrivee_voyage(
         colis.statut = "arrive"
         ticket = await obtenir_ticket_du_colis(session, colis)
         await _notifier_scan_colis(session, colis, ticket, "arrivee", gare_evt)
+        if ticket is not None:
+            await _notifier_comptes_colis(
+                session,
+                colis,
+                "Colis arrivé",
+                f"Votre colis {ticket.code_clair} est arrivé à destination. "
+                "Touchez pour consulter le ticket.",
+            )
         nb_colis += 1
 
     nb_passagers = 0

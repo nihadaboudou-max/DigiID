@@ -1,7 +1,10 @@
 "use client";
+import { useCallback, useEffect, useState } from "react";
+
 import { Bouton } from "@/composants/commun/Bouton";
 import { IconeTicket } from "@/composants/commun/Icones";
 import { imprimer } from "@/services/impression";
+import { clientAPI } from "@/services/client_api";
 import type { Colis, Ticket } from "@/types/logistique";
 import { formaterDate, formaterDateHeure, formaterFcfa, urlImageQR } from "./format";
 
@@ -11,12 +14,68 @@ interface Proprietes {
   afficherImpression?: boolean;
 }
 
+function PhotoColisPrivee({
+  url,
+  terminerChargement,
+}: {
+  url: string;
+  terminerChargement: () => void;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [indisponible, setIndisponible] = useState(false);
+
+  useEffect(() => {
+    let urlLocale: string | null = null;
+    let annule = false;
+    clientAPI
+      .getBlob(url, { authentifie: true })
+      .then((image) => {
+        if (annule) return;
+        urlLocale = URL.createObjectURL(image);
+        setSrc(urlLocale);
+        terminerChargement();
+      })
+      .catch((erreur: unknown) => {
+        console.error("Impossible de charger la photo privée du colis.", erreur);
+        if (!annule) {
+          setIndisponible(true);
+          terminerChargement();
+        }
+      });
+
+    return () => {
+      annule = true;
+      if (urlLocale) URL.revokeObjectURL(urlLocale);
+    };
+  }, [url, terminerChargement]);
+
+  if (indisponible) {
+    return <p className="max-w-[160px] text-center text-xs text-ardoise-clair">Photo indisponible</p>;
+  }
+  if (!src) {
+    return <p className="max-w-[160px] text-center text-xs text-ardoise-clair">Chargement de la photo…</p>;
+  }
+  return (
+    <img
+      src={src}
+      alt="Photo du colis expédié"
+      className="w-40 rounded-lg border border-ardoise-clair/20 object-cover"
+    />
+  );
+}
+
 export function TicketImprimable({
   ticket,
   colis,
   afficherImpression = true,
 }: Proprietes) {
   const qrSrc = urlImageQR(ticket.qr_code_url || ticket.qr_token);
+  const [photoEnChargement, setPhotoEnChargement] = useState(Boolean(colis?.photo_url));
+  const terminerChargementPhoto = useCallback(() => setPhotoEnChargement(false), []);
+
+  useEffect(() => {
+    setPhotoEnChargement(Boolean(colis?.photo_url));
+  }, [colis?.photo_url]);
 
   return (
     <div className="space-y-6">
@@ -103,6 +162,12 @@ export function TicketImprimable({
                 QR indisponible
               </div>
             )}
+            {colis?.photo_url && (
+              <PhotoColisPrivee
+                url={colis.photo_url}
+                terminerChargement={terminerChargementPhoto}
+              />
+            )}
             <p className="text-[10px] text-ardoise-clair text-center max-w-[160px]">
               À conserver par le remettant
             </p>
@@ -170,8 +235,12 @@ export function TicketImprimable({
         <div className="no-print flex flex-wrap gap-3 print:hidden mt-6">
           {/* `imprimer()` (et non `window.print()`) : attend les QR codes puis
               marque la page pour obtenir UNE page par ticket et par étiquette. */}
-          <Bouton variante="primaire" onClick={() => void imprimer()}>
-            ️ Imprimer le dossier complet
+          <Bouton
+            variante="primaire"
+            disabled={photoEnChargement}
+            onClick={() => void imprimer()}
+          >
+            {photoEnChargement ? "Chargement de la photo…" : "Imprimer le dossier complet"}
           </Bouton>
           <p className="text-xs text-ardoise-clair self-center">
             (Le ticket principal sera sur la 1ère page, les étiquettes sur les suivantes)

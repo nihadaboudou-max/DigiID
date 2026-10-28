@@ -35,6 +35,7 @@ class Colis(Base, MelangeTracabilite):
     __table_args__ = (
         Index("ix_colis_ticket_unique", "ticket_id", unique=True),
         Index("ix_colis_expediteur", "expediteur_id"),
+        Index("ix_colis_destinataire", "destinataire_id"),
         Index("ix_colis_gare_depart", "gare_depart_id"),
         Index("ix_colis_gare_arrivee", "gare_arrivee_id"),
         Index("ix_colis_voyage", "voyage_id"),
@@ -77,7 +78,14 @@ class Colis(Base, MelangeTracabilite):
     # Distinct de `expediteur_id` (compte DigiID facultatif).
     expediteur_nom: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     expediteur_tel: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    destinataire_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("utilisateur.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    # Photo privée du colis : conservée une semaine après la livraison.
+    photo_chemin: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     poids_kg: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     valeur_fcfa: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # Nombre d'articles contenus dans le colis — base de calcul du **frais de

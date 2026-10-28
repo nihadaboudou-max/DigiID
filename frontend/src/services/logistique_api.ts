@@ -348,6 +348,21 @@ export const logistiqueAPI = {
     creer: (d: DonneesColis) =>
       clientAPI.post<ColisEnregistre>(`${BASE}/colis`, d, opts),
 
+    /** Joindre la photo du colis enregistré (JPEG/PNG/WebP, 5 Mo maximum). */
+    ajouterPhoto: (colisId: string, fichier: File) => {
+      const formulaire = new FormData();
+      formulaire.append("fichier", fichier);
+      return clientAPI.postFormData<{ photo_url: string }>(
+        `${BASE}/colis/${colisId}/photo`,
+        formulaire,
+        opts,
+      );
+    },
+
+    /** Ticket privé accessible uniquement à l'expéditeur ou au destinataire. */
+    pourMonCompte: (colisId: string) =>
+      clientAPI.get<ColisEnregistre>(`${BASE}/colis/mes/${colisId}`, opts),
+
     /** Liste paginée des colis, avec filtres (statut, gare, voyage). */
     lister: (filtres?: {
       statut?: string;

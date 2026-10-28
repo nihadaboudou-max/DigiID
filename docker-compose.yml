@@ -125,6 +125,48 @@ services:
       redis:
         condition: service_started
 
+  worker_celery:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: digiid_worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    environment:
+      - POSTGRES_HOST=db
+      - REDIS_HOST=redis
+      - PYTHONPATH=/home/digiid/.local/lib/python3.11/site-packages:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: ["celery", "-A", "src.modules.monitoring.taches", "worker", "--loglevel=info", "--concurrency=2"]
+
+  beat_celery:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: digiid_celery_beat
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    environment:
+      - POSTGRES_HOST=db
+      - REDIS_HOST=redis
+      - PYTHONPATH=/home/digiid/.local/lib/python3.11/site-packages:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: ["celery", "-A", "src.modules.monitoring.taches", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
+
   frontend:
     build:
       context: .

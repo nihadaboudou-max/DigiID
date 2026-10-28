@@ -134,6 +134,28 @@ services:
     networks:
       - reseau_digiid
 
+  beat_celery:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: digiid_celery_beat
+    restart: unless-stopped
+    env_file:
+      - ../backend/.env
+    environment:
+      - POSTGRES_HOST=base_donnees
+      - REDIS_HOST=cache
+      - PYTHONPATH=/home/digiid/.local/lib/python3.11/site-packages:/app
+    depends_on:
+      - base_donnees
+      - cache
+    volumes:
+      - ../backend:/app
+      - donnees_logs:/app/logs
+    command: ["celery", "-A", "src.modules.monitoring.taches", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
+    networks:
+      - reseau_digiid
+
 # ---------------------------------------------------------------------------
 # Volumes persistants
 # ---------------------------------------------------------------------------

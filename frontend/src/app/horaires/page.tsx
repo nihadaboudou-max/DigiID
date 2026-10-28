@@ -10,7 +10,7 @@
  * On y accède depuis la page d'accueil ou par un lien direct partagé sur les
  * réseaux ; un champ permet aussi de **suivre un colis** à partir de son code.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -20,10 +20,19 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import { formaterDateHeure } from "@/composants/logistique/format";
 import { ErreurAPI } from "@/services/client_api";
+import { TicketImprimable } from "@/composants/logistique/TicketImprimable";
+import { useAuthentification } from "@/contextes/authentification";
+import { useNotifications } from "@/contextes/notifications";
+import {
+  listerMesNotifications,
+  marquerNotificationLue,
+  type NotificationDetail,
+} from "@/services/gamification";
 import {
   logistiqueAPI,
   type VoyagePublic,
 } from "@/services/logistique_api";
+import type { ColisEnregistre } from "@/types/logistique";
 
 /** Horizon d'affichage : ce qui intéresse un voyageur, pas tout l'historique. */
 type Horizon = "jour" | "semaine" | "tout";
@@ -76,6 +85,9 @@ function normaliser(texte: string): string {
 
 export default function PageHorairesPublics() {
   const router = useRouter();
+  const { utilisateur, chargement: chargementAuth } = useAuthentification();
+  const { notifier } = useNotifications();
+  const estCitoyenConnecte = utilisateur?.role === "citoyen";
 
   const [horaires, setHoraires] = useState<VoyagePublic[]>([]);
   const [horizon, setHorizon] = useState<Horizon>("jour");
@@ -84,6 +96,12 @@ export default function PageHorairesPublics() {
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [majLe, setMajLe] = useState<Date | null>(null);
+  const [notificationsColis, setNotificationsColis] = useState<NotificationDetail[]>([]);
+  const [erreurNotifications, setErreurNotifications] = useState<string | null>(null);
+  const [ticketSelectionne, setTicketSelectionne] = useState<ColisEnregistre | null>(null);
+  const [erreurTicket, setErreurTicket] = useState<string | null>(null);
+  const identifiantsConnus = useRef<Set<string> | null>(null);
+  const parametreColisTraite = useRef<string | null>(null);
 
   const charger = useCallback(async () => {
     setErreur(null);
@@ -171,6 +189,92 @@ export default function PageHorairesPublics() {
     router.push(`/suivi/${encodeURIComponent(code)}`);
   };
 
+  const chargerNotificationsColis = useCallback(async () => {
+    if (!estCitoyenConnecte) return;
+    try {
+      const resultat = await listerMesNotifications();
+      const toutes = resultat.notifications;
+      const colis = toutes.filter((notification) => notification.categorie === "logistique_colis");
+      if (identifiantsConnus.current) {
+        toutes
+          .filter(
+            (notification) =>
+              notification.categorie === "logistique_colis" &&
+              !identifiantsConnus.current?.has(notification.id),
+          )
+          .forEach((notification) =>
+            notifier(`${notification.titre} — ${notification.message}`, "info"),
+          );
+      }
+      identifiantsConnus.current = new Set(toutes.map((notification) => notification.id));
+      setNotificationsColis(colis);
+      setErreurNotifications(null);
+    } catch (e) {
+      setErreurNotifications(
+        e instanceof ErreurAPI
+          ? e.message_utilisateur
+          : "Impossible de charger vos notifications de colis.",
+      );
+    }
+  }, [estCitoyenConnecte, notifier]);
+
+  const ouvrirTicketColis = useCallback(async (colisId: string): Promise<boolean> => {
+    setErreurTicket(null);
+    try {
+      const ticket = await logistiqueAPI.colis.pourMonCompte(colisId);
+      setTicketSelectionne(ticket);
+      return true;
+    } catch (e) {
+      setErreurTicket(
+        e instanceof ErreurAPI
+          ? e.message_utilisateur
+          : "Impossible d'ouvrir le ticket de ce colis.",
+      );
+      return false;
+    }
+  }, []);
+
+  async function ouvrirNotification(notification: NotificationDetail) {
+    const lien = notification.lien_action;
+    const colisId = lien
+      ? new URL(lien, window.location.origin).searchParams.get("colis")
+      : null;
+    if (!colisId) {
+      setErreurTicket("Le lien du ticket est manquant dans cette notification.");
+      return;
+    }
+    const ticketOuvert = await ouvrirTicketColis(colisId);
+    if (!ticketOuvert) return;
+    if (!notification.est_lue) {
+      try {
+        await marquerNotificationLue(notification.id);
+        setNotificationsColis((liste) =>
+          liste.map((element) =>
+            element.id === notification.id ? { ...element, est_lue: true } : element,
+          ),
+        );
+      } catch (e) {
+        console.error("Impossible de marquer la notification comme lue.", e);
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (chargementAuth || !estCitoyenConnecte) return;
+    identifiantsConnus.current = null;
+    void chargerNotificationsColis();
+    const minuteur = window.setInterval(() => void chargerNotificationsColis(), 30_000);
+    return () => window.clearInterval(minuteur);
+  }, [chargementAuth, estCitoyenConnecte, chargerNotificationsColis]);
+
+  useEffect(() => {
+    if (chargementAuth || !estCitoyenConnecte) return;
+    const colisId = new URLSearchParams(window.location.search).get("colis");
+    if (!colisId || parametreColisTraite.current === colisId) return;
+    parametreColisTraite.current = colisId;
+    void ouvrirTicketColis(colisId);
+  }, [chargementAuth, estCitoyenConnecte, ouvrirTicketColis]);
+
   /**
    * Ce que le guide vocal lit à l'ouverture : les trois prochains départs.
    * C'est la question que se pose un voyageur — et il n'a rien à lire.
@@ -195,7 +299,11 @@ export default function PageHorairesPublics() {
       data-vocal-zone
       data-vocal-annonce={erreur ? `Attention. ${erreur}` : annonceVocale}
     >
-      <div className="mx-auto max-w-3xl space-y-6 apparition">
+      <div
+        className={`mx-auto space-y-6 apparition ${
+          estCitoyenConnecte ? "max-w-6xl" : "max-w-3xl"
+        }`}
+      >
         {/* En-tête public */}
         <header className="text-center">
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-lagune">
@@ -215,6 +323,14 @@ export default function PageHorairesPublics() {
           )}
         </header>
 
+        <div
+          className={
+            estCitoyenConnecte
+              ? "grid items-start gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.6fr)]"
+              : "space-y-6"
+          }
+        >
+        <div className="min-w-0 space-y-6">
         {/* Suivi d'un colis : le second réflexe du voyageur */}
         <Carte>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -385,6 +501,97 @@ export default function PageHorairesPublics() {
             </Link>
           </p>
         </footer>
+        </div>
+
+        {estCitoyenConnecte && (
+          <aside className="lg:sticky lg:top-4">
+            <Carte
+              titre="Notifications de mes colis"
+              description="Touchez un message pour ouvrir le ticket et la photo du colis."
+            >
+              {erreurNotifications && (
+                <Alerte variante="erreur" titre="Notifications indisponibles">
+                  {erreurNotifications}
+                </Alerte>
+              )}
+              {erreurTicket && (
+                <Alerte variante="erreur" titre="Ticket indisponible">
+                  {erreurTicket}
+                </Alerte>
+              )}
+              {notificationsColis.length === 0 ? (
+                <p className="py-4 text-sm text-ardoise-clair">
+                  Vous n&apos;avez pas encore de notification de colis.
+                </p>
+              ) : (
+                <ul className="max-h-[70vh] space-y-3 overflow-y-auto">
+                  {notificationsColis.map((notification) => (
+                    <li key={notification.id}>
+                      <button
+                        type="button"
+                        onClick={() => void ouvrirNotification(notification)}
+                        className={`w-full rounded-xl border p-3 text-left transition hover:border-lagune/40 hover:bg-lagune/5 ${
+                          notification.est_lue
+                            ? "border-ardoise-clair/15 bg-white"
+                            : "border-lagune/30 bg-lagune/5"
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <span
+                            className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${
+                              notification.est_lue ? "bg-ardoise-clair/30" : "bg-lagune"
+                            }`}
+                            aria-hidden="true"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-semibold text-ardoise">
+                              {notification.titre}
+                            </span>
+                            <span className="mt-1 block text-xs text-ardoise-clair">
+                              {notification.message}
+                            </span>
+                            <time
+                              className="mt-2 block text-[11px] text-ardoise-clair"
+                              dateTime={notification.cree_le}
+                            >
+                              {formaterDateHeure(notification.cree_le)}
+                            </time>
+                          </span>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Carte>
+          </aside>
+        )}
+        </div>
+
+        {ticketSelectionne && (
+          <div
+            className="no-print fixed inset-0 z-50 flex items-center justify-center bg-ardoise/60 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Ticket du colis"
+          >
+            <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-sable-clair p-4 shadow-2xl sm:p-6">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-lg font-bold text-ardoise">
+                  Ticket {ticketSelectionne.ticket.code_clair}
+                </h2>
+                <Bouton variante="ghost" onClick={() => setTicketSelectionne(null)}>
+                  Fermer
+                </Bouton>
+              </div>
+              <TicketImprimable
+                ticket={ticketSelectionne.ticket}
+                colis={ticketSelectionne.colis}
+                afficherImpression={false}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

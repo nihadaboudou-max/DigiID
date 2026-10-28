@@ -111,8 +111,10 @@ export function EnregistrementColis({
   const [etape, setEtape] = useState<Etape>(1);
   const [expediteurNom, setExpediteurNom] = useState("");
   const [expediteurTel, setExpediteurTel] = useState("");
+  const [expediteurCompteId, setExpediteurCompteId] = useState<string | null>(null);
   const [destinataireNom, setDestinataireNom] = useState("");
   const [destinataireTel, setDestinataireTel] = useState("");
+  const [destinataireCompteId, setDestinataireCompteId] = useState<string | null>(null);
   const [gareDepartId, setGareDepartId] = useState("");
   const [gareArriveeId, setGareArriveeId] = useState("");
   const [description, setDescription] = useState("");
@@ -134,13 +136,27 @@ export function EnregistrementColis({
   /** Paiement inclus à l'inscription, avant le QR. */
   const [moyenPaiement, setMoyenPaiement] = useState<MoyenPaiement | null>(null);
   const [telephonePaiement, setTelephonePaiement] = useState("");
+  const [photoColis, setPhotoColis] = useState<File | null>(null);
+  const [apercuPhoto, setApercuPhoto] = useState<string | null>(null);
 
   // État d'envoi
   const [erreur, setErreur] = useState<string | null>(null);
   const [enregistrement, setEnregistrement] = useState(false);
   const [resultat, setResultat] = useState<ColisEnregistre | null>(null);
+  const [erreurPhoto, setErreurPhoto] = useState<string | null>(null);
+  const [envoiPhoto, setEnvoiPhoto] = useState(false);
   /** Colis mis en file locale faute de réseau (id_local) — bandeau de succès. */
   const [colisEnFile, setColisEnFile] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!photoColis) {
+      setApercuPhoto(null);
+      return;
+    }
+    const url = URL.createObjectURL(photoColis);
+    setApercuPhoto(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photoColis]);
 
   // ─── Guidage vocal de l'assistant (S5) ─────────────────────────────
 
@@ -325,8 +341,10 @@ export function EnregistrementColis({
     setEtape(1);
     setExpediteurNom("");
     setExpediteurTel("");
+    setExpediteurCompteId(null);
     setDestinataireNom("");
     setDestinataireTel("");
+    setDestinataireCompteId(null);
     setDescription("");
     setPoidsKg("");
     setValeurFcfa("");
@@ -339,6 +357,9 @@ export function EnregistrementColis({
     setArretDestinationId("");
     setMoyenPaiement(null);
     setTelephonePaiement("");
+    setPhotoColis(null);
+    setErreurPhoto(null);
+    setEnvoiPhoto(false);
     setGareDepartId(gareGuichet?.id ?? "");
     setErreur(null);
   }
@@ -364,10 +385,12 @@ export function EnregistrementColis({
       const valeur = valeurFcfa ? Number(valeurFcfa.replace(",", ".")) : null;
       const charge = {
         expediteur_nom: expediteurNom.trim() || null,
+        expediteur_id: expediteurCompteId,
         // Numéros **normalisés** : +2290197123456 (ou +226… si étranger).
         expediteur_tel: telExpediteur,
         destinataire_nom: destinataireNom.trim(),
         destinataire_tel: telDestinataire,
+        destinataire_id: destinataireCompteId,
         gare_depart_id: gareDepartId,
         gare_arrivee_id: gareArriveeId,
         arret_destination_id:
@@ -395,7 +418,31 @@ export function EnregistrementColis({
       };
 
       try {
-        setResultat(await logistiqueAPI.colis.creer(charge));
+        const enregistre = await logistiqueAPI.colis.creer(charge);
+        if (photoColis) {
+          setEnvoiPhoto(true);
+          try {
+            const photo = await logistiqueAPI.colis.ajouterPhoto(
+              enregistre.colis.id,
+              photoColis,
+            );
+            setResultat({
+              ...enregistre,
+              colis: { ...enregistre.colis, photo_url: photo.photo_url },
+            });
+          } catch (e) {
+            setResultat(enregistre);
+            setErreurPhoto(
+              e instanceof ErreurAPI
+                ? e.message_utilisateur
+                : "Le colis est enregistré, mais la photo n'a pas pu être envoyée. Réessayez.",
+            );
+          } finally {
+            setEnvoiPhoto(false);
+          }
+        } else {
+          setResultat(enregistre);
+        }
       } catch (erreurEnvoi) {
         // Pas de réseau (ou serveur injoignable) : le colis est enregistré
         // LOCALEMENT puis rejoué à la reconnexion.
@@ -404,6 +451,12 @@ export function EnregistrementColis({
         // test `instanceof ErreurAPI` les prenait pour des refus métier et
         // n'enregistrait donc jamais rien hors-ligne.
         if (!estErreurReseau(erreurEnvoi)) throw erreurEnvoi;
+        if (photoColis) {
+          setErreur(
+            "La photo ne peut pas être mise en file hors ligne. Rétablissez la connexion pour enregistrer le colis avec sa photo.",
+          );
+          return;
+        }
 
         const enAttente = await mettreEnFile(charge);
         setColisEnFile(enAttente.id_local);
@@ -416,6 +469,34 @@ export function EnregistrementColis({
       );
     } finally {
       setEnregistrement(false);
+    }
+  }
+
+  async function retenterEnvoiPhoto() {
+    if (!resultat || !photoColis) return;
+    setEnvoiPhoto(true);
+    setErreurPhoto(null);
+    try {
+      const photo = await logistiqueAPI.colis.ajouterPhoto(
+        resultat.colis.id,
+        photoColis,
+      );
+      setResultat((courant) =>
+        courant
+          ? {
+              ...courant,
+              colis: { ...courant.colis, photo_url: photo.photo_url },
+            }
+          : courant,
+      );
+    } catch (e) {
+      setErreurPhoto(
+        e instanceof ErreurAPI
+          ? e.message_utilisateur
+          : "La photo n'a pas pu être envoyée. Réessayez.",
+      );
+    } finally {
+      setEnvoiPhoto(false);
     }
   }
 
@@ -481,6 +562,24 @@ export function EnregistrementColis({
         <Alerte variante="succes" titre={t("colis.succes.titre")}>
           {t("colis.succes.desc")}
         </Alerte>
+        {erreurPhoto && (
+          <Alerte variante="avertissement" titre="Photo non envoyée">
+            <div className="space-y-2">
+              <p>{erreurPhoto}</p>
+              {photoColis && (
+                <Bouton
+                  type="button"
+                  variante="secondaire"
+                  disabled={envoiPhoto}
+                  chargement={envoiPhoto}
+                  onClick={() => void retenterEnvoiPhoto()}
+                >
+                  Réessayer l&apos;envoi de la photo
+                </Bouton>
+              )}
+            </div>
+          </Alerte>
+        )}
         <TicketImprimable ticket={resultat.ticket} colis={resultat.colis} />
 
         <Alerte variante="info" titre="Paiement associé à l'enregistrement">
@@ -567,7 +666,11 @@ export function EnregistrementColis({
                   description="Présentez sa carte (ou saisissez son DigiID) : le nom et le téléphone ci-dessous se remplissent automatiquement."
                   rechercheInitiale={digiidInitial}
                   surSelection={(contact) => {
-                    if (!contact) return;
+                    if (!contact) {
+                      setExpediteurCompteId(null);
+                      return;
+                    }
+                    setExpediteurCompteId(contact.utilisateur_id);
                     setExpediteurNom(contact.nom_complet);
                     if (contact.telephone) setExpediteurTel(contact.telephone);
                   }}
@@ -583,7 +686,10 @@ export function EnregistrementColis({
                   libelle="Téléphone de l'expéditeur"
                   required
                   value={expediteurTel}
-                  onChange={(e) => setExpediteurTel(e.target.value)}
+                  onChange={(e) => {
+                    setExpediteurTel(e.target.value);
+                    setExpediteurCompteId(null);
+                  }}
                   placeholder="+229 01 97 12 34 56"
                   inputMode="tel"
                   type="tel"
@@ -618,7 +724,11 @@ export function EnregistrementColis({
                   titre="Le destinataire a une carte DigiID ?"
                   description="Scannez son QR dynamique (ou saisissez son DigiID) : le nom et le téléphone ci-dessous se remplissent automatiquement."
                   surSelection={(contact) => {
-                    if (!contact) return;
+                    if (!contact) {
+                      setDestinataireCompteId(null);
+                      return;
+                    }
+                    setDestinataireCompteId(contact.utilisateur_id);
                     setDestinataireNom(contact.nom_complet);
                     if (contact.telephone) setDestinataireTel(contact.telephone);
                   }}
@@ -634,7 +744,10 @@ export function EnregistrementColis({
                   libelle="Téléphone du destinataire"
                   required
                   value={destinataireTel}
-                  onChange={(e) => setDestinataireTel(e.target.value)}
+                  onChange={(e) => {
+                    setDestinataireTel(e.target.value);
+                    setDestinataireCompteId(null);
+                  }}
                   placeholder="+229 01 97 12 34 56"
                   inputMode="tel"
                   type="tel"
@@ -748,6 +861,56 @@ export function EnregistrementColis({
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Ex : Sac de riz 25 kg, carton de tissus…"
                 />
+
+                <div className="space-y-2 rounded-xl border border-ardoise-clair/15 bg-sable-clair/50 p-3">
+                  <label htmlFor="photo-colis" className="block text-sm font-semibold text-ardoise">
+                    Photo du colis (facultative)
+                  </label>
+                  <input
+                    id="photo-colis"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="block w-full text-sm text-ardoise-clair file:mr-3 file:rounded-lg file:border-0 file:bg-lagune/10 file:px-3 file:py-2 file:font-semibold file:text-lagune"
+                    onChange={(e) => {
+                      const fichier = e.target.files?.[0] ?? null;
+                      if (
+                        fichier &&
+                        !["image/jpeg", "image/png", "image/webp"].includes(fichier.type)
+                      ) {
+                        setErreur("Format non pris en charge. Choisissez une image JPEG, PNG ou WebP.");
+                        e.target.value = "";
+                        return;
+                      }
+                      if (fichier && fichier.size > 5 * 1024 * 1024) {
+                        setErreur("La photo ne doit pas dépasser 5 Mo.");
+                        e.target.value = "";
+                        return;
+                      }
+                      setErreur(null);
+                      setErreurPhoto(null);
+                      setPhotoColis(fichier);
+                    }}
+                  />
+                  <p className="text-xs text-ardoise-clair">
+                    La photo apparaît sous le QR du ticket et est supprimée 7 jours après la livraison.
+                  </p>
+                  {apercuPhoto && (
+                    <div className="flex items-start gap-3">
+                      <img
+                        src={apercuPhoto}
+                        alt="Aperçu de la photo du colis"
+                        className="h-24 w-24 rounded-lg border border-ardoise-clair/20 object-cover"
+                      />
+                      <button
+                        type="button"
+                        className="text-sm font-semibold text-terre hover:underline"
+                        onClick={() => setPhotoColis(null)}
+                      >
+                        Retirer la photo
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <ChampSaisie

@@ -5,9 +5,13 @@ import unicodedata
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter, Depends, File, HTTPException, Query, Request,
+    UploadFile, status,
+)
+from fastapi.responses import FileResponse
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
@@ -18,6 +22,12 @@ from src.modeles import (
 )
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.logistique import service, schemas
+from src.modules.logistique.stockage_colis import (
+    TAILLE_MAX_PHOTO,
+    chemin_photo_colis,
+    stocker_photo_colis,
+    supprimer_photo_colis,
+)
 from src.modules.paiement.tarification import frais_service_passager
 from src.modules.qr_dynamique.service import construire_url_qr_durable
 from src.modules.logistique.dependances import (
@@ -239,6 +249,20 @@ async def _enrichir_colis(session: AsyncSession, colis: Colis) -> Colis:
         session, colis.remis_guichet_a_id
     )
     colis.bagages = await _bagages_enrichis(session, colis_id=colis.id)
+    photo = chemin_photo_colis(colis.photo_chemin)
+    expiration_photo = (
+        colis.livre_le + timedelta(days=7)
+        if colis.livre_le is not None
+        else None
+    )
+    if expiration_photo is not None and expiration_photo.tzinfo is None:
+        expiration_photo = expiration_photo.replace(tzinfo=timezone.utc)
+    colis.photo_url = (
+        f"/api/v1/logistique/colis/{colis.id}/photo"
+        if photo is not None
+        and (expiration_photo is None or expiration_photo > datetime.now(timezone.utc))
+        else None
+    )
     return colis
 
 
@@ -1295,6 +1319,123 @@ async def affecter_colis(
     colis = await service.affecter_colis(session, colis_id, donnees, utilisateur_courant)
     await _enrichir_colis(session, colis)
     return colis
+
+
+@routeur_colis.post(
+    "/{colis_id}/photo",
+    response_model=schemas.PhotoColisResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Joindre la photo du colis à son expédition",
+)
+@require_permission("logistique.colis.creer")
+async def ajouter_photo_colis(
+    colis_id: UUID,
+    fichier: UploadFile = File(...),
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    colis = await service.obtenir_colis(session, colis_id)
+    if colis.enregistre_par_id != utilisateur_courant.id:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Seul l'agent qui a enregistré le colis peut joindre sa photo.",
+        )
+    if colis.statut in ("livre", "annule"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="La photo ne peut être ajoutée qu'avant la livraison du colis.",
+        )
+
+    contenu = await fichier.read(TAILLE_MAX_PHOTO + 1)
+    if len(contenu) > TAILLE_MAX_PHOTO:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="La photo ne doit pas dépasser 5 Mo.",
+        )
+    try:
+        nouveau_chemin = stocker_photo_colis(contenu)
+    except ValueError as erreur:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(erreur)) from erreur
+
+    ancien_chemin = colis.photo_chemin
+    colis.photo_chemin = nouveau_chemin
+    try:
+        await session.commit()
+    except SQLAlchemyError:
+        await session.rollback()
+        try:
+            supprimer_photo_colis(nouveau_chemin)
+        except OSError as erreur:
+            journal.error(f"Nettoyage de la photo temporaire {nouveau_chemin} impossible: {erreur}")
+        raise
+
+    if ancien_chemin:
+        try:
+            supprimer_photo_colis(ancien_chemin)
+        except OSError as erreur:
+            journal.error(f"Suppression de l'ancienne photo du colis {colis.id} impossible: {erreur}")
+
+    return {"photo_url": f"/api/v1/logistique/colis/{colis.id}/photo"}
+
+
+def _est_participant_colis(colis: Colis, utilisateur: Utilisateur) -> bool:
+    return utilisateur.id in {
+        colis.expediteur_id,
+        colis.destinataire_id,
+    }
+
+
+@routeur_colis.get(
+    "/mes/{colis_id}",
+    response_model=schemas.ColisEnregistre,
+    summary="Voir le ticket d'un colis associé à mon compte",
+)
+async def voir_mon_ticket_colis(
+    colis_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    colis = await service.obtenir_colis(session, colis_id)
+    if not _est_participant_colis(colis, utilisateur_courant):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Colis introuvable")
+    ticket = await session.get(Ticket, colis.ticket_id) if colis.ticket_id else None
+    if ticket is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Ticket introuvable")
+    await _enrichir_colis(session, colis)
+    ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
+    return {"colis": colis, "ticket": ticket}
+
+
+@routeur_colis.get(
+    "/{colis_id}/photo",
+    summary="Afficher la photo privée d'un colis",
+)
+async def voir_photo_colis(
+    colis_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    colis = await service.obtenir_colis(session, colis_id)
+    if (
+        not _est_participant_colis(colis, utilisateur_courant)
+        and colis.enregistre_par_id != utilisateur_courant.id
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Photo introuvable")
+
+    expiration = colis.livre_le + timedelta(days=7) if colis.livre_le else None
+    if expiration is not None and expiration.tzinfo is None:
+        expiration = expiration.replace(tzinfo=timezone.utc)
+    if expiration is not None and expiration <= datetime.now(timezone.utc):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="La photo a expiré")
+
+    chemin = chemin_photo_colis(colis.photo_chemin)
+    if chemin is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Photo introuvable")
+    return FileResponse(
+        chemin,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @routeur_colis.patch("/{colis_id}", response_model=schemas.ColisResponse,

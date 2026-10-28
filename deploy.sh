@@ -57,7 +57,7 @@ docker builder prune -f || true
 export COMPOSE_BAKE=false
 
 echo "🏗️  [1/2] Reconstruction du BACKEND..."
-docker compose build --progress plain --no-cache backend
+docker compose build --progress plain --no-cache backend worker_celery beat_celery
 
 echo "🏗️  [2/2] Reconstruction du FRONTEND..."
 docker compose build --progress plain --no-cache frontend

@@ -21,6 +21,7 @@ psycopg2-binary
 
 # --- Cache (Redis) ---
 redis==5.0.7
+celery==5.3.6
 
 # --- NLP (analyse de texte) ---
 spacy==3.7.4

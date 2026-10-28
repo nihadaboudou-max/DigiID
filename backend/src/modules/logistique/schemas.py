@@ -335,6 +335,8 @@ class ColisCreate(BaseModel):
     # Expéditeur saisi au guichet (souvent un tiers sans compte DigiID).
     expediteur_nom: Optional[str] = Field(None, max_length=150)
     expediteur_tel: Optional[str] = Field(None, max_length=30)
+    expediteur_id: Optional[UUID] = None
+    destinataire_id: Optional[UUID] = None
     gare_depart_id: UUID
     gare_arrivee_id: UUID
     # Arrêt précis où le colis doit descendre (facultatif : à défaut, la gare
@@ -355,8 +357,7 @@ class ColisCreate(BaseModel):
     # l'encaissement (espèces immédiat, mobile money en mode prototype).
     moyen_paiement: Literal["especes", "mtn", "moov"]
     telephone_paiement: Optional[str] = Field(None, max_length=30)
-    # Si non fournis, l'expéditeur ET le receveur = utilisateur courant (guichet).
-    expediteur_id: Optional[UUID] = None
+    # Si non fourni, le receveur = utilisateur courant (guichet).
     receveur_id: Optional[UUID] = None
     # **Attribution obligatoire** : tout enregistrement est lié à un chauffeur
     # précis et à un trajet précis (gare de départ → gare d'arrivée).
@@ -409,6 +410,7 @@ class ColisResponse(BaseModel):
     qr_token: Optional[str] = None
     qr_code_url: Optional[str] = None
     expediteur_id: Optional[UUID] = None
+    destinataire_id: Optional[UUID] = None
     destinataire_nom: str
     destinataire_tel: str
     description: Optional[str] = None
@@ -437,6 +439,7 @@ class ColisResponse(BaseModel):
     arret_destination_id: Optional[UUID] = None
     arret_destination_nom: Optional[str] = None
     arret_ordre: Optional[int] = None
+    photo_url: Optional[str] = None
     # Confirmation de prise en charge par le chauffeur + remise au guichet.
     reception_confirmee_le: Optional[datetime] = None
     remis_guichet_le: Optional[datetime] = None
@@ -467,6 +470,10 @@ class ColisHorsLigne(ColisCreate):
 class ColisEnregistre(BaseModel):
     colis: ColisResponse
     ticket: TicketResponse
+
+
+class PhotoColisResponse(BaseModel):
+    photo_url: str
 
 
 class ColisUpdate(BaseModel):

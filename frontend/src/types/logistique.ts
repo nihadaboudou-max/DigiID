@@ -54,6 +54,7 @@ export interface Colis {
   qr_token: string | null;
   qr_code_url: string | null;
   expediteur_id: string | null;
+  destinataire_id: string | null;
   destinataire_nom: string;
   destinataire_tel: string;
   description: string | null;
@@ -88,6 +89,8 @@ export interface Colis {
   expediteur_tel: string | null;
   receveur_nom: string | null;
   chauffeur_nom: string | null;
+  /** URL de la photo privée du colis, vide après sa période de conservation. */
+  photo_url: string | null;
   /** Étiquettes QR générées (une par sac). */
   bagages: Bagage[];
 }
@@ -137,6 +140,8 @@ export interface DonneesColis {
   /** Expéditeur saisi au guichet (souvent un tiers sans compte DigiID). */
   expediteur_nom?: string | null;
   expediteur_tel?: string | null;
+  expediteur_id?: string | null;
+  destinataire_id?: string | null;
   gare_depart_id: string;
   gare_arrivee_id: string;
   description?: string | null;
@@ -149,7 +154,6 @@ export interface DonneesColis {
 
   /** Prix du transport — facultatif : nul si le guichet ne le renseigne pas. */
   frais_fcfa?: number | null;
-  expediteur_id?: string | null;
   receveur_id?: string | null;
 
   /** Attribution **obligatoire** : trajet + chauffeur précis.

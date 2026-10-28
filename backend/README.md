@@ -9,6 +9,7 @@ API Python FastAPI pour le système d'identité numérique DigiID.
 - **SQLAlchemy 2.0** — ORM
 - **PostgreSQL 16** — base de données
 - **Redis 7** — cache + sessions + file de tâches
+- **Celery** — tâches d'arrière-plan et planification du nettoyage des photos de colis
 - **Alembic** — migrations de base de données
 - **Argon2id** — hachage des mots de passe
 - **AES-256-GCM** — chiffrement des données sensibles
@@ -51,6 +52,15 @@ backend/
 ## Démarrage rapide en local
 
 Voir le README à la racine du projet (`/digiid/README.md`).
+
+## Photos des colis
+
+Les photos d'expédition sont privées et enregistrées dans `media/colis`. Elles
+sont retirées de l'accès dès sept jours après la livraison, puis supprimées par
+la tâche périodique Celery Beat (toutes les 15 minutes). En production, l'API
+et le worker doivent partager un stockage persistant pour ce dossier, et Redis
+doit être disponible comme broker. Un disque éphémère ne garantit pas la
+conservation des photos ni leur suppression planifiée.
 
 ## Tests
 
