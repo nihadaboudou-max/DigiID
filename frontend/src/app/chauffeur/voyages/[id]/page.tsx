@@ -110,7 +110,6 @@ function Contenu() {
 
   const compteurs = useMemo(() => {
     return {
-      total: colis.length,
       a_transporter: colis.filter(
         (c) => c.statut === "enregistre" || c.statut === "en_transit",
       ).length,
@@ -149,8 +148,6 @@ function Contenu() {
         <Link href="/chauffeur/dashboard" className="hover:text-lagune">
           Mes voyages
         </Link>
-        <span>/</span>
-        <span className="text-ardoise font-semibold">{libelleLigne(ligne)}</span>
       </nav>
 
       {/* En-tête */}
@@ -187,8 +184,7 @@ function Contenu() {
       </Carte>
 
       {/* Compteurs colis */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Compteur libelle="Total" valeur={compteurs.total} couleur="text-ardoise" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Compteur
           libelle="À transporter"
           valeur={compteurs.a_transporter}
@@ -248,10 +244,9 @@ function Contenu() {
       {/* Manifeste : tout ce qui est à bord, en une feuille imprimable */}
       <ManifesteVoyage voyageId={voyage.id} rafraichir={rafraichir} />
 
-      {/* Liste des passagers (suivi familial) */}
+      {/* Détails des passagers (complémentaires au manifeste) */}
       <Carte
-        titre="Passagers à bord"
-        description={`${passagers.length} passager(s) suivis pour ce voyage.`}
+        titre="Suivi des passagers"
       >
         {passagers.length === 0 ? (
           <p className="text-sm italic text-ardoise-clair">
@@ -311,10 +306,9 @@ function Contenu() {
         )}
       </Carte>
 
-      {/* Liste des colis */}
+      {/* Détails des colis (complémentaires au manifeste) */}
       <Carte
-        titre="Colis à bord"
-        description={`${colis.length} colis pour ce voyage.`}
+        titre="Suivi détaillé des colis"
       >
         <TableauColis
           colis={colis}
