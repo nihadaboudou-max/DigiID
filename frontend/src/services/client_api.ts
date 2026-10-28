@@ -168,6 +168,36 @@ export class ErreurAPI extends Error {
   }
 }
 
+function messageErreurConnexion(): string {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return "Vous êtes hors ligne. Vérifiez votre connexion puis réessayez.";
+  }
+  return "Connexion temporairement indisponible. Réessayez dans quelques instants.";
+}
+
+function messageErreurValidation(message: string): string {
+  const obligatoire = message.match(
+    /(?:^|[\s·])([a-zA-Z_][\w.]*)\s*:\s*(?:Field required|ce champ est obligatoire)/i,
+  );
+  if (obligatoire) {
+    if (obligatoire[1] === "moyen_paiement") {
+      return "Veuillez choisir un moyen de paiement.";
+    }
+
+    const champ = obligatoire[1]
+      .split(".")
+      .pop()!
+      .replaceAll("_", " ");
+    return `Le champ « ${champ} » est obligatoire.`;
+  }
+
+  if (/Field required/i.test(message)) {
+    return "Veuillez remplir les champs obligatoires.";
+  }
+
+  return message;
+}
+
 /**
  * Vrai si l'échec vient du **réseau** (backend injoignable, coupure), et non
  * d'un refus métier (409, permission, validation…).
@@ -247,9 +277,7 @@ async function appel_api<T>(
     console.error("Échec d'appel API vers :", url, erreur);
     throw new ErreurAPI(
       "RESEAU",
-      `Le backend ne répond pas. ` +
-      `Vérifie que Docker tourne (« docker compose ps backend » doit montrer Up) ` +
-      `et que .env.local contient NEXT_PUBLIC_URL_BACKEND=http://127.0.0.1:8000.`,
+      messageErreurConnexion(),
       0,
     );
   }
@@ -308,11 +336,29 @@ async function appel_api<T>(
 
   // Réponse d'erreur ?
   if (!reponse.ok) {
-    const erreurApi = donnees as any;
+    const erreurApi =
+      typeof donnees === "object" && donnees !== null
+        ? (donnees as Partial<ReponseErreurAPI> & { detail?: unknown })
+        : {};
     // FastAPI renvoie 'detail', notre API custom renvoie 'message'
-    const message = erreurApi.message || erreurApi.detail || "Erreur inconnue";
+    const code = erreurApi.code_erreur || "INCONNU";
+    const estErreurConnexion = [
+      "RESEAU",
+      "BACKEND_INDISPONIBLE",
+      "BACKEND_TIMEOUT",
+      "ERREUR_PROXY",
+    ].includes(code);
+    const message = estErreurConnexion
+      ? messageErreurConnexion()
+      : typeof erreurApi.message === "string"
+        ? messageErreurValidation(erreurApi.message)
+        : reponse.status === 422
+          ? "Certaines informations sont incorrectes. Vérifiez le formulaire puis réessayez."
+          : typeof erreurApi.detail === "string"
+            ? erreurApi.detail
+            : "Une erreur est survenue. Veuillez réessayer.";
     throw new ErreurAPI(
-      erreurApi.code_erreur || "INCONNU",
+      code,
       message,
       reponse.status,
       erreurApi.request_id || undefined,
