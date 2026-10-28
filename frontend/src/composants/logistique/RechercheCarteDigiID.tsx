@@ -137,10 +137,6 @@ export function RechercheCarteDigiID({
             void rechercher(texte);
           }}
         />
-
-        <p className="text-xs italic text-ardoise-clair">
-          Sans scan possible ? Le code reste accepté, mais il est plus lent à saisir.
-        </p>
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-end gap-2">
