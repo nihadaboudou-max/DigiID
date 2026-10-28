@@ -388,7 +388,7 @@ export function EnregistrementSuiviFamilial({
             titre="Passager & contacts"
             description="Renseignez le passager, l'acheteur du ticket (pour un enfant) et un proche de confiance à prévenir."
           >
-            <div className="space-y-4">
+            <div className="space-y-4 [&_label]:font-semibold">
               {/* La personne au guichet présente sa carte : le nom et le téléphone du
                   responsable sont remplis exactement — c'est ce qui garantit que les
                   SMS de suivi partiront au bon numéro. */}
@@ -415,7 +415,7 @@ export function EnregistrementSuiviFamilial({
               />
               {/* Type de passager */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-ardoise">
+                <label className="text-sm font-semibold text-ardoise">
                   Type de passager <span className="text-terre">*</span>
                 </label>
                 <div className="flex gap-2">
@@ -436,7 +436,7 @@ export function EnregistrementSuiviFamilial({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <ChampSaisie
                   libelle={
                     typePassager === "enfant"
@@ -458,34 +458,28 @@ export function EnregistrementSuiviFamilial({
                   placeholder="Ex : 9"
                   erreur={ageValide ? undefined : "Âge invalide (0 à 120)"}
                 />
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-semibold text-ardoise">Sexe</label>
+                  <select
+                    className="champ-saisie"
+                    value={enfantSexe}
+                    onChange={(e) => setEnfantSexe(e.target.value)}
+                  >
+                    <option value="">— Non précisé —</option>
+                    <option value="M">Masculin</option>
+                    <option value="F">Féminin</option>
+                  </select>
+                </div>
               </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-ardoise">Sexe</label>
-                <select
-                  className="champ-saisie"
-                  value={enfantSexe}
-                  onChange={(e) => setEnfantSexe(e.target.value)}
-                >
-                  <option value="">— Non précisé —</option>
-                  <option value="M">Masculin</option>
-                  <option value="F">Féminin</option>
-                </select>
-              </div>
-
-              <ChampSaisie
-                libelle={
-                  typePassager === "enfant"
-                    ? "Nom du parent / tuteur (optionnel)"
-                    : "Nom du proche contacté (optionnel)"
-                }
-                value={parentNom}
-                onChange={(e) => setParentNom(e.target.value)}
-              />
 
               {/* Contacts selon le type */}
               {typePassager === "enfant" ? (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <ChampSaisie
+                    libelle="Nom du parent / tuteur (optionnel)"
+                    value={parentNom}
+                    onChange={(e) => setParentNom(e.target.value)}
+                  />
                   <ChampSaisie
                     libelle="Nom de l'acheteur du ticket"
                     required
@@ -510,20 +504,27 @@ export function EnregistrementSuiviFamilial({
                   />
                 </div>
               ) : (
-                <ChampSaisie
-                  libelle="Téléphone du passager"
-                  required
-                  value={telephonePassager}
-                  onChange={(e) => setTelephonePassager(e.target.value)}
-                  inputMode="tel"
-                  type="tel"
-                  placeholder="+229 01 97 12 34 56"
-                  erreur={
-                    telPassagerOk || telephonePassager === ""
-                      ? undefined
-                      : MESSAGE_TELEPHONE_INVALIDE
-                  }
-                />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <ChampSaisie
+                    libelle="Nom du proche contacté (optionnel)"
+                    value={parentNom}
+                    onChange={(e) => setParentNom(e.target.value)}
+                  />
+                  <ChampSaisie
+                    libelle="Téléphone du passager"
+                    required
+                    value={telephonePassager}
+                    onChange={(e) => setTelephonePassager(e.target.value)}
+                    inputMode="tel"
+                    type="tel"
+                    placeholder="+229 01 97 12 34 56"
+                    erreur={
+                      telPassagerOk || telephonePassager === ""
+                        ? undefined
+                        : MESSAGE_TELEPHONE_INVALIDE
+                    }
+                  />
+                </div>
               )}
 
               {/* Le proche de confiance a lui aussi le droit au scan : un numéro
@@ -569,7 +570,7 @@ export function EnregistrementSuiviFamilial({
             titre="Trajet & attribution"
             description="Le passager doit être lié à un chauffeur précis et à un voyage précis."
           >
-            <div className="space-y-4">
+            <div className="space-y-4 [&_label]:font-semibold">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium text-ardoise">
