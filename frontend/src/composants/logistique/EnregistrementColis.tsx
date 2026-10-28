@@ -12,9 +12,9 @@
  * il ne sert qu'à l'information du guichet (on ne veut pas donner l'impression
  * de surveiller les recettes du transporteur). Les **frais de service DigiID**
  * dépendent du **nombre d'articles** (100 / 200 / 350 / 500 FCFA) et sont
- * encaissés **à la fin de l'inscription**, avant génération du QR.
+ * enregistrés **à la fin de l'inscription**, avant génération du QR.
  *
- * À l'enregistrement, le backend encaisse puis génère le ticket (QR durable).
+ * À l'enregistrement, le backend crée la transaction puis génère le ticket.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -74,6 +74,44 @@ const VOCAL_ETAPE: Record<Etape, string> = {
   3: "colis.vocal.details",
   4: "colis.vocal.recap",
 };
+
+async function preparerPhotoColis(fichier: File): Promise<File> {
+  if (!["image/jpeg", "image/png", "image/webp"].includes(fichier.type)) {
+    throw new Error("Prenez une photo au format JPEG, PNG ou WebP.");
+  }
+
+  const image = await createImageBitmap(fichier);
+  try {
+    if (
+      fichier.size <= 5 * 1024 * 1024 &&
+      image.width <= 1600 &&
+      image.height <= 1600
+    ) {
+      return fichier;
+    }
+
+    const ratio = Math.min(1600 / image.width, 1600 / image.height, 1);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(image.width * ratio);
+    canvas.height = Math.round(image.height * ratio);
+    const contexte = canvas.getContext("2d");
+    if (!contexte) throw new Error("Impossible de préparer la photo.");
+    contexte.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise<Blob | null>((resoudre) =>
+      canvas.toBlob(resoudre, "image/jpeg", 0.8),
+    );
+    if (!blob || blob.size > 5 * 1024 * 1024) {
+      throw new Error("La photo est trop volumineuse. Reprenez-la.");
+    }
+    return new File([blob], "photo-colis.jpg", {
+      type: "image/jpeg",
+      lastModified: Date.now(),
+    });
+  } finally {
+    image.close();
+  }
+}
 
 export function EnregistrementColis({
   digiidInitial,
@@ -136,6 +174,7 @@ export function EnregistrementColis({
   /** Paiement inclus à l'inscription, avant le QR. */
   const [moyenPaiement, setMoyenPaiement] = useState<MoyenPaiement | null>(null);
   const [telephonePaiement, setTelephonePaiement] = useState("");
+  const [telephonePaiementPersonnalise, setTelephonePaiementPersonnalise] = useState(false);
   const [photoColis, setPhotoColis] = useState<File | null>(null);
   const [apercuPhoto, setApercuPhoto] = useState<string | null>(null);
 
@@ -147,6 +186,12 @@ export function EnregistrementColis({
   const [envoiPhoto, setEnvoiPhoto] = useState(false);
   /** Colis mis en file locale faute de réseau (id_local) — bandeau de succès. */
   const [colisEnFile, setColisEnFile] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!telephonePaiementPersonnalise) {
+      setTelephonePaiement(expediteurTel);
+    }
+  }, [expediteurTel, telephonePaiementPersonnalise]);
 
   useEffect(() => {
     if (!photoColis) {
@@ -357,6 +402,7 @@ export function EnregistrementColis({
     setArretDestinationId("");
     setMoyenPaiement(null);
     setTelephonePaiement("");
+    setTelephonePaiementPersonnalise(false);
     setPhotoColis(null);
     setErreurPhoto(null);
     setEnvoiPhoto(false);
@@ -435,7 +481,7 @@ export function EnregistrementColis({
             setErreurPhoto(
               e instanceof ErreurAPI
                 ? e.message_utilisateur
-                : "Le colis est enregistré, mais la photo n'a pas pu être envoyée. Réessayez.",
+                : "Photo non envoyée. Réessayez.",
             );
           } finally {
             setEnvoiPhoto(false);
@@ -493,7 +539,7 @@ export function EnregistrementColis({
       setErreurPhoto(
         e instanceof ErreurAPI
           ? e.message_utilisateur
-          : "La photo n'a pas pu être envoyée. Réessayez.",
+          : "Photo non envoyée. Réessayez.",
       );
     } finally {
       setEnvoiPhoto(false);
@@ -582,12 +628,6 @@ export function EnregistrementColis({
         )}
         <TicketImprimable ticket={resultat.ticket} colis={resultat.colis} />
 
-        <Alerte variante="info" titre="Paiement associé à l'enregistrement">
-          Moyen de paiement choisi : (
-          {moyenPaiement ? LIBELLES_MOYEN[moyenPaiement] ?? moyenPaiement : "—"}
-          ). Le QR a été généré ensuite.
-        </Alerte>
-
         <div className="no-print flex flex-wrap gap-3">
           <BoutonVocal
             variante="primaire"
@@ -655,7 +695,6 @@ export function EnregistrementColis({
           {etape === 1 && (
             <Carte
               titre={t("colis.expediteur.titre")}
-              description={t("colis.expediteur.desc")}
             >
               <div className="space-y-4">
                 {/* Le client présente sa carte : nom et téléphone remplis d'exactitude,
@@ -663,7 +702,7 @@ export function EnregistrementColis({
                 <RechercheCarteDigiID
                   libelle="DigiID de l'expéditeur (facultatif)"
                   titre="L'expéditeur a une carte DigiID ?"
-                  description="Présentez sa carte (ou saisissez son DigiID) : le nom et le téléphone ci-dessous se remplissent automatiquement."
+                  description="Scannez sa carte pour remplir les champs."
                   rechercheInitiale={digiidInitial}
                   surSelection={(contact) => {
                     if (!contact) {
@@ -693,7 +732,6 @@ export function EnregistrementColis({
                   placeholder="+229 01 97 12 34 56"
                   inputMode="tel"
                   type="tel"
-                  aide="Format +229 · un numéro invalide est refusé (SMS inutile sinon)."
                 />
                 <div className="flex justify-end">
                   <BoutonVocal
@@ -714,7 +752,6 @@ export function EnregistrementColis({
           {etape === 2 && (
             <Carte
               titre={t("colis.destinataire.titre")}
-              description={t("colis.destinataire.desc")}
             >
               <div className="space-y-4">
                 {/* Le destinataire peut aussi présenter son code : même geste
@@ -722,7 +759,7 @@ export function EnregistrementColis({
                 <RechercheCarteDigiID
                   libelle="DigiID du destinataire (facultatif)"
                   titre="Le destinataire a une carte DigiID ?"
-                  description="Scannez son QR dynamique (ou saisissez son DigiID) : le nom et le téléphone ci-dessous se remplissent automatiquement."
+                  description="Scannez sa carte pour remplir les champs."
                   surSelection={(contact) => {
                     if (!contact) {
                       setDestinataireCompteId(null);
@@ -826,7 +863,6 @@ export function EnregistrementColis({
           {etape === 3 && (
             <Carte
               titre={t("colis.details.titre")}
-              description={t("colis.details.desc")}
             >
               <div className="space-y-4">
                 <div className="rounded-xl border border-lagune/20 bg-lagune/5 px-4 py-3 space-y-3">
@@ -848,11 +884,6 @@ export function EnregistrementColis({
                       {formaterFcfa(fraisService.frais_fcfa)}
                     </span>
                   </div>
-                  <p className="text-xs text-ardoise-clair">
-                    dont {formaterFcfa(fraisService.part_receveur_fcfa)} pour la
-                    cagnotte du receveur. Le montant définitif est confirmé au
-                    moment de l&apos;encaissement.
-                  </p>
                 </div>
 
                 <ChampSaisie
@@ -863,37 +894,41 @@ export function EnregistrementColis({
                 />
 
                 <div className="space-y-2 rounded-xl border border-ardoise-clair/15 bg-sable-clair/50 p-3">
-                  <label htmlFor="photo-colis" className="block text-sm font-semibold text-ardoise">
+                  <p id="photo-colis-label" className="text-sm font-semibold text-ardoise">
                     Photo du colis (facultative)
+                  </p>
+                  <label
+                    htmlFor="photo-colis"
+                    className="inline-flex cursor-pointer rounded-lg bg-lagune px-3 py-2 text-sm font-semibold text-white hover:bg-lagune/90 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2"
+                  >
+                    Ouvrir l&apos;appareil photo
                   </label>
                   <input
                     id="photo-colis"
                     type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="block w-full text-sm text-ardoise-clair file:mr-3 file:rounded-lg file:border-0 file:bg-lagune/10 file:px-3 file:py-2 file:font-semibold file:text-lagune"
-                    onChange={(e) => {
-                      const fichier = e.target.files?.[0] ?? null;
-                      if (
-                        fichier &&
-                        !["image/jpeg", "image/png", "image/webp"].includes(fichier.type)
-                      ) {
-                        setErreur("Format non pris en charge. Choisissez une image JPEG, PNG ou WebP.");
-                        e.target.value = "";
-                        return;
+                    accept="image/*"
+                    capture="environment"
+                    className="peer sr-only"
+                    aria-labelledby="photo-colis-label"
+                    onChange={async (e) => {
+                      const entree = e.currentTarget;
+                      const fichier = entree.files?.[0] ?? null;
+                      entree.value = "";
+                      if (!fichier) return;
+                      try {
+                        const photo = await preparerPhotoColis(fichier);
+                        setErreur(null);
+                        setErreurPhoto(null);
+                        setPhotoColis(photo);
+                      } catch (erreurPhoto) {
+                        setErreur(
+                          erreurPhoto instanceof Error
+                            ? erreurPhoto.message
+                            : "Impossible de préparer la photo.",
+                        );
                       }
-                      if (fichier && fichier.size > 5 * 1024 * 1024) {
-                        setErreur("La photo ne doit pas dépasser 5 Mo.");
-                        e.target.value = "";
-                        return;
-                      }
-                      setErreur(null);
-                      setErreurPhoto(null);
-                      setPhotoColis(fichier);
                     }}
                   />
-                  <p className="text-xs text-ardoise-clair">
-                    La photo apparaît sous le QR du ticket et est supprimée 7 jours après la livraison.
-                  </p>
                   {apercuPhoto && (
                     <div className="flex items-start gap-3">
                       <img
@@ -1120,10 +1155,7 @@ export function EnregistrementColis({
               {/* Paiement inclus avant validation → QR généré ensuite */}
               <div className="mt-5 space-y-3 rounded-xl border border-lagune/20 bg-lagune/5 px-4 py-3">
                 <p className="text-sm font-semibold text-ardoise">
-                  Moyen de paiement des frais de service
-                </p>
-                <p className="text-xs text-ardoise-clair">
-                  Encaissement avant génération du ticket QR.
+                  Paiement des frais DigiID · simulation
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {(["especes", "mtn", "moov"] as MoyenPaiement[]).map((m) => (
@@ -1152,11 +1184,13 @@ export function EnregistrementColis({
                     libelle={`Téléphone ${LIBELLES_MOYEN[moyenPaiement]}`}
                     required
                     value={telephonePaiement}
-                    onChange={(e) => setTelephonePaiement(e.target.value)}
+                    onChange={(e) => {
+                      setTelephonePaiement(e.target.value);
+                      setTelephonePaiementPersonnalise(true);
+                    }}
                     inputMode="tel"
                     type="tel"
                     placeholder="+229 01 97 12 34 56"
-                    aide={`Numéro du payeur pour ${LIBELLES_MOYEN[moyenPaiement]}. Paiement simulé en attendant l'intégration opérateur.`}
                   />
                 )}
               </div>

@@ -88,6 +88,7 @@ export default function PageHorairesPublics() {
   const { utilisateur, chargement: chargementAuth } = useAuthentification();
   const { notifier } = useNotifications();
   const estCitoyenConnecte = utilisateur?.role === "citoyen";
+  const estConnecte = Boolean(utilisateur);
 
   const [horaires, setHoraires] = useState<VoyagePublic[]>([]);
   const [horizon, setHorizon] = useState<Horizon>("jour");
@@ -190,12 +191,20 @@ export default function PageHorairesPublics() {
   };
 
   const chargerNotificationsColis = useCallback(async () => {
-    if (!estCitoyenConnecte) return;
+    if (!estConnecte) return;
     try {
       const resultat = await listerMesNotifications();
       const toutes = resultat.notifications;
       const colis = toutes.filter((notification) => notification.categorie === "logistique_colis");
-      if (identifiantsConnus.current) {
+      if (identifiantsConnus.current === null) {
+        const derniereNonLue = colis.find((notification) => !notification.est_lue);
+        if (derniereNonLue) {
+          notifier(
+            `${derniereNonLue.titre} — ${derniereNonLue.message}`,
+            "info",
+          );
+        }
+      } else {
         toutes
           .filter(
             (notification) =>
@@ -216,7 +225,7 @@ export default function PageHorairesPublics() {
           : "Impossible de charger vos notifications de colis.",
       );
     }
-  }, [estCitoyenConnecte, notifier]);
+  }, [estConnecte, notifier]);
 
   const ouvrirTicketColis = useCallback(async (colisId: string): Promise<boolean> => {
     setErreurTicket(null);
@@ -260,20 +269,20 @@ export default function PageHorairesPublics() {
   }
 
   useEffect(() => {
-    if (chargementAuth || !estCitoyenConnecte) return;
+    if (chargementAuth || !estConnecte) return;
     identifiantsConnus.current = null;
     void chargerNotificationsColis();
-    const minuteur = window.setInterval(() => void chargerNotificationsColis(), 30_000);
+    const minuteur = window.setInterval(() => void chargerNotificationsColis(), 10_000);
     return () => window.clearInterval(minuteur);
-  }, [chargementAuth, estCitoyenConnecte, chargerNotificationsColis]);
+  }, [chargementAuth, estConnecte, chargerNotificationsColis]);
 
   useEffect(() => {
-    if (chargementAuth || !estCitoyenConnecte) return;
+    if (chargementAuth || !estConnecte) return;
     const colisId = new URLSearchParams(window.location.search).get("colis");
     if (!colisId || parametreColisTraite.current === colisId) return;
     parametreColisTraite.current = colisId;
     void ouvrirTicketColis(colisId);
-  }, [chargementAuth, estCitoyenConnecte, ouvrirTicketColis]);
+  }, [chargementAuth, estConnecte, ouvrirTicketColis]);
 
   /**
    * Ce que le guide vocal lit à l'ouverture : les trois prochains départs.
@@ -306,14 +315,11 @@ export default function PageHorairesPublics() {
       >
         {/* En-tête public */}
         <header className="text-center">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-lagune">
-            DigiID
-          </p>
           <h1 className="mt-1 text-3xl font-bold text-ardoise">
             Horaires des cars
           </h1>
           <p className="mt-1 text-sm text-ardoise-clair">
-            Les prochains départs, gare par gare — sans compte, sans application.
+            Les prochains départs, gare par gare.
           </p>
           {majLe && (
             <p className="mt-2 text-[11px] text-ardoise-clair">
@@ -497,13 +503,13 @@ export default function PageHorairesPublics() {
               href="/connexion"
               className="font-semibold text-lagune hover:underline"
             >
-              Espace guichet & chauffeur
+              Tableau de bord
             </Link>
           </p>
         </footer>
         </div>
 
-        {estCitoyenConnecte && (
+        {estConnecte && (
           <aside className="lg:sticky lg:top-4">
             <Carte
               titre="Notifications de mes colis"

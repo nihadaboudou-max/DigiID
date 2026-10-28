@@ -18,7 +18,7 @@ from src.modules.logistique import schemas
 from src.modules.gamification.service_notifications import creer_notification
 from src.noyau import dechiffrer_donnee, journal
 from src.noyau.constantes_roles import RoleUtilisateur
-from src.noyau.telephone import hasher_telephone
+from src.noyau.telephone import hasher_telephone, normaliser_numero_tiers
 from src.modules.qr_dynamique.service import (
     generer_token_durable,
     construire_url_qr_durable,
@@ -1285,9 +1285,15 @@ async def _compte_par_telephone(
 ) -> Utilisateur | None:
     if not telephone:
         return None
+    try:
+        telephone_normalise = normaliser_numero_tiers(telephone)
+    except ValueError:
+        return None
+    if not telephone_normalise or not telephone_normalise.startswith("+229"):
+        return None
     return await session.scalar(
         select(Utilisateur).where(
-            Utilisateur.telephone_hash == hasher_telephone(telephone),
+            Utilisateur.telephone_hash == hasher_telephone(telephone_normalise),
             Utilisateur.est_actif.is_(True),
         )
     )
