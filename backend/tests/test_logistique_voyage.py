@@ -22,18 +22,25 @@ from src.modules.logistique import service
 
 
 class _ResultatVide:
+    def __init__(self, elements=None):
+        self.elements = elements or []
+
     def scalars(self):
         return self
 
     def all(self):
-        return []
+        return self.elements
+
+    def first(self):
+        return self.elements[0] if self.elements else None
 
 
 class SessionFactice:
     """Session minimale : `get` rend ce qu'on lui a préparé, commit/refresh no-op."""
 
-    def __init__(self, objets: dict | None = None):
+    def __init__(self, objets: dict | None = None, resultat_execute=None):
         self.objets = objets or {}
+        self.resultat_execute = resultat_execute or _ResultatVide()
         self.commits = 0
 
     async def get(self, modele, identifiant):
@@ -41,7 +48,7 @@ class SessionFactice:
 
     async def execute(self, requete):
         # Aucun autre voyage en base : ces tests portent sur les garde-fous.
-        return _ResultatVide()
+        return self.resultat_execute
 
     async def commit(self):
         self.commits += 1
@@ -185,6 +192,40 @@ class TestQuitterVoyage:
 
 class TestAnnulerEtCharge:
     """Annulation et actions groupées : garde-fous métier."""
+
+    def test_creation_refuse_un_depart_deja_planifie_sur_la_meme_ligne(self):
+        from src.modules.logistique import schemas
+        from src.modeles import Ligne, Vehicule
+
+        ligne_id = uuid.uuid4()
+        vehicule_id = uuid.uuid4()
+        depart = datetime.now(timezone.utc) + timedelta(days=1)
+        voyage_existant = _voyage()
+        voyage_existant.ligne_id = ligne_id
+        voyage_existant.date_depart = depart
+        session = SessionFactice(
+            {
+                (Ligne, ligne_id): Ligne(),
+                (Vehicule, vehicule_id): object(),
+            },
+            resultat_execute=_ResultatVide([voyage_existant]),
+        )
+
+        with pytest.raises(HTTPException) as erreur:
+            asyncio.run(
+                service.creer_voyage(
+                    session,
+                    schemas.VoyageCreate(
+                        ligne_id=ligne_id,
+                        vehicule_id=vehicule_id,
+                        date_depart=depart,
+                    ),
+                )
+            )
+
+        assert erreur.value.status_code == 409
+        assert "déjà planifié" in erreur.value.detail.lower()
+        assert session.commits == 0
 
     def test_annulation_refusee_si_en_cours(self):
         from src.modules.logistique import schemas

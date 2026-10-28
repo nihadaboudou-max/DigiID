@@ -815,6 +815,9 @@ async def creer_voyage(session: AsyncSession, donnees: schemas.VoyageCreate) -> 
     if donnees.chauffeur_id is not None:
         await _verifier_existe(session, Utilisateur, donnees.chauffeur_id, "Chauffeur")
     _verifier_date_depart(donnees.date_depart)
+    await _verifier_doublon_voyage(
+        session, donnees.ligne_id, donnees.date_depart
+    )
     if donnees.chauffeur_id is not None:
         await _verifier_conflit_chauffeur(
             session,
@@ -828,6 +831,26 @@ async def creer_voyage(session: AsyncSession, donnees: schemas.VoyageCreate) -> 
     await session.commit()
     await session.refresh(voyage)
     return voyage
+
+
+async def _verifier_doublon_voyage(
+    session: AsyncSession, ligne_id: UUID, date_depart: datetime
+) -> None:
+    """Empêche deux départs actifs identiques sur la même ligne et au même horaire."""
+    requete = select(Voyage).where(
+        Voyage.ligne_id == ligne_id,
+        Voyage.date_depart == date_depart,
+        Voyage.statut.in_(("planifie", "en_cours")),
+    )
+    doublon = (await session.execute(requete)).scalars().first()
+    if doublon is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                "Un départ est déjà planifié sur ce trajet à cette heure. "
+                "Choisissez un autre horaire."
+            ),
+        )
 
 
 async def _duree_prevue_minutes(

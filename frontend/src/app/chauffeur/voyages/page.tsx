@@ -245,6 +245,21 @@ function Contenu() {
       notifier("Choisissez une ligne, un car et l'heure de départ.", "erreur");
       return;
     }
+    const departHorodatage = new Date(departISO).getTime();
+    const doublon = voyages.some(
+      (voyage) =>
+        voyage.ligne_id === plan.ligne_id &&
+        voyage.statut !== "annule" &&
+        voyage.statut !== "termine" &&
+        new Date(voyage.date_depart).getTime() === departHorodatage,
+    );
+    if (doublon) {
+      notifier(
+        "Un départ est déjà planifié sur ce trajet à cette heure. Choisissez un autre horaire.",
+        "erreur",
+      );
+      return;
+    }
     setPlanification(true);
     try {
       const duree = Number(plan.duree_min);

@@ -236,13 +236,14 @@ function Contenu() {
         surSucces={() => setRafraichir((n) => n + 1)}
       />
 
-      {/* Enregistrer un client monté en route (« je n'étais pas au guichet ») */}
-      <EnregistrementDirectChauffeur
-        voyageId={voyage.id}
-        gareDepartId={ligne?.gare_depart_id ?? null}
-        gareArriveeId={ligne?.gare_arrivee_id ?? null}
-        surSucces={() => setRafraichir((n) => n + 1)}
-      />
+      {voyage.statut !== "termine" && voyage.statut !== "annule" && (
+        <EnregistrementDirectChauffeur
+          voyageId={voyage.id}
+          gareDepartId={ligne?.gare_depart_id ?? null}
+          gareArriveeId={ligne?.gare_arrivee_id ?? null}
+          surSucces={() => setRafraichir((n) => n + 1)}
+        />
+      )}
 
       {/* Manifeste : tout ce qui est à bord, en une feuille imprimable */}
       <ManifesteVoyage voyageId={voyage.id} rafraichir={rafraichir} />
