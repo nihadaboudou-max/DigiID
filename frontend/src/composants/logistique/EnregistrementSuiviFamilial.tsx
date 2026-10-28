@@ -533,6 +533,7 @@ export function EnregistrementSuiviFamilial({
                 libelle="DigiID du proche de confiance (facultatif)"
                 titre="Le proche de confiance a une carte DigiID ?"
                 description="Scannez son QR dynamique (ou saisissez son DigiID) : son nom et son téléphone se remplissent automatiquement."
+                compact
                 surSelection={(contact) => {
                   if (!contact) return;
                   setProcheNom(contact.nom_complet);

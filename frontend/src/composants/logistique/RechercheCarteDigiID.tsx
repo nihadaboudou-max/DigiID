@@ -43,6 +43,7 @@ interface ProprietesRechercheCarte {
   libelle?: string;
   titre?: string;
   description?: string;
+  compact?: boolean;
   /**
    * DigiID / lien de QR à rechercher automatiquement au montage.
    *
@@ -57,6 +58,7 @@ export function RechercheCarteDigiID({
   libelle = "Carte DigiID du client",
   titre = "Client avec un compte DigiID ?",
   description = "Scannez le QR affiché par le client (code dynamique de 30 secondes, à usage unique) — ou saisissez son DigiID public : la fiche se pré-remplit automatiquement.",
+  compact = false,
   rechercheInitiale,
 }: ProprietesRechercheCarte) {
   const [valeur, setValeur] = useState(rechercheInitiale ?? "");
@@ -106,30 +108,40 @@ export function RechercheCarteDigiID({
   }
 
   return (
-    <div className="rounded-xl border border-lagune/20 bg-lagune/5 p-4 space-y-3">
+    <div
+      className={`rounded-xl border border-lagune/20 bg-lagune/5 ${
+        compact ? "space-y-2 p-3" : "space-y-3 p-4"
+      }`}
+    >
       <div className="flex items-start gap-2">
-        <IconeIdentite className="h-5 w-5 text-lagune shrink-0 mt-0.5" />
+        <IconeIdentite
+          className={`shrink-0 text-lagune ${compact ? "mt-0.5 h-4 w-4" : "mt-0.5 h-5 w-5"}`}
+        />
         <div>
           <p className="text-sm font-semibold text-ardoise">{titre}</p>
-          <p className="text-xs text-ardoise-clair">{description}</p>
+          <p className={`text-xs text-ardoise-clair ${compact ? "leading-snug" : ""}`}>
+            {description}
+          </p>
         </div>
       </div>
 
-            {/* Scan d'abord : c'est le geste rapide. Le code dynamique du citoyen
+      {/* Scan d'abord : c'est le geste rapide. Le code dynamique du citoyen
           (30 s, usage unique) ne peut pas être rejoué par un tiers. */}
-      <LecteurQRCode
-        id={idLecteur}
-        libelleBouton="Scanner le QR du client"
-        messageIndisponible="Caméra indisponible ou accès refusé. Saisissez le code à la main ci-dessous."
-        surDecode={(texte) => {
-          setValeur(texte);
-          void rechercher(texte);
-        }}
-      />
+      <div className={compact ? "flex flex-wrap items-center justify-between gap-2" : "space-y-3"}>
+        <LecteurQRCode
+          id={idLecteur}
+          libelleBouton="Scanner le QR du client"
+          messageIndisponible="Caméra indisponible ou accès refusé. Saisissez le code à la main ci-dessous."
+          surDecode={(texte) => {
+            setValeur(texte);
+            void rechercher(texte);
+          }}
+        />
 
-      <p className="text-xs italic text-ardoise-clair">
-        Sans scan possible ? Le code reste accepté, mais il est plus lent à saisir.
-      </p>
+        <p className="text-xs italic text-ardoise-clair">
+          Sans scan possible ? Le code reste accepté, mais il est plus lent à saisir.
+        </p>
+      </div>
 
       <div className="flex flex-col sm:flex-row sm:items-end gap-2">
         <div className="flex-1">
