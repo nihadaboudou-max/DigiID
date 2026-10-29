@@ -5,8 +5,9 @@
  * Données dynamiques issues de l'API via le contexte d'authentification.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Badge, type BadgeVariante } from "@/composants/commun/Badge";
@@ -15,10 +16,7 @@ import {
   useEtatVerifications,
   type NiveauVerification,
 } from "@/crochets/useEtatVerifications";
-// ── Score & Récompenses masqué (simplification) — dé-commenter pour le réafficher ──
-// import { BarreProgression } from "@/composants/commun/BarreProgression";
 import { useAuthentification } from "@/contextes/authentification";
-// import { obtenirMonScore, type ScoreDetail } from "@/services/score";
 
 export default function CitoyenDashboard() {
   return (
@@ -31,36 +29,8 @@ export default function CitoyenDashboard() {
 function Contenu() {
   const { utilisateur, chargement: chargementAuth } = useAuthentification();
   const etatVerifications = useEtatVerifications();
-  /* ── SCORE MASQUÉ (simplification) — dé-commenter ce bloc pour le réafficher ──
-  const [scoreData, setScoreData] = useState<ScoreDetail | null>(null);
-  const [chargementScore, setChargementScore] = useState(true);
-
-  const chargerScore = useCallback(async () => {
-    if (!utilisateur) return;
-    try {
-      const data = await obtenirMonScore();
-      setScoreData(data);
-    } catch {
-      // Pas de score disponible — silencieux
-    }
-    setChargementScore(false);
-  }, [utilisateur]);
-
-  useEffect(() => {
-    chargerScore();
-  }, [chargerScore]);
-
-  // Rafraîchit le score quand la page redevient visible
-  useEffect(() => {
-    function onVisible() {
-      if (document.visibilityState === "visible" && scoreData) {
-        obtenirMonScore().then(setScoreData).catch(() => {});
-      }
-    }
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [scoreData]);
-  ── FIN BLOC SCORE ── */
+  const [codeSuivi, setCodeSuivi] = useState("");
+  const router = useRouter();
 
   if (chargementAuth) {
     return (
@@ -73,65 +43,6 @@ function Contenu() {
   }
 
   if (!utilisateur) return null;
-
-  /* ─── Catégories organisées par priorité ─── */
-
-interface LienAction {
-  titre: string;
-  href: string;
-  icone: string;
-  description: string;
-}
-
-const CATEGORIES: { titre: string; icone: string; couleur: string; liens: LienAction[] }[] = [
-  {
-    titre: "Identité & Vérification",
-    icone: "🪪",
-    couleur: "border-l-lagune",
-    liens: [
-      { titre: "Documents d'identité", href: "/documents-identite", icone: "🆔", description: "CNI, permis, assurance" },
-      // Menu masqué (simplification) — dé-commenter pour le réafficher :
-      // { titre: "Vérifier ma CNI", href: "/identite/verification-cni", icone: "📄", description: "Scanner ta carte d'identité" },
-      { titre: "Reconnaissance faciale", href: "/identite/verification-visuelle", icone: "📸", description: "Vérification biométrique" },
-    ],
-  },
-  /* ── Catégorie masquée (simplification) — dé-commenter pour la réafficher ──
-  {
-    titre: "Santé",
-    icone: "🏥",
-    couleur: "border-l-lagune",
-    liens: [
-      { titre: "Mon dossier médical", href: "/citoyen/mon-dossier-medical", icone: "📋", description: "Consultations, prescriptions" },
-      { titre: "Mes ordonnances", href: "/citoyen/mes-ordonnances", icone: "💊", description: "Consultez vos prescriptions" },
-    ],
-  },
-  */
-  {
-    titre: "Sécurité & Données",
-    icone: "🔒",
-    couleur: "border-l-ocre",
-    liens: [
-      { titre: "Mes consentements", href: "/consentements", icone: "✅", description: "Gérer les accès autorisés" },
-      { titre: "Mes autorisations", href: "/autorisations", icone: "🔐", description: "Qui a accès à mes données" },
-      { titre: "Partager mon DigiID", href: "/partage", icone: "📱", description: "QR code et lien de partage" },
-      // Menu masqué (simplification) — dé-commenter pour le réafficher :
-      // { titre: "Mes documents", href: "/documents", icone: "📁", description: "Documents et justificatifs" },
-    ],
-  },
-  /* ── Catégorie masquée (simplification) — dé-commenter pour la réafficher ──
-  {
-    titre: "Engagement & Outils",
-    icone: "🌟",
-    couleur: "border-l-terre",
-    liens: [
-      { titre: "Mon score", href: "/score", icone: "📊", description: "Suis ton score de confiance" },
-      { titre: "Mes badges", href: "/badges", icone: "🏆", description: "Gamification et récompenses" },
-      { titre: "Parrainage", href: "/parrainage", icone: "📨", description: "Invite tes proches" },
-      { titre: "Assistant DigiID", href: "/chatbot", icone: "🤖", description: "Pose tes questions" },
-    ],
-  },
-  */
-];
 
   // Initiales pour l'avatar
   const initiales = ((utilisateur.prenom?.[0] || "") + (utilisateur.nom?.[0] || "")).toUpperCase() || "?";
@@ -155,10 +66,6 @@ const CATEGORIES: { titre: string; icone: string; couleur: string; liens: LienAc
     variante: VARIANTES_NIVEAU[etatVerifications.niveau],
   };
 
-  // Score masqué (simplification) — dé-commenter avec le bloc Score :
-  // const scoreTotal = scoreData?.score_total ?? 0;
-  // const niveauScore = scoreData?.niveau ?? "—";
-
   return (
     <div className="space-y-6 apparition pb-20">
       {/* En-tête */}
@@ -166,12 +73,12 @@ const CATEGORIES: { titre: string; icone: string; couleur: string; liens: LienAc
         <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Mon espace</p>
         <h1 className="mt-1">Tableau de bord</h1>
         <p className="text-ardoise-clair mt-1 text-sm">
-          Bienvenue {nomComplet.split(" ")[0]} ✨ — Accède rapidement à tes données et services.
+          Bienvenue {nomComplet.split(" ")[0]} — retrouve ici ton identité et tes suivis de transport.
         </p>
       </div>
 
-      {/* Barre identité + Score + Progression */}
-      <div className="grid lg:grid-cols-3 gap-4">
+      {/* Identité et vérifications essentielles */}
+      <div className="grid lg:grid-cols-2 gap-4">
         {/* Carte Identité */}
         <Carte className="lg:col-span-1">
           <div className="flex items-center gap-4">
@@ -194,42 +101,6 @@ const CATEGORIES: { titre: string; icone: string; couleur: string; liens: LienAc
           </div>
         </Carte>
 
-        {/* ═══ CARTE SCORE MASQUÉE (simplification) — dé-commenter pour la réafficher ═══
-
-        Carte Score
-        {scoreData && !chargementScore ? (
-          <Link href="/score" className="lg:col-span-1 block group">
-            <Carte className="cursor-pointer hover:shadow-lg transition-all h-full group">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs uppercase text-ardoise-clair font-semibold">Score de confiance</p>
-                <span className="flex items-center gap-1 text-[10px] text-green-700">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                  Live
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-3xl font-bold text-lagune transition-all duration-500">{scoreTotal}</span>
-                <span className="text-sm text-ardoise-clair">/100</span>
-              </div>
-              <BarreProgression valeur={scoreTotal} couleur="lagune" />
-              <div className="flex items-center justify-between mt-2">
-                <span className="text-xs text-ardoise-clair">Niveau : {niveauScore}</span>
-                <span className="text-xs text-ocre font-semibold group-hover:translate-x-1 transition-transform">
-                  Détails →
-                </span>
-              </div>
-            </Carte>
-          </Link>
-        ) : (
-          <div className="lg:col-span-1">
-            <Carte>
-              <p className="text-xs text-ardoise-clair italic">Chargement du score...</p>
-            </Carte>
-          </div>
-        )}
-
-        ═══ FIN CARTE SCORE MASQUÉE ═══ */}
-
         {/* État des vérifications (compte + documents fournis) */}
         <Carte className="lg:col-span-1">
           <p className="text-xs uppercase text-ardoise-clair font-semibold mb-3">Vérifications</p>
@@ -240,45 +111,40 @@ const CATEGORIES: { titre: string; icone: string; couleur: string; liens: LienAc
         </Carte>
       </div>
 
-      {/* Catégories organisées */}
-      <div className="grid md:grid-cols-2 gap-4">
-        {CATEGORIES.map((categorie) => (
-          <Carte key={categorie.titre} className={`border-l-4 ${categorie.couleur}`}>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xl">{categorie.icone}</span>
-              <h2 className="font-bold text-ardoise">{categorie.titre}</h2>
-            </div>
-            <div className="divide-y divide-ardoise-clair/5">
-              {categorie.liens.map((lien) => (
-                <Link
-                  key={lien.href}
-                  href={lien.href}
-                  className="flex items-center gap-3 py-2.5 group hover:bg-sable/50 -mx-4 px-4 rounded transition-colors"
-                >
-                  <span className="text-base w-6 text-center flex-shrink-0">{lien.icone}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-ardoise group-hover:text-ocre transition-colors truncate">
-                      {lien.titre}
-                    </p>
-                    <p className="text-xs text-ardoise-clair truncate">{lien.description}</p>
-                  </div>
-                  <span className="text-ocre text-xs opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                </Link>
-              ))}
-            </div>
-          </Carte>
-        ))}
-      </div>
-
-      {/* Lien vers paramètres */}
-      <div className="text-center pt-4">
-        <Link
-          href="/parametres"
-          className="inline-flex items-center gap-2 text-sm text-ardoise-clair hover:text-ocre transition-colors"
+      {/* Le détail des envois se charge uniquement à l'ouverture de la carte. */}
+      <Carte titre="Transport et suivi" description="Suis tes colis et les trajets de tes proches, de la gare de départ à l'arrivée.">
+        <form
+          className="flex flex-col sm:flex-row gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const code = codeSuivi.trim();
+            if (code) router.push(`/suivi/${encodeURIComponent(code)}`);
+          }}
         >
-          ⚙️ Paramètres du compte et préférences →
+          <label htmlFor="code-suivi" className="sr-only">Code de suivi</label>
+          <input
+            id="code-suivi"
+            className="champ-saisie flex-1"
+            value={codeSuivi}
+            onChange={(event) => setCodeSuivi(event.target.value)}
+            placeholder="Saisir un code de suivi"
+            autoComplete="off"
+          />
+          <button
+            type="submit"
+            disabled={!codeSuivi.trim()}
+            className="rounded-lg bg-lagune px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-lagune/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Suivre
+          </button>
+        </form>
+        <Link
+          href="/identite/carte"
+          className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-ocre hover:underline"
+        >
+          Ma carte DigiID, mes colis et mes proches →
         </Link>
-      </div>
+      </Carte>
     </div>
   );
 }
