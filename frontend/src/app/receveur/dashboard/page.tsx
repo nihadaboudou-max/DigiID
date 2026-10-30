@@ -16,6 +16,7 @@ import {
 } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { DepartsDesChauffeurs } from "@/composants/logistique/DepartsDesChauffeurs";
+import { RecommandationTarifaire } from "@/composants/logistique/RecommandationTarifaire";
 import { AnalyseDemandeLogistique } from "@/composants/logistique/AnalyseDemandeLogistique";
 import { ROLES_GUICHET } from "@/composants/logistique/roles";
 import { TableauColis } from "@/composants/logistique/TableauColis";
@@ -23,7 +24,13 @@ import { PortefeuilleCarte } from "@/composants/paiement/PortefeuilleCarte";
 import { useAuthentification } from "@/contextes/authentification";
 import { useLangue } from "@/i18n/useLangue";
 import { ErreurAPI } from "@/services/client_api";
-import { gareDeLActeur, logistiqueAPI, type Gare } from "@/services/logistique_api";
+import {
+  gareDeLActeur,
+  logistiqueAPI,
+  type Gare,
+  type Vehicule,
+  type Voyage,
+} from "@/services/logistique_api";
 import type { Colis } from "@/types/logistique";
 
 export default function PageTableauDeBordReceveur() {
@@ -39,6 +46,8 @@ function Contenu() {
   const { t, jouer } = useLangue();
   const [gare, setGare] = useState<Gare | null>(null);
   const [colis, setColis] = useState<Colis[]>([]);
+  const [voyages, setVoyages] = useState<Voyage[]>([]);
+  const [vehicules, setVehicules] = useState<Vehicule[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -54,10 +63,18 @@ function Contenu() {
         if (annule) return;
         setGare(gareCourante);
 
-        const reponse = await logistiqueAPI.colis.lister(
-          gareCourante ? { gare_id: gareCourante.id, par_page: 100 } : { par_page: 100 },
-        );
+        const [reponse, reponseVoyages, reponseVehicules] = await Promise.all([
+          logistiqueAPI.colis.lister(
+            gareCourante ? { gare_id: gareCourante.id, par_page: 100 } : { par_page: 100 },
+          ),
+          logistiqueAPI.voyages.lister({ par_page: 100 }),
+          logistiqueAPI.vehicules.lister(),
+        ]);
         if (!annule) setColis(reponse.elements);
+        if (!annule) {
+          setVoyages(reponseVoyages.elements);
+          setVehicules(reponseVehicules.elements);
+        }
       } catch (e) {
         if (!annule) {
           setErreur(
@@ -139,6 +156,12 @@ function Contenu() {
 
       {/* Les cars annoncés par les chauffeurs : on y charge colis et passagers. */}
       <DepartsDesChauffeurs gareId={gare?.id} />
+
+      <RecommandationTarifaire
+        voyages={voyages}
+        colis={colis}
+        vehicules={vehicules}
+      />
 
       <AnalyseDemandeLogistique colis={colis} />
 

@@ -20,16 +20,19 @@ import {
   IconeTicket,
 } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
+import { RecommandationTarifaire } from "@/composants/logistique/RecommandationTarifaire";
 import { formaterDate } from "@/composants/logistique/format";
 import { ROLES_CHAUFFEUR } from "@/composants/logistique/roles";
 import { PortefeuilleCarte } from "@/composants/paiement/PortefeuilleCarte";
 import { useAuthentification } from "@/contextes/authentification";
 import { useLangue } from "@/i18n/useLangue";
 import { ErreurAPI } from "@/services/client_api";
+import { identiteAPI } from "@/services/identite_api";
 import {
   libelleLigne,
   logistiqueAPI,
   type Ligne,
+  type Vehicule,
   type Voyage,
 } from "@/services/logistique_api";
 import {
@@ -52,6 +55,8 @@ function Contenu() {
   const [voyages, setVoyages] = useState<Voyage[]>([]);
   const [lignes, setLignes] = useState<Ligne[]>([]);
   const [colis, setColis] = useState<Colis[]>([]);
+  const [vehicules, setVehicules] = useState<Vehicule[]>([]);
+  const [passagersParVoyage, setPassagersParVoyage] = useState<Record<string, number>>({});
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [mesVoyagesSeulement, setMesVoyagesSeulement] = useState(true);
@@ -62,15 +67,21 @@ function Contenu() {
       setChargement(true);
       setErreur(null);
       try {
-        const [repVoyages, repLignes, repColis] = await Promise.all([
+        const [repVoyages, repLignes, repColis, repVehicules, repVolumes] = await Promise.all([
           logistiqueAPI.voyages.lister({ par_page: 100 }),
           logistiqueAPI.lignes.lister(),
           logistiqueAPI.colis.lister({ par_page: 100 }),
+          logistiqueAPI.vehicules.listerMesVehicules(),
+          identiteAPI.chauffeur.voyages().catch(() => []),
         ]);
         if (annule) return;
         setVoyages(repVoyages.elements);
         setLignes(repLignes.elements);
         setColis(repColis.elements);
+        setVehicules(repVehicules);
+        setPassagersParVoyage(
+          Object.fromEntries(repVolumes.map((voyage) => [voyage.id, voyage.nb_passagers])),
+        );
       } catch (e) {
         if (!annule) {
           setErreur(
@@ -158,6 +169,13 @@ function Contenu() {
 
       {/* Ma cagnotte : le chauffeur gagne sa commission sur ses propres enregistrements */}
       <PortefeuilleCarte limiteMouvements={3} cheminCagnotte="/chauffeur/cagnotte" />
+
+      <RecommandationTarifaire
+        voyages={mesVoyages}
+        colis={colis}
+        vehicules={vehicules}
+        passagersParVoyage={passagersParVoyage}
+      />
 
       {/* Liste des voyages */}
       <Carte
