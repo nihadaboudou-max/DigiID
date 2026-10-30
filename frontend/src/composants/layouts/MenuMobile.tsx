@@ -209,7 +209,7 @@ function SectionPlieMobile({
       </div>
     </div>
   );
-}
+} 
 
 export function BoutonMenuMobile() {
   const [ouvert, setOuvert] = useState(false);
