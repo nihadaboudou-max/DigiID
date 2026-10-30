@@ -16,6 +16,7 @@ import {
 } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { DepartsDesChauffeurs } from "@/composants/logistique/DepartsDesChauffeurs";
+import { AnalyseDemandeLogistique } from "@/composants/logistique/AnalyseDemandeLogistique";
 import { ROLES_GUICHET } from "@/composants/logistique/roles";
 import { TableauColis } from "@/composants/logistique/TableauColis";
 import { PortefeuilleCarte } from "@/composants/paiement/PortefeuilleCarte";
@@ -138,6 +139,8 @@ function Contenu() {
 
       {/* Les cars annoncés par les chauffeurs : on y charge colis et passagers. */}
       <DepartsDesChauffeurs gareId={gare?.id} />
+
+      <AnalyseDemandeLogistique colis={colis} />
 
       {/* S6 — portefeuille : solde + derniers mouvements */}
       <PortefeuilleCarte limiteMouvements={3} />
