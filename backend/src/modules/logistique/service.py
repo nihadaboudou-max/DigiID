@@ -1902,10 +1902,11 @@ async def _verifier_scan_autorise(
     """Sépare les gestes du chauffeur et ceux du guichet sur un colis.
 
     Règle terrain : **seul le chauffeur** constate le départ et l'arrivée (il est
-    dans le car) ; **seul le guichet** constate la remise finale au destinataire
-    (le chauffeur n'a pas à croiser la famille). Un chauffeur ne peut scanner
-    que les colis de son car, et un guichet ne peut livrer qu'un colis que le
-    chauffeur a effectivement déposé (``remis_guichet_le``).
+    dans le car). Il peut également constater la livraison directement quand il
+    remet le colis en main propre au destinataire. Si le chauffeur confie le colis
+    à un agent du guichet, c'est alors ce dernier qui constatera la livraison.
+    Un chauffeur ne peut scanner que les colis de son car, et un guichet ne peut
+    livrer qu'un colis qui lui a été confié (``remis_guichet_le``).
     """
     type_evenement = donnees.type_evenement
     role = utilisateur.role
@@ -1917,14 +1918,15 @@ async def _verifier_scan_autorise(
                 detail="Ce colis n'est pas dans votre car : vous ne pouvez pas le scanner.",
             )
         if type_evenement == "livraison":
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                detail=(
-                    "Le chauffeur dépose le colis au guichet (bouton « Remettre au "
-                    "guichet ») : c'est le guichet qui constate la livraison au "
-                    "destinataire."
-                ),
-            )
+            if colis.remis_guichet_le is not None:
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "Ce colis a été confié à un agent du guichet : la livraison "
+                        "doit être constatée par le guichet."
+                    ),
+                )
+            return
         return
 
     if role in (
@@ -1945,26 +1947,22 @@ async def _verifier_scan_autorise(
                     "(« Valider le départ » / « Arrivés »), pas depuis le guichet."
                 ),
             )
-        if (
-            type_evenement == "livraison"
-            and colis.chauffeur_id is not None
-            and colis.remis_guichet_le is None
-        ):
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                detail=(
-                    "Le chauffeur n'a pas encore déposé ce colis au guichet : "
-                    "la livraison ne peut pas être constatée."
-                ),
-            )
-        if (
-            type_evenement == "livraison"
-            and colis.remis_guichet_a_id != utilisateur.id
-        ):
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                detail="Ce colis a été confié à un autre agent du guichet.",
-            )
+            if type_evenement == "livraison" and colis.remis_guichet_le is None:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    detail=(
+                        "Le chauffeur n'a pas confié ce colis à un agent du guichet : "
+                        "la livraison ne peut pas être constatée par le guichet."
+                    ),
+                )
+            if (
+                type_evenement == "livraison"
+                and colis.remis_guichet_a_id != utilisateur.id
+            ):
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    detail="Ce colis a été confié à un autre agent du guichet.",
+                )
 
 
 async def _resoudre_ticket(
@@ -2752,12 +2750,24 @@ def _verifier_evenement_suivi_autorise(
     donnees: schemas.SuiviFamilialEvenementCreate,
     utilisateur: Utilisateur,
 ) -> None:
-    """Le guichet ne marque pas le départ/l'arrivée et ne livre que ce qui lui est confié."""
+    """Le chauffeur peut remettre directement ; le guichet ne livre que ce qui lui est confié."""
     exiger_acces_suivi_familial(utilisateur)
     if utilisateur.role == RoleUtilisateur.GERANT_GARE.value:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail="Le gérant supervise la gare ; les étapes de transport relèvent du chauffeur et la remise au receveur.",
+        )
+    if utilisateur.role == RoleUtilisateur.CHAUFFEUR.value:
+        if donnees.type_evenement == "livraison":
+            if suivi.remis_guichet_le is not None:
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    detail="Cet enfant a été confié à un agent du guichet : la livraison doit être constatée par le guichet.",
+                )
+            return
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Le chauffeur constate le départ et l'arrivée ; la remise finale se fait directement ou via le guichet.",
         )
     if (
         donnees.type_evenement == "livraison"
@@ -2841,21 +2851,21 @@ async def enregistrer_evenement_suivi(
                 "evenement": existant,
             }
 
-    # Défense en profondeur pour les autres rôles autorisés à enregistrer un
-    # événement : la famille ne récupère l'enfant qu'après son dépôt au guichet.
+    # Défense en profondeur : le chauffeur peut remettre directement à la
+    # famille; seul le guichet garde le droit de délivrer si le colis/enfant a
+    # été explicitement confié à son agent.
     if (
         donnees.type_evenement == "livraison"
         and suivi.type_passager == "enfant"
         and suivi.chauffeur_id is not None
-        and suivi.remis_guichet_le is None
+        and suivi.remis_guichet_le is not None
+        and utilisateur.role in ROLES_GUICHET_SUIVI
     ):
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail=(
-                "Le chauffeur n'a pas encore confié cet enfant au guichet : "
-                "la remise à la famille ne peut pas être constatée."
-            ),
-        )
+        if suivi.remis_guichet_a_id != utilisateur.id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail="Cet enfant a été confié à un autre agent du guichet.",
+            )
 
     maintenant = donnees.horodatage or datetime.now(timezone.utc)
     evenement = SuiviFamilialEvenement(

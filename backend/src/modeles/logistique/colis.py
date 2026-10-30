@@ -177,8 +177,9 @@ class Colis(Base, MelangeTracabilite):
         nullable=True,
     )
     # ─── Remise au guichet d'arrivée ────────────────────────────────
-    # Le chauffeur ne remet jamais un colis en main propre au destinataire :
-    # il le dépose au guichet, qui constate la remise finale (scan livraison).
+    # Le chauffeur peut livrer directement au destinataire. S'il confie le colis
+    # à un agent du guichet, la livraison finale est alors constatée par ce
+    # guichetier (scan livraison).
     remis_guichet_le: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

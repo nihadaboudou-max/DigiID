@@ -75,9 +75,10 @@ export function ManifesteVoyage({
   /**
    * Prise en charge / dépôt au guichet — gestes du **chauffeur uniquement**.
    *
-   * La remise finale au destinataire reste au guichet : le chauffeur dépose,
-   * le guichet constate. On rafraîchit ensuite le manifeste pour que l'arrêt
-   * suivant ne contienne plus le colis déjà descendu.
+   * Le chauffeur peut livrer directement au destinataire. S'il confie le colis à
+   * un agent du guichet, ce dernier constate alors la remise finale. On
+   * rafraîchit ensuite le manifeste pour que l'arrêt suivant ne contienne plus
+   * le colis déjà descendu.
    */
   async function choisirAgentGuichet(ligne: LigneManifeste) {
     if (!ligne.gare_arrivee_id) {

@@ -78,7 +78,7 @@ const CONFIG: Record<
     description:
       "Les passagers et colis de l'arrêt (ou de la gare) sélectionné seront marqués arrivés.",
     messageAlerte:
-      "Un SMS d'arrivée sera envoyé aux familles et aux destinataires concernés. Ensuite seulement vous pourrez confier colis/enfants au guichet.",
+      "Un SMS d'arrivée sera envoyé aux familles et aux destinataires concernés. Vous pouvez livrer directement ou confier colis/enfants au guichet si vous souhaitez qu'un agent le remette.",
     texteBouton: "Marquer arrivés",
   },
 };

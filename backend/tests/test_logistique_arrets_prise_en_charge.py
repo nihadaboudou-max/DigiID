@@ -130,19 +130,17 @@ class TestGardeFousFiche:
 
 
 class TestPartageChauffeurGuichet:
-    def test_chauffeur_ne_peut_pas_constater_la_livraison(self):
+    def test_chauffeur_peut_constater_la_livraison_directe(self):
         chauffeur = _utilisateur(RoleUtilisateur.CHAUFFEUR.value)
         colis = _colis(chauffeur_id=chauffeur.id)
-        with pytest.raises(HTTPException) as erreur:
-            asyncio.run(
-                service._verifier_scan_autorise(
-                    SessionFactice(),
-                    colis,
-                    schemas.ScanCreate(token="x", type_evenement="livraison"),
-                    chauffeur,
-                )
+        asyncio.run(
+            service._verifier_scan_autorise(
+                SessionFactice(),
+                colis,
+                schemas.ScanCreate(token="x", type_evenement="livraison"),
+                chauffeur,
             )
-        assert erreur.value.status_code == 403
+        )
 
     def test_chauffeur_ne_scan_pas_le_colis_d_un_autre(self):
         chauffeur = _utilisateur(RoleUtilisateur.CHAUFFEUR.value)
@@ -353,19 +351,16 @@ class TestEvenementsSuiviFamilial:
 
         assert erreur.value.status_code == 403
 
-    def test_chauffeur_ne_peut_pas_confirmer_la_remise_a_la_famille(self):
+    def test_chauffeur_peut_confirmer_la_remise_directe_a_la_famille(self):
         chauffeur = _utilisateur(RoleUtilisateur.CHAUFFEUR.value)
         suivi = SimpleNamespace(
             type_passager="enfant",
-            remis_guichet_le=object(),
-            remis_guichet_a_id=chauffeur.id,
+            remis_guichet_le=None,
+            remis_guichet_a_id=None,
         )
         donnees = schemas.SuiviFamilialEvenementCreate(type_evenement="livraison")
 
-        with pytest.raises(HTTPException) as erreur:
-            service._verifier_evenement_suivi_autorise(suivi, donnees, chauffeur)
-
-        assert erreur.value.status_code == 403
+        service._verifier_evenement_suivi_autorise(suivi, donnees, chauffeur)
 
 
 class TestArretDestination:
