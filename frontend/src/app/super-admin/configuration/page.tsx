@@ -12,6 +12,7 @@ import { Badge } from "@/composants/commun/Badge";
 import { Alerte } from "@/composants/commun/Alerte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { useNotifications } from "@/contextes/notifications";
+import { clientAPI, ErreurAPI } from "@/services/client_api";
 import {
   listerFeatureFlags,
   modifierFeatureFlags,
@@ -32,6 +33,10 @@ function Contenu() {
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [modificationEnCours, setModificationEnCours] = useState<string | null>(null);
+  const [formatExport, setFormatExport] = useState<"csv" | "json">("csv");
+  const [dateDebutExport, setDateDebutExport] = useState("");
+  const [dateFinExport, setDateFinExport] = useState("");
+  const [exportEnCours, setExportEnCours] = useState(false);
   const { notifier } = useNotifications();
 
   const chargerFlags = useCallback(async () => {
@@ -70,6 +75,35 @@ function Contenu() {
     }
   };
 
+  const exporterTransitAnonyme = async () => {
+    setExportEnCours(true);
+    try {
+      const params = new URLSearchParams({ format: formatExport });
+      if (dateDebutExport) params.set("date_debut", `${dateDebutExport}T00:00:00Z`);
+      if (dateFinExport) params.set("date_fin", `${dateFinExport}T23:59:59Z`);
+      const fichier = await clientAPI.getBlob(
+        `/api/v1/super-admin/donnees-transit/export?${params.toString()}`,
+        { authentifie: true }
+      );
+      const url = URL.createObjectURL(fichier);
+      const lien = document.createElement("a");
+      lien.href = url;
+      lien.download = `digiid-transit-anonyme.${formatExport}`;
+      document.body.appendChild(lien);
+      lien.click();
+      lien.remove();
+      URL.revokeObjectURL(url);
+      notifier("Export anonymisé téléchargé et journalisé.", "succes");
+    } catch (e) {
+      notifier(
+        e instanceof ErreurAPI ? e.message_utilisateur : "Échec de l’export anonymisé.",
+        "erreur"
+      );
+    } finally {
+      setExportEnCours(false);
+    }
+  };
+
   if (chargement) {
     return (
       <div className="space-y-4">
@@ -103,6 +137,55 @@ function Contenu() {
           {erreur}
         </Alerte>
       )}
+
+      <Carte
+        titre="Gouvernance de la data"
+        description="Export sécurisé des données de transit pour l’apprentissage externe"
+      >
+        <div className="space-y-3">
+          <div className="rounded-lg border border-lagune/20 bg-lagune/5 p-3 text-xs text-ardoise">
+            <p className="font-semibold text-lagune">Export anonymisé APDP</p>
+            <p className="mt-1">
+              Aucun nom, email, téléphone, IP, acteur, identifiant de colis ou texte libre
+              n’est exporté. Chaque téléchargement est tracé dans l’audit.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="text-xs font-semibold text-ardoise">
+              Format
+              <select
+                value={formatExport}
+                onChange={(e) => setFormatExport(e.target.value as "csv" | "json")}
+                className="mt-1 block w-full rounded-lg border border-ardoise-clair/20 bg-white px-2 py-2 text-sm font-normal"
+              >
+                <option value="csv">CSV</option>
+                <option value="json">JSON</option>
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-ardoise">
+              Du
+              <input
+                type="date"
+                value={dateDebutExport}
+                onChange={(e) => setDateDebutExport(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-ardoise-clair/20 bg-white px-2 py-2 text-sm font-normal"
+              />
+            </label>
+            <label className="text-xs font-semibold text-ardoise">
+              Au
+              <input
+                type="date"
+                value={dateFinExport}
+                onChange={(e) => setDateFinExport(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-ardoise-clair/20 bg-white px-2 py-2 text-sm font-normal"
+              />
+            </label>
+          </div>
+          <Bouton variante="primaire" taille="petit" onClick={exporterTransitAnonyme} disabled={exportEnCours}>
+            {exportEnCours ? "Préparation..." : "Télécharger l’export anonymisé"}
+          </Bouton>
+        </div>
+      </Carte>
 
       <Carte
         titre="Feature flags"

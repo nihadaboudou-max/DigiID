@@ -85,9 +85,18 @@ function Contenu() {
 
   if (!stats) return null;
 
-  const { utilisateurs, administrateurs, sessions, scores } = stats;
+  const {
+    utilisateurs,
+    administrateurs,
+    sessions,
+    scores,
+    flux_logistiques,
+    saturation_gares,
+    indice_performance_logistique,
+  } = stats;
   const tauxActivite = Math.round((utilisateurs.total_actifs / (utilisateurs.total_utilisateurs || 1)) * 100);
   const inactifs = utilisateurs.total_inactifs;
+  const volumeFluxMax = flux_logistiques[0]?.colis || 1;
 
   const gererExportCSV = () => {
     const lignes = [["Metrique", "Valeur"]];
@@ -173,7 +182,70 @@ function Contenu() {
         </div>
       </section>
 
-      {/* Audit */}
+      {/* Analyse descriptive BI */}
+      <section className="space-y-2">
+        <h2 className="text-base font-bold text-ardoise">Analyse descriptive (BI)</h2>
+        <div className="grid lg:grid-cols-2 gap-3">
+          <Carte titre="Cartographie thermique — flux interurbains">
+            <p className="text-xs text-ardoise-clair mb-3">
+              Flux les plus denses et gares présentant le plus fort volume de colis.
+            </p>
+            <div className="space-y-2">
+              {flux_logistiques.length === 0 ? (
+                <p className="text-sm text-ardoise-clair">Aucun flux enregistré.</p>
+              ) : (
+                flux_logistiques.slice(0, 5).map((flux) => (
+                  <div key={`${flux.depart}-${flux.arrivee}`} className="space-y-1">
+                    <div className="flex justify-between gap-3 text-sm">
+                      <span>{flux.depart} → {flux.arrivee}</span>
+                      <strong className="text-lagune">{flux.colis} colis</strong>
+                    </div>
+                    <div className="h-2 rounded-full bg-sable overflow-hidden" aria-label={`Intensité du flux ${flux.depart} vers ${flux.arrivee}`}>
+                      <div
+                        className="h-full rounded-full bg-ocre"
+                        style={{ width: `${Math.max(8, (flux.colis / volumeFluxMax) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            {saturation_gares.length > 0 && (
+              <p className="text-xs text-ardoise-clair mt-3">
+                Zone la plus sollicitée : <strong>{saturation_gares[0].gare}</strong> ({saturation_gares[0].colis} passages colis).
+              </p>
+            )}
+          </Carte>
+          <Carte titre="Indice de performance logistique (IPL)">
+            <p className="text-xs text-ardoise-clair mb-3">
+              Score fondé sur la ponctualité, l’attrition des colis et la satisfaction client.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <StatLigne
+                libelle="Score IPL"
+                valeur={indice_performance_logistique.score != null ? `${indice_performance_logistique.score}/100` : "N/D"}
+                couleur="ocre"
+              />
+              <StatLigne
+                libelle="Attrition colis"
+                valeur={indice_performance_logistique.taux_attrition_colis != null ? `${indice_performance_logistique.taux_attrition_colis}%` : "N/D"}
+                couleur="terre"
+              />
+              <StatLigne
+                libelle="Ponctualité"
+                valeur={indice_performance_logistique.ponctualite != null ? `${indice_performance_logistique.ponctualite}%` : "N/D"}
+                couleur="lagune"
+              />
+            </div>
+            {!indice_performance_logistique.satisfaction_disponible && (
+              <p className="text-xs text-ardoise-clair mt-3">
+                IPL non calculé : les retours de satisfaction client ne sont pas encore collectés.
+              </p>
+            )}
+          </Carte>
+        </div>
+      </section>
+
       <section className="space-y-2">
         <h2 className="text-base font-bold text-ardoise">Activité d'audit</h2>
 

@@ -363,11 +363,11 @@ function Contenu() {
             </Carte>
           </div>
 
-          {/* Alertes de sécurité */}
+          {/* Alertes événementielles */}
           {donnees.alertes.length > 0 && (
             <Carte
-              titre="Alertes de sécurité"
-              description={`${donnees.alertes.length} incident(s) détecté(s)`}
+              titre="Alertes événementielles"
+              description={`${donnees.alertes.length} anomalie(s) détectée(s)`}
             >
               <div className="space-y-2">
                 {donnees.alertes.map((a) => {
@@ -377,7 +377,9 @@ function Contenu() {
                   return (
                     <div key={a.id} className={`border-l-4 border-${niveauColor} bg-sable-clair rounded-r-lg p-3`}>
                       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                        <Badge variante={niveauColor as any} taille="petit">{a.type_incident}</Badge>
+                        <Badge variante={niveauColor as any} taille="petit">
+                          {a.type_incident.replace(/_/g, " ")}
+                        </Badge>
                         <span className={`text-[10px] font-bold ${
                           a.niveau === "critique" ? "text-terre" : a.niveau === "elevee" ? "text-ocre" : "text-lagune"
                         }`}>

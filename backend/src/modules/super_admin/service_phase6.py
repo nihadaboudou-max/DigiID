@@ -48,6 +48,8 @@ from uuid import UUID
 # =============================================================================
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
+from sqlalchemy.orm import aliased
 
 # =============================================================================
 # IMPORTS INTERNES — DigiID
@@ -59,6 +61,7 @@ from src.modeles import (
     SessionAuthentification,
     ConfigurationSysteme,
 )
+from src.modeles.logistique import Colis, ColisEvenement, Gare, Ligne, Voyage
 from src.modules.super_admin.schemas import AdminApercu as AdminApercuSchema
 from src.modules.super_admin.schemas_phase6 import (
     # Audit
@@ -66,6 +69,7 @@ from src.modules.super_admin.schemas_phase6 import (
     # Statistiques
     StatistiquesCompletes, StatistiquesUtilisateurs, StatistiquesAdmins,
     StatistiquesSessions, StatistiquesScore,
+    FluxLogistique, SaturationGare, IndicePerformanceLogistique,
     # Feature flags
     FeatureFlagItem, ListeFeatureFlags, MiseAJourFeatureFlags,
     # Sessions
@@ -101,6 +105,7 @@ TYPE_EVENEMENT_SUPPRESSION_ADMIN: str = "suppression_admin"
 TYPE_EVENEMENT_REVOCATION_SESSION: str = "revocation_session_admin"
 TYPE_EVENEMENT_MODIFICATION_FLAG: str = "modification_feature_flag"
 TYPE_EVENEMENT_EXPORT_ADMIN: str = "export_admin_donnees"
+TYPE_EVENEMENT_EXPORT_TRANSIT_ANONYME: str = "export_transit_anonyme"
 
 #: Rôles considérés comme administrateurs
 ROLES_ADMIN: list[str] = [
@@ -622,6 +627,89 @@ async def calculer_statistiques(session: AsyncSession) -> StatistiquesCompletes:
     )
 
     # -------------------------------------------------------------------------
+    # Bloc 4 bis : Analyse descriptive des flux logistiques
+    # -------------------------------------------------------------------------
+    gare_depart = aliased(Gare)
+    gare_arrivee = aliased(Gare)
+    resultat_flux = await session.execute(
+        select(
+            gare_depart.ville,
+            gare_arrivee.ville,
+            func.count(Colis.id),
+        )
+        .join(gare_depart, Colis.gare_depart_id == gare_depart.id)
+        .join(gare_arrivee, Colis.gare_arrivee_id == gare_arrivee.id)
+        .group_by(gare_depart.ville, gare_arrivee.ville)
+        .order_by(func.count(Colis.id).desc())
+        .limit(10)
+    )
+    flux_logistiques = [
+        FluxLogistique(depart=depart, arrivee=arrivee, colis=nombre)
+        for depart, arrivee, nombre in resultat_flux.all()
+    ]
+
+    resultat_depart = await session.execute(
+        select(gare_depart.ville, func.count(Colis.id))
+        .join(gare_depart, Colis.gare_depart_id == gare_depart.id)
+        .group_by(gare_depart.ville)
+    )
+    resultat_arrivee = await session.execute(
+        select(gare_arrivee.ville, func.count(Colis.id))
+        .join(gare_arrivee, Colis.gare_arrivee_id == gare_arrivee.id)
+        .group_by(gare_arrivee.ville)
+    )
+    volumes_gares: dict[str, int] = {}
+    for ville, nombre in resultat_depart.all():
+        volumes_gares[ville] = volumes_gares.get(ville, 0) + nombre
+    for ville, nombre in resultat_arrivee.all():
+        volumes_gares[ville] = volumes_gares.get(ville, 0) + nombre
+    saturation_gares = [
+        SaturationGare(gare=ville, colis=nombre)
+        for ville, nombre in sorted(
+            volumes_gares.items(), key=lambda element: element[1], reverse=True
+        )[:10]
+    ]
+
+    # Aucun modèle de satisfaction client n'existe encore : l'IPL reste
+    # explicitement indisponible tant que cette dimension n'est pas collectée.
+    resultat_voyages = await session.execute(
+        select(Voyage.date_depart, Voyage.date_arrivee, Ligne.duree_min)
+        .join(Ligne, Voyage.ligne_id == Ligne.id)
+        .where(
+            Voyage.date_arrivee.isnot(None),
+            Voyage.statut == "termine",
+            Ligne.duree_min.isnot(None),
+        )
+    )
+    lignes_voyages = resultat_voyages.all()
+    voyages_ponctuels = sum(
+        arrivee <= depart + timedelta(minutes=duree)
+        for depart, arrivee, duree in lignes_voyages
+    )
+    voyages_evalues = len(lignes_voyages)
+    ponctualite = (
+        round(voyages_ponctuels / voyages_evalues * 100, 1)
+        if voyages_evalues
+        else None
+    )
+    colis_evalues = await session.scalar(select(func.count(Colis.id))) or 0
+    colis_annules = await session.scalar(
+        select(func.count(Colis.id)).where(Colis.statut == "annule")
+    ) or 0
+    taux_attrition = (
+        round(colis_annules / colis_evalues * 100, 1) if colis_evalues else None
+    )
+    indice_performance = IndicePerformanceLogistique(
+        score=None,
+        ponctualite=ponctualite,
+        taux_attrition_colis=taux_attrition,
+        satisfaction_client=None,
+        voyages_evalues=voyages_evalues,
+        colis_evalues=colis_evalues,
+        satisfaction_disponible=False,
+    )
+
+    # -------------------------------------------------------------------------
     # Bloc 5 : Totaux audit
     # -------------------------------------------------------------------------
     total_evenements: int = await session.scalar(
@@ -643,6 +731,9 @@ async def calculer_statistiques(session: AsyncSession) -> StatistiquesCompletes:
         administrateurs=stats_admins,
         sessions=stats_sessions,
         scores=stats_scores,
+        flux_logistiques=flux_logistiques,
+        saturation_gares=saturation_gares,
+        indice_performance_logistique=indice_performance,
         total_evenements_audit=total_evenements,
         evenements_aujourd_hui=evenements_ajd,
         date_calcul=maintenant,
@@ -1453,3 +1544,95 @@ async def exporter_liste_admins_csv(
 
     return _generer_csv(en_tetes, lignes)
 
+
+async def exporter_transit_anonymise(
+    session: AsyncSession,
+    super_admin: Utilisateur,
+    format_export: str,
+    date_debut: Optional[datetime] = None,
+    date_fin: Optional[datetime] = None,
+    adresse_ip: Optional[str] = None,
+) -> tuple[str, str, str, int]:
+    """Exporte les événements de transit sans aucune donnée personnelle.
+
+    Le schéma exporté ne contient volontairement aucun identifiant technique,
+    identifiant de colis, acteur, IP, téléphone, nom, email ou texte libre.
+    """
+    maintenant = datetime.now(timezone.utc)
+    date_debut = date_debut or maintenant - timedelta(days=90)
+    date_fin = date_fin or maintenant
+    if date_debut > date_fin:
+        raise ErreurValidation("La date de début doit précéder la date de fin.")
+
+    gare_depart = aliased(Gare)
+    gare_arrivee = aliased(Gare)
+    resultat = await session.execute(
+        select(
+            ColisEvenement.type_evenement,
+            ColisEvenement.horodatage,
+            Colis.statut,
+            Colis.poids_kg,
+            gare_depart.ville,
+            gare_arrivee.ville,
+        )
+        .join(Colis, Colis.id == ColisEvenement.colis_id)
+        .join(gare_depart, gare_depart.id == Colis.gare_depart_id)
+        .join(gare_arrivee, gare_arrivee.id == Colis.gare_arrivee_id)
+        .where(
+            ColisEvenement.horodatage >= date_debut,
+            ColisEvenement.horodatage <= date_fin,
+            ColisEvenement.type_evenement.in_(
+                ("enregistrement", "reception", "depart", "mise_en_transit",
+                 "arrivee", "remise_guichet", "livraison", "incident")
+            ),
+        )
+        .order_by(ColisEvenement.horodatage.asc())
+    )
+
+    lignes = [
+        {
+            "event_type": type_evenement,
+            "event_date": horodatage.date().isoformat(),
+            "event_hour": horodatage.hour,
+            "route_origin": depart,
+            "route_destination": arrivee,
+            "parcel_status": statut,
+            "weight_kg": poids,
+        }
+        for type_evenement, horodatage, statut, poids, depart, arrivee in resultat.all()
+    ]
+
+    if format_export == "json":
+        contenu = json.dumps(lignes, ensure_ascii=False, separators=(",", ":"))
+        media_type = "application/json"
+        extension = "json"
+    else:
+        sortie = io.StringIO(newline="")
+        champs = [
+            "event_type", "event_date", "event_hour", "route_origin",
+            "route_destination", "parcel_status", "weight_kg",
+        ]
+        ecrivain = csv.DictWriter(sortie, fieldnames=champs)
+        ecrivain.writeheader()
+        ecrivain.writerows(lignes)
+        contenu = "\ufeff" + sortie.getvalue()
+        media_type = "text/csv"
+        extension = "csv"
+
+    _enregistrer_audit(
+        session=session,
+        type_evenement=TYPE_EVENEMENT_EXPORT_TRANSIT_ANONYME,
+        description="Export anonymisé des données de transit",
+        acteur_id=super_admin.id,
+        role_acteur=super_admin.role,
+        adresse_ip=adresse_ip,
+        donnees_supplementaires={
+            "format": format_export,
+            "date_debut": date_debut.isoformat(),
+            "date_fin": date_fin.isoformat(),
+            "lignes": len(lignes),
+            "pii_incluses": False,
+        },
+    )
+    await session.commit()
+    return contenu, media_type, extension, len(lignes)

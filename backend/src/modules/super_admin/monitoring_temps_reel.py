@@ -33,6 +33,7 @@ from src.modeles import (
     JournalAudit,
     FraudeIncident,
 )
+from src.modeles.logistique import Colis, ColisEvenement, Gare, Ligne, Voyage
 from src.noyau import dechiffrer_donnee, journal
 from src.noyau.exceptions import ErreurRessourceIntrouvable, ErreurValidation
 
@@ -52,6 +53,11 @@ SEUIL_IP_DIFFERENTES: int = 3
 
 #: Durée de validité d'une session "active" (30 minutes sans activité = inactif)
 DUREE_SESSION_ACTIVE_MINUTES: int = 30
+
+# Seuils de détection des anomalies logistiques.
+SEUIL_COLIS_IMMOBILE_HEURES: int = 24
+SEUIL_RETARD_CRITIQUE_HEURES: int = 2
+SEUIL_SCANS_SUSPECTS: int = 3
 
 
 # =============================================================================
@@ -233,6 +239,7 @@ async def obtenir_resume_temps_reel(
             FraudeIncident.cree_le >= seuil_alerte,
         )
     ) or 0
+    alertes_recents += len(await obtenir_alertes_logistiques(session))
 
     return ResumeTempsReel(
         utilisateurs_connectes=sessions_actives_recentes,
@@ -551,6 +558,131 @@ async def obtenir_alertes_securite(
                 score_risque=inc.score_risque or 0,
                 date_detection=inc.cree_le.isoformat(),
                 resolue=resolue,
+            )
+        )
+
+    alertes.extend(await obtenir_alertes_logistiques(session))
+    return sorted(
+        alertes,
+        key=lambda alerte: alerte.date_detection,
+        reverse=True,
+    )[:limite]
+
+
+async def obtenir_alertes_logistiques(
+    session: AsyncSession,
+) -> list[AlerteSecuriteItem]:
+    """Détecte les anomalies logistiques à partir des événements récents."""
+    maintenant = datetime.now(timezone.utc)
+    alertes: list[AlerteSecuriteItem] = []
+
+    # Colis non livrés dont le dernier événement est antérieur à 24 heures.
+    dernier_evenement = (
+        select(
+            ColisEvenement.colis_id,
+            func.max(ColisEvenement.horodatage).label("dernier_scan"),
+        )
+        .group_by(ColisEvenement.colis_id)
+        .subquery()
+    )
+    resultat_colis = await session.execute(
+        select(
+            Colis.id,
+            dernier_evenement.c.dernier_scan,
+            Gare.ville,
+        )
+        .join(dernier_evenement, dernier_evenement.c.colis_id == Colis.id)
+        .join(Gare, Gare.id == Colis.gare_depart_id)
+        .where(
+            Colis.statut.notin_(("livre", "annule")),
+            dernier_evenement.c.dernier_scan
+            < maintenant - timedelta(hours=SEUIL_COLIS_IMMOBILE_HEURES),
+        )
+        .order_by(dernier_evenement.c.dernier_scan.asc())
+        .limit(50)
+    )
+    for colis_id, dernier_scan, ville in resultat_colis.all():
+        alertes.append(
+            AlerteSecuriteItem(
+                id=f"logistique-colis-immobile-{colis_id}",
+                type_incident="colis_immobile",
+                niveau="elevee",
+                description=(
+                    f"Colis sans événement depuis plus de {SEUIL_COLIS_IMMOBILE_HEURES} h "
+                    f"(gare de départ : {ville})."
+                ),
+                score_risque=75,
+                date_detection=dernier_scan.isoformat(),
+            )
+        )
+
+    # Trajets partis mais non arrivés au-delà de la durée prévue + 2 heures.
+    resultat_voyages = await session.execute(
+        select(Voyage.id, Voyage.date_depart, Ligne.duree_min)
+        .join(Ligne, Ligne.id == Voyage.ligne_id)
+        .where(
+            Voyage.date_depart
+            < maintenant - timedelta(hours=SEUIL_RETARD_CRITIQUE_HEURES),
+            Voyage.date_arrivee.is_(None),
+            Voyage.statut.in_(("planifie", "en_cours")),
+            Ligne.duree_min.isnot(None),
+        )
+        .limit(50)
+    )
+    for voyage_id, date_depart, duree_min in resultat_voyages.all():
+        echeance = date_depart + timedelta(minutes=duree_min)
+        if echeance + timedelta(hours=SEUIL_RETARD_CRITIQUE_HEURES) > maintenant:
+            continue
+        alertes.append(
+            AlerteSecuriteItem(
+                id=f"logistique-retard-{voyage_id}",
+                type_incident="retard_trajet_critique",
+                niveau="critique",
+                description="Trajet en retard critique : arrivée non enregistrée.",
+                score_risque=85,
+                date_detection=date_depart.isoformat(),
+            )
+        )
+
+    # Plusieurs scans identiques du même colis par le même acteur sur 24 h.
+    resultat_scans = await session.execute(
+        select(
+            ColisEvenement.colis_id,
+            ColisEvenement.acteur_id,
+            ColisEvenement.type_evenement,
+            func.count(ColisEvenement.id).label("nombre_scans"),
+            func.min(ColisEvenement.horodatage).label("premier_scan"),
+        )
+        .where(
+            ColisEvenement.horodatage
+            >= maintenant - timedelta(hours=24),
+            ColisEvenement.type_evenement.in_(
+                ("depart", "mise_en_transit", "arrivee", "livraison")
+            ),
+        )
+        .group_by(
+            ColisEvenement.colis_id,
+            ColisEvenement.acteur_id,
+            ColisEvenement.type_evenement,
+        )
+        .having(func.count(ColisEvenement.id) >= SEUIL_SCANS_SUSPECTS)
+        .limit(50)
+    )
+    for colis_id, acteur_id, type_evenement, nombre_scans, premier_scan in (
+        resultat_scans.all()
+    ):
+        alertes.append(
+            AlerteSecuriteItem(
+                id=f"logistique-scans-{colis_id}-{acteur_id}-{type_evenement}",
+                type_incident="fraude_scans_suspecte",
+                niveau="critique",
+                description=(
+                    f"{nombre_scans} scans « {type_evenement} » pour le même colis "
+                    "sur les dernières 24 h."
+                ),
+                utilisateur_id=str(acteur_id) if acteur_id else None,
+                score_risque=90,
+                date_detection=premier_scan.isoformat(),
             )
         )
 

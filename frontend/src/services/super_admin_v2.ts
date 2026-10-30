@@ -139,11 +139,35 @@ export interface StatistiquesScore {
   recalculs_effectues: number;
 }
 
+export interface FluxLogistique {
+  depart: string;
+  arrivee: string;
+  colis: number;
+}
+
+export interface SaturationGare {
+  gare: string;
+  colis: number;
+}
+
+export interface IndicePerformanceLogistique {
+  score: number | null;
+  ponctualite: number | null;
+  taux_attrition_colis: number | null;
+  satisfaction_client: number | null;
+  voyages_evalues: number;
+  colis_evalues: number;
+  satisfaction_disponible: boolean;
+}
+
 export interface StatistiquesCompletes {
   utilisateurs: StatistiquesUtilisateurs;
   administrateurs: StatistiquesAdmins;
   sessions: StatistiquesSessions;
   scores: StatistiquesScore;
+  flux_logistiques: FluxLogistique[];
+  saturation_gares: SaturationGare[];
+  indice_performance_logistique: IndicePerformanceLogistique;
   total_evenements_audit: number;
   evenements_aujourd_hui: number;
   date_calcul: string;

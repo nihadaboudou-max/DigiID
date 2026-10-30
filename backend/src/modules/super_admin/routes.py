@@ -154,6 +154,44 @@ async def exporter_liste_admins_csv(
 
 
 @routeur_super_admin.get(
+    "/donnees-transit/export",
+    summary="Exporter les données de transit anonymisées",
+    description=(
+        "Exporte les événements logistiques sans identifiant personnel ou "
+        "technique, au format CSV ou JSON."
+    ),
+)
+async def exporter_donnees_transit(
+    requete: Request,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+    super_admin: Annotated[Utilisateur, Depends(super_admin_courant)],
+    format_export: str = Query(default="csv", pattern="^(csv|json)$", alias="format"),
+    date_debut: datetime | None = Query(default=None),
+    date_fin: datetime | None = Query(default=None),
+):
+    contenu, media_type, extension, lignes = (
+        await service_super_admin_v2.exporter_transit_anonymise(
+            session=session,
+            super_admin=super_admin,
+            format_export=format_export,
+            date_debut=date_debut,
+            date_fin=date_fin,
+            adresse_ip=obtenir_ip_client(requete),
+        )
+    )
+    nom_fichier = f"digiid-transit-anonyme-{datetime.now().date()}.{extension}"
+    return StreamingResponse(
+        iter([contenu]),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename={nom_fichier}",
+            "X-Export-Rows": str(lignes),
+            "X-PII-Included": "false",
+        },
+    )
+
+
+@routeur_super_admin.get(
     "/administrateurs",
     response_model=ListeAdmins,
     summary="Lister tous les administrateurs",

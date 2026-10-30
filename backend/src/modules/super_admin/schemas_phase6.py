@@ -245,6 +245,33 @@ class StatistiquesScore(BaseModel):
     recalculs_effectues: int
 
 
+class FluxLogistique(BaseModel):
+    """Flux interurbain observé sur les colis enregistrés."""
+
+    depart: str
+    arrivee: str
+    colis: int
+
+
+class SaturationGare(BaseModel):
+    """Volume de colis traité par une gare."""
+
+    gare: str
+    colis: int
+
+
+class IndicePerformanceLogistique(BaseModel):
+    """Indice calculé à partir des données logistiques disponibles."""
+
+    score: Optional[float] = None
+    ponctualite: Optional[float] = None
+    taux_attrition_colis: Optional[float] = None
+    satisfaction_client: Optional[float] = None
+    voyages_evalues: int
+    colis_evalues: int
+    satisfaction_disponible: bool
+
+
 class StatistiquesCompletes(BaseModel):
     """
     Agrégation complète de toutes les statistiques système.
@@ -260,6 +287,11 @@ class StatistiquesCompletes(BaseModel):
     sessions: StatistiquesSessions
     #: Statistiques scores
     scores: StatistiquesScore
+    #: Flux et saturation du réseau logistique
+    flux_logistiques: list[FluxLogistique]
+    saturation_gares: list[SaturationGare]
+    #: Indice de performance des transporteurs
+    indice_performance_logistique: IndicePerformanceLogistique
     #: Nombre total d'événements d'audit
     total_evenements_audit: int
     #: Événements d'audit créés aujourd'hui
@@ -472,4 +504,3 @@ class DonneesAdminExport(BaseModel):
     sessions_actives: int
     #: Nombre total d'événements d'audit pour cet admin
     total_evenements_audit: int
-
