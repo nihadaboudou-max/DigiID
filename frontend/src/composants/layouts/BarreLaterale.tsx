@@ -302,22 +302,34 @@ export function BarreLaterale() {
     accentColor = "bg-lagune";
   }
 
-  // ─── PIVOT LOGISTIQUE : Guichet (receveur / gérant de gare) ──────
-  else if (utilisateur.role === "receveur" || utilisateur.role === "gerant_gare") {
+  // ─── PIVOT LOGISTIQUE : Receveur ─────────────────────────────────
+  else if (utilisateur.role === "receveur") {
     liens = [
       { href: "/receveur/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
       { href: "/receveur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
       { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
       { href: "/receveur/suivi-familial", libelle: "Suivi familial", Icone: IconeIdentite },
-      { href: "/receveur/vehicules", libelle: "Cars & chauffeurs", Icone: IconeCamion },
       { href: "/receveur/scan", libelle: "Scanner / Livrer", Icone: IconeScan },
       { href: "/guichet/carte", libelle: "Carte client (scan)", Icone: IconeIdentite },
       { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
       { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
       { href: "/chatbot", libelle: "Assistance", Icone: IconeChat },
     ];
-    titreSection =
-      utilisateur.role === "receveur" ? "Guichet logistique" : "Gérant de gare";
+    titreSection = "Guichet logistique";
+    couleurLabel = "text-lagune";
+    accentColor = "bg-lagune";
+  }
+
+  // ─── PIVOT LOGISTIQUE : Gérant de gare ────────────────────────────
+  else if (utilisateur.role === "gerant_gare") {
+    liens = [
+      { href: "/gerant-gare/dashboard", libelle: "Supervision de gare", Icone: IconeAccueil },
+      { href: "/gerant-gare/vehicules", libelle: "Cars & chauffeurs", Icone: IconeCamion },
+      { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
+      { href: "/gerant-gare/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
+      { href: "/chatbot", libelle: "Assistance", Icone: IconeChat },
+    ];
+    titreSection = "Gérant de gare";
     couleurLabel = "text-lagune";
     accentColor = "bg-lagune";
   }
@@ -346,11 +358,11 @@ export function BarreLaterale() {
   // ─── PIVOT LOGISTIQUE : Commerçant (enregistrement) ──────────────
   else if (utilisateur.role === "commercant") {
     liens = [
-      { href: "/receveur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
-      { href: "/receveur/tickets", libelle: "Mes colis", Icone: IconeTicket },
+      { href: "/commercant/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+      { href: "/commercant/colis/nouveau", libelle: "Enregistrer un dépôt", Icone: IconeColis },
+      { href: "/commercant/colis", libelle: "Mes dépôts", Icone: IconeTicket },
       { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
-      { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
-      { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
+      { href: "/commercant/cagnotte", libelle: "Mes commissions", Icone: IconePortefeuille },
     ];
     titreSection = "Commerçant";
     couleurLabel = "text-lagune";

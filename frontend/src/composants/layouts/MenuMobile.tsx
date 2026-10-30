@@ -117,17 +117,24 @@ const LIENS_CHEF_ENROLEMENT: Lien[] = [
   { href: "/chef-enrolement/rapports", libelle: "Rapports", Icone: IconePartage },
 ];
 
-// ✅ Pivot logistique (Plan B) — guichet, chauffeur, commerçant
+// Parcours du receveur : dépôts, suivi et remises confiés au guichet.
 const LIENS_RECEVEUR: Lien[] = [
   { href: "/receveur/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
   { href: "/receveur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
   { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
   { href: "/receveur/suivi-familial", libelle: "Suivi familial", Icone: IconeIdentite },
-  { href: "/receveur/vehicules", libelle: "Cars & chauffeurs", Icone: IconeCamion },
   { href: "/receveur/scan", libelle: "Scanner / Livrer", Icone: IconeScan },
   { href: "/guichet/carte", libelle: "Carte client (scan)", Icone: IconeIdentite },
   { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
   { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
+  { href: "/chatbot", libelle: "Assistance", Icone: IconeChat },
+];
+
+const LIENS_GERANT_GARE: Lien[] = [
+  { href: "/gerant-gare/dashboard", libelle: "Supervision de gare", Icone: IconeAccueil },
+  { href: "/gerant-gare/vehicules", libelle: "Cars & chauffeurs", Icone: IconeCamion },
+  { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
+  { href: "/gerant-gare/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
   { href: "/chatbot", libelle: "Assistance", Icone: IconeChat },
 ];
 
@@ -147,11 +154,11 @@ const LIENS_CHAUFFEUR: Lien[] = [
 ];
 
 const LIENS_COMMERCANT: Lien[] = [
-  { href: "/receveur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
-  { href: "/receveur/tickets", libelle: "Mes colis", Icone: IconeTicket },
+  { href: "/commercant/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
+  { href: "/commercant/colis/nouveau", libelle: "Enregistrer un dépôt", Icone: IconeColis },
+  { href: "/commercant/colis", libelle: "Mes dépôts", Icone: IconeTicket },
   { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
-  { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
-  { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
+  { href: "/commercant/cagnotte", libelle: "Mes commissions", Icone: IconePortefeuille },
 ];
 
 // ---- Composant section pliable mobile ----
@@ -305,11 +312,12 @@ export function BoutonMenuMobile() {
   const estProfessionnel = estMedecin || estAgent || estPolice || estOng;
 
   // ✅ Pivot logistique (Plan B)
-  const estReceveur =
-    utilisateur.role === "receveur" || utilisateur.role === "gerant_gare";
+  const estReceveur = utilisateur.role === "receveur";
+  const estGerantGare = utilisateur.role === "gerant_gare";
   const estChauffeur = utilisateur.role === "chauffeur";
   const estCommercant = utilisateur.role === "commercant";
-  const estLogistique = estReceveur || estChauffeur || estCommercant;
+  const estLogistique =
+    estReceveur || estGerantGare || estChauffeur || estCommercant;
 
   const initiales = utilisateur.prenom
     ? (utilisateur.prenom.charAt(0) + (utilisateur.nom?.charAt(0) || "")).toUpperCase()
@@ -366,8 +374,11 @@ export function BoutonMenuMobile() {
   } else if (estReceveur) {
     couleurSection = "text-lagune";
     bgCercle = "bg-lagune";
-    titreSection =
-      utilisateur.role === "receveur" ? "Guichet logistique" : "Gérant de gare";
+    titreSection = "Guichet logistique";
+  } else if (estGerantGare) {
+    couleurSection = "text-lagune";
+    bgCercle = "bg-lagune";
+    titreSection = "Gérant de gare";
   } else if (estChauffeur) {
     couleurSection = "text-ocre";
     bgCercle = "bg-ocre";
@@ -888,9 +899,9 @@ export function BoutonMenuMobile() {
                   <SectionPlieMobile
                     titre={
                       estReceveur
-                        ? utilisateur.role === "receveur"
-                          ? "Guichet logistique"
-                          : "Gérant de gare"
+                        ? "Guichet logistique"
+                        : estGerantGare
+                          ? "Gérant de gare"
                         : estChauffeur
                           ? "Chauffeur"
                           : "Commerçant"
@@ -901,6 +912,8 @@ export function BoutonMenuMobile() {
                     <div className="pl-2">
                       {(estReceveur
                         ? LIENS_RECEVEUR
+                        : estGerantGare
+                          ? LIENS_GERANT_GARE
                         : estChauffeur
                           ? LIENS_CHAUFFEUR
                           : LIENS_COMMERCANT

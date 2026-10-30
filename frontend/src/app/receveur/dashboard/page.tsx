@@ -12,7 +12,7 @@ import { Alerte } from "@/composants/commun/Alerte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import {
-  IconeCamion, IconeColis, IconeIdentite, IconePortefeuille, IconeScan, IconeTicket,
+  IconeColis, IconeIdentite, IconePortefeuille, IconeScan, IconeTicket,
 } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { DepartsDesChauffeurs } from "@/composants/logistique/DepartsDesChauffeurs";
@@ -113,13 +113,6 @@ function Contenu() {
           icone={<IconeIdentite className="w-6 h-6" />}
           titre="Suivi familial"
           description="Enfants voyageant seuls : SMS au parent au départ et à l'arrivée."
-        />
-        {/* Référentiel roulant : inscrire un car et l'affecter à son chauffeur. */}
-        <ActionRapide
-          href="/receveur/vehicules"
-          icone={<IconeCamion className="w-6 h-6" />}
-          titre="Cars & chauffeurs"
-          description="Inscrire un car du terrain et l'affecter à son chauffeur."
         />
         <ActionRapide
           href="/receveur/scan"

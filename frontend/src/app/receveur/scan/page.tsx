@@ -9,12 +9,12 @@ import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
-import { ROLES_SCAN } from "@/composants/logistique/roles";
+import { ROLES_SCAN_GUICHET } from "@/composants/logistique/roles";
 import { ScannerTicket } from "@/composants/logistique/ScannerTicket";
 
 export default function PageScanReceveur() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={ROLES_SCAN}>
+    <EnvelopperEspaceProtege rolesAutorises={ROLES_SCAN_GUICHET}>
       <Suspense
         fallback={
           <p className="text-ardoise-clair italic py-12 text-center">Chargement…</p>

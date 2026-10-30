@@ -125,16 +125,17 @@ export function cheminTableauDeBord(role: RoleUtilisateur): string {
       return "/chef-ong";
     case "chef_agent":
       return "/chef-enrolement";
-    // Pivot logistique : le guichet (receveur & gérant de gare)
+    // Pivot logistique : parcours propres au receveur et au gérant.
     case "receveur":
-    case "gerant_gare":
       return "/receveur/dashboard";
+    case "gerant_gare":
+      return "/gerant-gare/dashboard";
     // Chauffeur : voyages + scan en route (S4)
     case "chauffeur":
       return "/chauffeur/dashboard";
     // Commerçant : enregistrement de colis (S6)
     case "commercant":
-      return "/receveur/colis/nouveau";
+      return "/commercant/dashboard";
     default:
       return "/tableau-de-bord";
   }

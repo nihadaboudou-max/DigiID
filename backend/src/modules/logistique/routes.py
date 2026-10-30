@@ -1623,6 +1623,7 @@ async def obtenir_suivi_familial(
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
+    service.exiger_acces_suivi_familial(utilisateur_courant)
     suivi = await service.obtenir_suivi_familial(session, suivi_id)
     return await _enrichir_suivi_familial(session, suivi)
 
@@ -1636,6 +1637,7 @@ async def lister_evenements_suivi(
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
+    service.exiger_acces_suivi_familial(utilisateur_courant)
     evenements = await service.lister_evenements_suivi(session, suivi_id)
     for evenement in evenements:
         await _enrichir_evenement_suivi(session, evenement)
@@ -1651,6 +1653,7 @@ async def lister_notifications_suivi(
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
+    service.exiger_acces_suivi_familial(utilisateur_courant)
     await service.obtenir_suivi_familial(session, suivi_id)
     return await service.lister_notifications(session, "suivi_familial", suivi_id)
 

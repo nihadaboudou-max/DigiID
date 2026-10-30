@@ -92,6 +92,9 @@ ROLES_GUICHET = (
     RoleUtilisateur.GERANT_GARE.value,
     RoleUtilisateur.COMMERCANT.value,
 )
+ROLES_GUICHET_SUIVI = (
+    RoleUtilisateur.RECEVEUR.value,
+)
 
 
 async def lister_arrets(session: AsyncSession, ligne_id: UUID) -> list[ArretLigne]:
@@ -270,6 +273,25 @@ async def _gare_de_l_agent(
 
 def _est_guichet(utilisateur: Utilisateur | None) -> bool:
     return utilisateur is not None and utilisateur.role in ROLES_GUICHET
+
+
+def exiger_acces_suivi_familial(utilisateur: Utilisateur) -> None:
+    if utilisateur.role == RoleUtilisateur.COMMERCANT.value:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="L'espace commerçant ne donne pas accès au suivi des passagers.",
+        )
+
+
+def _exiger_gestion_suivi_familial(utilisateur: Utilisateur) -> None:
+    if utilisateur.role not in ROLES_GUICHET_SUIVI and utilisateur.role not in (
+        "super_admin",
+        "super_administrateur",
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Seul le guichet peut gérer les fiches de suivi des passagers.",
+        )
 
 
 def _est_chauffeur_role(utilisateur: Utilisateur | None) -> bool:
@@ -1252,6 +1274,11 @@ async def creer_colis(
     id_local: str | None = None,
 ) -> tuple[Colis, Ticket]:
     """Enregistre un colis et génère son ticket (QR + numéro en clair)."""
+    if utilisateur.role == RoleUtilisateur.GERANT_GARE.value:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Le gérant supervise la gare ; l'enregistrement des colis est réservé au receveur ou au commerçant.",
+        )
     # L'arrêt de destination, s'il est précisé, **est** la gare d'arrivée du
     # colis : on la dérive du référentiel (le guichet ne la ressaisit pas et ne
     # peut donc pas la contredire).
@@ -1773,7 +1800,9 @@ async def lister_colis(
         requete = requete.where(Colis.voyage_id == voyage_id)
     # Périmètre du guichet : chacun voit ses propres enregistrements et ceux qui
     # touchent sa gare. On ne laisse pas un agent lire toute la base.
-    if _est_guichet(utilisateur):
+    if utilisateur is not None and utilisateur.role == RoleUtilisateur.COMMERCANT.value:
+        requete = requete.where(Colis.enregistre_par_id == utilisateur.id)
+    elif _est_guichet(utilisateur):
         conditions = [Colis.enregistre_par_id == utilisateur.id]
         perimetre = await _gare_de_l_agent(session, utilisateur.id)
         if perimetre is not None:
@@ -1832,7 +1861,16 @@ async def _verifier_scan_autorise(
             )
         return
 
-    if role in ROLES_GUICHET:
+    if role in (
+        RoleUtilisateur.COMMERCANT.value,
+        RoleUtilisateur.GERANT_GARE.value,
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Ce profil ne réalise pas les scans de transport ou de livraison.",
+        )
+
+    if role in ROLES_GUICHET_SUIVI:
         if type_evenement in ("depart", "mise_en_transit", "arrivee"):
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
@@ -2195,6 +2233,7 @@ async def creer_suivi_familial(
     utilisateur: Utilisateur,
 ) -> tuple[SuiviFamilial, Ticket]:
     """Enregistre un enfant suivi et génère son ticket (QR + code ``ENF-…``)."""
+    _exiger_gestion_suivi_familial(utilisateur)
     arret_destination_id = donnees.arret_destination_id
     gare_arrivee_id = donnees.gare_arrivee_id
     if arret_destination_id is not None:
@@ -2378,6 +2417,7 @@ async def affecter_suivi_familial(
     Même logique que pour un colis : la famille confie l'enfant au guichet, le
     receveur sait rarement **quel** car partira sur-le-champ.
     """
+    _exiger_gestion_suivi_familial(utilisateur)
     suivi = await obtenir_suivi_familial(session, suivi_id)
     if suivi.statut in ("arrive", "annule"):
         raise HTTPException(
@@ -2462,6 +2502,7 @@ async def modifier_suivi_familial(
     donnees: schemas.SuiviFamilialUpdate,
     utilisateur: Utilisateur,
 ) -> SuiviFamilial:
+    _exiger_gestion_suivi_familial(utilisateur)
     """Corrige une fiche passager avant la prise en charge par le chauffeur."""
     suivi = await obtenir_suivi_familial(session, suivi_id)
     _exiger_fiche_modifiable(suivi, utilisateur)
@@ -2611,6 +2652,8 @@ async def lister_suivi_familial(
     recherche: str | None = None,
     utilisateur: Utilisateur | None = None,
 ):
+    if utilisateur is not None:
+        exiger_acces_suivi_familial(utilisateur)
     requete = select(SuiviFamilial)
     if statut is not None:
         requete = requete.where(SuiviFamilial.statut == statut)
@@ -2644,15 +2687,22 @@ def _verifier_evenement_suivi_autorise(
     utilisateur: Utilisateur,
 ) -> None:
     """Le guichet ne marque pas le départ/l'arrivée et ne livre que ce qui lui est confié."""
+    exiger_acces_suivi_familial(utilisateur)
+    if utilisateur.role == RoleUtilisateur.GERANT_GARE.value:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Le gérant supervise la gare ; les étapes de transport relèvent du chauffeur et la remise au receveur.",
+        )
     if (
         donnees.type_evenement == "livraison"
-        and utilisateur.role not in ROLES_GUICHET
+        and utilisateur.role not in ROLES_GUICHET_SUIVI
+        and utilisateur.role not in ("super_admin", "super_administrateur")
     ):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail="Seul l'agent de guichet auquel l'enfant a été confié peut le remettre à sa famille.",
         )
-    if utilisateur.role not in ROLES_GUICHET:
+    if utilisateur.role not in ROLES_GUICHET_SUIVI:
         return
 
     if donnees.type_evenement != "livraison":

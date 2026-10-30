@@ -104,12 +104,6 @@ const QUESTIONS_GUICHET: QuestionAide[] = [
       "La cagnotte du jour regroupe vos recettes colis et passagers, consultable à tout moment.",
     lien: { href: "/receveur/cagnotte", libelle: "Ma cagnotte" },
   },
-  {
-    question: "Comment inscrire un car et le confier à un chauffeur ?",
-    reponse:
-      "Écran « Cars & chauffeurs » : plaque, marque, capacité, gare et le chauffeur à qui le car appartient — en une seule fois. Un car n'a qu'un chauffeur.",
-    lien: { href: "/receveur/vehicules", libelle: "Cars & chauffeurs" },
-  },
 ];
 
 /** Socle « chauffeur » : cars, départs, ce qui est à bord. */
@@ -280,27 +274,25 @@ export const CONTENUS_AIDE: Record<ProfilAide, ContenuAide> = {
   gerant_gare: {
     titre: "Aide — Gérant de gare",
     resume:
-      "Le guichet au complet, plus la planification des départs et le référentiel de votre gare.",
+      "Superviser le parc roulant et vérifier les affectations des chauffeurs de votre gare.",
     actions: [
-      { href: "/receveur/dashboard", libelle: "Départs du jour" },
-      { href: "/receveur/vehicules", libelle: "Cars & chauffeurs" },
-      { href: "/receveur/colis/nouveau", libelle: "Nouveau colis" },
-      { href: "/receveur/suivi-familial/nouveau", libelle: "Enfant voyageant seul" },
+      { href: "/gerant-gare/dashboard", libelle: "Supervision de gare" },
+      { href: "/gerant-gare/vehicules", libelle: "Cars & chauffeurs" },
+      { href: "/gerant-gare/cagnotte", libelle: "Ma cagnotte" },
       { href: "/logistique/profil", libelle: "Mon dossier pro" },
     ],
     questions: [
-      ...QUESTIONS_GUICHET,
       {
-        question: "Comment préparer les départs de la journée ?",
+        question: "Comment affecter un car à un chauffeur ?",
         reponse:
-          "Les départs sont planifiés par les chauffeurs et s'affichent sur votre tableau de bord ; vous y voyez ce qui est prêt à partir et ce qui manque encore.",
-        lien: { href: "/receveur/dashboard", libelle: "Départs du jour" },
+          "Dans « Cars & chauffeurs », sélectionnez le car puis le chauffeur responsable. Cette affectation détermine les véhicules que le chauffeur peut utiliser pour planifier ses trajets.",
+        lien: { href: "/gerant-gare/vehicules", libelle: "Gérer les cars" },
       },
       {
-        question: "Comment vérifier les cars et les chauffeurs de ma gare ?",
+        question: "Puis-je enregistrer ou livrer un colis ?",
         reponse:
-          "Tous les cars de la gare sont sur « Cars & chauffeurs », avec leur chauffeur. C'est là qu'on affecte ou retire un chauffeur.",
-        lien: { href: "/receveur/vehicules", libelle: "Cars & chauffeurs" },
+          "Non. L'enregistrement et la remise des colis ou passagers sont des opérations du receveur. Votre espace est consacré à la supervision de la gare et du parc roulant.",
+        lien: { href: "/gerant-gare/dashboard", libelle: "Supervision de gare" },
       },
       {
         question: "Qui peut voir qui a modifié un car ou un départ ?",

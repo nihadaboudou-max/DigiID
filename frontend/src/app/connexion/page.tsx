@@ -38,9 +38,9 @@ const REDIRECTIONS_PAR_ROLE: Record<string, string> = {
   "agent_terrain": "/agent/dashboard",
   // Pivot logistique — le guichet (S3)
   "receveur": "/receveur/dashboard",
-  "gerant_gare": "/receveur/dashboard",
+  "gerant_gare": "/gerant-gare/dashboard",
   "chauffeur": "/chauffeur/dashboard",
-  "commercant": "/receveur/colis/nouveau",
+  "commercant": "/commercant/dashboard",
 };
 
 // Code d'erreur : l'email du compte n'est pas encore confirmé (première connexion)

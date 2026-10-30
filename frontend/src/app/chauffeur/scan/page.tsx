@@ -11,7 +11,7 @@ import { useSearchParams } from "next/navigation";
 
 import { Alerte } from "@/composants/commun/Alerte";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
-import { ROLES_SCAN } from "@/composants/logistique/roles";
+import { ROLES_SCAN_CHAUFFEUR } from "@/composants/logistique/roles";
 import { ScannerTicket } from "@/composants/logistique/ScannerTicket";
 import type { TypeEvenementScan } from "@/types/logistique";
 
@@ -20,12 +20,11 @@ const TYPES_ACCEPTES: TypeEvenementScan[] = [
   "mise_en_transit",
   "depart",
   "arrivee",
-  "livraison",
 ];
 
 export default function PageScanChauffeur() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={ROLES_SCAN}>
+    <EnvelopperEspaceProtege rolesAutorises={ROLES_SCAN_CHAUFFEUR}>
       <Suspense
         fallback={
           <p className="text-ardoise-clair italic py-12 text-center">Chargement…</p>
@@ -41,8 +40,6 @@ function Contenu() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token") ?? searchParams.get("code") ?? "";
   const voyageId = searchParams.get("voyage_id");
-  // `?type=livraison` arrive depuis la fiche colis (« Remettre au destinataire ») :
-  // l'action est pré-sélectionnée, le chauffeur n'a plus qu'à confirmer.
   const typeDemande = searchParams.get("type");
   const typeParDefaut: TypeEvenementScan =
     (TYPES_ACCEPTES as string[]).includes(typeDemande ?? "")

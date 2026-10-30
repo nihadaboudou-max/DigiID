@@ -6,43 +6,53 @@
  * `commercant`, plus les rôles d'administration pour le support.
  */
 
-/** Consultation du tableau de bord et des colis (`logistique.lire`). */
+/** Opérations de guichet : réception, suivi et remise aux familles. */
 export const ROLES_GUICHET: string[] = [
   "receveur",
-  "gerant_gare",
-  "chauffeur",
-  "commercant",
   "super_administrateur",
   "super_admin",
 ];
 
-/** Enregistrement d'un colis (permission `logistique.colis.creer`). */
+/** Supervision de gare et gestion du parc roulant. */
+export const ROLES_GERANT_GARE: string[] = [
+  "gerant_gare",
+  "super_administrateur",
+  "super_admin",
+];
+
+/** Enregistrement au guichet (`logistique.colis.creer`). */
 export const ROLES_GUICHET_ECRITURE: string[] = [
   "receveur",
-  "gerant_gare",
-  "commercant",
   "super_administrateur",
   "super_admin",
 ];
 
-/** Scan / livraison (permission `logistique.scan`). */
-export const ROLES_SCAN: string[] = [
+/** Seul le guichet reçoit et remet les colis et passagers. */
+export const ROLES_SCAN_GUICHET: string[] = [
   "receveur",
-  "gerant_gare",
-  "chauffeur",
   "super_administrateur",
   "super_admin",
 ];
 
 /**
- * Vue chauffeur (S4) : ses voyages, les colis à bord et le scan en route.
- *
- * Le gérant de gare et les administrateurs peuvent consulter l'espace pour
- * le support, mais seuls le chauffeur (et les admins) y accèdent en pratique.
+ * Parcours du chauffeur : ses voyages et les événements de transport.
  */
 export const ROLES_CHAUFFEUR: string[] = [
   "chauffeur",
-  "gerant_gare",
+  "super_administrateur",
+  "super_admin",
+];
+
+/** Seul le chauffeur valide les départs, transits et arrivées. */
+export const ROLES_SCAN_CHAUFFEUR: string[] = [
+  "chauffeur",
+  "super_administrateur",
+  "super_admin",
+];
+
+/** Espace dédié au commerçant : ses dépôts de colis et son portefeuille. */
+export const ROLES_COMMERCANT: string[] = [
+  "commercant",
   "super_administrateur",
   "super_admin",
 ];
@@ -50,17 +60,19 @@ export const ROLES_CHAUFFEUR: string[] = [
 /**
  * Paiement / cagnotte (S6) — permission `paiement.lire`.
  *
- * Tous les acteurs du pivot logistique disposent d'une cagnotte (le receveur
- * est crédité de 25 à 150 FCFA par colis selon son nombre d'articles) ; les
- * admins peuvent consulter pour le support.
+ * Receveurs, gérants et chauffeurs consultent leur cagnotte ; le commerçant
+ * dispose d'un écran séparé pour ses commissions.
  */
 export const ROLES_CAGNOTTE: string[] = [
   "receveur",
   "gerant_gare",
   "chauffeur",
-  "commercant",
   "super_administrateur",
   "super_admin",
+];
+
+export const ROLES_CAGNOTTE_COMMERCANT: string[] = [
+  ...ROLES_COMMERCANT,
 ];
 
 /**
@@ -72,7 +84,6 @@ export const ROLES_CAGNOTTE: string[] = [
  * pour le support.
  */
 export const ROLES_REFERENTIEL_ROULANT: string[] = [
-  "receveur",
   "gerant_gare",
   "super_administrateur",
   "super_admin",

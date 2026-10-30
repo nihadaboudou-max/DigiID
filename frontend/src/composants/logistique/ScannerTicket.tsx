@@ -79,9 +79,7 @@ export function ScannerTicket({
 }: Proprietes) {
   const { utilisateur } = useAuthentification();
   const { t } = useLangue();
-  const estGuichet = ["receveur", "gerant_gare", "commercant"].includes(
-    utilisateur?.role ?? "",
-  );
+  const estGuichet = utilisateur?.role === "receveur";
 
   const [code, setCode] = useState(tokenInitial ?? "");
   const [typeEvenement, setTypeEvenement] = useState<TypeEvenementScan>(typeParDefaut);

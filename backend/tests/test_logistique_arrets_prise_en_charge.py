@@ -202,6 +202,42 @@ class TestPartageChauffeurGuichet:
             )
         )
 
+    def test_gerant_de_gare_ne_realise_pas_de_scan_de_livraison(self):
+        gerant = _utilisateur(RoleUtilisateur.GERANT_GARE.value)
+        colis = _colis(remis_guichet_le=object(), remis_guichet_a_id=gerant.id)
+        with pytest.raises(HTTPException) as erreur:
+            asyncio.run(
+                service._verifier_scan_autorise(
+                    SessionFactice(),
+                    colis,
+                    schemas.ScanCreate(token="x", type_evenement="livraison"),
+                    gerant,
+                )
+            )
+        assert erreur.value.status_code == 403
+
+    def test_gerant_de_gare_ne_peut_pas_enregistrer_un_colis(self):
+        gerant = _utilisateur(RoleUtilisateur.GERANT_GARE.value)
+
+        with pytest.raises(HTTPException) as erreur:
+            asyncio.run(service.creer_colis(SessionFactice(), None, gerant))
+
+        assert erreur.value.status_code == 403
+
+    def test_commercant_ne_realise_pas_de_scan_de_livraison(self):
+        commercant = _utilisateur(RoleUtilisateur.COMMERCANT.value)
+        colis = _colis(remis_guichet_le=object(), remis_guichet_a_id=commercant.id)
+        with pytest.raises(HTTPException) as erreur:
+            asyncio.run(
+                service._verifier_scan_autorise(
+                    SessionFactice(),
+                    colis,
+                    schemas.ScanCreate(token="x", type_evenement="livraison"),
+                    commercant,
+                )
+            )
+        assert erreur.value.status_code == 403
+
     def test_guichet_ne_livre_pas_un_colis_confie_a_un_autre_agent(self):
         receveur = _utilisateur(RoleUtilisateur.RECEVEUR.value)
         colis = _colis(
@@ -222,6 +258,14 @@ class TestPartageChauffeurGuichet:
 
 
 class TestEvenementsSuiviFamilial:
+    def test_gerant_ne_peut_pas_gerer_une_fiche_de_suivi(self):
+        gerant = _utilisateur(RoleUtilisateur.GERANT_GARE.value)
+
+        with pytest.raises(HTTPException) as erreur:
+            service._exiger_gestion_suivi_familial(gerant)
+
+        assert erreur.value.status_code == 403
+
     def test_guichet_ne_marque_pas_le_depart(self):
         receveur = _utilisateur(RoleUtilisateur.RECEVEUR.value)
         suivi = SimpleNamespace(type_passager="enfant")
@@ -290,6 +334,24 @@ class TestEvenementsSuiviFamilial:
         donnees = schemas.SuiviFamilialEvenementCreate(type_evenement="livraison")
 
         service._verifier_evenement_suivi_autorise(suivi, donnees, receveur)
+
+    def test_gerant_ne_peut_pas_marquer_une_etape_de_suivi_familial(self):
+        gerant = _utilisateur(RoleUtilisateur.GERANT_GARE.value)
+        suivi = SimpleNamespace(type_passager="enfant")
+        donnees = schemas.SuiviFamilialEvenementCreate(type_evenement="depart")
+
+        with pytest.raises(HTTPException) as erreur:
+            service._verifier_evenement_suivi_autorise(suivi, donnees, gerant)
+
+        assert erreur.value.status_code == 403
+
+    def test_commercant_n_a_pas_acces_au_suivi_familial(self):
+        commercant = _utilisateur(RoleUtilisateur.COMMERCANT.value)
+
+        with pytest.raises(HTTPException) as erreur:
+            service.exiger_acces_suivi_familial(commercant)
+
+        assert erreur.value.status_code == 403
 
     def test_chauffeur_ne_peut_pas_confirmer_la_remise_a_la_famille(self):
         chauffeur = _utilisateur(RoleUtilisateur.CHAUFFEUR.value)

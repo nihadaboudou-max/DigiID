@@ -8,11 +8,11 @@
  */
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { CagnotteContenu } from "@/composants/logistique/CagnotteContenu";
-import { ROLES_CAGNOTTE } from "@/composants/logistique/roles";
+import { ROLES_GUICHET } from "@/composants/logistique/roles";
 
 export default function PageCagnotte() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={ROLES_CAGNOTTE}>
+    <EnvelopperEspaceProtege rolesAutorises={ROLES_GUICHET}>
       <CagnotteContenu
         titre="Ma cagnotte"
         sousTitre="Vos gains de commission et l'historique de votre portefeuille."
