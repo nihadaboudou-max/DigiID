@@ -114,7 +114,7 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
     RoleUtilisateur.GERANT_GARE: frozenset({
         "logistique.lire", "logistique.ecrire", "logistique.supprimer",
         "logistique.colis.creer", "logistique.scan",
-        "logistique.profil.ecrire", "logistique.voyage.rejoindre",
+        "logistique.profil.ecrire",
         "logistique.planifier",
         # Référentiel roulant : enregistrer un car et l'affecter à un chauffeur
         # sur le terrain, sans attendre que le super-admin soit disponible.
@@ -142,7 +142,7 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
     # propres clients (colis ou passager) : c'est la traçabilité « en route ».
     RoleUtilisateur.CHAUFFEUR: frozenset({
         "logistique.lire", "logistique.scan", "logistique.colis.creer",
-        "logistique.profil.ecrire", "logistique.voyage.rejoindre",
+        "logistique.profil.ecrire",
         "logistique.planifier",
         # Seul le chauffeur constate le départ et l'arrivée (il est dans le car).
         "logistique.voyage.valider",

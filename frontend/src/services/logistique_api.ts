@@ -273,19 +273,6 @@ export const logistiqueAPI = {
     preAlerte: (id: string, d?: DonneesPreAlerte) =>
       clientAPI.post<ResultatPreAlerte>(`${BASE}/voyages/${id}/pre-alerte`, d ?? {}, opts),
 
-    // ── Le chauffeur choisit ses voyages (flexibilité multi-lignes) ──
-    /**
-     * Se désigner comme chauffeur d'un voyage **planifié** encore libre.
-     *
-     * Répond au terrain : un chauffeur indépendant travaille sur plusieurs
-     * lignes ; il prend un départ sans passer par le gérant de gare. Refusé si
-     * un autre chauffeur est déjà engagé ou si le car est déjà parti.
-     */
-    rejoindre: (id: string) =>
-      clientAPI.post<Voyage>(`${BASE}/voyages/${id}/chauffeur`, {}, opts),
-    /** Se retirer d'un voyage **avant** le départ (libère le car). */
-    quitter: (id: string) =>
-      clientAPI.delete<Voyage>(`${BASE}/voyages/${id}/chauffeur`, opts),
   },
   acteurs: {
     lister: () => clientAPI.get<ReponseListe<Acteur>>(`${BASE}/acteurs?par_page=100`, opts),

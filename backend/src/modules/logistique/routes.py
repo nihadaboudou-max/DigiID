@@ -890,65 +890,6 @@ async def supprimer_voyage(
     await service.supprimer_voyage(session, voyage.id)
 
 
-# ─── Le chauffeur choisit ses voyages (flexibilité multi-lignes) ──────
-
-@routeur_voyages.post("/{voyage_id}/chauffeur",
-                      response_model=schemas.VoyageResponse,
-                      summary="Se désigner comme chauffeur d'un voyage (volontaire)")
-@require_permission("logistique.voyage.rejoindre")
-async def rejoindre_voyage(
-    voyage_id: UUID,
-    requete: Request,
-    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
-    session: AsyncSession = Depends(obtenir_session),
-):
-    """Un chauffeur indépendant prend un départ encore libre.
-
-    Garde-fou : il doit être **enregistré comme chauffeur** (acteur logistique),
-    sinon n'importe quel compte pourrait s'emparer d'un car.
-    """
-    acteurs = await service.lister_chauffeurs_pour_trajet(
-        session, utilisateur_id=utilisateur_courant.id
-    )
-    if not acteurs:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            detail=(
-                "Votre compte n'est pas enregistré comme chauffeur : demandez au "
-                "super-admin (ou au gérant de gare) de créer votre fiche acteur."
-            ),
-        )
-    voyage = await service.rejoindre_voyage(
-        session, voyage_id=voyage_id, chauffeur_id=utilisateur_courant.id
-    )
-    await _auditer_logistique(
-        session, requete, utilisateur_courant,
-        TypesEvenementAudit.VOYAGE_CHAUFFEUR_ENGAGE,
-        f"Un chauffeur s'est engagé sur le voyage {voyage.id}",
-        donnees={
-            "voyage_id": str(voyage.id),
-            "vehicule_id": str(voyage.vehicule_id),
-            "chauffeur_id": str(utilisateur_courant.id),
-        },
-    )
-    return await _enrichir_voyage(session, voyage)
-
-
-@routeur_voyages.delete("/{voyage_id}/chauffeur",
-                        response_model=schemas.VoyageResponse,
-                        summary="Se retirer d'un voyage (avant le départ)")
-@require_permission("logistique.voyage.rejoindre")
-async def quitter_voyage(
-    voyage_id: UUID,
-    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
-    session: AsyncSession = Depends(obtenir_session),
-):
-    voyage = await service.quitter_voyage(
-        session, voyage_id=voyage_id, chauffeur_id=utilisateur_courant.id
-    )
-    return await _enrichir_voyage(session, voyage)
-
-
 # ─── Actions groupées du chauffeur (passagers ET colis) ──────────────
 
 @routeur_voyages.post("/{voyage_id}/depart",

@@ -1,6 +1,6 @@
 "use client";
 /**
- * Chauffeur — « Mes trajets & départs » (planification + flexibilité).
+ * Chauffeur — « Mes trajets & départs » (planification personnelle).
  *
  * Le chauffeur est un **indépendant**. Cette page lui donne les deux gestes du
  * métier, qui cohabitent :
@@ -9,7 +9,6 @@
  *      heure. Le départ devient aussitôt visible du **guichet** (receveur /
  *      gérant de gare), qui y charge les colis et oriente les passagers vers ce
  *      car : c'est ainsi qu'un chauffeur remplit son véhicule ;
- *   2. **Prendre** un départ libre déjà planifié par un gérant de gare.
  *
  * Sur les gares : elles n'appartiennent à personne. Le chauffeur s'y **gare**
  * pour prendre la clientèle ; ce sont le gérant de gare et le super-admin qui
@@ -114,8 +113,6 @@ function Contenu() {
   const [vehicules, setVehicules] = useState<Vehicule[]>([]);
   const [voyages, setVoyages] = useState<Voyage[]>([]);
   const [jour, setJour] = useState(aujourdHui());
-  const [ligneChoisie, setLigneChoisie] = useState("");
-  const [afficherTout, setAfficherTout] = useState(false);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [actionEnCours, setActionEnCours] = useState<string | null>(null);
@@ -150,7 +147,10 @@ function Contenu() {
           // Mes cars uniquement : le serveur ne renvoie que ceux qui me sont
           // affectés et celui dont j'ai déclaré la plaque dans mon dossier pro.
           logistiqueAPI.vehicules.listerMesVehicules(),
-          logistiqueAPI.voyages.lister({ a_partir_de: depuis, par_page: 100 }),
+          logistiqueAPI.voyages.lister({
+            a_partir_de: depuis,
+            par_page: 100,
+          }),
           // Mes voyages à part : si le réseau a plus de 100 départs à venir, les
           // miens doivent quand même remonter (le filtre est fait côté serveur).
           logistiqueAPI.voyages.lister({
@@ -220,22 +220,6 @@ function Contenu() {
         (v.statut === "termine" || v.statut === "annule"),
     )
     .sort((a, b) => triChronologique(b, a));
-
-  /** Départs libres : planifiés et sans chauffeur (les miens sont déjà ci-dessus). */
-  const depart = voyages
-    .filter((v) => v.statut === "planifie")
-    .filter((v) => !v.chauffeur_id)
-    .filter((v) => !ligneChoisie || v.ligne_id === ligneChoisie)
-    .filter((v) => {
-      const bornes = bornesDuJour(jour);
-      if (afficherTout || !bornes) return true;
-      const quand = new Date(v.date_depart).getTime();
-      return (
-        quand >= new Date(bornes.debut).getTime() &&
-        quand < new Date(bornes.fin).getTime()
-      );
-    })
-    .sort(triChronologique);
 
   // ─── Actions ───────────────────────────────────────────────────────
 
@@ -347,38 +331,6 @@ function Contenu() {
     }
   };
 
-  const rejoindre = async (voyage: Voyage) => {
-    setActionEnCours(voyage.id);
-    try {
-      await logistiqueAPI.voyages.rejoindre(voyage.id);
-      notifier("Départ rejoint : ce car vous est attribué.", "succes");
-      await charger();
-    } catch (e) {
-      notifier(
-        e instanceof ErreurAPI ? e.message_utilisateur : "Action impossible",
-        "erreur",
-      );
-    } finally {
-      setActionEnCours(null);
-    }
-  };
-
-  const retirer = async (voyage: Voyage) => {
-    setActionEnCours(voyage.id);
-    try {
-      await logistiqueAPI.voyages.quitter(voyage.id);
-      notifier("Vous vous êtes retiré de ce départ.", "succes");
-      await charger();
-    } catch (e) {
-      notifier(
-        e instanceof ErreurAPI ? e.message_utilisateur : "Action impossible",
-        "erreur",
-      );
-    } finally {
-      setActionEnCours(null);
-    }
-  };
-
   /** (Dés)active une ligne ou un car : on n'efface pas l'historique des voyages. */
   const basculerActif = async (
     type: "ligne" | "vehicule",
@@ -414,8 +366,7 @@ function Contenu() {
           Déclarez vos <strong>lignes</strong> entre les gares existantes, puis{" "}
           <strong>planifiez vos départs</strong> avec votre car. Un départ planifié
           est aussitôt visible des receveurs et gérants de gare : ils y chargent
-          des colis et orientent les passagers vers vous. Vous pouvez aussi
-          prendre un départ libre d&apos;un autre.
+          des colis et orientent les passagers vers vous.
         </p>
       </div>
 
@@ -558,8 +509,7 @@ function Contenu() {
           </p>
         ) : mesDepart.length === 0 ? (
           <p className="text-sm text-ardoise-clair italic py-4 text-center">
-            Aucun départ engagé. Planifiez-en un ci-dessus, ou prenez un départ
-            libre ci-dessous.
+            Aucun départ planifié. Choisissez une ligne, un car et une heure ci-dessus.
           </p>
         ) : (
           <ul className="space-y-3">
@@ -612,14 +562,6 @@ function Contenu() {
                               }
                             >
                               Ajuster
-                            </Bouton>
-                            <Bouton
-                              variante="ghost"
-                              taille="petit"
-                              chargement={actionEnCours === voyage.id}
-                              onClick={() => retirer(voyage)}
-                            >
-                              Me retirer
                             </Bouton>
                             <Bouton
                               variante="ghost"
@@ -738,105 +680,6 @@ function Contenu() {
           )}
         </Carte>
       </div>
-
-      {/* ─── Départs libres ───────────────────────────────────────── */}
-      <Carte
-        titre="Départs libres"
-        description="Voyages planifiés sans chauffeur : vous pouvez vous engager vous-même."
-      >
-        <div className="mb-4 grid gap-3 sm:grid-cols-3">
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase text-ardoise-clair">
-              Jour
-            </label>
-            <input
-              type="date"
-              value={jour}
-              onChange={(e) => setJour(e.target.value)}
-              className="w-full rounded-lg border border-ardoise-clair/20 px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase text-ardoise-clair">
-              Ligne
-            </label>
-            <select
-              value={ligneChoisie}
-              onChange={(e) => setLigneChoisie(e.target.value)}
-              className="w-full rounded-lg border border-ardoise-clair/20 px-3 py-2 text-sm"
-            >
-              <option value="">Toutes les lignes</option>
-              {lignes.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {libelleLigne(l)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <label className="flex items-end gap-2 pb-2 text-xs text-ardoise-clair">
-            <input
-              type="checkbox"
-              checked={afficherTout}
-              onChange={(e) => setAfficherTout(e.target.checked)}
-              className="rounded border-ardoise-clair/30"
-            />
-            Voir aussi les jours suivants
-          </label>
-        </div>
-
-        {chargement ? (
-          <p className="text-sm text-ardoise-clair italic py-6 text-center">
-            Chargement des départs…
-          </p>
-        ) : depart.length === 0 ? (
-          <p className="text-sm text-ardoise-clair italic py-6 text-center">
-            Aucun départ libre pour ces critères. Essayez « Voir aussi les jours
-            suivants », une autre ligne — ou planifiez votre propre départ.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-ardoise-clair/10 text-left text-xs uppercase text-ardoise-clair">
-                  <th className="py-2 pr-3 font-semibold">Départ</th>
-                  <th className="py-2 pr-3 font-semibold">Trajet</th>
-                  <th className="py-2 pr-3 font-semibold">Car</th>
-                  <th className="py-2 pr-3 font-semibold">Disponibilité</th>
-                  <th className="py-2 pr-3 font-semibold"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {depart.map((voyage) => (
-                  <tr key={voyage.id}>
-                    <td className="border-b border-ardoise-clair/5 py-2 pr-3">
-                      {formaterDateHeure(voyage.date_depart)}
-                    </td>
-                    <td className="border-b border-ardoise-clair/5 py-2 pr-3">
-                      {trajetDe(voyage)}
-                    </td>
-                    <td className="border-b border-ardoise-clair/5 py-2 pr-3">
-                      {voyage.vehicule_immatriculation ?? "—"}
-                    </td>
-                    <td className="border-b border-ardoise-clair/5 py-2 pr-3">
-                      <Badge variante="succes">Libre</Badge>
-                    </td>
-                    <td className="border-b border-ardoise-clair/5 py-2 pr-3 text-right">
-                      <Bouton
-                        variante="primaire"
-                        taille="petit"
-                        chargement={actionEnCours === voyage.id}
-                        onClick={() => rejoindre(voyage)}
-                      >
-                        Prendre ce départ
-                      </Bouton>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Carte>
 
       {/* ─── Mes lignes & mes cars ────────────────────────────────── */}
       <Carte

@@ -136,14 +136,6 @@ BASE: list[dict] = [
         "lien": "/chauffeur/dashboard",
     },
     {
-        "mots_cles": ["depart libre", "rejoindre un depart", "trajet sans chauffeur", "me retirer"],
-        "reponse": (
-            "Le tableau de bord chauffeur liste les départs sans chauffeur : vous les "
-            "rejoignez en un clic, et vous pouvez vous retirer tant que le car n'est "
-            "pas parti. Si un collègue l'a pris, son nom est affiché."
-        ),
-    },
-    {
         "mots_cles": ["en route", "enregistrer un passager", "monter en route", "client au bord de la route", "enregistrer en route"],
         "reponse": (
             "Depuis le car, vous pouvez enregistrer un passager ou un colis confié en "

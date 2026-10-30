@@ -113,14 +113,9 @@ Planifier un départ, supprimer un car, valider une arrivée de lot (réservés 
 1. `/chauffeur/voyages/<id>` → **Valider le départ** → tous les passagers + colis passent « en route » en un clic.
 2. En route : `/chauffeur/scan` → scanner chaque QR (livraison à la montée/descente), ou **Pré-alerte** → SMS passagers + proches + destinataires de l'approche.
 3. À l'arrivée : **Marquer arrivés** (éventuellement par gare) → passagers et colis « arrivés », SMS envoyés.
-4. Attendu : un chauffeur ne peut pas forcer un statut de route par modification manuelle ; un voyage déjà parti ne se rejoint plus par un collègue.
+4. Attendu : un chauffeur ne peut pas forcer un statut de route par modification manuelle.
 
-### P4.5 Rejoindre / quitter un départ libre
-1. `/chauffeur/dashboard` → départs libres (sans chauffeur) → **Rejoindre**.
-2. Refusé si : déjà pris par un autre (nom cité), déjà parti, ou compte non enregistré comme chauffeur.
-3. Avant le départ : **Quitter** → le car redevient libre.
-
-### P4.6 Encaisser / dossier
+### P4.5 Encaisser / dossier
 1. `/chauffeur/cagnotte` → encaissements du jour.
 2. `/logistique/profil` → dossier pro « chauffeur » (permis, plaque déclarée, gare).
 

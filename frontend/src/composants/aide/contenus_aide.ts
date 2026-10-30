@@ -138,12 +138,6 @@ const QUESTIONS_CHAUFFEUR: QuestionAide[] = [
     lien: { href: "/chauffeur/dashboard", libelle: "Mes départs du jour" },
   },
   {
-    question: "Comment rejoindre un départ libre ?",
-    reponse:
-      "Le tableau de bord liste les départs sans chauffeur : vous les rejoignez en un clic et pouvez vous retirer tant que le car n'est pas parti.",
-    lien: { href: "/chauffeur/dashboard", libelle: "Mes départs du jour" },
-  },
-  {
     question: "Comment enregistrer un client en route ?",
     reponse:
       "Passager monté au bord de la route ou colis confié en cours de trajet : enregistrez-le depuis le car, avec le scan du code du client.",

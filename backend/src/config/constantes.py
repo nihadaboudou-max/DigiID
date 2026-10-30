@@ -194,7 +194,6 @@ class TypesEvenementAudit(str, Enum):
     VEHICULE_SUPPRIME = "vehicule_supprime"
     VOYAGE_PLANIFIE = "voyage_planifie"
     VOYAGE_MODIFIE = "voyage_modifie"
-    VOYAGE_CHAUFFEUR_ENGAGE = "voyage_chauffeur_engage"
 
     # Sécurité
     TENTATIVE_INTRUSION = "tentative_intrusion"

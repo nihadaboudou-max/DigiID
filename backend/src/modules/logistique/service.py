@@ -959,9 +959,9 @@ async def lister_voyages(session: AsyncSession, page: int, par_page: int,
     Avec ``a_partir_de``, on trie du **prochain** départ au plus lointain ;
     sinon du plus récent au plus ancien.
 
-    Un chauffeur ne voit **que ses propres départs** : le filtre est appliqué
-    côté serveur, un appel direct avec un autre ``chauffeur_id`` ne contourne
-    donc pas la règle.
+    Un chauffeur ne voit que ses propres départs : le filtre est appliqué côté
+    serveur, un appel direct avec un autre ``chauffeur_id`` ne contourne donc
+    pas la règle.
     """
     requete = select(Voyage)
     if statut is not None:
@@ -1105,91 +1105,6 @@ async def supprimer_voyage(session: AsyncSession, voyage_id: UUID) -> None:
     voyage = await obtenir_voyage(session, voyage_id)
     await session.delete(voyage)
     await session.commit()
-
-
-async def rejoindre_voyage(
-    session: AsyncSession, *, voyage_id: UUID, chauffeur_id: UUID
-) -> Voyage:
-    """Un chauffeur indépendant se désigne lui-même sur un voyage **planifié**.
-
-    Flexibilité voulue par le terrain : un chauffeur qui travaille sur une autre
-    ligne (ou dont le car a changé) peut prendre un départ encore libre, sans
-    passer par le gérant de gare. Garde-fous :
-      * voyage pas encore parti (statut `planifie`) ;
-      * personne d'autre déjà désigné (sinon on refuse : l'engagement est public,
-        le suivi et les SMS partent sur ce nom).
-    """
-    voyage = await session.get(Voyage, voyage_id)
-    if voyage is None:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, detail="Voyage introuvable"
-        )
-    if voyage.chauffeur_id == chauffeur_id:
-        return voyage  # déjà le mien : idempotent (double clic du téléphone)
-    if voyage.statut != "planifie":
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail=(
-                f"Ce voyage est « {voyage.statut} » : on ne peut plus s'y ajouter. "
-                "Demandez au gérant de gare de créer un nouveau départ."
-            ),
-        )
-    if voyage.chauffeur_id is not None:
-        autre = await session.get(Utilisateur, voyage.chauffeur_id)
-        nom = "un autre chauffeur"
-        if autre is not None:
-            nom = f"{dechiffrer_donnee(autre.prenom_chiffre) if autre.prenom_chiffre else ''} " \
-                  f"{dechiffrer_donnee(autre.nom_chiffre) if autre.nom_chiffre else ''}".strip() \
-                  or (autre.digiid_public or "un autre chauffeur")
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail=f"{nom} conduit déjà ce voyage (statut « planifie »). Choisissez un autre départ.",
-        )
-
-    await _verifier_conflit_chauffeur(
-        session, chauffeur_id, voyage.date_depart, voyage.date_arrivee, voyage.ligne_id
-    )
-    voyage.chauffeur_id = chauffeur_id
-    await session.commit()
-    await session.refresh(voyage)
-    journal.info(
-        f"voyage_rejoint | chauffeur={chauffeur_id} | voyage={voyage_id} "
-        f"| ligne={voyage.ligne_id} | depart={voyage.date_depart}"
-    )
-    return voyage
-
-
-async def quitter_voyage(
-    session: AsyncSession, *, voyage_id: UUID, chauffeur_id: UUID
-) -> Voyage:
-    """Un chauffeur se retire d'un voyage tant qu'il n'est pas parti.
-
-    Même logique que `rejoindre_voyage` : on ne « débarque » pas un car déjà en
-    route (les colis et passagers à bord dépendent de ce chauffeur).
-    """
-    voyage = await session.get(Voyage, voyage_id)
-    if voyage is None:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, detail="Voyage introuvable"
-        )
-    if voyage.chauffeur_id != chauffeur_id:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail="Vous n'êtes pas le chauffeur de ce voyage.",
-        )
-    if voyage.statut != "planifie":
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail=(
-                "Ce voyage a déjà commencé : vous ne pouvez plus vous en retirer. "
-                "Terminez le voyage ou contactez le gérant de gare."
-            ),
-        )
-    voyage.chauffeur_id = None
-    await session.commit()
-    await session.refresh(voyage)
-    journal.info(f"voyage_quitte | chauffeur={chauffeur_id} | voyage={voyage_id}")
-    return voyage
 
 
 # ─── Acteurs logistiques ─────────────────────────────────────────────
