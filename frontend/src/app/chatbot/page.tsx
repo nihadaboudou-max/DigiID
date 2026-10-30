@@ -5,13 +5,11 @@
  * Branchée sur /api/v1/utilisateur/chatbot/*
  */
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import clsx from "clsx";
 
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
-import { Alerte } from "@/composants/commun/Alerte";
 import { IconeEnvoyer, IconeChat } from "@/composants/commun/Icones";
 import { useNotifications } from "@/contextes/notifications";
 import { useAuthentification } from "@/contextes/authentification";
@@ -37,25 +35,58 @@ export default function PageChatbot() {
   );
 }
 
-/**
- * Questions prêtes à cliquer : elles couvrent le parcours du pivot
- * (colis, passagers, cars, guichet, chauffeur) — l'utilisateur pressé obtient
- * une réponse en un geste au lieu de rédiger sa question.
- */
-const SUGGESTIONS = [
-  "Comment enregistrer un colis au guichet ?",
-  "Le client n'a pas de compte DigiID, comment je remplis sa fiche ?",
-  "Pourquoi scanner le QR du client plutôt que taper son code ?",
-  "Le QR est refusé, que faire ?",
-  "Comment marquer un colis livré ?",
-  "Je suis chauffeur : comment récupérer mon car ?",
-  "Comment prévenir le parent d'un enfant qui voyage seul ?",
-  "Combien ai-je encaissé aujourd'hui ?",
-] as const;
+const ASSISTANCE_PAR_ROLE: Record<string, { titre: string; questions: string[] }> = {
+  receveur: {
+    titre: "Assistance guichet",
+    questions: [
+      "Comment enregistrer un colis ?",
+      "Le QR du client est refusé, que faire ?",
+      "Comment marquer un colis livré ?",
+      "Comment enregistrer un enfant qui voyage seul ?",
+    ],
+  },
+  gerant_gare: {
+    titre: "Assistance gérant de gare",
+    questions: [
+      "Comment affecter un car à un chauffeur ?",
+      "Un chauffeur n'apparaît pas dans la liste, que faire ?",
+      "Comment planifier un départ ?",
+      "Comment suivre un colis ou un passager ?",
+    ],
+  },
+  chauffeur: {
+    titre: "Assistance chauffeur",
+    questions: [
+      "Comment planifier un départ avec mon car ?",
+      "Comment voir les colis et passagers à bord ?",
+      "Comment valider le départ et l'arrivée ?",
+      "Comment enregistrer un client en route ?",
+      "Où consulter ma cagnotte ?",
+    ],
+  },
+  commercant: {
+    titre: "Assistance commerçant",
+    questions: [
+      "Comment enregistrer un colis ?",
+      "Comment suivre un colis ?",
+      "Où retrouver mes tickets ?",
+    ],
+  },
+};
+
+const ASSISTANCE_PAR_DEFAUT = {
+  titre: "Assistant DigiID",
+  questions: [
+    "Comment suivre un colis ?",
+    "Comment utiliser ma carte DigiID ?",
+    "Comment modifier mon profil ?",
+  ],
+};
 
 function Contenu() {
   const { utilisateur } = useAuthentification();
   const { notifier } = useNotifications();
+  const assistance = ASSISTANCE_PAR_ROLE[utilisateur?.role ?? ""] ?? ASSISTANCE_PAR_DEFAUT;
 
   // Liste des conversations existantes (panneau gauche)
   const [conversations, setConversations] = useState<ConversationApercu[]>([]);
@@ -135,26 +166,25 @@ function Contenu() {
 
   async function envoyerTexte(texteBrut: string) {
     const texte = texteBrut.trim();
-    if (!texte || envoiEnCours || !actuelle) return;
-
-    // Si pas de conversation ouverte, en créer une d'abord
-    let conversation = actuelle;
-    if (!conversation) {
-      const nouvelle = await creerConversation();
-      conversation = {
-        id: nouvelle.id,
-        titre: nouvelle.titre,
-        cree_le: nouvelle.cree_le,
-        messages: [],
-      };
-      setActuelle(conversation);
-      setConversations((c) => [nouvelle, ...c]);
-    }
+    if (!texte || envoiEnCours) return;
 
     setSaisie("");
     setEnvoiEnCours(true);
 
     try {
+      let conversation = actuelle;
+      if (!conversation) {
+        const nouvelle = await creerConversation();
+        conversation = {
+          id: nouvelle.id,
+          titre: nouvelle.titre,
+          cree_le: nouvelle.cree_le,
+          messages: [],
+        };
+        setActuelle(conversation);
+        setConversations((c) => [nouvelle, ...c]);
+      }
+
       // Appel API : envoie le message et reçoit message + réponse
       const reponse = await envoyerMessage(conversation.id, texte);
       // Mettre à jour la conversation actuelle avec les deux nouveaux messages
@@ -176,43 +206,29 @@ function Contenu() {
 
   return (
     <div className="space-y-4 apparition">
-      <header className="flex items-start justify-between gap-4 flex-wrap">
+      <header className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-ocre font-semibold text-sm uppercase tracking-wider">
-            Assistant DigiID
-          </p>
-          <h1 className="mt-1">Discute avec ton assistant</h1>
-          <p className="text-ardoise-clair mt-2 max-w-2xl">
-            Pose-lui des questions sur DigiID ou sur tes documents.
-            Il se souvient de ce que vous avez déjà dit.
-          </p>
+          <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Aide métier</p>
+          <h1 className="mt-1">{assistance.titre}</h1>
         </div>
-        <Link href="/documents">
-          <Bouton variante="ghost" taille="petit">
-            Mes documents
-          </Bouton>
-        </Link>
+        <Bouton variante="primaire" taille="petit" onClick={gererNouvelleConversation}>
+          Nouvelle question
+        </Bouton>
       </header>
 
       <Carte className="!p-0 overflow-hidden">
-        <div className="grid md:grid-cols-[260px_1fr] min-h-[600px]">
+        <div className="grid md:grid-cols-[220px_1fr] min-h-[520px]">
           {/* Panneau gauche : liste des conversations */}
           <aside className="border-r border-ardoise-clair/10 bg-sable-clair/50 flex flex-col">
             <div className="p-4 border-b border-ardoise-clair/10">
-              <Bouton
-                variante="primaire"
-                onClick={gererNouvelleConversation}
-                className="w-full !py-2"
-              >
-                + Nouvelle conversation
-              </Bouton>
+              <p className="text-xs font-semibold uppercase text-ardoise-clair">Questions récentes</p>
             </div>
             <div className="flex-grow overflow-y-auto p-2 space-y-1 max-h-[500px]">
               {chargementListe ? (
                 <p className="text-xs text-ardoise-clair italic p-3">Chargement...</p>
               ) : conversations.length === 0 ? (
                 <p className="text-xs text-ardoise-clair italic p-3">
-                  Aucune conversation. Lance la première !
+                  Aucune question récente.
                 </p>
               ) : (
                 conversations.map((c) => (
@@ -248,20 +264,21 @@ function Contenu() {
           {/* Panneau droit : conversation active */}
           <div className="flex flex-col">
             {actuelle === null ? (
-              // Aucune conversation ouverte
-              <div className="flex-grow flex items-center justify-center p-8">
-                <div className="text-center max-w-sm">
-                  <div className="w-16 h-16 bg-lagune/10 text-lagune rounded-full flex items-center justify-center mx-auto mb-4">
-                    <IconeChat />
-                  </div>
-                  <h3 className="mb-2">Bienvenue {utilisateur?.prenom || ""}</h3>
-                  <p className="text-sm text-ardoise-clair mb-4">
-                    Crée une nouvelle conversation pour commencer à discuter.
-                    L'assistant peut aussi répondre sur des documents que tu auras uploadés.
-                  </p>
-                  <Bouton variante="primaire" onClick={gererNouvelleConversation}>
-                    Commencer
-                  </Bouton>
+              <div className="flex-grow p-5 sm:p-8">
+                <h2 className="font-semibold text-ardoise">Quel est le problème ?</h2>
+                <p className="mt-1 text-sm text-ardoise-clair">Choisis une question ou écris la tienne.</p>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {assistance.questions.map((question) => (
+                    <button
+                      key={question}
+                      type="button"
+                      disabled={envoiEnCours}
+                      onClick={() => void envoyerTexte(question)}
+                      className="rounded-lg border border-lagune/20 bg-lagune/5 px-3 py-2 text-left text-sm font-medium text-lagune transition-colors hover:bg-lagune/10 disabled:opacity-50"
+                    >
+                      {question}
+                    </button>
+                  ))}
                 </div>
               </div>
             ) : (
@@ -269,61 +286,52 @@ function Contenu() {
                 {/* Messages */}
                 <div className="flex-grow overflow-y-auto p-6 space-y-4 bg-white max-h-[500px]">
                   {actuelle.messages.length === 0 ? (
-                    <div className="space-y-4">
-                      <Alerte variante="info">
-                        Conversation vide. Pose ta première question — l&apos;assistant te répondra.
-                      </Alerte>
-                      <div>
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ardoise-clair">
-                          Questions fréquentes (logistique)
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {SUGGESTIONS.map((suggestion) => (
-                            <button
-                              key={suggestion}
-                              type="button"
-                              disabled={envoiEnCours}
-                              onClick={() => void envoyerTexte(suggestion)}
-                              className="rounded-full border border-lagune/20 bg-lagune/5 px-3 py-1.5 text-left text-xs font-medium text-lagune transition-colors hover:bg-lagune/10 disabled:opacity-50"
-                            >
-                              {suggestion}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                    <p className="text-sm text-ardoise-clair">Choisis une question ou écris la tienne.</p>
                   ) : (
                     actuelle.messages.map((m) => (
                       <Bulle key={m.id} message={m} prenom={utilisateur?.prenom} />
                     ))
                   )}
+                  {actuelle.messages.length === 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {assistance.questions.map((question) => (
+                        <button
+                          key={question}
+                          type="button"
+                          disabled={envoiEnCours}
+                          onClick={() => void envoyerTexte(question)}
+                          className="rounded-lg border border-lagune/20 bg-lagune/5 px-3 py-2 text-left text-sm font-medium text-lagune transition-colors hover:bg-lagune/10 disabled:opacity-50"
+                        >
+                          {question}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {envoiEnCours && <BulleReflexion />}
                   <div ref={refFin} />
                 </div>
-
-                {/* Zone de saisie */}
-                <form onSubmit={gererEnvoi} className="border-t border-ardoise-clair/10 p-4 bg-white flex gap-3">
-                  <input
-                    type="text"
-                    value={saisie}
-                    onChange={(e) => setSaisie(e.target.value)}
-                    placeholder="Tape ta question..."
-                    className="champ-saisie flex-grow !py-2.5"
-                    disabled={envoiEnCours}
-                    autoFocus
-                  />
-                  <Bouton
-                    type="submit"
-                    variante="primaire"
-                    disabled={!saisie.trim() || envoiEnCours}
-                    taille="moyen"
-                    className="!px-4"
-                  >
-                    <IconeEnvoyer />
-                  </Bouton>
-                </form>
               </>
             )}
+            <form onSubmit={gererEnvoi} className="border-t border-ardoise-clair/10 p-4 bg-white flex gap-3">
+              <input
+                type="text"
+                value={saisie}
+                onChange={(e) => setSaisie(e.target.value)}
+                placeholder="Écris ta question"
+                className="champ-saisie flex-grow !py-2.5"
+                disabled={envoiEnCours}
+              />
+              <Bouton
+                type="submit"
+                variante="primaire"
+                disabled={!saisie.trim() || envoiEnCours}
+                taille="moyen"
+                className="!px-4"
+                aria-label="Envoyer la question"
+              >
+                <IconeEnvoyer />
+              </Bouton>
+            </form>
           </div>
         </div>
       </Carte>

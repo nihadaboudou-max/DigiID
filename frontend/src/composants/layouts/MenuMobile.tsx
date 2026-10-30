@@ -34,7 +34,6 @@ const LIENS_UTILISATEUR: Lien[] = [
   { href: "/aide", libelle: "Aide et Support", Icone: IconeAlerte },
   // Menus masqués (simplification) — dé-commenter pour les réafficher :
   // { href: "/score", libelle: "Mon score", Icone: IconeScore },   
-  // { href: "/chatbot", libelle: "Assistant", Icone: IconeChat },
   //{ href: "/parametres", libelle: "Paramètres", Icone: IconeParametres },
 ];
 
@@ -129,6 +128,7 @@ const LIENS_RECEVEUR: Lien[] = [
   { href: "/guichet/carte", libelle: "Carte client (scan)", Icone: IconeIdentite },
   { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
   { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
+  { href: "/chatbot", libelle: "Assistance", Icone: IconeChat },
 ];
 
 const LIENS_CHAUFFEUR: Lien[] = [
@@ -143,6 +143,7 @@ const LIENS_CHAUFFEUR: Lien[] = [
   { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
   { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
   { href: "/chauffeur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
+  { href: "/chatbot", libelle: "Assistance", Icone: IconeChat },
 ];
 
 const LIENS_COMMERCANT: Lien[] = [

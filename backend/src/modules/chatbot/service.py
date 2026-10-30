@@ -58,21 +58,24 @@ CONNAISSANCES_LOGISTIQUE = (
     "guichet enregistre un proche de confiance : il recoit un SMS au depart, a "
     "l'approche et a l'arrivee.\n"
     "- Un car appartient a UN chauffeur : il est affecte par le guichet ou le "
-    "gerant de gare, ou revendique par le chauffeur quand la plaque est libre au "
-    "referentiel. Un chauffeur ne voit que ses cars et ne peut pas planifier un "
+    "gerant de gare. Un chauffeur ne voit que ses cars et ne peut pas planifier un "
     "depart avec le car d'un collegue (refus cote serveur).\n"
     "- Le chauffeur planifie ses departs, valide le depart et l'arrivee de tout ce "
     "qui est a bord, scanne les codes, et suit sa cagnotte du jour.\n"
     "- Le guichet encaisse les frais (cagnotte du guichet), scanne les codes de "
     "ticket pour marquer une livraison (un second scan indique 'deja livre').\n"
-    "- Un depart deja parti ne se rejoint plus et ne se modifie plus.\n"
+    "- Un depart deja parti ne peut plus etre modifie ou annule.\n"
     "- Toutes les actions sensibles (affectation d'un car, planification, "
     "enregistrement) sont tracees dans le journal d'audit consultable par le "
     "super-administrateur.\n"
 )
 
 
-def _construire_prompt_systeme(prenom: Optional[str], documents: list[tuple[str, str]]) -> str:
+def _construire_prompt_systeme(
+    prenom: Optional[str],
+    documents: list[tuple[str, str]],
+    role: Optional[str] = None,
+) -> str:
     """
     Construit le message système qui donne au LLM son rôle et son contexte.
 
@@ -83,15 +86,24 @@ def _construire_prompt_systeme(prenom: Optional[str], documents: list[tuple[str,
     """
     base = (
         "Tu es l'assistant DigiID, un système d'identité numérique africaine. "
-        "Tu réponds aux questions de l'utilisateur sur l'application DigiID, "
-        "son score, ses données, ainsi que sur les documents qu'il t'a fournis. "
-        "Tu réponds en français, de manière claire, amicale et factuelle. "
+        "Tu réponds aux questions de l'utilisateur sur l'application DigiID et "
+        "les tâches de son métier. Réponds en français, directement et brièvement : "
+        "une réponse ou trois étapes maximum, sans salutation ni bavardage. "
+        "Indique le nom exact du menu à ouvrir. N'invente pas de fonction absente. "
         "Tu ne donnes jamais d'informations sur d'autres utilisateurs. "
         "Si tu ne sais pas, tu le dis honnêtement."
     )
 
     # Le contexte métier « pivot » : colis, passagers, cars, guichet, chauffeur.
     base += CONNAISSANCES_LOGISTIQUE
+
+    consignes_role = {
+        "receveur": "Priorité au guichet : colis, passagers, scan, livraison et caisse.",
+        "gerant_gare": "Priorité à la gare : lignes, véhicules, affectation des chauffeurs et suivi.",
+        "chauffeur": "Priorité au chauffeur : ses trajets, les clients à bord, scan, départ, arrivée et cagnotte.",
+    }
+    if role in consignes_role:
+        base += f"\n\nProfil de l'utilisateur : {consignes_role[role]}"
 
     # Personnalisation par prénom si disponible
     if prenom:
@@ -218,7 +230,12 @@ async def envoyer_message(
             prenom = None
 
     # 6. Construire le prompt système avec les docs en contexte
-    prompt_systeme = _construire_prompt_systeme(prenom=prenom, documents=documents)
+    role = getattr(utilisateur.role, "value", utilisateur.role)
+    prompt_systeme = _construire_prompt_systeme(
+        prenom=prenom,
+        documents=documents,
+        role=role,
+    )
 
     # 7. Appeler le LLM — et si l'IA n'est pas joignable, répondre quand même.
     #    Le guide local (colis, passagers, cars, QR dynamique, score, données)
@@ -231,7 +248,6 @@ async def envoyer_message(
             question_utilisateur=contenu_utilisateur,
         )
     except Exception as erreur:  # noqa: BLE001 — le chatbot ne doit jamais renvoyer une erreur
-        role = getattr(utilisateur.role, "value", utilisateur.role)
         journal.warning(f"LLM indisponible ({erreur}) — réponse du guide local")
         contenu_reponse, _ = repondre_localement(contenu_utilisateur, role=role)
 

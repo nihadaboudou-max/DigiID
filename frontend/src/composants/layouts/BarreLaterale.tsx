@@ -314,6 +314,7 @@ export function BarreLaterale() {
       { href: "/guichet/carte", libelle: "Carte client (scan)", Icone: IconeIdentite },
       { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
       { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
+      { href: "/chatbot", libelle: "Assistance", Icone: IconeChat },
     ];
     titreSection =
       utilisateur.role === "receveur" ? "Guichet logistique" : "Gérant de gare";
@@ -335,6 +336,7 @@ export function BarreLaterale() {
       { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
       { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
       { href: "/chauffeur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
+      { href: "/chatbot", libelle: "Assistance", Icone: IconeChat },
     ];
     titreSection = "Chauffeur";
     couleurLabel = "text-ocre";
