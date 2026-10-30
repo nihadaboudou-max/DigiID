@@ -1490,6 +1490,9 @@ async def scanner_ticket(
     colis = resultat.get("colis")
     if colis is not None:
         await _enrichir_colis(session, colis)
+    suivi = resultat.get("suivi")
+    if suivi is not None:
+        resultat["suivi"] = await _enrichir_suivi_familial(session, suivi)
     evenement = resultat.get("evenement")
     if evenement is not None:
         await _enrichir_evenement(session, evenement)

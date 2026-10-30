@@ -291,6 +291,20 @@ class TestEvenementsSuiviFamilial:
 
         service._verifier_evenement_suivi_autorise(suivi, donnees, receveur)
 
+    def test_chauffeur_ne_peut_pas_confirmer_la_remise_a_la_famille(self):
+        chauffeur = _utilisateur(RoleUtilisateur.CHAUFFEUR.value)
+        suivi = SimpleNamespace(
+            type_passager="enfant",
+            remis_guichet_le=object(),
+            remis_guichet_a_id=chauffeur.id,
+        )
+        donnees = schemas.SuiviFamilialEvenementCreate(type_evenement="livraison")
+
+        with pytest.raises(HTTPException) as erreur:
+            service._verifier_evenement_suivi_autorise(suivi, donnees, chauffeur)
+
+        assert erreur.value.status_code == 403
+
 
 class TestArretDestination:
     def test_arret_doit_appartenir_a_la_ligne(self):

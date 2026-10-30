@@ -35,8 +35,9 @@ function Contenu() {
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold text-ardoise">Scanner / Livrer</h1>
         <p className="text-sm text-ardoise-clair">
-          Scannez le QR Code du colis ou saisissez son numéro pour enregistrer une
-          remise au destinataire.
+          Scannez le ticket d&apos;un colis ou d&apos;un enfant confié à votre guichet.
+          Confirmez la remise finale au destinataire du colis ou à la famille de
+          l&apos;enfant. Le départ et l&apos;arrivée sont enregistrés par le chauffeur.
         </p>
       </div>
 

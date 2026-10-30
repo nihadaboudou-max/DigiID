@@ -197,6 +197,7 @@ export interface ResultatScan {
   message: string;
   statut_colis: StatutColis | null;
   colis: Colis | null;
+  suivi: SuiviFamilial | null;
   ticket: Ticket | null;
   evenement: ColisEvenement | null;
 }

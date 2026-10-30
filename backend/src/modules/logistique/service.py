@@ -1915,6 +1915,64 @@ async def enregistrer_scan(
     if ticket is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             detail="Ticket introuvable (QR ou code clair invalide)")
+    if ticket.type == "ENFANT":
+        suivi = await session.get(SuiviFamilial, ticket.reference_id) if ticket.reference_id else None
+        if suivi is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                detail="Passager associé à ce ticket introuvable.",
+            )
+        if donnees.type_evenement != "livraison":
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Ce ticket appartient à un passager. Le guichet peut uniquement "
+                    "confirmer sa remise à la famille après réception du chauffeur."
+                ),
+            )
+        donnees_evenement_suivi = schemas.SuiviFamilialEvenementCreate(
+            type_evenement="livraison",
+            gare_id=donnees.gare_id,
+            localisation=donnees.localisation,
+            idempotency_key=donnees.idempotency_key,
+            horodatage=donnees.horodatage,
+        )
+        _verifier_evenement_suivi_autorise(
+            suivi, donnees_evenement_suivi, utilisateur
+        )
+        evenement_livraison = await session.scalar(
+            select(SuiviFamilialEvenement).where(
+                SuiviFamilialEvenement.suivi_familial_id == suivi.id,
+                SuiviFamilialEvenement.type_evenement == "livraison",
+            )
+        )
+        if evenement_livraison is not None or ticket.statut == "livre":
+            return {
+                "succes": True,
+                "deja_livre": True,
+                "deja_scanne": False,
+                "message": f"PASSAGER DÉJÀ REMIS — {suivi.enfant_nom} a déjà été remis à sa famille.",
+                "statut_colis": suivi.statut,
+                "suivi": suivi,
+                "ticket": ticket,
+                "evenement": None,
+            }
+        resultat_suivi = await enregistrer_evenement_suivi(
+            session,
+            suivi.id,
+            donnees_evenement_suivi,
+            utilisateur,
+        )
+        return {
+            "succes": True,
+            "deja_livre": False,
+            "deja_scanne": resultat_suivi["deja_enregistre"],
+            "message": resultat_suivi["message"],
+            "statut_colis": suivi.statut,
+            "suivi": suivi,
+            "ticket": ticket,
+            "evenement": None,
+        }
     colis = await session.get(Colis, ticket.reference_id) if ticket.reference_id else None
     if colis is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
@@ -2020,7 +2078,7 @@ async def enregistrer_scan(
     message = (
         "Scan enregistré."
         if donnees.type_evenement != "livraison"
-        else "Colis livré avec succès."
+        else "Colis remis au destinataire avec succès."
     )
     if debit_agent is not None:
         message += (
@@ -2586,6 +2644,14 @@ def _verifier_evenement_suivi_autorise(
     utilisateur: Utilisateur,
 ) -> None:
     """Le guichet ne marque pas le départ/l'arrivée et ne livre que ce qui lui est confié."""
+    if (
+        donnees.type_evenement == "livraison"
+        and utilisateur.role not in ROLES_GUICHET
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Seul l'agent de guichet auquel l'enfant a été confié peut le remettre à sa famille.",
+        )
     if utilisateur.role not in ROLES_GUICHET:
         return
 
@@ -2649,7 +2715,11 @@ async def enregistrer_evenement_suivi(
             return {
                 "succes": True,
                 "deja_enregistre": True,
-                "message": "Événement déjà enregistré (idempotent).",
+                "message": (
+                    f"La remise de {suivi.enfant_nom} à sa famille a déjà été confirmée."
+                    if donnees.type_evenement == "livraison"
+                    else "Événement déjà enregistré (idempotent)."
+                ),
                 "statut_suivi": suivi.statut,
                 "suivi": suivi,
                 "evenement": existant,
@@ -2728,6 +2798,8 @@ async def enregistrer_evenement_suivi(
     if ticket is not None:
         if donnees.type_evenement in ("depart", "arrivee"):
             ticket.statut = "en_transit"
+        elif donnees.type_evenement == "livraison":
+            ticket.statut = "livre"
         ticket.nb_scans = (ticket.nb_scans or 0) + 1
         if ticket.premier_scan_le is None:
             ticket.premier_scan_le = maintenant
@@ -2739,7 +2811,7 @@ async def enregistrer_evenement_suivi(
     libelles = {
         "depart": "Départ enregistré.",
         "arrivee": "Arrivée enregistrée. Le parent a été prévenu.",
-        "livraison": "Remise de l'enfant enregistrée.",
+        "livraison": f"Passager {suivi.enfant_nom} remis à sa famille avec succès.",
         "incident": "Incident signalé.",
     }
     return {

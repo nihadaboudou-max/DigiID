@@ -1,6 +1,6 @@
 "use client";
 /**
- * Scanner de ticket colis — guichet / terrain (S3).
+ * Scanner de ticket colis ou passager — guichet / terrain (S3).
  *
  * Deux façons de renseigner le colis :
  *   - scan caméra (QR Code imprimé sur le ticket),
@@ -35,7 +35,7 @@ const ID_LECTEUR = "lecteur-qr-colis";
 
 /** Actions proposées à l'agent, dans l'ordre du parcours d'un colis. */
 const OPTIONS_TYPE: { valeur: TypeEvenementScan; libelle: string }[] = [
-  { valeur: "livraison", libelle: "Remise au destinataire (livraison)" },
+  { valeur: "livraison", libelle: "Remise finale au destinataire / à la famille" },
   { valeur: "depart", libelle: "Départ de la gare" },
   { valeur: "mise_en_transit", libelle: "Mise en transit" },
   { valeur: "arrivee", libelle: "Arrivée à destination" },
@@ -79,6 +79,9 @@ export function ScannerTicket({
 }: Proprietes) {
   const { utilisateur } = useAuthentification();
   const { t } = useLangue();
+  const estGuichet = ["receveur", "gerant_gare", "commercant"].includes(
+    utilisateur?.role ?? "",
+  );
 
   const [code, setCode] = useState(tokenInitial ?? "");
   const [typeEvenement, setTypeEvenement] = useState<TypeEvenementScan>(typeParDefaut);
@@ -92,11 +95,18 @@ export function ScannerTicket({
   const [cameraEnDemarrage, setCameraEnDemarrage] = useState(false);
   const [erreurCamera, setErreurCamera] = useState<string | null>(null);
   const refScanner = useRef<Html5Qrcode | null>(null);
+  const optionsType = estGuichet
+    ? OPTIONS_TYPE.filter((option) => option.valeur === "livraison")
+    : OPTIONS_TYPE;
 
   /** Libellé parlable de l'action sélectionnée (annonce du guide vocal). */
   const optionCourante =
     OPTIONS_TYPE.find((option) => option.valeur === typeEvenement)?.libelle ??
     "Remise au destinataire";
+
+  useEffect(() => {
+    if (estGuichet) setTypeEvenement("livraison");
+  }, [estGuichet]);
 
   // Gare de rattachement (contexte du scan)
   useEffect(() => {
@@ -124,9 +134,9 @@ export function ScannerTicket({
   async function executerScan(entreeBrute: string) {
     const cible = analyserEntreeScan(entreeBrute);
     if (!cible.token && !cible.code_clair) {
-      setErreur("Scannez ou saisissez d'abord le numéro du colis.");
+      setErreur("Scannez ou saisissez le numéro du ticket du colis ou du passager.");
       annoncerNotification(
-        "Scannez ou saisissez d'abord le numéro du colis.",
+        "Scannez ou saisissez le numéro du ticket du colis ou du passager.",
         "erreur",
       );
       return;
@@ -156,7 +166,7 @@ export function ScannerTicket({
       const message =
         e instanceof ErreurAPI
           ? e.message_utilisateur
-          : "Échec du scan. Vérifiez le numéro puis réessayez.";
+          : "Échec du scan. Vérifiez le ticket du colis ou du passager, puis réessayez.";
       setErreur(message);
       annoncerNotification(message, "erreur");
     } finally {
@@ -194,7 +204,7 @@ export function ScannerTicket({
       refScanner.current = null;
       setCameraOuverte(false);
       setErreurCamera(
-        "Caméra indisponible ou accès refusé. Saisissez le numéro du colis à la main.",
+        "Caméra indisponible ou accès refusé. Saisissez le numéro du ticket à la main.",
       );
     } finally {
       setCameraEnDemarrage(false);
@@ -223,9 +233,9 @@ export function ScannerTicket({
       data-vocal-annonce={
         erreur
           ? `Attention. ${erreur}`
-          : `Scanner un colis. Action choisie : ${optionCourante}. ${
+          : `Scanner un ticket de colis ou de passager. Action choisie : ${optionCourante}. ${
               gareContexte ? `Scan rattaché à la gare ${gareContexte.nom}.` : ""
-            } Scannez le Q R du ticket, ou tapez son numéro, puis touchez Valider le scan.`
+            } Scannez le Q R ou saisissez le numéro du ticket, puis touchez Valider le scan.`
       }
     >
       <Carte
@@ -242,7 +252,7 @@ export function ScannerTicket({
               value={typeEvenement}
               onChange={(e) => setTypeEvenement(e.target.value as TypeEvenementScan)}
             >
-              {OPTIONS_TYPE.map((option) => (
+              {optionsType.map((option) => (
                 <option key={option.valeur} value={option.valeur}>
                   {option.libelle}
                 </option>
@@ -259,7 +269,7 @@ export function ScannerTicket({
             libelle={t("scan.numero_label")}
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            placeholder="Ex : DKR-2025-000001"
+            placeholder="Numéro de ticket colis ou passager"
             autoComplete="off"
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -346,10 +356,21 @@ export function ScannerTicket({
 /** Affiche le résultat d'un scan (succès, déjà scanné, ou « DÉJÀ LIVRÉ »). */
 function ResultatScanAffichage({ resultat }: { resultat: ResultatScan }) {
   const colis = resultat.colis;
+  const suivi = resultat.suivi;
+  const titreSucces = resultat.deja_scanne
+    ? "Scan déjà enregistré"
+    : suivi
+      ? "Passager remis à sa famille"
+      : colis?.statut === "livre"
+        ? "Colis remis au destinataire"
+        : "Scan enregistré";
 
   if (resultat.deja_livre) {
     return (
-      <Alerte variante="erreur" titre="DÉJÀ LIVRÉ">
+      <Alerte
+        variante="erreur"
+        titre={suivi ? "PASSAGER DÉJÀ REMIS" : "COLIS DÉJÀ LIVRÉ"}
+      >
         {resultat.message}
       </Alerte>
     );
@@ -359,10 +380,31 @@ function ResultatScanAffichage({ resultat }: { resultat: ResultatScan }) {
     <div className="space-y-3 apparition">
       <Alerte
         variante={resultat.deja_scanne ? "avertissement" : "succes"}
-        titre={resultat.deja_scanne ? "Scan déjà enregistré" : "Scan enregistré"}
+        titre={titreSucces}
       >
         {resultat.message}
       </Alerte>
+
+      {suivi && (
+        <Carte titre="Passager confié à votre guichet">
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <span className="font-semibold text-lagune text-lg">{suivi.enfant_nom}</span>
+              <Badge variante="succes">Remis à sa famille</Badge>
+            </div>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+              <Ligne
+                libelle="Famille à prévenir"
+                valeur={suivi.parent_nom || "Famille du passager"}
+              />
+              <Ligne libelle="Téléphone" valeur={suivi.telephone_parent} />
+              <Ligne libelle="Départ" valeur={suivi.gare_depart_nom || "—"} />
+              <Ligne libelle="Arrivée" valeur={suivi.gare_arrivee_nom || "—"} />
+              <Ligne libelle="Ticket" valeur={suivi.code_clair || "—"} />
+            </dl>
+          </div>
+        </Carte>
+      )}
 
       {colis && (
         <Carte titre="Colis concerné">

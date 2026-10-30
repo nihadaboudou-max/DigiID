@@ -555,17 +555,6 @@ class ScanCreate(BaseModel):
         return self
 
 
-class ScanResponse(BaseModel):
-    succes: bool
-    deja_livre: bool = False
-    deja_scanne: bool = False
-    message: str
-    statut_colis: Optional[str] = None
-    colis: Optional[ColisResponse] = None
-    ticket: Optional[TicketResponse] = None
-    evenement: Optional[ColisEvenementResponse] = None
-
-
 # ─── Notifications logistiques (SMS départ/arrivée) ──────────────────
 
 class NotificationLogistiqueResponse(BaseModel):
@@ -754,6 +743,18 @@ class SuiviFamilialResponse(BaseModel):
     # Étiquettes QR générées (une par sac).
     bagages: list[BagageResponse] = []
     model_config = ConfigDict(from_attributes=True)
+
+
+class ScanResponse(BaseModel):
+    succes: bool
+    deja_livre: bool = False
+    deja_scanne: bool = False
+    message: str
+    statut_colis: Optional[str] = None
+    colis: Optional[ColisResponse] = None
+    suivi: Optional[SuiviFamilialResponse] = None
+    ticket: Optional[TicketResponse] = None
+    evenement: Optional[ColisEvenementResponse] = None
 
 
 class SuiviFamilialEnregistre(BaseModel):
