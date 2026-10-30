@@ -10,6 +10,7 @@ session factice, pour prouver qu'aucune requête directe ne peut contourner :
 """
 import asyncio
 import uuid
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -187,7 +188,11 @@ class TestPartageChauffeurGuichet:
 
     def test_guichet_livre_apres_remise(self):
         receveur = _utilisateur(RoleUtilisateur.RECEVEUR.value)
-        colis = _colis(chauffeur_id=uuid.uuid4(), remis_guichet_le=object())
+        colis = _colis(
+            chauffeur_id=uuid.uuid4(),
+            remis_guichet_le=object(),
+            remis_guichet_a_id=receveur.id,
+        )
         asyncio.run(
             service._verifier_scan_autorise(
                 SessionFactice(),
@@ -196,6 +201,95 @@ class TestPartageChauffeurGuichet:
                 receveur,
             )
         )
+
+    def test_guichet_ne_livre_pas_un_colis_confie_a_un_autre_agent(self):
+        receveur = _utilisateur(RoleUtilisateur.RECEVEUR.value)
+        colis = _colis(
+            chauffeur_id=uuid.uuid4(),
+            remis_guichet_le=object(),
+            remis_guichet_a_id=uuid.uuid4(),
+        )
+        with pytest.raises(HTTPException) as erreur:
+            asyncio.run(
+                service._verifier_scan_autorise(
+                    SessionFactice(),
+                    colis,
+                    schemas.ScanCreate(token="x", type_evenement="livraison"),
+                    receveur,
+                )
+            )
+        assert erreur.value.status_code == 403
+
+
+class TestEvenementsSuiviFamilial:
+    def test_guichet_ne_marque_pas_le_depart(self):
+        receveur = _utilisateur(RoleUtilisateur.RECEVEUR.value)
+        suivi = SimpleNamespace(type_passager="enfant")
+        donnees = schemas.SuiviFamilialEvenementCreate(type_evenement="depart")
+
+        with pytest.raises(HTTPException) as erreur:
+            service._verifier_evenement_suivi_autorise(suivi, donnees, receveur)
+
+        assert erreur.value.status_code == 403
+
+    def test_guichet_ne_signale_pas_un_autre_evenement(self):
+        receveur = _utilisateur(RoleUtilisateur.RECEVEUR.value)
+        suivi = SimpleNamespace(type_passager="enfant")
+        donnees = schemas.SuiviFamilialEvenementCreate(type_evenement="incident")
+
+        with pytest.raises(HTTPException) as erreur:
+            service._verifier_evenement_suivi_autorise(suivi, donnees, receveur)
+
+        assert erreur.value.status_code == 403
+
+    def test_guichet_ne_marque_pas_l_arrivee(self):
+        receveur = _utilisateur(RoleUtilisateur.RECEVEUR.value)
+        suivi = SimpleNamespace(type_passager="enfant")
+        donnees = schemas.SuiviFamilialEvenementCreate(type_evenement="arrivee")
+
+        with pytest.raises(HTTPException) as erreur:
+            service._verifier_evenement_suivi_autorise(suivi, donnees, receveur)
+
+        assert erreur.value.status_code == 403
+
+    def test_guichet_ne_livre_pas_un_enfant_non_confie(self):
+        receveur = _utilisateur(RoleUtilisateur.RECEVEUR.value)
+        suivi = SimpleNamespace(
+            type_passager="enfant",
+            remis_guichet_le=None,
+            remis_guichet_a_id=receveur.id,
+        )
+        donnees = schemas.SuiviFamilialEvenementCreate(type_evenement="livraison")
+
+        with pytest.raises(HTTPException) as erreur:
+            service._verifier_evenement_suivi_autorise(suivi, donnees, receveur)
+
+        assert erreur.value.status_code == 409
+
+    def test_guichet_ne_livre_pas_un_enfant_confie_a_un_autre_agent(self):
+        receveur = _utilisateur(RoleUtilisateur.RECEVEUR.value)
+        suivi = SimpleNamespace(
+            type_passager="enfant",
+            remis_guichet_le=object(),
+            remis_guichet_a_id=uuid.uuid4(),
+        )
+        donnees = schemas.SuiviFamilialEvenementCreate(type_evenement="livraison")
+
+        with pytest.raises(HTTPException) as erreur:
+            service._verifier_evenement_suivi_autorise(suivi, donnees, receveur)
+
+        assert erreur.value.status_code == 403
+
+    def test_agent_designe_peut_livrer_un_enfant_confie(self):
+        receveur = _utilisateur(RoleUtilisateur.RECEVEUR.value)
+        suivi = SimpleNamespace(
+            type_passager="enfant",
+            remis_guichet_le=object(),
+            remis_guichet_a_id=receveur.id,
+        )
+        donnees = schemas.SuiviFamilialEvenementCreate(type_evenement="livraison")
+
+        service._verifier_evenement_suivi_autorise(suivi, donnees, receveur)
 
 
 class TestArretDestination:

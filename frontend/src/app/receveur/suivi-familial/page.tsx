@@ -2,10 +2,9 @@
 /**
  * Liste des enfants suivis (guichet) — suivi familial (Plan B, étape S7).
  *
- * Le guichet enregistre un enfant (ticket ``ENFANT``), puis marque le
- * **départ** et l'**arrivée** : chaque étape déclenche un SMS automatique au
- * parent et reste traçable. La famille peut aussi consulter la page publique
- * ``/suivi/ENF-…`` (sans compte).
+ * Le guichet enregistre un enfant (ticket ``ENFANT``). Le chauffeur marque le
+ * départ et l'arrivée ; le guichet ne confirme que la remise à la famille après
+ * que le chauffeur lui a confié l'enfant.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -14,11 +13,12 @@ import { Alerte } from "@/composants/commun/Alerte";
 import { Badge, type BadgeVariante } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
-import { IconeIdentite, IconeScan, IconeUtilisateur } from "@/composants/commun/Icones";
+import { IconeCheck, IconeIdentite, IconeUtilisateur } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { AffecterChauffeur } from "@/composants/logistique/AffecterChauffeur";
 import { formaterDateHeure } from "@/composants/logistique/format";
 import { ROLES_GUICHET } from "@/composants/logistique/roles";
+import { useAuthentification } from "@/contextes/authentification";
 import { ErreurAPI } from "@/services/client_api";
 import { logistiqueAPI } from "@/services/logistique_api";
 import {
@@ -46,6 +46,7 @@ export default function PageSuiviFamilial() {
 }
 
 function Contenu() {
+  const { utilisateur } = useAuthentification();
   const [suivis, setSuivis] = useState<SuiviFamilial[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -53,6 +54,9 @@ function Contenu() {
   const [recherche, setRecherche] = useState("");
   const [filtreStatut, setFiltreStatut] = useState<"" | StatutSuiviFamilial>("");
   const [actionEnCours, setActionEnCours] = useState<string | null>(null);
+  const [remisesConfirmees, setRemisesConfirmees] = useState<Set<string>>(
+    () => new Set(),
+  );
   /** Suivi dont on est en train de (ré)affecter le chauffeur (panneau ouvert). */
   const [affectationPour, setAffectationPour] = useState<string | null>(null);
 
@@ -77,21 +81,21 @@ function Contenu() {
     void charger();
   }, [charger]);
 
-  /** Marque une étape (départ / arrivée) : déclenche le SMS au parent. */
-  async function marquer(suivi: SuiviFamilial, type: "depart" | "arrivee") {
-    setActionEnCours(`${suivi.id}:${type}`);
+  /** Confirme la remise à la famille après le dépôt du chauffeur au guichet. */
+  async function confirmerRemise(suivi: SuiviFamilial) {
+    setActionEnCours(`${suivi.id}:livraison`);
     setErreur(null);
     setMessage(null);
     try {
       const resultat = await logistiqueAPI.suiviFamilial.enregistrerEvenement(
         suivi.id,
         {
-          type_evenement: type,
-          gare_id: type === "arrivee" ? suivi.gare_arrivee_id : suivi.gare_depart_id,
-          // Clé stable : empêche tout double enregistrement si l'agent reclique.
-          idempotency_key: `${type}-${suivi.id}`,
+          type_evenement: "livraison",
+          gare_id: suivi.gare_arrivee_id,
+          idempotency_key: `livraison-${suivi.id}`,
         },
       );
+      setRemisesConfirmees((precedentes) => new Set(precedentes).add(suivi.id));
       setMessage(`${suivi.enfant_nom} — ${resultat.message}`);
       await charger();
     } catch (e) {
@@ -152,7 +156,7 @@ function Contenu() {
         </Alerte>
       )}
       {message && (
-        <Alerte variante="succes" titre="Étape enregistrée">
+        <Alerte variante="succes" titre="Remise confirmée">
           {message}
         </Alerte>
       )}
@@ -204,8 +208,10 @@ function Contenu() {
         ) : (
           <ul className="space-y-3">
             {suivisFiltres.map((suivi) => {
-              const enRoute = suivi.statut === "en_route";
               const arrive = suivi.statut === "arrive";
+              const remiseConfiee =
+                suivi.remis_guichet_le != null &&
+                suivi.remis_guichet_a_id === utilisateur?.id;
               return (
                 <li
                   key={suivi.id}
@@ -275,26 +281,17 @@ function Contenu() {
                     </div>
 
                     <div className="flex flex-col items-stretch gap-2">
-                      {!enRoute && !arrive && (
-                        <Bouton
-                          variante="secondaire"
-                          taille="petit"
-                          chargement={actionEnCours === `${suivi.id}:depart`}
-                          disabled={actionEnCours !== null || suivi.statut === "annule"}
-                          onClick={() => void marquer(suivi, "depart")}
-                        >
-                          <IconeScan className="h-4 w-4" /> Marquer le départ
-                        </Bouton>
-                      )}
-                      {!arrive && (
+                      {remiseConfiee &&
+                        arrive &&
+                        !remisesConfirmees.has(suivi.id) && (
                         <Bouton
                           variante="succes"
                           taille="petit"
-                          chargement={actionEnCours === `${suivi.id}:arrivee`}
-                          disabled={actionEnCours !== null || suivi.statut === "annule"}
-                          onClick={() => void marquer(suivi, "arrivee")}
+                          chargement={actionEnCours === `${suivi.id}:livraison`}
+                          disabled={actionEnCours !== null}
+                          onClick={() => void confirmerRemise(suivi)}
                         >
-                          ✅ Marquer l&apos;arrivée
+                          <IconeCheck className="h-4 w-4" /> Confirmer la remise à la famille
                         </Bouton>
                       )}
                       {!arrive && suivi.statut !== "annule" && (
@@ -367,9 +364,9 @@ function Contenu() {
       </Carte>
 
       <div className="rounded-xl bg-lagune/5 p-3 text-xs text-ardoise-clair">
-        💡 Le suivi familial rassure les familles : le parent reçoit un SMS
-        automatique au départ puis à l&apos;arrivée, et peut suivre le voyage en
-        ligne avec le code imprimé sur le ticket.
+        💡 Le chauffeur enregistre le départ et l&apos;arrivée. Le guichet confirme
+        uniquement la remise à la famille après réception de l&apos;enfant du
+        chauffeur ; les proches peuvent suivre le voyage avec le code du ticket.
       </div>
     </div>
   );

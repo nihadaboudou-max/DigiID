@@ -328,6 +328,9 @@ export interface SuiviFamilial {
   enregistre_par_nom: string | null;
   chauffeur_nom: string | null;
   nb_evenements: number;
+  reception_confirmee_le: string | null;
+  remis_guichet_le: string | null;
+  remis_guichet_a_id: string | null;
   /** Étiquettes QR générées (une par sac). */
   bagages: Bagage[];
 }

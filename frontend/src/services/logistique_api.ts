@@ -431,7 +431,7 @@ export const logistiqueAPI = {
     obtenir: (id: string) =>
       clientAPI.get<SuiviFamilial>(`${BASE}/suivi-familial/${id}`, opts),
 
-    /** Marque une étape (départ / arrivée) et déclenche le SMS au parent. */
+    /** Enregistre un événement de suivi (départ, arrivée ou remise). */
     enregistrerEvenement: (id: string, d: DonneesEvenementSuivi) =>
       clientAPI.post<ResultatEvenementSuivi>(
         `${BASE}/suivi-familial/${id}/evenement`,

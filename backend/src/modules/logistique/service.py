@@ -1853,6 +1853,14 @@ async def _verifier_scan_autorise(
                     "la livraison ne peut pas être constatée."
                 ),
             )
+        if (
+            type_evenement == "livraison"
+            and colis.remis_guichet_a_id != utilisateur.id
+        ):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail="Ce colis a été confié à un autre agent du guichet.",
+            )
 
 
 async def _resoudre_ticket(
@@ -2572,6 +2580,36 @@ async def _compter_evenements_suivi(session: AsyncSession, suivi_id: UUID) -> in
     ) or 0
 
 
+def _verifier_evenement_suivi_autorise(
+    suivi: SuiviFamilial,
+    donnees: schemas.SuiviFamilialEvenementCreate,
+    utilisateur: Utilisateur,
+) -> None:
+    """Le guichet ne marque pas le départ/l'arrivée et ne livre que ce qui lui est confié."""
+    if utilisateur.role not in ROLES_GUICHET:
+        return
+
+    if donnees.type_evenement != "livraison":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Le guichet peut uniquement confirmer la remise d'un passager "
+                "qui lui a été confié."
+            ),
+        )
+
+    if suivi.type_passager != "enfant" or suivi.remis_guichet_le is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Le chauffeur doit d'abord confier cet enfant au guichet.",
+        )
+    if suivi.remis_guichet_a_id != utilisateur.id:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Cet enfant a été confié à un autre agent du guichet.",
+        )
+
+
 async def lister_evenements_suivi(
     session: AsyncSession, suivi_id: UUID
 ) -> list[SuiviFamilialEvenement]:
@@ -2599,6 +2637,7 @@ async def enregistrer_evenement_suivi(
     le SMS de départ / d'arrivée ne part qu'une seule fois (flags ``sms_*_envoye``).
     """
     suivi = await obtenir_suivi_familial(session, suivi_id)
+    _verifier_evenement_suivi_autorise(suivi, donnees, utilisateur)
 
     if donnees.idempotency_key:
         existant = await session.scalar(
@@ -2616,7 +2655,8 @@ async def enregistrer_evenement_suivi(
                 "evenement": existant,
             }
 
-    # Enfant confié au guichet : la famille ne récupère qu'après dépôt chauffeur.
+    # Défense en profondeur pour les autres rôles autorisés à enregistrer un
+    # événement : la famille ne récupère l'enfant qu'après son dépôt au guichet.
     if (
         donnees.type_evenement == "livraison"
         and suivi.type_passager == "enfant"
