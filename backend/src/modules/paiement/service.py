@@ -609,7 +609,12 @@ async def confirmer_transaction(
     await _verser_commission(session, transaction)
     await session.commit()
     await session.refresh(transaction)
-    return await _resultat(session, transaction, "Paiement confirmé, cagnotte créditée.")
+    message = (
+        "Paiement confirmé."
+        if transaction.type == "API"
+        else "Paiement confirmé, cagnotte créditée."
+    )
+    return await _resultat(session, transaction, message)
 
 
 async def lister_transactions(

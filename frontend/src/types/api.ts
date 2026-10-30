@@ -24,7 +24,7 @@ export type RoleUtilisateur =
   | "gerant_gare"          // Référentiel + supervision du guichet
   | "receveur"             // Guichet : colis + scan/livraison
   | "chauffeur"            // Scan départs/arrivées (espace dédié S4)
-  | "commercant";          // Enregistrement de colis (espace dédié S6)
+  | "commercant";          // Ancien rôle, converti en citoyen à l'activation
 
 /** Rôles qui ont un panneau d'administration dédié */
 export const ROLES_ADMIN: RoleUtilisateur[] = [
@@ -209,6 +209,7 @@ export interface Utilisateur {
   telephone?: string | null;
   ville: string | null;
   role: RoleUtilisateur;
+  mode_commercant_actif?: boolean;
   deux_fa_active: boolean;
   est_email_verifie: boolean;
   /** Numéro validé par OTP/SMS (contrainte S3). */

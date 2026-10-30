@@ -357,6 +357,8 @@ class ColisCreate(BaseModel):
     # l'encaissement (espèces immédiat, mobile money en mode prototype).
     moyen_paiement: Literal["especes", "mtn", "moov"]
     telephone_paiement: Optional[str] = Field(None, max_length=30)
+    paiement_reference: Optional[str] = Field(None, max_length=40)
+    payeur_id: Optional[UUID] = None
     # Si non fourni, le receveur = utilisateur courant (guichet).
     receveur_id: Optional[UUID] = None
     # **Attribution obligatoire** : tout enregistrement est lié à un chauffeur

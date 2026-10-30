@@ -41,7 +41,7 @@ class RoleUtilisateur(str, Enum):
     GERANT_GARE = "gerant_gare"
     RECEVEUR = "receveur"
     CHAUFFEUR = "chauffeur"
-    COMMERCANT = "commercant"
+    COMMERCANT = "commercant"  # Ancien rôle, converti en citoyen lors de l'activation.
 
 
 # ─── Groupes de rôles ────────────────────────────────────────────────

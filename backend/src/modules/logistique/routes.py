@@ -326,7 +326,7 @@ async def creer_gare(
 
 @routeur_gares.get("", response_model=schemas.ReponseListe[schemas.GareResponse],
                    summary="Lister les gares")
-@require_permission("logistique.lire")
+@require_permission("logistique.lire", "logistique.commercant.lire")
 async def lister_gares(
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     page: int = Query(1, ge=1),
@@ -390,7 +390,7 @@ async def creer_ligne(
 
 @routeur_lignes.get("", response_model=schemas.ReponseListe[schemas.LigneResponse],
                     summary="Lister les lignes")
-@require_permission("logistique.lire")
+@require_permission("logistique.lire", "logistique.commercant.lire")
 async def lister_lignes(
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     page: int = Query(1, ge=1),
@@ -444,7 +444,7 @@ async def supprimer_ligne(
 @routeur_lignes.get("/{ligne_id}/arrets",
                     response_model=list[schemas.ArretLigneResponse],
                     summary="Arrêts intermédiaires d'une ligne (ordre de la tournée)")
-@require_permission("logistique.lire")
+@require_permission("logistique.lire", "logistique.commercant.lire")
 async def lister_arrets_ligne(
     ligne_id: UUID,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
@@ -773,7 +773,7 @@ async def creer_voyage(
 
 @routeur_voyages.get("", response_model=schemas.ReponseListe[schemas.VoyageResponse],
                      summary="Lister les voyages")
-@require_permission("logistique.lire")
+@require_permission("logistique.lire", "logistique.commercant.lire")
 async def lister_voyages(
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     page: int = Query(1, ge=1),
@@ -1120,7 +1120,7 @@ routeur_colis = APIRouter(prefix="/colis", tags=["Logistique — Colis"])
 @routeur_colis.post("", response_model=schemas.ColisEnregistre,
                     status_code=status.HTTP_201_CREATED,
                     summary="Enregistrer un colis (génère le ticket QR + numéro en clair)")
-@require_permission("logistique.colis.creer")
+@require_permission("logistique.colis.creer", "logistique.commercant.colis.creer")
 async def enregistrer_colis(
     donnees: schemas.ColisCreate,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
@@ -1222,7 +1222,7 @@ async def synchroniser_colis_hors_ligne(
 
 @routeur_colis.get("", response_model=schemas.ReponseListe[schemas.ColisResponse],
                    summary="Lister les colis")
-@require_permission("logistique.lire")
+@require_permission("logistique.lire", "logistique.commercant.lire")
 async def lister_colis(
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     page: int = Query(1, ge=1),
@@ -1268,7 +1268,7 @@ async def affecter_colis(
     status_code=status.HTTP_201_CREATED,
     summary="Joindre la photo du colis à son expédition",
 )
-@require_permission("logistique.colis.creer")
+@require_permission("logistique.colis.creer", "logistique.commercant.colis.creer")
 async def ajouter_photo_colis(
     colis_id: UUID,
     fichier: UploadFile = File(...),
@@ -1435,12 +1435,19 @@ async def remettre_colis_au_guichet(
 @routeur_colis.get("/{colis_id}/evenements",
                    response_model=list[schemas.ColisEvenementResponse],
                    summary="Timeline d'un colis")
-@require_permission("logistique.lire")
+@require_permission("logistique.lire", "logistique.commercant.lire")
 async def lister_evenements_colis(
     colis_id: UUID,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
+    colis = await service.obtenir_colis(session, colis_id)
+    if (
+        utilisateur_courant.role == "citoyen"
+        and utilisateur_courant.mode_commercant_actif
+        and colis.enregistre_par_id != utilisateur_courant.id
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Colis introuvable")
     evenements = await service.lister_evenements(session, colis_id)
     for evenement in evenements:
         await _enrichir_evenement(session, evenement)
@@ -1450,25 +1457,37 @@ async def lister_evenements_colis(
 @routeur_colis.get("/{colis_id}/notifications",
                    response_model=list[schemas.NotificationLogistiqueResponse],
                    summary="SMS envoyés pour un colis (S7)")
-@require_permission("logistique.lire")
+@require_permission("logistique.lire", "logistique.commercant.lire")
 async def lister_notifications_colis(
     colis_id: UUID,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
-    await service.obtenir_colis(session, colis_id)
+    colis = await service.obtenir_colis(session, colis_id)
+    if (
+        utilisateur_courant.role == "citoyen"
+        and utilisateur_courant.mode_commercant_actif
+        and colis.enregistre_par_id != utilisateur_courant.id
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Colis introuvable")
     return await service.lister_notifications(session, "colis", colis_id)
 
 
 @routeur_colis.get("/{code}", response_model=schemas.ColisResponse,
                    summary="Obtenir un colis par code clair (ou token QR)")
-@require_permission("logistique.lire")
+@require_permission("logistique.lire", "logistique.commercant.lire")
 async def obtenir_colis(
     code: str,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     colis, _ = await service.obtenir_colis_par_code(session, code)
+    if (
+        utilisateur_courant.role == "citoyen"
+        and utilisateur_courant.mode_commercant_actif
+        and colis.enregistre_par_id != utilisateur_courant.id
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Colis introuvable")
     return await _enrichir_colis(session, colis)
 
 

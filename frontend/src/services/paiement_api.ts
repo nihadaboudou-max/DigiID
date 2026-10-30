@@ -7,6 +7,7 @@ import type {
   DonneesPaiement,
   MoyenPaiementInfo,
   MouvementPortefeuille,
+  MoyenPaiement,
   Portefeuille,
   ResultatPaiement,
   StatistiquesPlateforme,
@@ -97,6 +98,21 @@ export const paiementAPI = {
     /** Payer un colis (crédite la cagnotte du receveur). */
     payer: (donnees: DonneesPaiement) =>
       clientAPI.post<ResultatPaiement>(`${BASE}/transactions`, donnees, opts),
+
+    payerFraisSuivi: (donnees: {
+      nombre_articles: number;
+      moyen: MoyenPaiement;
+      telephone?: string | null;
+      payeur_id: string;
+      destinataire_id?: string | null;
+      telephone_destinataire?: string | null;
+      idempotency_key: string;
+    }) =>
+      clientAPI.post<ResultatPaiement>(
+        `${BASE}/frais-suivi`,
+        donnees,
+        opts,
+      ),
 
     /** Confirmer une transaction en attente (retour opérateur / démo). */
     confirmer: (reference: string) =>

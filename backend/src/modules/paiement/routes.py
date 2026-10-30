@@ -1,16 +1,21 @@
 # -*- coding: utf-8 -*-
 """Routes API du domaine paiement (portefeuille, transactions, commissions)."""
+import hashlib
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
 from src.modeles import Utilisateur
+from src.modeles.paiement import TransactionPaiement
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.paiement import schemas, service
+from src.modules.paiement import tarification
 from src.modules.paiement.mobile_money import lister_moyens
 from src.noyau.permissions import require_permission
+from src.noyau.telephone import hasher_telephone
 
 
 routeur_paiement = APIRouter(prefix="/api/v1/paiement", tags=["Paiement"])
@@ -144,7 +149,124 @@ async def creer_transaction(
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
+    if (
+        utilisateur_courant.role == "citoyen"
+        and utilisateur_courant.mode_commercant_actif
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Utilisez le paiement des frais de suivi pour un dépôt commerçant.",
+        )
     return await service.creer_transaction(session, donnees, utilisateur_courant)
+
+
+@routeur_paiement.post(
+    "/frais-suivi",
+    response_model=schemas.PaiementResultat,
+    status_code=status.HTTP_201_CREATED,
+    summary="Payer les frais de suivi avant le dépôt commerçant",
+)
+@require_permission("paiement.payer")
+async def payer_frais_suivi(
+    donnees: schemas.FraisSuiviCreate,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    if (
+        utilisateur_courant.role == "citoyen"
+        and not utilisateur_courant.mode_commercant_actif
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Le mode commerçant doit être activé pour payer ces frais.",
+        )
+    payeurs_autorises = {utilisateur_courant.id}
+    if donnees.destinataire_id is not None:
+        payeurs_autorises.add(donnees.destinataire_id)
+    if donnees.payeur_id not in payeurs_autorises:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Le payeur doit être le commerçant ou le destinataire identifié.",
+        )
+    if donnees.destinataire_id is not None:
+        destinataire = await session.get(Utilisateur, donnees.destinataire_id)
+        if (
+            destinataire is None
+            or donnees.telephone_destinataire is None
+            or destinataire.telephone_hash
+            != hasher_telephone(donnees.telephone_destinataire)
+        ):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Le compte DigiID et le téléphone du destinataire ne correspondent pas.",
+            )
+    if donnees.payeur_id != utilisateur_courant.id and (
+        donnees.payeur_id != donnees.destinataire_id
+    ):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Le destinataire ne peut payer qu'avec son compte identifié.",
+        )
+
+    frais = tarification.frais_service(donnees.nombre_articles)
+    empreinte_paiement = hashlib.sha256(
+        ":".join(
+            (
+                donnees.idempotency_key,
+                str(donnees.nombre_articles),
+                str(frais.frais_fcfa),
+                donnees.moyen,
+                donnees.telephone or "",
+                str(donnees.payeur_id),
+                str(donnees.destinataire_id or ""),
+                donnees.telephone_destinataire or "",
+            )
+        ).encode("utf-8")
+    ).hexdigest()
+    resultat = await service.creer_transaction(
+        session,
+        schemas.TransactionCreate(
+            type="API",
+            montant_fcfa=frais.frais_fcfa,
+            moyen=donnees.moyen,
+            telephone=donnees.telephone,
+            payeur_id=donnees.payeur_id,
+            idempotency_key=(
+                f"mode-commercant:{utilisateur_courant.id}:{empreinte_paiement}"
+            ),
+        ),
+        utilisateur_courant,
+        commit=False,
+    )
+    transaction = await session.scalar(
+        select(TransactionPaiement).where(
+            TransactionPaiement.reference == resultat["transaction"].reference
+        )
+    )
+    if transaction is None:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="La transaction de suivi n'a pas été créée.",
+        )
+    if (
+        transaction.montant_fcfa != frais.frais_fcfa
+        or transaction.payeur_id != donnees.payeur_id
+        or transaction.moyen != donnees.moyen
+        or transaction.telephone != donnees.telephone
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                "Cette clé de paiement a déjà servi avec un payeur ou un montant "
+                "différent. Recommencez le paiement."
+            ),
+        )
+    transaction.frais_plateforme = frais.frais_fcfa
+    transaction.montant_net = 0
+    await session.commit()
+    resultat["transaction"].frais_plateforme = frais.frais_fcfa
+    resultat["transaction"].montant_net = 0
+    return resultat
 
 
 @routeur_paiement.post(
@@ -158,6 +280,25 @@ async def confirmer_transaction(
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
+    transaction = await session.scalar(
+        select(TransactionPaiement).where(
+            TransactionPaiement.reference == reference
+        )
+    )
+    if utilisateur_courant.role in {"citoyen", "commercant"} and transaction is not None:
+        prefixe = f"mode-commercant:{utilisateur_courant.id}:"
+        possede_transaction = (
+            transaction.payeur_id == utilisateur_courant.id
+            or (
+                transaction.type == "API"
+                and (transaction.idempotency_key or "").startswith(prefixe)
+            )
+        )
+        if not possede_transaction:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                detail="Transaction introuvable.",
+            )
     return await service.confirmer_transaction(session, reference)
 
 

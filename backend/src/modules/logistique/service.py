@@ -14,6 +14,7 @@ from src.modeles import (
     Ticket, Colis, ColisEvenement, ProfilLogistique,
     SuiviFamilial, SuiviFamilialEvenement, NotificationLogistique, Bagage,
 )
+from src.modeles.paiement import TransactionPaiement
 from src.modules.logistique import schemas
 from src.modules.gamification.service_notifications import creer_notification
 from src.noyau import dechiffrer_donnee, journal
@@ -31,6 +32,7 @@ from src.noyau.notification import (
     masquer_telephone,
 )
 from src.modules.logistique.stockage_colis import chemin_photo_colis
+from src.modules.paiement.tarification import frais_service
 
 
 # ─── Utilitaires ─────────────────────────────────────────────────────
@@ -1368,6 +1370,57 @@ async def creer_colis(
         if donnees.destinataire_id is not None
         else await _compte_par_telephone(session, donnees.destinataire_tel)
     )
+    mode_commercant = (
+        utilisateur.role == RoleUtilisateur.CITOYEN
+        and utilisateur.mode_commercant_actif
+    )
+    transaction_suivi = None
+    if mode_commercant:
+        if donnees.paiement_reference is None or donnees.payeur_id is None:
+            raise HTTPException(
+                status.HTTP_402_PAYMENT_REQUIRED,
+                detail="Payez les frais de suivi avant de valider le dépôt.",
+            )
+        transaction_suivi = await session.scalar(
+            select(TransactionPaiement).where(
+                TransactionPaiement.reference == donnees.paiement_reference
+            )
+        )
+        prefixe_paiement = f"mode-commercant:{utilisateur.id}:"
+        if (
+            transaction_suivi is not None
+            and transaction_suivi.type == "COLIS"
+            and transaction_suivi.colis_id is not None
+            and (transaction_suivi.idempotency_key or "").startswith(
+                prefixe_paiement
+            )
+        ):
+            colis_existant = await session.get(Colis, transaction_suivi.colis_id)
+            if (
+                colis_existant is not None
+                and colis_existant.enregistre_par_id == utilisateur.id
+            ):
+                ticket_existant = await session.get(Ticket, colis_existant.ticket_id)
+                if ticket_existant is not None:
+                    return colis_existant, ticket_existant
+        montant_attendu = frais_service(donnees.nombre_articles).frais_fcfa
+        if (
+            transaction_suivi is None
+            or transaction_suivi.type != "API"
+            or transaction_suivi.statut != "reussi"
+            or transaction_suivi.payeur_id != donnees.payeur_id
+            or transaction_suivi.montant_fcfa != montant_attendu
+            or transaction_suivi.frais_plateforme != montant_attendu
+            or transaction_suivi.moyen != donnees.moyen_paiement
+            or transaction_suivi.telephone != donnees.telephone_paiement
+            or not (transaction_suivi.idempotency_key or "").startswith(
+                f"mode-commercant:{utilisateur.id}:"
+            )
+        ):
+            raise HTTPException(
+                status.HTTP_402_PAYMENT_REQUIRED,
+                detail="Le paiement des frais de suivi doit être confirmé avant validation.",
+            )
     if expediteur is not None and donnees.expediteur_tel and (
         expediteur.telephone_hash != hasher_telephone(donnees.expediteur_tel)
     ):
@@ -1385,7 +1438,7 @@ async def creer_colis(
     if donnees.receveur_id is not None:
         await _verifier_existe(session, Utilisateur, donnees.receveur_id, "Receveur")
 
-    receveur_id = donnees.receveur_id or utilisateur.id
+    receveur_id = None if mode_commercant else (donnees.receveur_id or utilisateur.id)
 
     colis = Colis(
         # Cle d'idempotence du mode hors-ligne, ecrite dans la MEME transaction
@@ -1437,16 +1490,23 @@ async def creer_colis(
 
     colis.ticket_id = ticket.id
 
-    # Paiement **avant remise du QR** : espèces = encaissé tout de suite ;
-    # Mobile money = en attente ; les moyens opérateur restent simulés jusqu'à
-    # l'intégration de leurs API.
-    await _encaisser_frais_service(
-        session,
-        utilisateur,
-        moyen=donnees.moyen_paiement,
-        telephone=donnees.telephone_paiement,
-        colis_id=colis.id,
-    )
+    if transaction_suivi is not None:
+        transaction_suivi.type = "COLIS"
+        transaction_suivi.colis_id = colis.id
+        transaction_suivi.beneficiaire_id = None
+        transaction_suivi.commission_receveur = 0
+        transaction_suivi.montant_net = 0
+    else:
+        # Paiement **avant remise du QR** : espèces = encaissé tout de suite ;
+        # Mobile money = en attente ; les moyens opérateur restent simulés jusqu'à
+        # l'intégration de leurs API.
+        await _encaisser_frais_service(
+            session,
+            utilisateur,
+            moyen=donnees.moyen_paiement,
+            telephone=donnees.telephone_paiement,
+            colis_id=colis.id,
+        )
 
     evenement = ColisEvenement(
         colis_id=colis.id,
@@ -1800,7 +1860,13 @@ async def lister_colis(
         requete = requete.where(Colis.voyage_id == voyage_id)
     # Périmètre du guichet : chacun voit ses propres enregistrements et ceux qui
     # touchent sa gare. On ne laisse pas un agent lire toute la base.
-    if utilisateur is not None and utilisateur.role == RoleUtilisateur.COMMERCANT.value:
+    if utilisateur is not None and (
+        utilisateur.role == RoleUtilisateur.COMMERCANT.value
+        or (
+            utilisateur.role == RoleUtilisateur.CITOYEN
+            and utilisateur.mode_commercant_actif
+        )
+    ):
         requete = requete.where(Colis.enregistre_par_id == utilisateur.id)
     elif _est_guichet(utilisateur):
         conditions = [Colis.enregistre_par_id == utilisateur.id]

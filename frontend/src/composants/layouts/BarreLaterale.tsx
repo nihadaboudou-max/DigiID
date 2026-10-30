@@ -358,13 +358,9 @@ export function BarreLaterale() {
   // ─── PIVOT LOGISTIQUE : Commerçant (enregistrement) ──────────────
   else if (utilisateur.role === "commercant") {
     liens = [
-      { href: "/commercant/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
-      { href: "/commercant/colis/nouveau", libelle: "Enregistrer un dépôt", Icone: IconeColis },
-      { href: "/commercant/colis", libelle: "Mes dépôts", Icone: IconeTicket },
-      { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
-      { href: "/commercant/cagnotte", libelle: "Mes commissions", Icone: IconePortefeuille },
+      { href: "/commercant/activation", libelle: "Activer mon mode commerçant", Icone: IconeColis },
     ];
-    titreSection = "Commerçant";
+    titreSection = "Activation commerçant";
     couleurLabel = "text-lagune";
     accentColor = "bg-lagune";
   }
@@ -623,6 +619,24 @@ export function BarreLaterale() {
               Icone={IconeIdentite}
               actif={pathname === "/identite/carte"}
             />
+
+            {utilisateur.mode_commercant_actif ? (
+              <>
+                <LienNav
+                  href="/commercant/dashboard"
+                  libelle="Espace commerçant"
+                  Icone={IconeColis}
+                  actif={pathname.startsWith("/commercant")}
+                />
+              </>
+            ) : (
+              <LienNav
+                href="/commercant/activation"
+                libelle="Activer le mode commerçant"
+                Icone={IconeColis}
+                actif={pathname === "/commercant/activation"}
+              />
+            )}
 
             {/* Mon DigiID — QR Code dynamique (carte d'identité numérique) */}
             <LienNav

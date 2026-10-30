@@ -2,12 +2,13 @@
 """Tests des agrégats financiers visibles par le super-administrateur."""
 import asyncio
 import uuid
+from types import SimpleNamespace
 
 import pytest
 
 from src.modeles import Utilisateur
 from src.modules.paiement import mobile_money, schemas as schemas_paiement, service
-from src.noyau.permissions import a_permission
+from src.noyau.permissions import a_permission, a_permission_utilisateur
 
 
 class Resultat:
@@ -68,6 +69,26 @@ def test_statistiques_aggregent_paiements_reussis_et_classent_les_agents():
 def test_statistiques_financieres_sont_reservees_au_super_administrateur():
     assert a_permission("super_administrateur", "paiement.statistiques")
     assert not a_permission("receveur", "paiement.statistiques")
+
+
+def test_mode_commercant_citoyen_est_limite_aux_depots_et_au_paiement():
+    actif = SimpleNamespace(role="citoyen", mode_commercant_actif=True)
+    inactif = SimpleNamespace(role="citoyen", mode_commercant_actif=False)
+
+    assert a_permission_utilisateur(actif, "logistique.commercant.lire")
+    assert a_permission_utilisateur(actif, "logistique.commercant.colis.creer")
+    assert a_permission_utilisateur(actif, "paiement.payer")
+    assert not a_permission_utilisateur(actif, "logistique.lire")
+    assert not a_permission_utilisateur(actif, "logistique.colis.creer")
+    assert not a_permission_utilisateur(actif, "logistique.scan")
+    assert not a_permission_utilisateur(actif, "paiement.lire")
+    assert not a_permission_utilisateur(
+        inactif, "logistique.commercant.colis.creer"
+    )
+    assert not a_permission_utilisateur(
+        SimpleNamespace(role="commercant", mode_commercant_actif=False),
+        "paiement.payer",
+    )
 
 
 def test_catalogue_mobile_money_benin_propose_mtn_et_moov_en_mode_mock():

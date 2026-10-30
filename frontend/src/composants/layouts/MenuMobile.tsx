@@ -154,11 +154,7 @@ const LIENS_CHAUFFEUR: Lien[] = [
 ];
 
 const LIENS_COMMERCANT: Lien[] = [
-  { href: "/commercant/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
-  { href: "/commercant/colis/nouveau", libelle: "Enregistrer un dépôt", Icone: IconeColis },
-  { href: "/commercant/colis", libelle: "Mes dépôts", Icone: IconeTicket },
-  { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
-  { href: "/commercant/cagnotte", libelle: "Mes commissions", Icone: IconePortefeuille },
+  { href: "/commercant/activation", libelle: "Activer mon mode commerçant", Icone: IconeColis },
 ];
 
 // ---- Composant section pliable mobile ----
@@ -972,6 +968,29 @@ export function BoutonMenuMobile() {
                           </Link>
                         );
                       })}
+                      {utilisateur.mode_commercant_actif ? (
+                        <Link
+                          href="/commercant/dashboard"
+                          onClick={() => setOuvert(false)}
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 text-ardoise hover:bg-sable/60"
+                        >
+                          <span className="w-7 h-7 rounded-lg flex items-center justify-center bg-sable-clair text-ardoise-clair">
+                            <IconeColis className="w-3.5 h-3.5" />
+                          </span>
+                          Espace commerçant
+                        </Link>
+                      ) : (
+                        <Link
+                          href="/commercant/activation"
+                          onClick={() => setOuvert(false)}
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 text-ardoise hover:bg-sable/60"
+                        >
+                          <span className="w-7 h-7 rounded-lg flex items-center justify-center bg-sable-clair text-ardoise-clair">
+                            <IconeColis className="w-3.5 h-3.5" />
+                          </span>
+                          Activer le mode commerçant
+                        </Link>
+                      )}
                     </div>
                   </SectionPlieMobile>
 

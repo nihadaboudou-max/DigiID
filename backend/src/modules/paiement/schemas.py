@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Generic, Literal, Optional, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 T = TypeVar("T")
 
@@ -69,6 +69,30 @@ class TransactionCreate(BaseModel):
     def _colis_requis(self):
         if self.type == "COLIS" and self.colis_id is None:
             raise ValueError("Un paiement de type COLIS doit référencer 'colis_id'")
+        if self.moyen in ("mtn", "moov") and not self.telephone:
+            raise ValueError("Le numéro de téléphone mobile money est obligatoire")
+        return self
+
+
+class FraisSuiviCreate(BaseModel):
+    """Paiement préalable des frais de suivi d'un dépôt commerçant."""
+    nombre_articles: int = Field(..., ge=1, le=9999)
+    moyen: MoyenPaiement
+    telephone: Optional[str] = Field(None, max_length=30)
+    payeur_id: UUID
+    destinataire_id: Optional[UUID] = None
+    telephone_destinataire: Optional[str] = Field(None, max_length=30)
+    idempotency_key: str = Field(..., min_length=16, max_length=80)
+
+    @field_validator("telephone_destinataire", mode="before")
+    @classmethod
+    def _normaliser_telephone_destinataire(cls, valeur):
+        from src.noyau.telephone import normaliser_numero_tiers
+
+        return normaliser_numero_tiers(valeur)
+
+    @model_validator(mode="after")
+    def _telephone_mobile_requis(self):
         if self.moyen in ("mtn", "moov") and not self.telephone:
             raise ValueError("Le numéro de téléphone mobile money est obligatoire")
         return self

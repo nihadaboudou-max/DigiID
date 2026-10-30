@@ -10,10 +10,15 @@ import { Alerte } from "@/composants/commun/Alerte";
 
 interface Proprietes {
   rolesAutorises: string[];
+  modeCommercantRequis?: boolean;
   children: React.ReactNode;
 }
 
-export function EnvelopperEspaceProtege({ rolesAutorises, children }: Proprietes) {
+export function EnvelopperEspaceProtege({
+  rolesAutorises,
+  modeCommercantRequis = false,
+  children,
+}: Proprietes) {
   const { utilisateur, estConnecte, chargement } = useAuthentification();
   const router = useRouter();
 
@@ -45,6 +50,27 @@ export function EnvelopperEspaceProtege({ rolesAutorises, children }: Proprietes
         <Alerte variante="erreur" titre="Accès refusé">
           Vous n'avez pas les permissions nécessaires pour accéder à cette page.
           Rôle requis : {rolesAutorises.join(", ")}
+        </Alerte>
+      </div>
+    );
+  }
+
+  if (
+    modeCommercantRequis &&
+    ["citoyen", "commercant"].includes(utilisateur.role) &&
+    !utilisateur.mode_commercant_actif
+  ) {
+    return (
+      <div className="max-w-2xl mx-auto p-8">
+        <Alerte variante="avertissement" titre="Mode commerçant requis">
+          Activez le mode commerçant depuis votre compte citoyen avant d'accéder
+          à cet espace.{" "}
+          <a
+            href="/commercant/activation"
+            className="font-semibold underline"
+          >
+            Accéder à l'activation
+          </a>
         </Alerte>
       </div>
     );

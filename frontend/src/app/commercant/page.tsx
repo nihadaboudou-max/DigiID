@@ -8,7 +8,10 @@ import { ROLES_COMMERCANT } from "@/composants/logistique/roles";
 
 export default function PageCommercant() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={ROLES_COMMERCANT}>
+    <EnvelopperEspaceProtege
+      rolesAutorises={ROLES_COMMERCANT}
+      modeCommercantRequis
+    >
       <Redirection />
     </EnvelopperEspaceProtege>
   );

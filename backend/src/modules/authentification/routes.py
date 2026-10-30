@@ -12,10 +12,16 @@ GET    /me/ui-config         Configuration UI selon le rôle
 """
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.base_donnees.session import obtenir_session
 from src.config import parametres
-from src.modeles import Utilisateur
+from src.modeles import (
+    InspectionDocument,
+    Notification,
+    Utilisateur,
+    VerificationVisuelle,
+)
 from src.modules.authentification import service
 from src.modules.authentification.dependances import (
     utilisateur_courant, obtenir_ip_client, obtenir_agent_utilisateur,
@@ -33,6 +39,8 @@ from src.schemas.authentification import (
     VerificationVerifierRequete as VerifVerifierReq,
     VerificationVerifierReponse as VerifVerifierRep,
     VerificationStatutReponse as VerifStatutRep,
+    StatutModeCommercantReponse,
+    AssistanceModeCommercantRequete,
     MotDePasseOublieRequete, MotDePasseOublieReponse,
     MotDePasseReinitialisationRequete, MotDePasseReinitialisationReponse,
 )
@@ -55,6 +63,7 @@ def _construire_utilisateur_reponse(utilisateur: Utilisateur) -> UtilisateurRepo
         telephone=dechiffrer_donnee(utilisateur.telephone_chiffre) if utilisateur.telephone_chiffre else None,
         ville=utilisateur.ville,
         role=utilisateur.role,
+        mode_commercant_actif=utilisateur.mode_commercant_actif,
         deux_fa_active=utilisateur.deux_fa_active,
         est_email_verifie=utilisateur.est_email_verifie,
         est_telephone_verifie=bool(
@@ -224,6 +233,128 @@ async def moi(
 ):
     """Retourne les informations de base de l'utilisateur connecté."""
     return _construire_utilisateur_reponse(utilisateur)
+
+
+async def _preuves_mode_commercant(
+    session: AsyncSession, utilisateur_id
+) -> tuple[bool, bool]:
+    document_valide = await session.scalar(
+        select(InspectionDocument.id)
+        .where(
+            InspectionDocument.utilisateur_id == utilisateur_id,
+            InspectionDocument.est_supprime.is_(False),
+            InspectionDocument.est_valide.is_(True),
+            InspectionDocument.statut == "approuve",
+            InspectionDocument.document_chemin.is_not(None),
+        )
+        .limit(1)
+    )
+    photo_validee = await session.scalar(
+        select(VerificationVisuelle.id)
+        .where(
+            VerificationVisuelle.utilisateur_id == utilisateur_id,
+            VerificationVisuelle.est_supprime.is_(False),
+            VerificationVisuelle.statut == "approuve",
+            VerificationVisuelle.photo_chemin.is_not(None),
+        )
+        .limit(1)
+    )
+    return document_valide is not None, photo_validee is not None
+
+
+@routeur_authentification.get(
+    "/mode-commercant",
+    response_model=StatutModeCommercantReponse,
+    summary="Consulter l'éligibilité au mode commerçant",
+)
+async def statut_mode_commercant(
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    document_valide, photo_validee = await _preuves_mode_commercant(
+        session, utilisateur.id
+    )
+    return StatutModeCommercantReponse(
+        mode_actif=utilisateur.mode_commercant_actif,
+        document_valide=document_valide,
+        photo_validee=photo_validee,
+        peut_activer=document_valide and photo_validee,
+    )
+
+
+@routeur_authentification.post(
+    "/mode-commercant/activer",
+    response_model=UtilisateurReponse,
+    summary="Activer le mode commerçant sur un compte citoyen vérifié",
+)
+async def activer_mode_commercant(
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    if utilisateur.role not in {"citoyen", "commercant"}:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Activez le mode commerçant depuis un compte citoyen.",
+        )
+    document_valide, photo_validee = await _preuves_mode_commercant(
+        session, utilisateur.id
+    )
+    if not document_valide or not photo_validee:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Un document d'identité approuvé et une photo vérifiée sont requis.",
+        )
+    utilisateur.role = "citoyen"
+    utilisateur.mode_commercant_actif = True
+    await session.commit()
+    await session.refresh(utilisateur)
+    return _construire_utilisateur_reponse(utilisateur)
+
+
+@routeur_authentification.post(
+    "/mode-commercant/assistance",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Demander l'aide du super-administrateur pour activer le mode commerçant",
+)
+async def demander_assistance_mode_commercant(
+    donnees: AssistanceModeCommercantRequete,
+    utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    if utilisateur.role not in {"citoyen", "commercant"}:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="L'assistance à l'activation est réservée aux comptes citoyens.",
+        )
+    administrateurs = (
+        await session.scalars(
+            select(Utilisateur.id).where(
+                Utilisateur.role.in_(("super_admin", "super_administrateur")),
+                Utilisateur.est_actif.is_(True),
+            )
+        )
+    ).all()
+    if not administrateurs:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Aucun super-administrateur n'est disponible pour recevoir la demande.",
+        )
+    for administrateur_id in administrateurs:
+        session.add(
+            Notification(
+                utilisateur_id=administrateur_id,
+                type_notification="info",
+                categorie="systeme",
+                titre="Aide à l'activation du mode commerçant",
+                message=(
+                    f"Demande de {utilisateur.digiid_public or utilisateur.id} : "
+                    f"{donnees.message.strip()}"
+                ),
+                lien_action="/super-admin/utilisateurs",
+            )
+        )
+    await session.commit()
+    return {"message": "Votre demande a été transmise au super-administrateur."}
 
 
 # =============================================================================

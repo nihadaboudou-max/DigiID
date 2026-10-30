@@ -120,6 +120,13 @@ class Utilisateur(Base, MelangeTracabilite):
         nullable=False,
         index=True,
     )
+    mode_commercant_actif: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="false",
+        nullable=False,
+        doc="Autorise les fonctions commerçant sans remplacer le rôle citoyen",
+    )
 
     # --- Configuration UI (matrice des droits) ---
     ui_layout: Mapped[Optional[str]] = mapped_column(

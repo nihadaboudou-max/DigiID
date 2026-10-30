@@ -15,7 +15,10 @@ import type { Colis } from "@/types/logistique";
 
 export default function PageMesDepotsCommercant() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={ROLES_COMMERCANT}>
+    <EnvelopperEspaceProtege
+      rolesAutorises={ROLES_COMMERCANT}
+      modeCommercantRequis
+    >
       <Contenu />
     </EnvelopperEspaceProtege>
   );

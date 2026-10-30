@@ -10,7 +10,10 @@ import { ROLES_COMMERCANT } from "@/composants/logistique/roles";
 
 export default function PageNouveauDepotCommercant() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={ROLES_COMMERCANT}>
+    <EnvelopperEspaceProtege
+      rolesAutorises={ROLES_COMMERCANT}
+      modeCommercantRequis
+    >
       <Suspense
         fallback={
           <p className="py-12 text-center italic text-ardoise-clair">Chargement…</p>

@@ -19,6 +19,32 @@ import type {
 
 const PREFIXE = "/api/v1/auth";
 
+export interface StatutModeCommercant {
+  mode_actif: boolean;
+  document_valide: boolean;
+  photo_validee: boolean;
+  peut_activer: boolean;
+}
+
+export const modeCommercantAPI = {
+  statut: () =>
+    clientAPI.get<StatutModeCommercant>(`${PREFIXE}/mode-commercant`, {
+      authentifie: true,
+    }),
+  activer: () =>
+    clientAPI.post<Utilisateur>(
+      `${PREFIXE}/mode-commercant/activer`,
+      {},
+      { authentifie: true },
+    ),
+  demanderAssistance: (message: string) =>
+    clientAPI.post<{ message: string }>(
+      `${PREFIXE}/mode-commercant/assistance`,
+      { message },
+      { authentifie: true },
+    ),
+};
+
 /**
  * Inscrit un nouvel utilisateur.
  * Stocke automatiquement les jetons reçus pour que l'utilisateur

@@ -145,6 +145,7 @@ class UtilisateurReponse(BaseModel):
     telephone: Optional[str] = None
     ville: Optional[str]
     role: str
+    mode_commercant_actif: bool = False
     deux_fa_active: bool
     est_email_verifie: bool
     est_telephone_verifie: bool = False
@@ -154,6 +155,17 @@ class UtilisateurReponse(BaseModel):
     # au frontend de filtrer les données par domaine/département
     domaine_id: Optional[UUID] = None
     departement_id: Optional[UUID] = None
+
+
+class StatutModeCommercantReponse(BaseModel):
+    mode_actif: bool
+    document_valide: bool
+    photo_validee: bool
+    peut_activer: bool
+
+
+class AssistanceModeCommercantRequete(BaseModel):
+    message: str = Field(..., min_length=10, max_length=1000)
 
 
 class ConnexionReponse(BaseModel):

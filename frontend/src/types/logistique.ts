@@ -175,6 +175,8 @@ export interface DonneesColis {
   /** Encaissé **avant** génération du QR (même transaction backend). */
   moyen_paiement?: "especes" | "mtn" | "moov";
   telephone_paiement?: string | null;
+  paiement_reference?: string | null;
+  payeur_id?: string | null;
 }
 
 /** Payload d'un scan (QR ou repli code clair). */

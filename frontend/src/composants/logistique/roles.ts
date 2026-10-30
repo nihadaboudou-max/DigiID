@@ -50,8 +50,9 @@ export const ROLES_SCAN_CHAUFFEUR: string[] = [
   "super_admin",
 ];
 
-/** Espace dédié au commerçant : ses dépôts de colis et son portefeuille. */
+/** Espace commerçant : dépôts et suivi, sans cagnotte. */
 export const ROLES_COMMERCANT: string[] = [
+  "citoyen",
   "commercant",
   "super_administrateur",
   "super_admin",
@@ -60,8 +61,8 @@ export const ROLES_COMMERCANT: string[] = [
 /**
  * Paiement / cagnotte (S6) — permission `paiement.lire`.
  *
- * Receveurs, gérants et chauffeurs consultent leur cagnotte ; le commerçant
- * dispose d'un écran séparé pour ses commissions.
+ * Receveurs, gérants et chauffeurs consultent leur cagnotte. Le commerçant
+ * paie les frais de suivi mais ne dispose pas de portefeuille.
  */
 export const ROLES_CAGNOTTE: string[] = [
   "receveur",
@@ -69,10 +70,6 @@ export const ROLES_CAGNOTTE: string[] = [
   "chauffeur",
   "super_administrateur",
   "super_admin",
-];
-
-export const ROLES_CAGNOTTE_COMMERCANT: string[] = [
-  ...ROLES_COMMERCANT,
 ];
 
 /**

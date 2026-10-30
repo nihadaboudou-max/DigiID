@@ -27,6 +27,7 @@ import { BoutonVocal } from "@/composants/accessibilite/BoutonVocal";
 import { useLangue, useVoix } from "@/i18n/useLangue";
 import { useAuthentification } from "@/contextes/authentification";
 import { ErreurAPI, estErreurReseau } from "@/services/client_api";
+import { paiementAPI } from "@/services/paiement_api";
 import { mettreEnFile } from "@/services/offline/file_colis";
 import { chargerAvecCache } from "@/services/offline/ref_cache";
 import {
@@ -39,6 +40,7 @@ import {
   logistiqueAPI,
   type ArretLigne,
   type ColisEnregistre,
+  type DonneesColis,
   type Gare,
   type Ligne,
   type Voyage,
@@ -135,6 +137,9 @@ export function EnregistrementColis({
   enregistrementDirect?: boolean;
 } = {}) {
   const { utilisateur } = useAuthentification();
+  const estModeCommercant =
+    utilisateur?.role === "commercant" ||
+    (utilisateur?.role === "citoyen" && utilisateur.mode_commercant_actif);
   const { t } = useLangue();
   const { guide, lireTexte } = useVoix();
 
@@ -173,6 +178,9 @@ export function EnregistrementColis({
   const [arretsLigne, setArretsLigne] = useState<ArretLigne[]>([]);
   /** Paiement inclus à l'inscription, avant le QR. */
   const [moyenPaiement, setMoyenPaiement] = useState<MoyenPaiement | null>(null);
+  const [payeurFrais, setPayeurFrais] = useState<"commercant" | "destinataire">(
+    "commercant",
+  );
   const [telephonePaiement, setTelephonePaiement] = useState("");
   const [telephonePaiementPersonnalise, setTelephonePaiementPersonnalise] = useState(false);
   const [photoColis, setPhotoColis] = useState<File | null>(null);
@@ -186,6 +194,14 @@ export function EnregistrementColis({
   const [envoiPhoto, setEnvoiPhoto] = useState(false);
   /** Colis mis en file locale faute de réseau (id_local) — bandeau de succès. */
   const [colisEnFile, setColisEnFile] = useState<string | null>(null);
+  const [paiementCommercant, setPaiementCommercant] = useState<{
+    charge: DonneesColis;
+    reference: string;
+    statut: "en_attente" | "reussi";
+  } | null>(null);
+  const [cleIdempotencePaiement, setCleIdempotencePaiement] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     if (!telephonePaiementPersonnalise) {
@@ -365,15 +381,22 @@ export function EnregistrementColis({
   // Voyage connu : destination = arrêt intermédiaire ou terminus (clé « terminus »).
   const destinationArretValide =
     affecterPlusTard || !voyageSelectionne ? true : arretDestinationId !== "";
+  const telephonePayeur =
+    estModeCommercant && payeurFrais === "destinataire"
+      ? telDestinataire ?? ""
+      : telephonePaiement;
   const telephoneMobileMoneyValide =
     moyenPaiement === "mtn" || moyenPaiement === "moov"
-      ? normaliserTelephone(telephonePaiement)
+      ? normaliserTelephone(telephonePayeur)
       : true;
   const paiementValide =
-    moyenPaiement === "especes" ||
-    ((moyenPaiement === "mtn" || moyenPaiement === "moov") &&
-      telephoneMobileMoneyValide !== null &&
-      telephonePaiement.trim() !== "");
+    (moyenPaiement === "especes" ||
+      ((moyenPaiement === "mtn" || moyenPaiement === "moov") &&
+        telephoneMobileMoneyValide !== null &&
+        telephonePayeur.trim() !== "")) &&
+    (!estModeCommercant ||
+      payeurFrais === "commercant" ||
+      destinataireCompteId !== null);
   const etapeDetailsValide =
     fraisValide &&
     nombreArticlesValide &&
@@ -401,6 +424,7 @@ export function EnregistrementColis({
     setGareArriveeId("");
     setArretDestinationId("");
     setMoyenPaiement(null);
+    setPayeurFrais("commercant");
     setTelephonePaiement("");
     setTelephonePaiementPersonnalise(false);
     setPhotoColis(null);
@@ -408,6 +432,43 @@ export function EnregistrementColis({
     setEnvoiPhoto(false);
     setGareDepartId(gareGuichet?.id ?? "");
     setErreur(null);
+    setPaiementCommercant(null);
+    setCleIdempotencePaiement(null);
+  }
+
+  async function finaliserDepot(
+    charge: DonneesColis,
+    referencePaiement?: string,
+  ) {
+    const enregistre = await logistiqueAPI.colis.creer({
+      ...charge,
+      paiement_reference: referencePaiement ?? null,
+    });
+    if (photoColis) {
+      setEnvoiPhoto(true);
+      try {
+        const photo = await logistiqueAPI.colis.ajouterPhoto(
+          enregistre.colis.id,
+          photoColis,
+        );
+        setResultat({
+          ...enregistre,
+          colis: { ...enregistre.colis, photo_url: photo.photo_url },
+        });
+      } catch (e) {
+        setResultat(enregistre);
+        setErreurPhoto(
+          e instanceof ErreurAPI
+            ? e.message_utilisateur
+            : "Photo non envoyée. Réessayez.",
+        );
+      } finally {
+        setEnvoiPhoto(false);
+      }
+    } else {
+      setResultat(enregistre);
+    }
+    setPaiementCommercant(null);
   }
 
   async function enregistrer() {
@@ -426,10 +487,11 @@ export function EnregistrementColis({
     }
 
     setEnregistrement(true);
+    let fraisPayes = false;
     try {
       const poids = poidsKg ? Number(poidsKg.replace(",", ".")) : null;
       const valeur = valeurFcfa ? Number(valeurFcfa.replace(",", ".")) : null;
-      const charge = {
+      const charge: DonneesColis = {
         expediteur_nom: expediteurNom.trim() || null,
         expediteur_id: expediteurCompteId,
         // Numéros **normalisés** : +2290197123456 (ou +226… si étranger).
@@ -459,35 +521,68 @@ export function EnregistrementColis({
         moyen_paiement: moyenPaiement,
         telephone_paiement:
           moyenPaiement === "mtn" || moyenPaiement === "moov"
-            ? (normaliserTelephone(telephonePaiement) ?? telephonePaiement.trim())
+            ? (normaliserTelephone(telephonePayeur) ?? telephonePayeur.trim())
             : null,
+        ...(estModeCommercant
+          ? {
+              payeur_id:
+                payeurFrais === "commercant"
+                  ? utilisateur?.id
+                  : destinataireCompteId,
+            }
+          : {}),
       };
 
       try {
-        const enregistre = await logistiqueAPI.colis.creer(charge);
-        if (photoColis) {
-          setEnvoiPhoto(true);
-          try {
-            const photo = await logistiqueAPI.colis.ajouterPhoto(
-              enregistre.colis.id,
-              photoColis,
+        if (estModeCommercant) {
+          if (!utilisateur?.id || !charge.payeur_id) {
+            throw new Error(
+              "Identifiez le commerçant ou le destinataire qui règle les frais.",
             );
-            setResultat({
-              ...enregistre,
-              colis: { ...enregistre.colis, photo_url: photo.photo_url },
-            });
-          } catch (e) {
-            setResultat(enregistre);
-            setErreurPhoto(
-              e instanceof ErreurAPI
-                ? e.message_utilisateur
-                : "Photo non envoyée. Réessayez.",
-            );
-          } finally {
-            setEnvoiPhoto(false);
           }
+          const clePaiement = cleIdempotencePaiement ?? crypto.randomUUID();
+          if (!cleIdempotencePaiement) {
+            setCleIdempotencePaiement(clePaiement);
+          }
+          const paiement = await paiementAPI.transactions.payerFraisSuivi({
+            nombre_articles: charge.nombre_articles,
+            moyen: moyenPaiement,
+            telephone:
+              moyenPaiement === "mtn" || moyenPaiement === "moov"
+                ? (normaliserTelephone(
+                    telephonePayeur,
+                  ) ?? undefined)
+                : undefined,
+            payeur_id: charge.payeur_id,
+            destinataire_id: destinataireCompteId,
+            telephone_destinataire: telDestinataire,
+            idempotency_key: clePaiement,
+          });
+          if (
+            paiement.transaction.statut !== "reussi" &&
+            paiement.transaction.statut !== "en_attente"
+          ) {
+            setCleIdempotencePaiement(null);
+            throw new Error(
+              "Le paiement des frais de suivi a échoué. Aucun dépôt n'a été validé.",
+            );
+          }
+          setPaiementCommercant({
+            charge,
+            reference: paiement.transaction.reference,
+            statut: paiement.transaction.statut,
+          });
+          if (paiement.transaction.statut !== "reussi") {
+            setErreur(
+              "Le paiement mobile est en attente. Confirmez-le ci-dessous avant de valider le dépôt.",
+            );
+            return;
+          }
+          fraisPayes = true;
+          setCleIdempotencePaiement(null);
+          await finaliserDepot(charge, paiement.transaction.reference);
         } else {
-          setResultat(enregistre);
+          await finaliserDepot(charge);
         }
       } catch (erreurEnvoi) {
         // Pas de réseau (ou serveur injoignable) : le colis est enregistré
@@ -497,6 +592,14 @@ export function EnregistrementColis({
         // test `instanceof ErreurAPI` les prenait pour des refus métier et
         // n'enregistrait donc jamais rien hors-ligne.
         if (!estErreurReseau(erreurEnvoi)) throw erreurEnvoi;
+        if (estModeCommercant) {
+          setErreur(
+            fraisPayes
+              ? "Le paiement est confirmé, mais le dépôt n'a pas été validé. Utilisez le bouton ci-dessous pour terminer sans repayer."
+              : "Connexion indisponible : aucun dépôt commerçant n'a été validé. Rétablissez le réseau puis réessayez.",
+          );
+          return;
+        }
         if (photoColis) {
           setErreur(
             "La photo ne peut pas être mise en file hors ligne. Rétablissez la connexion pour enregistrer le colis avec sa photo.",
@@ -504,7 +607,7 @@ export function EnregistrementColis({
           return;
         }
 
-        const enAttente = await mettreEnFile(charge);
+        const enAttente = await mettreEnFile({ ...charge });
         setColisEnFile(enAttente.id_local);
       }
     } catch (e) {
@@ -512,6 +615,38 @@ export function EnregistrementColis({
         e instanceof ErreurAPI
           ? e.message_utilisateur
           : "Échec de l'enregistrement. Vérifiez les informations puis réessayez.",
+      );
+    } finally {
+      setEnregistrement(false);
+    }
+  }
+
+  async function confirmerPaiementEtFinaliser() {
+    if (!paiementCommercant) return;
+    setEnregistrement(true);
+    setErreur(null);
+    try {
+      if (paiementCommercant.statut === "en_attente") {
+        const resultatPaiement = await paiementAPI.transactions.confirmer(
+          paiementCommercant.reference,
+        );
+        if (resultatPaiement.transaction.statut !== "reussi") {
+          setErreur(
+            "Le paiement n'est pas encore confirmé. Aucun dépôt n'a été validé.",
+          );
+          return;
+        }
+        setPaiementCommercant({ ...paiementCommercant, statut: "reussi" });
+      }
+      await finaliserDepot(
+        paiementCommercant.charge,
+        paiementCommercant.reference,
+      );
+    } catch (cause) {
+      setErreur(
+        cause instanceof ErreurAPI
+          ? cause.message_utilisateur
+          : "Impossible de finaliser le dépôt. Le paiement confirmé reste conservé.",
       );
     } finally {
       setEnregistrement(false);
@@ -1146,17 +1281,56 @@ export function EnregistrementColis({
                 />
                 <Ligne
                   libelle="Frais de service DigiID"
-                  valeur={`${formaterFcfa(
-                    fraisService.frais_fcfa,
-                  )} (dont ${formaterFcfa(fraisService.part_receveur_fcfa)} receveur)`}
+                  valeur={
+                    estModeCommercant
+                      ? formaterFcfa(fraisService.frais_fcfa)
+                      : `${formaterFcfa(
+                          fraisService.frais_fcfa,
+                        )} (dont ${formaterFcfa(fraisService.part_receveur_fcfa)} receveur)`
+                  }
                 />
               </dl>
 
               {/* Paiement inclus avant validation → QR généré ensuite */}
               <div className="mt-5 space-y-3 rounded-xl border border-lagune/20 bg-lagune/5 px-4 py-3">
                 <p className="text-sm font-semibold text-ardoise">
-                  Paiement des frais DigiID · simulation
+                  {estModeCommercant
+                    ? "Paiement obligatoire avant validation du dépôt"
+                    : "Paiement des frais DigiID · simulation"}
                 </p>
+                {estModeCommercant && (
+                  <div className="space-y-2">
+                    <label className="block text-xs font-medium text-ardoise">
+                      Qui règle les frais de suivi ?
+                      <select
+                        value={payeurFrais}
+                        onChange={(event) =>
+                          setPayeurFrais(
+                            event.target.value as "commercant" | "destinataire",
+                          )
+                        }
+                        className="mt-1 block w-full rounded-lg border border-ardoise/20 bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="commercant">Moi, le commerçant</option>
+                        <option value="destinataire">Le destinataire</option>
+                      </select>
+                    </label>
+                    {payeurFrais === "destinataire" && !destinataireCompteId && (
+                      <p className="text-xs font-medium text-terre">
+                        Identifiez le compte DigiID du destinataire à l'étape
+                        précédente avant de lui attribuer le paiement.
+                      </p>
+                    )}
+                    <p className="text-xs text-ardoise-clair">
+                      Aucun dépôt ni ticket ne sera validé avant confirmation du
+                      paiement. Ce mode ne donne pas accès à une cagnotte.
+                    </p>
+                    <p className="text-xs text-ardoise-clair">
+                      Les paiements Mobile Money sont simulés dans cette version
+                      : confirmez uniquement après l'autorisation du payeur.
+                    </p>
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {(["especes", "mtn", "moov"] as MoyenPaiement[]).map((m) => (
                     <button
@@ -1181,17 +1355,34 @@ export function EnregistrementColis({
                 )}
                 {(moyenPaiement === "mtn" || moyenPaiement === "moov") && (
                   <ChampSaisie
-                    libelle={`Téléphone ${LIBELLES_MOYEN[moyenPaiement]}`}
+                    libelle={`Téléphone du payeur · ${LIBELLES_MOYEN[moyenPaiement]}`}
                     required
-                    value={telephonePaiement}
+                    value={telephonePayeur}
                     onChange={(e) => {
-                      setTelephonePaiement(e.target.value);
-                      setTelephonePaiementPersonnalise(true);
+                      if (payeurFrais === "commercant" || !estModeCommercant) {
+                        setTelephonePaiement(e.target.value);
+                        setTelephonePaiementPersonnalise(true);
+                      }
                     }}
+                    disabled={estModeCommercant && payeurFrais === "destinataire"}
                     inputMode="tel"
                     type="tel"
                     placeholder="+229 01 97 12 34 56"
                   />
+                )}
+                {paiementCommercant && (
+                  <Alerte
+                    variante="avertissement"
+                    titre={
+                      paiementCommercant.statut === "en_attente"
+                        ? "Paiement en attente"
+                        : "Paiement confirmé"
+                    }
+                  >
+                    {paiementCommercant.statut === "en_attente"
+                      ? "Confirmez le paiement mobile avant de valider le dépôt."
+                      : "Les frais sont déjà payés. Vous pouvez terminer le dépôt sans repayer."}
+                  </Alerte>
                 )}
               </div>
 
@@ -1204,22 +1395,36 @@ export function EnregistrementColis({
                 >
                   ← {t("btn.retour")}
                 </BoutonVocal>
-                <BoutonVocal
-                  variante="succes"
-                  cleAudio="btn.enregistrer"
-                  texteAudio={t("btn.enregistrer")}
-                  chargement={enregistrement}
-                  disabled={
-                    enregistrement ||
-                    !etapeExpediteurValide ||
-                    !etapeDestinataireValide ||
-                    !etapeDetailsValide ||
-                    !paiementValide
-                  }
-                  onClick={enregistrer}
-                >
-                  <IconeCheck className="w-4 h-4" /> Payer &amp; {t("btn.enregistrer")}
-                </BoutonVocal>
+                {paiementCommercant ? (
+                  <Bouton
+                    variante="succes"
+                    chargement={enregistrement}
+                    onClick={() => void confirmerPaiementEtFinaliser()}
+                  >
+                    <IconeCheck className="w-4 h-4" />
+                    {paiementCommercant.statut === "en_attente"
+                      ? "Confirmer le paiement puis valider"
+                      : "Finaliser le dépôt sans repayer"}
+                  </Bouton>
+                ) : (
+                  <BoutonVocal
+                    variante="succes"
+                    cleAudio="btn.enregistrer"
+                    texteAudio={t("btn.enregistrer")}
+                    chargement={enregistrement}
+                    disabled={
+                      enregistrement ||
+                      !etapeExpediteurValide ||
+                      !etapeDestinataireValide ||
+                      !etapeDetailsValide ||
+                      !paiementValide
+                    }
+                    onClick={enregistrer}
+                  >
+                    <IconeCheck className="w-4 h-4" />
+                    {estModeCommercant ? "Payer puis valider le dépôt" : `Payer & ${t("btn.enregistrer")}`}
+                  </BoutonVocal>
+                )}
               </div>
             </Carte>
           )}

@@ -110,7 +110,7 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
     # ─── Pivot logistique (Plan B) ───
     # S1 : lire/écrire/supprimer le référentiel.
     # S2 : créer des colis (logistique.colis.creer) et scanner (logistique.scan).
-    # S6 : encaisser un colis et consulter sa cagnotte (paiement.lire / paiement.payer).
+    # S6 : encaisser un colis et consulter sa cagnotte selon le rôle.
     RoleUtilisateur.GERANT_GARE: frozenset({
         "logistique.lire", "logistique.ecrire", "logistique.supprimer",
         "logistique.colis.creer", "logistique.scan",
@@ -148,11 +148,6 @@ PERMISSIONS_PAR_ROLE: dict[str, frozenset[str]] = {
         "logistique.voyage.valider",
         "paiement.lire",
     }),
-    RoleUtilisateur.COMMERCANT: frozenset({
-        "logistique.lire", "logistique.colis.creer",
-        "paiement.lire", "paiement.payer",
-    }),
-    
     # Citoyen — accès à ses propres données uniquement
     RoleUtilisateur.CITOYEN: frozenset({
         "profil.lire", "profil.ecrire",
@@ -187,6 +182,22 @@ def a_permission(role: str, permission: str) -> bool:
         return True
     
     return permission in permissions_role
+
+
+def a_permission_utilisateur(utilisateur: Any, permission: str) -> bool:
+    """Ajoute les seules capacités de dépôt au citoyen en mode commerçant."""
+    if a_permission(utilisateur.role, permission):
+        return True
+    return (
+        utilisateur.role == RoleUtilisateur.CITOYEN
+        and utilisateur.mode_commercant_actif
+        and permission
+        in {
+            "logistique.commercant.lire",
+            "logistique.commercant.colis.creer",
+            "paiement.payer",
+        }
+    )
 
 
 def peut_acceder_a(
@@ -345,7 +356,10 @@ def require_permission(*permissions: str) -> Callable:
                     detail="Utilisateur courant non disponible",
                 )
 
-            if not any(a_permission(utilisateur.role, permission) for permission in permissions):
+            if not any(
+                a_permission_utilisateur(utilisateur, permission)
+                for permission in permissions
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Permission requise : " + " ou ".join(sorted(permissions)),
