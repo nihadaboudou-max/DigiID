@@ -200,6 +200,34 @@ class TestPartageChauffeurGuichet:
             )
         )
 
+    def test_depart_refuse_si_colis_deja_en_transit(self):
+        chauffeur = _utilisateur(RoleUtilisateur.CHAUFFEUR.value)
+        colis = _colis(chauffeur_id=chauffeur.id, statut="en_transit")
+        with pytest.raises(HTTPException) as erreur:
+            asyncio.run(
+                service._verifier_scan_autorise(
+                    SessionFactice(),
+                    colis,
+                    schemas.ScanCreate(token="x", type_evenement="depart"),
+                    chauffeur,
+                )
+            )
+        assert erreur.value.status_code == 403
+
+    def test_arrivee_refuse_si_colis_pas_en_transit(self):
+        chauffeur = _utilisateur(RoleUtilisateur.CHAUFFEUR.value)
+        colis = _colis(chauffeur_id=chauffeur.id, statut="arrive")
+        with pytest.raises(HTTPException) as erreur:
+            asyncio.run(
+                service._verifier_scan_autorise(
+                    SessionFactice(),
+                    colis,
+                    schemas.ScanCreate(token="x", type_evenement="arrivee"),
+                    chauffeur,
+                )
+            )
+        assert erreur.value.status_code == 403
+
     def test_gerant_de_gare_ne_realise_pas_de_scan_de_livraison(self):
         gerant = _utilisateur(RoleUtilisateur.GERANT_GARE.value)
         colis = _colis(remis_guichet_le=object(), remis_guichet_a_id=gerant.id)

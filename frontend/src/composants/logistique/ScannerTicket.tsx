@@ -27,6 +27,7 @@ import {
   LIBELLES_STATUT_COLIS,
   VARIANTES_STATUT_COLIS,
   type ResultatScan,
+  type StatutColis,
   type TypeEvenementScan,
 } from "@/types/logistique";
 import { analyserEntreeScan, formaterDateHeure, formaterFcfa } from "./format";
@@ -84,6 +85,7 @@ export function ScannerTicket({
   const [code, setCode] = useState(tokenInitial ?? "");
   const [typeEvenement, setTypeEvenement] = useState<TypeEvenementScan>(typeParDefaut);
   const [gareContexte, setGareContexte] = useState<Gare | null>(null);
+  const [statutActuel, setStatutActuel] = useState<StatutColis | null>(null);
 
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -95,7 +97,15 @@ export function ScannerTicket({
   const refScanner = useRef<Html5Qrcode | null>(null);
   const optionsType = estGuichet
     ? OPTIONS_TYPE.filter((option) => option.valeur === "livraison")
-    : OPTIONS_TYPE;
+    : statutActuel
+      ? OPTIONS_TYPE.filter((option) => {
+          if (option.valeur === "livraison") return statutActuel === "arrive";
+          if (option.valeur === "arrivee") return statutActuel === "en_transit";
+          if (option.valeur === "depart") return ["enregistre", "enregistre_direct"].includes(statutActuel);
+          if (option.valeur === "mise_en_transit") return ["enregistre", "enregistre_direct", "en_transit"].includes(statutActuel);
+          return false;
+        })
+      : OPTIONS_TYPE;
 
   /** Libellé parlable de l'action sélectionnée (annonce du guide vocal). */
   const optionCourante =
@@ -103,8 +113,40 @@ export function ScannerTicket({
     "Remise au destinataire";
 
   useEffect(() => {
-    if (estGuichet) setTypeEvenement("livraison");
-  }, [estGuichet]);
+    if (estGuichet) {
+      setTypeEvenement("livraison");
+      setStatutActuel(null);
+      return;
+    }
+    if (optionsType.length > 0 && !optionsType.some((option) => option.valeur === typeEvenement)) {
+      setTypeEvenement(optionsType[0].valeur);
+    }
+  }, [estGuichet, optionsType, typeEvenement]);
+
+  useEffect(() => {
+    const cible = analyserEntreeScan(code);
+    if (!cible.token && !cible.code_clair) {
+      setStatutActuel(null);
+      return;
+    }
+    let annule = false;
+    const identifiant = cible.code_clair ?? cible.token ?? "";
+    if (!identifiant) {
+      setStatutActuel(null);
+      return;
+    }
+    void (async () => {
+      try {
+        const colis = await logistiqueAPI.colis.parCode(identifiant);
+        if (!annule) setStatutActuel(colis.statut as StatutColis);
+      } catch {
+        if (!annule) setStatutActuel(null);
+      }
+    })();
+    return () => {
+      annule = true;
+    };
+  }, [code]);
 
   // Gare de rattachement (contexte du scan)
   useEffect(() => {

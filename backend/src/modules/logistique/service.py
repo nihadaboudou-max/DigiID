@@ -1917,6 +1917,28 @@ async def _verifier_scan_autorise(
                 status.HTTP_403_FORBIDDEN,
                 detail="Ce colis n'est pas dans votre car : vous ne pouvez pas le scanner.",
             )
+        if type_evenement == "depart" and colis.statut not in (
+            "enregistre",
+            "enregistre_direct",
+        ):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail="Le départ ne peut être constaté qu'au démarrage du voyage.",
+            )
+        if type_evenement == "mise_en_transit" and colis.statut not in (
+            "enregistre",
+            "enregistre_direct",
+            "en_transit",
+        ):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail="La mise en transit ne peut être enregistrée que pour un colis en cours de transport.",
+            )
+        if type_evenement == "arrivee" and colis.statut != "en_transit":
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail="L'arrivée ne peut être constatée que lorsque le colis est déjà en transit.",
+            )
         if type_evenement == "livraison":
             if colis.remis_guichet_le is not None:
                 raise HTTPException(
@@ -1925,6 +1947,11 @@ async def _verifier_scan_autorise(
                         "Ce colis a été confié à un agent du guichet : la livraison "
                         "doit être constatée par le guichet."
                     ),
+                )
+            if colis.statut != "arrive":
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    detail="La livraison directe ne peut être constatée qu'après l'arrivée au destinataire.",
                 )
             return
         return
@@ -1947,7 +1974,8 @@ async def _verifier_scan_autorise(
                     "(« Valider le départ » / « Arrivés »), pas depuis le guichet."
                 ),
             )
-            if type_evenement == "livraison" and colis.remis_guichet_le is None:
+        if type_evenement == "livraison":
+            if colis.remis_guichet_le is None:
                 raise HTTPException(
                     status.HTTP_409_CONFLICT,
                     detail=(
@@ -1955,14 +1983,13 @@ async def _verifier_scan_autorise(
                         "la livraison ne peut pas être constatée par le guichet."
                     ),
                 )
-            if (
-                type_evenement == "livraison"
-                and colis.remis_guichet_a_id != utilisateur.id
-            ):
+            if colis.remis_guichet_a_id != utilisateur.id:
                 raise HTTPException(
                     status.HTTP_403_FORBIDDEN,
                     detail="Ce colis a été confié à un autre agent du guichet.",
                 )
+            return
+        return
 
 
 async def _resoudre_ticket(
@@ -2097,7 +2124,37 @@ async def enregistrer_scan(
             "evenement": None,
         }
 
-    # 4. Enregistrement de l'événement + mise à jour des statuts
+    # 4. Gardes-fous métier : un même colis ne doit pas parcourir le flux dans
+    #    le mauvais ordre ni refaire un départ / une arrivée déjà validés.
+    if donnees.type_evenement == "depart" and colis.statut not in (
+        "enregistre",
+        "enregistre_direct",
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Le départ ne peut être constaté qu'au départ du trajet, avant tout transit.",
+        )
+    if donnees.type_evenement == "mise_en_transit" and colis.statut not in (
+        "enregistre",
+        "enregistre_direct",
+        "en_transit",
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="La mise en transit n'est possible qu'avant ou lors du transit du colis.",
+        )
+    if donnees.type_evenement == "arrivee" and colis.statut != "en_transit":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="L'arrivée doit être constatée après le départ / le transit du colis.",
+        )
+    if donnees.type_evenement == "livraison" and colis.statut != "arrive":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="La livraison ne peut être constatée qu'après l'arrivée au destinataire.",
+        )
+
+    # 5. Enregistrement de l'événement + mise à jour des statuts
     maintenant = donnees.horodatage or datetime.now(timezone.utc)
     evenement = ColisEvenement(
         colis_id=colis.id,
