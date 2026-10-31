@@ -5,7 +5,7 @@
  * Données dynamiques issues de l'API via le contexte d'authentification.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
@@ -17,6 +17,8 @@ import {
   type NiveauVerification,
 } from "@/crochets/useEtatVerifications";
 import { useAuthentification } from "@/contextes/authentification";
+import { logistiqueAPI } from "@/services/logistique_api";
+import type { Colis } from "@/types/logistique";
 
 export default function CitoyenDashboard() {
   return (
@@ -30,7 +32,15 @@ function Contenu() {
   const { utilisateur, chargement: chargementAuth } = useAuthentification();
   const etatVerifications = useEtatVerifications();
   const [codeSuivi, setCodeSuivi] = useState("");
+  const [mesColis, setMesColis] = useState<Colis[]>([]);
   const router = useRouter();
+
+  useEffect(() => {
+    if (!utilisateur?.id) return;
+    void logistiqueAPI.colis.mes()
+      .then((reponse) => setMesColis(reponse.elements))
+      .catch(() => setMesColis([]));
+  }, [utilisateur?.id]);
 
   if (chargementAuth) {
     return (
@@ -144,6 +154,24 @@ function Contenu() {
         >
           Ma carte DigiID, mes colis et mes proches →
         </Link>
+        {mesColis.length > 0 && (
+          <div className="mt-5 space-y-2 border-t border-ardoise-clair/10 pt-4">
+            <p className="text-xs font-semibold uppercase text-ardoise-clair">
+              Colis liés à ton compte
+            </p>
+            {mesColis.slice(0, 5).map((colis) => (
+              <button
+                key={colis.id}
+                type="button"
+                onClick={() => router.push(`/suivi/${encodeURIComponent(colis.code_clair || colis.id)}`)}
+                className="flex w-full items-center justify-between rounded-lg bg-sable px-3 py-2 text-left text-sm hover:bg-sable/70"
+              >
+                <span className="font-mono text-lagune">{colis.code_clair || "Code indisponible"}</span>
+                <span className="text-ardoise-clair">{colis.statut}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </Carte>
     </div>
   );

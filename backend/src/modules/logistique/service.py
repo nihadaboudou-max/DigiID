@@ -1248,19 +1248,26 @@ async def _notifier_comptes_colis(
     titre: str,
     message: str,
     acteur_id: UUID | None = None,
+    code_clair: str | None = None,
 ) -> None:
     identifiants = {
         identifiant
         for identifiant in (colis.expediteur_id, colis.destinataire_id, acteur_id)
         if identifiant is not None
     }
+    if colis.destinataire_id is None:
+        destinataire = await _compte_par_telephone(session, colis.destinataire_tel)
+        if destinataire is not None:
+            identifiants.add(destinataire.id)
+            colis.destinataire_id = destinataire.id
+
     if not identifiants:
         return
 
     utilisateurs = await session.scalars(
         select(Utilisateur).where(Utilisateur.id.in_(identifiants))
     )
-    lien = f"/horaires?colis={colis.id}"
+    lien = f"/suivi/{code_clair}" if code_clair else f"/horaires?colis={colis.id}"
     for utilisateur in utilisateurs:
         await creer_notification(
             session,
@@ -1313,6 +1320,7 @@ async def preparer_code_remise(
         colis,
         "Code de remise du colis",
         message,
+        code_clair=ticket.code_clair,
     )
     await session.commit()
     await session.refresh(colis)
@@ -1998,6 +2006,26 @@ async def lister_colis(
         if perimetre is not None:
             conditions.append(Colis.gare_depart_id == perimetre)
             conditions.append(Colis.gare_arrivee_id == perimetre)
+        requete = requete.where(or_(*conditions))
+    elif utilisateur is not None and utilisateur.role == RoleUtilisateur.CITOYEN.value:
+        # Un colis peut avoir été enregistré avant la création du compte du
+        # destinataire : le téléphone normalisé reste alors la clé de rattachement.
+        conditions = [
+            Colis.expediteur_id == utilisateur.id,
+            Colis.destinataire_id == utilisateur.id,
+        ]
+        if utilisateur.telephone_chiffre:
+            try:
+                telephone = normaliser_numero_tiers(
+                    dechiffrer_donnee(utilisateur.telephone_chiffre)
+                )
+            except ValueError:
+                telephone = None
+            if telephone:
+                conditions.extend([
+                    Colis.expediteur_tel == telephone,
+                    Colis.destinataire_tel == telephone,
+                ])
         requete = requete.where(or_(*conditions))
     requete = requete.order_by(Colis.cree_le.desc())
     return await _paginer(session, requete, page, par_page)

@@ -38,6 +38,9 @@ const COULEURS_ROLES: Record<string, { bg: string; text: string; border: string;
   ong: { bg: "bg-teal-50", text: "text-teal-700", border: "border-teal-300", label: "ONG", icone: "🌍" },
   agent: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-300", label: "Agent", icone: "👤" },
   citoyen: { bg: "bg-gray-50", text: "text-gray-700", border: "border-gray-300", label: "Citoyen", icone: "" },
+  gerant_gare: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-300", label: "Gérant de gare", icone: "🏢" },
+  receveur: { bg: "bg-cyan-50", text: "text-cyan-700", border: "border-cyan-300", label: "Receveur", icone: "🎫" },
+  chauffeur: { bg: "bg-sky-50", text: "text-sky-700", border: "border-sky-300", label: "Chauffeur", icone: "🚐" },
 };
 
 const ORDRE_ROLES = [
@@ -52,6 +55,9 @@ const ORDRE_ROLES = [
   "agent_medical",
   "agent_ong",
   "agent_terrain",
+  "gerant_gare",
+  "receveur",
+  "chauffeur",
   "citoyen",
 ];
 

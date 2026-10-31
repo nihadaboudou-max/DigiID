@@ -367,6 +367,9 @@ export const logistiqueAPI = {
       return clientAPI.get<ReponseListe<Colis>>(`${BASE}/colis?${qs.toString()}`, opts);
     },
 
+    mes: () =>
+      clientAPI.get<ReponseListe<Colis>>(`${BASE}/colis/mes`, opts),
+
     /** Retrouve un colis par code clair (ou token QR). */
     parCode: (code: string) =>
       clientAPI.get<Colis>(`${BASE}/colis/${encodeURIComponent(code)}`, opts),

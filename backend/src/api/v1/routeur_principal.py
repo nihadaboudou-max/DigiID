@@ -115,6 +115,7 @@ from src.modules.paiement import routeur_paiement
 
 # --- Identité DigiID — carte citoyenne (QR durable), profils logistiques, manifestes ---
 from src.modules.identite_digiid import routeur_identite
+from src.modules.temps_reel import routeur_temps_reel
 
 
 # Routeur racine — préfixe et tag globaux gérés au montage
@@ -226,3 +227,4 @@ routeur_v1.include_router(routeur_paiement)
 
 # Identité DigiID — carte citoyenne, pré-remplissage guichet, profils logistiques
 routeur_v1.include_router(routeur_identite)
+routeur_v1.include_router(routeur_temps_reel)

@@ -1241,6 +1241,20 @@ async def lister_colis(
     return schemas.ReponseListe(elements=colis_liste, total=total, page=page, par_page=par_page)
 
 
+@routeur_colis.get("/mes", response_model=schemas.ReponseListe[schemas.ColisResponse],
+                   summary="Lister mes colis comme expéditeur ou destinataire")
+async def lister_mes_colis(
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    colis_liste, total = await service.lister_colis(
+        session, 1, 100, utilisateur=utilisateur_courant
+    )
+    for colis in colis_liste:
+        await _enrichir_colis(session, colis)
+    return schemas.ReponseListe(elements=colis_liste, total=total, page=1, par_page=100)
+
+
 @routeur_colis.post("/{colis_id}/affectation",
                    response_model=schemas.ColisResponse,
                    summary="Affecter (ou réaffecter) un colis à un voyage / chauffeur")

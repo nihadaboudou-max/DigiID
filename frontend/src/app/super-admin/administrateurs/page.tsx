@@ -33,6 +33,9 @@ const ROLES_GERABLES = [
   { value: "agent_medical", label: "Agent Médical", couleur: "lagune" },
   { value: "agent_ong", label: "Agent ONG", couleur: "ocre" },
   { value: "agent_terrain", label: "Agent Terrain", couleur: "lagune" },
+  { value: "gerant_gare", label: "Gérant de gare", couleur: "ocre" },
+  { value: "receveur", label: "Receveur", couleur: "lagune" },
+  { value: "chauffeur", label: "Chauffeur", couleur: "terre" },
 ];
 
 export default function PageAdministrateurs() {

@@ -185,7 +185,7 @@ def generer_token_durable(contexte: str = "") -> str:
 
 def construire_url_qr_durable(
     token: str,
-    chemin: str = "logistique/scan",
+    chemin: str = "suivi",
     base_url: Optional[str] = None,
 ) -> str:
     """Construit l'URL encodée dans le QR d'un ticket (page frontend navigable)."""

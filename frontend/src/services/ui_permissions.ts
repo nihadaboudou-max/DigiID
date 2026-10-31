@@ -114,6 +114,23 @@ export function modulesParDefaut(role: string): ModulePermission[] {
       { role_name: "citoyen", module_key: "badges", module_label: "Mes badges", module_description: null, module_icon: "award", is_enabled: true, is_read_only: true, updated_at: null },
       { role_name: "citoyen", module_key: "parrainage", module_label: "Mon parrainage", module_description: null, module_icon: "share-2", is_enabled: true, is_read_only: false, updated_at: null },
     ],
+    gerant_gare: [
+      { role_name: "gerant_gare", module_key: "tableau_bord_logistique", module_label: "Tableau de bord logistique", module_description: null, module_icon: "layout-dashboard", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "gerant_gare", module_key: "gestion_gare", module_label: "Gestion de la gare", module_description: null, module_icon: "building", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "gerant_gare", module_key: "suivi_colis", module_label: "Suivi des colis", module_description: null, module_icon: "package", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "gerant_gare", module_key: "profils_logistiques", module_label: "Profils professionnels", module_description: null, module_icon: "users", is_enabled: true, is_read_only: true, updated_at: null },
+    ],
+    receveur: [
+      { role_name: "receveur", module_key: "tableau_bord_logistique", module_label: "Tableau de bord logistique", module_description: null, module_icon: "layout-dashboard", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "receveur", module_key: "enregistrement_colis", module_label: "Enregistrement des colis", module_description: null, module_icon: "package-plus", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "receveur", module_key: "confirmation_remise", module_label: "Confirmation des remises", module_description: null, module_icon: "check-circle", is_enabled: true, is_read_only: false, updated_at: null },
+    ],
+    chauffeur: [
+      { role_name: "chauffeur", module_key: "tableau_bord_logistique", module_label: "Tableau de bord logistique", module_description: null, module_icon: "layout-dashboard", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "chauffeur", module_key: "mes_voyages", module_label: "Mes voyages", module_description: null, module_icon: "truck", is_enabled: true, is_read_only: false, updated_at: null },
+      { role_name: "chauffeur", module_key: "mes_colis", module_label: "Mes colis", module_description: null, module_icon: "package", is_enabled: true, is_read_only: true, updated_at: null },
+      { role_name: "chauffeur", module_key: "confirmation_remise", module_label: "Confirmation des remises", module_description: null, module_icon: "check-circle", is_enabled: true, is_read_only: false, updated_at: null },
+    ],
     agent_terrain: [
       { role_name: "agent_terrain", module_key: "enrolement_citoyen", module_label: "Enrôlement citoyen", module_description: null, module_icon: "user-plus", is_enabled: true, is_read_only: false, updated_at: null },
       { role_name: "agent_terrain", module_key: "scan_ocr_cni", module_label: "Scan OCR CNI", module_description: null, module_icon: "scan", is_enabled: true, is_read_only: false, updated_at: null },

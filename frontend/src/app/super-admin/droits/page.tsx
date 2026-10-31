@@ -162,6 +162,9 @@ const COULEURS_ROLE: Record<string, string> = {
   chef_medical: "text-emerald-700 bg-emerald-50 border-emerald-300",
   chef_ong: "text-cyan-700 bg-cyan-50 border-cyan-300",
   chef_agent: "text-blue-700 bg-blue-50 border-blue-300",
+  gerant_gare: "text-amber-700 bg-amber-50 border-amber-300",
+  receveur: "text-cyan-700 bg-cyan-50 border-cyan-300",
+  chauffeur: "text-sky-700 bg-sky-50 border-sky-300",
 };
 
 const LIBELLES_ROLE: Record<string, string> = {
@@ -182,6 +185,9 @@ const LIBELLES_ROLE: Record<string, string> = {
   chef_medical: "Chef Médical",
   chef_ong: "Chef ONG",
   chef_agent: "Chef Enrôlement",
+  gerant_gare: "Gérant de gare",
+  receveur: "Receveur",
+  chauffeur: "Chauffeur",
 };
 
 // ---------- Page ----------

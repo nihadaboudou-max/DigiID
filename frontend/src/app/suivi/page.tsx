@@ -11,9 +11,9 @@
  * Cette page ne demande pas de compte : c'est l'entrée des personnes qui ne
  * connaissent pas DigiID et qui viennent d'envoyer un colis.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
@@ -22,8 +22,16 @@ import { IconeColis } from "@/composants/commun/Icones";
 
 export default function PageSuivi() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [code, setCode] = useState("");
   const [erreur, setErreur] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = searchParams.get("token");
+    if (token) {
+      router.replace(`/suivi/${encodeURIComponent(token)}`);
+    }
+  }, [router, searchParams]);
 
   /**
    * Nettoie ce que le client colle : il arrive souvent avec l'URL entière du

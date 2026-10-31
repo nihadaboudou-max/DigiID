@@ -168,6 +168,20 @@ async def enregistrer_evenement_audit(
         donnees_supplementaires=donnees_supplementaires,
     )
     session.add(entree)
+
+    # Informe immédiatement les interfaces connectées. L'événement est
+    # volontairement générique : chaque page recharge ses données autorisées.
+    try:
+        from src.modules.temps_reel.service import gestionnaire_temps_reel
+        import asyncio
+        asyncio.create_task(
+            gestionnaire_temps_reel.diffuser(
+                {"type": "donnees_modifiees", "evenement": type_evenement}
+            )
+        )
+    except RuntimeError:
+        # Aucun event loop actif dans certains scripts de migration ou tests.
+        pass
     
     # Aussi dans les logs fichiers
     journal_audit(f"{type_evenement} | utilisateur={utilisateur_id} | {description}")
