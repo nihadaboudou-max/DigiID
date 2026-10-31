@@ -16,7 +16,7 @@ Trois publics, trois besoins :
 """
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
@@ -24,6 +24,8 @@ from src.modeles import Utilisateur
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.identite_digiid import service, schemas
 from src.noyau.permissions import require_permission
+from src.config.constantes import TypesEvenementAudit
+from src.noyau.journal import enregistrer_evenement_audit
 
 # Routeurs thématiques
 routeur_carte = APIRouter(prefix="/carte", tags=["Identité DigiID — Carte citoyenne"])
@@ -130,6 +132,7 @@ async def lister_guichetiers(
 )
 @require_permission("logistique.profil.ecrire")
 async def enregistrer_mon_profil_logistique(
+    requete: Request,
     donnees: schemas.ProfilLogistiqueCreate,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
@@ -139,9 +142,21 @@ async def enregistrer_mon_profil_logistique(
     Toute modification d'un élément contrôlé remet le dossier « en attente » :
     on ne peut pas valider un dossier puis changer l'immatriculation en silence.
     """
-    return await service.enregistrer_profil_logistique(
+    profil = await service.enregistrer_profil_logistique(
         session, utilisateur_courant, donnees
     )
+    await enregistrer_evenement_audit(
+        session,
+        TypesEvenementAudit.PROFIL_LOGISTIQUE_MODIFIE.value,
+        "Dossier professionnel logistique créé ou mis à jour.",
+        utilisateur_id=utilisateur_courant.id,
+        role_acteur=utilisateur_courant.role,
+        adresse_ip=requete.client.host if requete.client else None,
+        agent_utilisateur=requete.headers.get("user-agent"),
+        donnees_supplementaires={"type_profil": donnees.type_profil},
+    )
+    await session.commit()
+    return profil
 
 
 @routeur_profils.get(
@@ -167,6 +182,7 @@ async def consulter_profil_logistique(
 )
 @require_permission("logistique.ecrire")
 async def verifier_profil_logistique(
+    requete: Request,
     utilisateur_id: UUID,
     donnees: schemas.VerificationProfilRequest,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
@@ -177,9 +193,24 @@ async def verifier_profil_logistique(
     Le dossier n'est déclaré « vérifié » que si **tous** les éléments exigés sont
     validés — sinon il reste en attente, avec les motifs visibles côté terrain.
     """
-    return await service.verifier_profil_logistique(
+    profil = await service.verifier_profil_logistique(
         session, utilisateur_id, donnees, utilisateur_courant
     )
+    await enregistrer_evenement_audit(
+        session,
+        TypesEvenementAudit.PROFIL_LOGISTIQUE_VERIFIE.value,
+        "Dossier professionnel logistique vérifié ou maintenu en attente.",
+        utilisateur_id=utilisateur_courant.id,
+        role_acteur=utilisateur_courant.role,
+        adresse_ip=requete.client.host if requete.client else None,
+        agent_utilisateur=requete.headers.get("user-agent"),
+        donnees_supplementaires={
+            "utilisateur_cible": str(utilisateur_id),
+            "statut": profil.statut_verification,
+        },
+    )
+    await session.commit()
+    return profil
 
 
 # ─── Chauffeur : voyages et manifeste ────────────────────────────────

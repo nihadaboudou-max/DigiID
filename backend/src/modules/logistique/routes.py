@@ -859,7 +859,7 @@ async def modifier_voyage(
     voyage = await service.modifier_voyage(session, voyage.id, donnees)
     await _auditer_logistique(
         session, requete, utilisateur_courant,
-        TypesEvenementAudit.VOYAGE_MODIFIE,
+        TypesEvenementAudit.REMISE_COLIS_CONFIRMEE,
         f"Modification du départ (voyage {voyage.id})",
         donnees={
             "voyage_id": str(voyage.id),
@@ -1471,6 +1471,58 @@ async def lister_notifications_colis(
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Colis introuvable")
     return await service.lister_notifications(session, "colis", colis_id)
+
+
+@routeur_colis.post("/{colis_id}/code-remise",
+                    response_model=schemas.CodeRemiseResponse,
+                    summary="Envoyer ou renvoyer le code de remise au destinataire")
+@require_permission("logistique.scan")
+async def envoyer_code_remise(
+    colis_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    colis = await service.obtenir_colis(session, colis_id)
+    if colis.statut != "arrive":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Le code est disponible uniquement après l'arrivée du colis.",
+        )
+    ticket = await service.obtenir_ticket_du_colis(session, colis)
+    if ticket is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Ticket du colis introuvable.")
+    expire_le = await service.preparer_code_remise(
+        session, colis, ticket, renouveller=True
+    )
+    return {
+        "message": "Le code a été envoyé dans la notification interne DigiID.",
+        "expire_le": expire_le,
+    }
+
+
+@routeur_colis.post("/{colis_id}/confirmer-remise",
+                    response_model=schemas.ColisResponse,
+                    summary="Valider la remise avec le code du destinataire")
+@require_permission("logistique.scan")
+async def confirmer_remise(
+    colis_id: UUID,
+    donnees: schemas.ConfirmationRemiseRequest,
+    requete: Request,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    colis = await service.confirmer_remise_colis(
+        session, colis_id, donnees.code, utilisateur_courant
+    )
+    await _auditer_logistique(
+        session,
+        requete,
+        utilisateur_courant,
+        TypesEvenementAudit.VOYAGE_MODIFIE,
+        "Remise d'un colis confirmée par le code du destinataire.",
+        {"colis_id": str(colis_id)},
+    )
+    return await _enrichir_colis(session, colis)
 
 
 @routeur_colis.get("/{code}", response_model=schemas.ColisResponse,

@@ -8,7 +8,6 @@ import { useEffect } from "react";
 import Link from "next/link";
 
 import { Bouton } from "@/composants/commun/Bouton";
-import { EnTete } from "@/composants/layouts/EnTete";
 import { Alerte } from "@/composants/commun/Alerte";
 
 export default function PageErreurGlobale({
@@ -25,7 +24,6 @@ export default function PageErreurGlobale({
 
   return (
     <>
-      <EnTete />
       <main className="flex-grow flex items-center justify-center px-6 py-16 bg-sable-clair">
         <div className="max-w-lg w-full apparition">
           <div className="text-center mb-6">

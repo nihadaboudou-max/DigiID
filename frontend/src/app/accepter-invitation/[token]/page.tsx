@@ -307,7 +307,7 @@ export default function PageAccepterInvitation() {
               type="tel"
               value={telephone}
               onChange={(e) => setTelephone(e.target.value)}
-              placeholder="+221 77 123 45 67"
+              placeholder="+229 01 97 12 34 56"
             />
           </div>
 

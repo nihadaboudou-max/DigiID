@@ -29,6 +29,8 @@ TYPES_EVENEMENT_COLIS = (
     # Le chauffeur dépose le colis au guichet d'arrivée.
     "remise_guichet",
     "livraison",
+    "code_remise_genere",
+    "code_remise_confirme",
     "incident",
 )
 

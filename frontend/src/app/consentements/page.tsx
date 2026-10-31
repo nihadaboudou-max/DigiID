@@ -92,7 +92,7 @@ function Contenu() {
         <h1 className="mt-1">Consentements</h1>
         <p className="text-ardoise-clair mt-2 max-w-2xl">
           Pour chaque catégorie de donnée, tu décides. Tu peux revenir sur tes choix à tout
-          moment — c'est ton droit, garanti par la loi 2008-12.
+          moment — c'est ton droit garanti par le Code du numérique du Bénin.
         </p>
       </header>
 
@@ -148,7 +148,7 @@ function Contenu() {
           <li>✓ Tu peux retirer un consentement à tout moment (effet immédiat).</li>
           <li>✓ Le retrait n'a aucune conséquence pénalisante pour toi.</li>
           <li>✓ Tu peux exporter la liste de tes consentements actifs depuis ton profil.</li>
-          <li>✓ En cas de litige, la CDP (Commission de Protection des Données) est compétente.</li>
+          <li>✓ En cas de litige, l'APDP (Autorité de protection des données à caractère personnel du Bénin) peut être saisie.</li>
         </ul>
       </Carte>
 

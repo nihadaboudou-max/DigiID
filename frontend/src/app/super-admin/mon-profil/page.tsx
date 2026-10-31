@@ -309,10 +309,10 @@ function Contenu() {
       </Carte>
 
       {/* Export RGPD */}
-      <Carte titre="Portabilité des données (RGPD/CDP)" description="Télécharge toutes tes données personnelles">
+      <Carte titre="Portabilité des données (APDP)" description="Télécharge toutes tes données personnelles">
         <div className="space-y-2">
           <p className="text-sm text-ardoise-clair">
-            Conformément au RGPD et à la CDP, tu peux exporter toutes les données liées
+            Conformément au Code du numérique du Bénin et aux orientations de l'APDP, tu peux exporter toutes les données liées
             à ton compte. Fichier au format JSON structuré.
           </p>
           <div className="flex gap-2">

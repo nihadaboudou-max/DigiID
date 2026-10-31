@@ -31,19 +31,15 @@ export function ConteneurLayout({ children }: { children: React.ReactNode }) {
   );
   const estAccueil = pathname === "/";
 
-  // Pages publiques / accueil marketing / chargement → pas de chrome app
-  // (évite double header + padding qui écrasent le responsive mobile)
+  // Pages publiques / chargement : un seul en-tête global, sans barre latérale
+  // ni conteneur de contenu connecté.
   if (estPagePublique || estAccueil || chargement) {
-    // Accueil connecté : garder seulement l'en-tête (menu hamburger), sans sidebar
-    if (estAccueil && utilisateur && !chargement) {
-      return (
-        <div className="min-h-screen bg-sable-clair flex flex-col">
-          <EnTete />
-          <div className="flex-1 min-w-0 overflow-x-clip">{children}</div>
-        </div>
-      );
-    }
-    return <>{children}</>;
+    return (
+      <div className="min-h-screen bg-sable-clair flex flex-col">
+        <EnTete />
+        <div className="flex-1 min-w-0 overflow-x-clip">{children}</div>
+      </div>
+    );
   }
 
   // Espace connecté → layout avec barre latérale (desktop) / menu hamburger (mobile)

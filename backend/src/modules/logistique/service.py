@@ -1,6 +1,9 @@
  # -*- coding: utf-8 -*-
 """Service logistique — logique métier du référentiel + colis de bout en bout."""
 from datetime import datetime, timedelta, timezone
+import hashlib
+import hmac
+import secrets
 from urllib.parse import parse_qs, urlparse
 from uuid import UUID
 
@@ -31,6 +34,7 @@ from src.noyau.notification import (
     construire_message_pre_alerte,
     masquer_telephone,
 )
+from src.config import parametres
 from src.modules.logistique.stockage_colis import chemin_photo_colis
 from src.modules.paiement.tarification import frais_service
 
@@ -1269,6 +1273,126 @@ async def _notifier_comptes_colis(
         )
 
 
+async def preparer_code_remise(
+    session: AsyncSession,
+    colis: Colis,
+    ticket: Ticket,
+    *,
+    renouveller: bool = False,
+) -> datetime:
+    """Génère un code à quatre chiffres et notifie le destinataire."""
+    maintenant = datetime.now(timezone.utc)
+    if (
+        not renouveller
+        and colis.code_remise_hash
+        and colis.code_remise_expire_le
+        and colis.code_remise_expire_le > maintenant
+    ):
+        return colis.code_remise_expire_le
+
+    code = f"{secrets.randbelow(10000):04d}"
+    expire_le = maintenant + timedelta(
+        seconds=parametres.duree_validite_code_remise_secondes
+    )
+    colis.code_remise_hash = hashlib.sha256(code.encode("ascii")).hexdigest()
+    colis.code_remise_expire_le = expire_le
+    colis.code_remise_tentatives = 0
+    session.add(
+        ColisEvenement(
+            colis_id=colis.id,
+            type_evenement="code_remise_genere",
+            horodatage=maintenant,
+        )
+    )
+    message = (
+        f"Votre code de remise du colis {ticket.code_clair} est {code}. "
+        "Ne le communiquez qu'au livreur présent devant vous."
+    )
+    await _notifier_comptes_colis(
+        session,
+        colis,
+        "Code de remise du colis",
+        message,
+    )
+    await session.commit()
+    await session.refresh(colis)
+    return expire_le
+
+
+async def confirmer_remise_colis(
+    session: AsyncSession,
+    colis_id: UUID,
+    code: str,
+    utilisateur: Utilisateur,
+) -> Colis:
+    """Valide la remise finale uniquement avec le code du destinataire."""
+    colis = await obtenir_colis(session, colis_id)
+    if colis.statut == "livre":
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Ce colis est déjà livré.")
+    if colis.statut != "arrive":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Le code ne peut être validé qu'après l'arrivée du colis.",
+        )
+    if utilisateur.id not in {
+        colis.chauffeur_id,
+        colis.receveur_id,
+        colis.remis_guichet_a_id,
+    } and utilisateur.role not in ("gerant_gare", "super_administrateur"):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Vous n'êtes pas autorisé à constater cette remise.",
+        )
+    maintenant = datetime.now(timezone.utc)
+    if not colis.code_remise_hash or not colis.code_remise_expire_le:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Aucun code de remise actif.")
+    if colis.code_remise_expire_le <= maintenant:
+        raise HTTPException(status.HTTP_410_GONE, detail="Le code de remise a expiré.")
+    if colis.code_remise_tentatives >= parametres.nombre_max_tentatives_code_remise:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail="Trop de tentatives.")
+
+    colis.code_remise_tentatives += 1
+    hash_code = hashlib.sha256(code.encode("ascii")).hexdigest()
+    if not hmac.compare_digest(colis.code_remise_hash, hash_code):
+        await session.commit()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Code de remise incorrect.")
+
+    colis.code_remise_confirme_le = maintenant
+    colis.code_remise_hash = None
+    colis.code_remise_expire_le = None
+    colis.statut = "livre"
+    colis.livre_le = maintenant
+    ticket = await obtenir_ticket_du_colis(session, colis)
+    if ticket is not None:
+        ticket.statut = "livre"
+    session.add(
+        ColisEvenement(
+            colis_id=colis.id,
+            type_evenement="code_remise_confirme",
+            acteur_id=utilisateur.id,
+            horodatage=maintenant,
+        )
+    )
+    evenement_livraison = ColisEvenement(
+        colis_id=colis.id,
+        type_evenement="livraison",
+        acteur_id=utilisateur.id,
+        horodatage=maintenant,
+    )
+    session.add(evenement_livraison)
+    if ticket is not None:
+        await _notifier_scan_colis(session, colis, ticket, "livraison", None)
+    await _notifier_comptes_colis(
+        session,
+        colis,
+        "Colis livré",
+        f"Le colis {ticket.code_clair if ticket else colis.id} a été remis après validation du code.",
+    )
+    await session.commit()
+    await session.refresh(colis)
+    return colis
+
+
 async def creer_colis(
     session: AsyncSession,
     donnees: schemas.ColisCreate,
@@ -2154,6 +2278,34 @@ async def enregistrer_scan(
             detail="La livraison ne peut être constatée qu'après l'arrivée au destinataire.",
         )
 
+    if donnees.type_evenement == "livraison":
+        if not donnees.code_confirmation:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Le code à quatre chiffres du destinataire est obligatoire.",
+            )
+        colis_confirme = await confirmer_remise_colis(
+            session, colis.id, donnees.code_confirmation, utilisateur
+        )
+        evenement_confirme = await session.scalar(
+            select(ColisEvenement)
+            .where(
+                ColisEvenement.colis_id == colis_confirme.id,
+                ColisEvenement.type_evenement == "livraison",
+            )
+            .order_by(ColisEvenement.horodatage.desc())
+        )
+        return {
+            "succes": True,
+            "deja_livre": False,
+            "deja_scanne": False,
+            "message": "Colis remis au destinataire avec succès.",
+            "statut_colis": colis_confirme.statut,
+            "colis": colis_confirme,
+            "ticket": await obtenir_ticket_du_colis(session, colis_confirme),
+            "evenement": evenement_confirme,
+        }
+
     # 5. Enregistrement de l'événement + mise à jour des statuts
     maintenant = donnees.horodatage or datetime.now(timezone.utc)
     evenement = ColisEvenement(
@@ -2178,6 +2330,7 @@ async def enregistrer_scan(
     elif donnees.type_evenement == "arrivee":
         colis.statut = "arrive"
         ticket.statut = "en_transit"
+        await preparer_code_remise(session, colis, ticket)
 
     ticket.nb_scans = (ticket.nb_scans or 0) + 1
     if ticket.premier_scan_le is None:

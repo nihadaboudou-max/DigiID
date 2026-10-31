@@ -423,7 +423,7 @@ async def obtenir_statut_verification(
 
 def _masquer_destination(destination: str) -> str:
     """Masque partiellement une destination pour l'afficher à l'utilisateur.
-    Ex : "a***@example.com" ou "+221*****67"
+    Ex : "a***@example.com" ou "+229*****67"
     """
     if "@" in destination:
         local, domaine = destination.split("@", 1)

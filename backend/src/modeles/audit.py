@@ -6,7 +6,7 @@ Cette table est en append-only : on n'efface jamais une ligne, on n'en
 modifie jamais. Si une fraude est constatée, on peut reconstituer
 exactement ce qui s'est passé.
 
-Conformité CDP / APDP / RGPD :
+Conformité APDP / RGPD :
   - Trace toutes les actions sur les données personnelles
   - Conservation 1 an minimum
   - Consultable par les régulateurs sur demande

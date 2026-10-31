@@ -104,7 +104,7 @@ const TECHNOLOGIES_STATIQUES: Technologie[] = [
   { id: "cnin", nom: "Vérification CNI", description: "Scan et OCR de la Carte Nationale d'Identité", icone: "cnin", roles_autorises: ["citoyen", "agent", "medecin", "police", "ong"], niveau_acces: "standard" },
   { id: "faciale", nom: "Reconnaissance faciale", description: "Vérification visuelle, détection de vivacité", icone: "faciale", roles_autorises: ["citoyen", "agent", "medecin", "police", "ong"], niveau_acces: "sensible" },
   { id: "score", nom: "Score de confiance", description: "Calcul et historique du score d'identité", icone: "score", roles_autorises: ["citoyen", "agent", "medecin", "police", "ong"], niveau_acces: "standard" },
-  { id: "consentements", nom: "Consentements", description: "Gestion des consentements RGPD/CDP", icone: "consentements", roles_autorises: ["citoyen", "medecin", "ong"], niveau_acces: "sensible" },
+  { id: "consentements", nom: "Consentements", description: "Gestion des consentements et des règles APDP", icone: "consentements", roles_autorises: ["citoyen", "medecin", "ong"], niveau_acces: "sensible" },
   { id: "chatbot", nom: "Assistant DigiID", description: "Chatbot intelligent avec RAG", icone: "chatbot", roles_autorises: ["citoyen", "agent", "medecin", "police", "ong"], niveau_acces: "standard" },
 ];
 

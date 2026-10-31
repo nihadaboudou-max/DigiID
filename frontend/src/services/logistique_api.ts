@@ -388,6 +388,18 @@ export const logistiqueAPI = {
     modifier: (colisId: string, donnees: Record<string, unknown>) =>
       clientAPI.patch<Colis>(`${BASE}/colis/${colisId}`, donnees, opts),
 
+    /** Envoie ou renvoie le code de remise dans DigiID et par SMS. */
+    envoyerCodeRemise: (colisId: string) =>
+      clientAPI.post<{ message: string; expire_le: string }>(
+        `${BASE}/colis/${colisId}/code-remise`,
+        {},
+        opts,
+      ),
+
+    /** Confirme la remise finale avec le code communiqué par le destinataire. */
+    confirmerRemise: (colisId: string, code: string) =>
+      clientAPI.post<Colis>(`${BASE}/colis/${colisId}/confirmer-remise`, { code }, opts),
+
     /** Le chauffeur confirme avoir physiquement pris le colis en charge. */
     confirmerReception: (colisId: string) =>
       clientAPI.post<Colis>(`${BASE}/colis/${colisId}/reception`, {}, opts),

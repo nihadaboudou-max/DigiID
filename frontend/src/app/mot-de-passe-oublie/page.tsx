@@ -10,7 +10,6 @@ import { useState } from "react";
 import { Bouton } from "@/composants/commun/Bouton";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { Alerte } from "@/composants/commun/Alerte";
-import { EnTete } from "@/composants/layouts/EnTete";
 import { Logo } from "@/composants/commun/Logo";
 import { ErreurAPI } from "@/services/client_api";
 import { demanderReinitialisationMotDePasse } from "@/services/authentification";
@@ -44,7 +43,6 @@ export default function PageMotDePasseOublie() {
 
     return (
     <>
-      <EnTete />
       <main className="flex-grow flex items-center justify-center px-6 py-12 bg-sable-clair">
         <div className="max-w-md w-full carte apparition">
           <div className="text-center mb-6">

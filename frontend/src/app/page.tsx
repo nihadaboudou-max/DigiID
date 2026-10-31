@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import { Bouton } from "@/composants/commun/Bouton";
-import { Logo } from "@/composants/commun/Logo";
 import { SelecteurLangue } from "@/composants/accessibilite/SelecteurLangue";
 import { PiedDePage } from "@/composants/layouts/PiedDePage";
 
@@ -30,27 +29,6 @@ const SERVICES = [
 export default function PageAccueil() {
   return (
     <main className="flex-grow">
-      <header className="border-b border-ardoise-clair/10 bg-white px-6 py-3">
-        <div className="mx-auto flex max-w-contenu items-center justify-between gap-3">
-          <Link href="/" aria-label="DigiID — accueil">
-            <Logo taille="moyen" />
-          </Link>
-          <nav aria-label="Compte" className="flex items-center gap-2">
-            <Link
-              href="/connexion"
-              className="rounded-lg px-3 py-2 text-sm font-medium text-ardoise-clair transition-colors hover:bg-sable hover:text-lagune"
-            >
-              Connexion
-            </Link>
-            <Link href="/inscription">
-              <Bouton variante="primaire" taille="petit">
-                Inscription
-              </Bouton>
-            </Link>
-          </nav>
-        </div>
-      </header>
-
       <section
         aria-label="Choix de la langue"
         className="border-b border-ardoise-clair/10 bg-white px-6 py-3"

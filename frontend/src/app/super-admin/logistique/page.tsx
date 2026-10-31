@@ -25,12 +25,14 @@ import {
   type Vehicule,
   type Voyage,
 } from "@/services/logistique_api";
+import { identiteAPI } from "@/services/identite_api";
+import type { ProfilLogistique } from "@/types/identite";
 import {
   listerTousUtilisateurs,
   type UtilisateurComplet,
 } from "@/services/super_admin_utilisateurs";
 
-const ONGLETS = ["Gares", "Lignes", "Véhicules", "Voyages", "Acteurs"] as const;
+const ONGLETS = ["Gares", "Lignes", "Véhicules", "Voyages", "Acteurs", "Profils professionnels"] as const;
 type Onglet = (typeof ONGLETS)[number];
 
 const clsInput = "w-full px-3 py-2 border border-ardoise-clair/20 rounded-lg text-sm";
@@ -57,6 +59,7 @@ function Contenu() {
   const [vehicules, setVehicules] = useState<Vehicule[]>([]);
   const [voyages, setVoyages] = useState<Voyage[]>([]);
   const [acteurs, setActeurs] = useState<Acteur[]>([]);
+  const [profils, setProfils] = useState<ProfilLogistique[]>([]);
 
   const charger = async () => {
     setChargement(true);
@@ -74,6 +77,16 @@ function Contenu() {
       setVehicules(v.elements);
       setVoyages(voy.elements);
       setActeurs(a.elements);
+      const profilsCharges = await Promise.all(
+        a.elements.map(async (acteur) => {
+          try {
+            return await identiteAPI.profils.obtenir(acteur.utilisateur_id);
+          } catch {
+            return null;
+          }
+        }),
+      );
+      setProfils(profilsCharges.filter((profil): profil is ProfilLogistique => profil !== null));
     } catch (e) {
       setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
     } finally {
@@ -169,10 +182,59 @@ function Contenu() {
               supprimer={(id) => supprimer(() => api.acteurs.supprimer(id), "Acteur supprimé")}
             />
           )}
+          {onglet === "Profils professionnels" && (
+            <SectionProfils profils={profils} />
+          )}
         </>
       )}
     </div>
   );
+}
+
+function SectionProfils({ profils }: { profils: ProfilLogistique[] }) {
+  const verifies = profils.filter((profil) => profil.est_verifie).length;
+  const enAttente = profils.filter((profil) => profil.statut_verification === "en_attente").length;
+  const parType = ["chauffeur", "receveur", "gerant_gare"].map((type) => ({
+    type,
+    nombre: profils.filter((profil) => profil.type_profil === type).length,
+  }));
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Carte titre="Dossiers professionnels"><p className="text-3xl font-bold text-lagune">{profils.length}</p><p className="text-xs text-ardoise-clair">Chauffeurs, receveurs et gérants de gare</p></Carte>
+        <Carte titre="Dossiers vérifiés"><p className="text-3xl font-bold text-green-600">{verifies}</p><p className="text-xs text-ardoise-clair">Identité et éléments métier contrôlés</p></Carte>
+        <Carte titre="À contrôler"><p className="text-3xl font-bold text-ocre">{enAttente}</p><p className="text-xs text-ardoise-clair">Dossiers en attente de vérification</p></Carte>
+      </div>
+      <Carte titre="Répartition des professionnels" description="Lecture simple des profils enregistrés">
+        <div className="space-y-3">
+          {parType.map((ligne) => (
+            <div key={ligne.type}>
+              <div className="flex justify-between text-sm"><span>{libelleProfil(ligne.type)}</span><strong>{ligne.nombre}</strong></div>
+              <div className="mt-1 h-3 rounded-full bg-sable overflow-hidden">
+                <div className="h-full rounded-full bg-lagune" style={{ width: `${profils.length ? Math.max(4, ligne.nombre / profils.length * 100) : 0}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Carte>
+      <Carte titre="État des dossiers">
+        <TableauSimple entetes={["Professionnel", "Métier", "Gare", "État"]}>
+          {profils.length === 0 ? <LigneVide colonnes={4} message="Aucun dossier professionnel trouvé." /> : profils.map((profil) => (
+            <tr key={profil.id} className="border-b border-ardoise-clair/10">
+              <td className="py-2 pr-3">{profil.utilisateur_nom || profil.identifiant_public}</td>
+              <td className="py-2 pr-3">{libelleProfil(profil.type_profil)}</td>
+              <td className="py-2 pr-3">{profil.gare_nom || "Non renseignée"}</td>
+              <td className="py-2"><Badge variante={profil.est_verifie ? "succes" : "ocre"} taille="petit">{profil.est_verifie ? "Vérifié" : "À contrôler"}</Badge></td>
+            </tr>
+          ))}
+        </TableauSimple>
+      </Carte>
+    </div>
+  );
+}
+
+function libelleProfil(type: string): string {
+  return { chauffeur: "Chauffeur", receveur: "Receveur", gerant_gare: "Gérant de gare" }[type] || type;
 }
 
 // ─── Éléments de formulaire réutilisables ────────────────────────────

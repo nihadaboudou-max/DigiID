@@ -153,6 +153,16 @@ class Colis(Base, MelangeTracabilite):
     livre_le: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    code_remise_hash: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    code_remise_expire_le: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    code_remise_tentatives: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    code_remise_confirme_le: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # ─── Arrêt de destination (trajets avec arrêts intermédiaires) ───
     # Le colis ne va pas forcément au terminus : il peut descendre à Dassa.

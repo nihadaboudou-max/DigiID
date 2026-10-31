@@ -183,6 +183,7 @@ export interface DonneesColis {
 export interface DonneesScan {
   token?: string;
   code_clair?: string;
+  code_confirmation?: string;
   type_evenement?: TypeEvenementScan;
   gare_id?: string | null;
   voyage_id?: string | null;

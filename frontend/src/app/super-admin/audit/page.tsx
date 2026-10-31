@@ -200,7 +200,7 @@ function Contenu() {
           </p>
           <h1 className="mt-1 text-2xl">Journal d'audit immuable</h1>
           <p className="text-ardoise-clair mt-1 text-sm max-w-2xl">
-            Toutes les actions sensibles du système. Conservation 1 an minimum (CDP).
+            Toutes les actions sensibles du système. Conservation selon les exigences applicables de l'APDP.
             Immuable : aucune suppression ni modification autorisée.
           </p>
         </header>

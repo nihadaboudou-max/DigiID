@@ -293,7 +293,7 @@ BASE: list[dict] = [
         "mots_cles": ["supprimer mon compte", "effacer mes donnees", "fermer mon compte"],
         "reponse": (
             "Paramètres → Zone sensible → Supprimer mon compte. Les données sont "
-            "effacées sous 30 jours, conformément à la loi 2008-12."
+            "effacées selon les délais prévus par le Code du numérique du Bénin."
         ),
         "lien": "/parametres",
     },

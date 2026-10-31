@@ -188,12 +188,11 @@ docker compose down -v
 ## Conformité légale
 
 Le système est conçu en conformité avec :
-- **Loi 2008-12 du Sénégal** sur la protection des données personnelles
 - **Code numérique du Bénin** (loi 2017-20)
 - **Convention de Malabo** (Union africaine)
 - **Acte additionnel CEDEAO** sur la protection des données
 
-Documentation du traitement préparée pour la CDP (Sénégal) et l'APDP (Bénin).
+Documentation du traitement préparée pour l'APDP (Bénin).
 
 ---
 

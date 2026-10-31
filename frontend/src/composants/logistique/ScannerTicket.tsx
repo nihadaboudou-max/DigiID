@@ -83,6 +83,7 @@ export function ScannerTicket({
   const estGuichet = utilisateur?.role === "receveur";
 
   const [code, setCode] = useState(tokenInitial ?? "");
+  const [codeRemise, setCodeRemise] = useState("");
   const [typeEvenement, setTypeEvenement] = useState<TypeEvenementScan>(typeParDefaut);
   const [gareContexte, setGareContexte] = useState<Gare | null>(null);
   const [statutActuel, setStatutActuel] = useState<StatutColis | null>(null);
@@ -187,6 +188,7 @@ export function ScannerTicket({
     try {
       const reponse = await logistiqueAPI.scans.scanner({
         ...cible,
+        code_confirmation: typeEvenement === "livraison" ? codeRemise : undefined,
         type_evenement: typeEvenement,
         gare_id: gareContexte?.id ?? null,
         voyage_id: voyageId,
@@ -319,12 +321,23 @@ export function ScannerTicket({
             }}
           />
 
+          {typeEvenement === "livraison" && (
+            <ChampSaisie
+              libelle="Code de remise à 4 chiffres"
+              value={codeRemise}
+              onChange={(e) => setCodeRemise(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              placeholder="Code communiqué par le destinataire"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+            />
+          )}
+
           <div className="flex flex-wrap gap-3">
             <BoutonVocal
               variante="primaire"
               cleAudio="btn.valider_scan"
               texteAudio={t("btn.valider_scan")}
-              disabled={enCours || !code.trim()}
+              disabled={enCours || !code.trim() || (typeEvenement === "livraison" && codeRemise.length !== 4)}
               chargement={enCours && !cameraOuverte}
               onClick={() => void executerScan(code)}
             >

@@ -37,7 +37,7 @@ const CARTES_TECHNOLOGIES: TechnologieCard[] = [
     icone: "👤",
     href: "/super-admin/administrateurs",
     statut: "actif",
-    technologies: ["CRUD", "RBAC", "Sessions"],
+    technologies: ["Gestion", "Droits", "Sessions"],
   },
   {
     id: "droits",
@@ -46,7 +46,7 @@ const CARTES_TECHNOLOGIES: TechnologieCard[] = [
     icone: "🛡️",
     href: "/super-admin/droits",
     statut: "actif",
-    technologies: ["RBAC", "Permissions", "Rôles"],
+    technologies: ["Droits", "Permissions", "Rôles"],
   },
   {
     id: "statistiques",
@@ -55,7 +55,7 @@ const CARTES_TECHNOLOGIES: TechnologieCard[] = [
     icone: "📊",
     href: "/super-admin/statistiques",
     statut: "actif",
-    technologies: ["Métriques", "Analyse", "CSV"],
+    technologies: ["Mesures", "Analyse", "Export"],
   },
   {
     id: "monitoring",
@@ -73,7 +73,7 @@ const CARTES_TECHNOLOGIES: TechnologieCard[] = [
     icone: "📜",
     href: "/super-admin/audit",
     statut: "actif",
-    technologies: ["Audit", "Traçabilité", "Filtres"],
+    technologies: ["Historique", "Traçabilité", "Filtres"],
   },
   {
     id: "configuration",
@@ -82,7 +82,7 @@ const CARTES_TECHNOLOGIES: TechnologieCard[] = [
     icone: "⚙️",
     href: "/super-admin/configuration",
     statut: "actif",
-    technologies: ["Flags", "Config", "Système"],
+    technologies: ["Options", "Réglages", "Système"],
   },
   {
     id: "mon-profil",
@@ -209,10 +209,21 @@ function Contenu() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
         <KPI libelle="Utilisateurs" valeur={utilisateurs.total_utilisateurs} couleur="lagune" />
         <KPI libelle="Actifs" valeur={utilisateurs.total_actifs} couleur="succes" />
-        <KPI libelle="2FA activée" valeur={utilisateurs.total_2fa_actif} couleur="ocre" />
+        <KPI libelle="Double vérification activée" valeur={utilisateurs.total_2fa_actif} couleur="ocre" />
         <KPI libelle="Sessions" valeur={sessions.sessions_actives} couleur="lagune" />
         <KPI libelle="Audits aujourd'hui" valeur={stats.evenements_aujourd_hui} couleur="terre" />
       </div>
+
+      <Carte titre="Vue simple de l'activité" description="Comparaison des comptes actifs, inactifs et des connexions en cours">
+        <GraphiqueBarres
+          donnees={[
+            { libelle: "Comptes actifs", valeur: utilisateurs.total_actifs, couleur: "bg-green-600" },
+            { libelle: "Comptes inactifs", valeur: utilisateurs.total_inactifs, couleur: "bg-ocre" },
+            { libelle: "Connexions en cours", valeur: sessions.sessions_actives, couleur: "bg-lagune" },
+            { libelle: "Actions aujourd'hui", valeur: stats.evenements_aujourd_hui, couleur: "bg-terre" },
+          ]}
+        />
+      </Carte>
 
       <section className="space-y-3" aria-labelledby="titre-finances">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -348,6 +359,29 @@ function Contenu() {
           ))}
         </div>
       </section>
+    </div>
+  );
+}
+
+function GraphiqueBarres({
+  donnees,
+}: {
+  donnees: { libelle: string; valeur: number; couleur: string }[];
+}) {
+  const maximum = Math.max(...donnees.map((donnee) => donnee.valeur), 1);
+  return (
+    <div className="space-y-3" role="img" aria-label="Graphique des indicateurs principaux">
+      {donnees.map((donnee) => (
+        <div key={donnee.libelle}>
+          <div className="flex justify-between gap-3 text-sm">
+            <span>{donnee.libelle}</span>
+            <strong>{donnee.valeur}</strong>
+          </div>
+          <div className="mt-1 h-3 overflow-hidden rounded-full bg-sable">
+            <div className={`h-full rounded-full ${donnee.couleur}`} style={{ width: `${Math.max(4, (donnee.valeur / maximum) * 100)}%` }} />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

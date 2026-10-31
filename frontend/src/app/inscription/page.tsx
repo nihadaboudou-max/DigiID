@@ -10,7 +10,6 @@ import { useEffect, useState } from "react";
 
 import { Bouton } from "@/composants/commun/Bouton";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
-import { EnTete } from "@/composants/layouts/EnTete";
 import { Logo } from "@/composants/commun/Logo";
 import { inscrire } from "@/services/authentification";
 import { ErreurAPI } from "@/services/client_api";
@@ -99,7 +98,6 @@ export default function PageInscription() {
   if (succes) {
     return (
       <>
-        <EnTete />
         <main className="flex-grow flex items-center justify-center px-6 py-12 bg-sable-clair">
           <div className="max-w-md w-full carte apparition">
             <div className="text-center">
@@ -149,7 +147,6 @@ export default function PageInscription() {
 
   return (
     <>
-      <EnTete />
       <main className="flex-grow flex items-center justify-center px-6 py-12 bg-sable-clair">
         <div className="max-w-lg w-full carte apparition">
           <div className="text-center mb-6">

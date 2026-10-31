@@ -1,13 +1,11 @@
 /**
  * Conditions générales d'utilisation — texte légal accessible publiquement.
  */
-import { EnTete } from "@/composants/layouts/EnTete";
 import { PiedDePage } from "@/composants/layouts/PiedDePage";
 
 export default function PageCGU() {
   return (
     <>
-      <EnTete />
       <main className="flex-grow bg-sable-clair">
         <article className="max-w-3xl mx-auto px-6 py-12 space-y-6 text-ardoise">
           <header>

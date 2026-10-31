@@ -276,7 +276,8 @@ async def supprimer_compte(
     adresse_ip: Optional[str] = None,
 ) -> dict:
     """
-    Suppression logique du compte — droit à l'oubli (loi 2008-12 art. 32).
+    Suppression logique du compte — droit à l'effacement selon le Code du numérique
+    du Bénin et les exigences applicables de l'APDP.
 
     Le compte est marqué comme supprimé. Une purge complète (effacement
     physique des données chiffrées) est programmée sous 30 jours, via une

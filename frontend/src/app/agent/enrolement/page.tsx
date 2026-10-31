@@ -363,7 +363,7 @@ function Contenu() {
                   type="tel"
                   value={telephone}
                   onChange={(e) => setTelephone(e.target.value)}
-                  placeholder="Ex: +221 77 123 45 67"
+                  placeholder="Ex: +229 01 97 12 34 56"
                   aide="Numéro obligatoire pour la création du compte DigiID"
                   required
                 />

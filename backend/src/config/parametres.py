@@ -134,6 +134,10 @@ class ParametresApplication(BaseSettings):
     activer_2fa_obligatoire_admin: bool = True
     duree_validite_code_2fa_secondes: int = 300
 
+    # --- Confirmation de remise des colis ---
+    duree_validite_code_remise_secondes: int = 600
+    nombre_max_tentatives_code_remise: int = 3
+
     # --- Email (Resend) ---
     resend_api_key: str = ""
     email_expediteur: str = "DigiID <bigdataism2024@gmail.com>"

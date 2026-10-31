@@ -90,9 +90,9 @@ Ce scénario parcourt les fonctionnalités principales du prototype, dans l'ordr
 - **Prénom** : ex. `Amadou`
 - **Nom** : ex. `Diallo`
 - **Email** : (un email valide pour recevoir le code de vérification, ou utiliser `amadou@test.com`)
-- **Téléphone** (facultatif) : ex. `+221 77 123 45 67`
+- **Téléphone** (facultatif) : ex. `+229 01 97 12 34 56`
 - **Mot de passe** : minimum 12 caractères (ex. `Test@DigiID2025!`)
-- **Ville** : ex. `Dakar`
+- **Ville** : ex. `Cotonou`
 - **Code de parrainage** : laisser vide (facultatif)
 - **CGU** : cocher la case d'acceptation
 

@@ -199,7 +199,7 @@ Journal **immuable** de tous les événements sensibles :
 - ✓ Immuable : impossible de supprimer ou modifier
 - ✓ Signé cryptographiquement
 - ✓ Conservé 1 an minimum
-- ✓ Conforme CDP/RGPD
+- ✓ Conforme APDP/RGPD
 
 ---
 

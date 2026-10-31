@@ -34,7 +34,7 @@ class InscriptionRequete(BaseModel):
     telephone: Optional[str] = Field(
         default=None,
         max_length=20,
-        description="Numéro de téléphone au format international (ex: +221771234567)"
+        description="Numéro de téléphone béninois au format international (ex: +2290197123456)"
     )
     ville: Optional[str] = Field(default=None, max_length=100)
     code_parrainage: Optional[str] = Field(

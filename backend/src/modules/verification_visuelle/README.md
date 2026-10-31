@@ -52,7 +52,7 @@ listes officielles de personnes recherchées (sous consentement explicite).
 - Consentement enregistré dans `Consentement` (catégorie `verification_personnes_recherchees`)
 - Possibilité de retirer le consentement à tout moment (effet immédiat)
 - Embeddings chiffrés au repos (AES-256-GCM)
-- Documenté dans le dossier CDP/APDP avec finalité explicite (KYC bancaire)
+- Documenté dans le dossier APDP avec finalité explicite (KYC bancaire)
 
 ## Sécurité
 

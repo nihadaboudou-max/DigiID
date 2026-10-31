@@ -11,7 +11,6 @@ import { useEffect, useState } from "react";
 
 import { Bouton } from "@/composants/commun/Bouton";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
-import { EnTete } from "@/composants/layouts/EnTete";
 import { Logo } from "@/composants/commun/Logo";
 import {
   envoyerCodeVerification,
@@ -130,7 +129,6 @@ export default function PageVerificationEmail() {
   if (verifie) {
     return (
       <>
-        <EnTete />
         <main className="flex-grow flex items-center justify-center px-6 py-12 bg-sable-clair">
           <div className="max-w-md w-full carte apparition text-center">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -148,7 +146,6 @@ export default function PageVerificationEmail() {
 
   return (
     <>
-      <EnTete />
       <main className="flex-grow flex items-center justify-center px-6 py-12 bg-sable-clair">
         <div className="max-w-md w-full carte apparition">
           <div className="text-center mb-6">

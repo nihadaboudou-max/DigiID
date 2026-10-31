@@ -248,7 +248,7 @@ function Contenu() {
           <div>
             <h3 className="text-base font-semibold text-ardoise">Export de mes données</h3>
             <p className="text-xs text-ardoise-clair mt-0.5">
-              Télécharge toutes tes données personnelles au format JSON (conformité RGPD / loi 2008-12).
+              Télécharge toutes tes données personnelles au format JSON (conformité au Code du numérique du Bénin / APDP).
             </p>
           </div>
         </div>

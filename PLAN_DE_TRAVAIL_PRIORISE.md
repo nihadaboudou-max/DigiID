@@ -342,8 +342,13 @@ Rappel de ce qui est en place côté logistique :
   (`table_cible` + `document_id`), migration `20261007_1000_base_document_inspection`,
   rendu inspection **par type** (`composants/inspection/champsParType.ts`).
 
+**S10 — confirmation de remise** : code à usage unique de **4 chiffres** envoyé
+dans la notification interne DigiID après l'arrivée ; validation obligatoire avant le
+statut « Livré », expiration, limite d'essais, journal des événements et migration
+`20261031_0100_confirmation_remise_colis`.
+
 **Prochaine étape proposée** : S10 — score logistique chauffeur + avis + litiges.
 
 ---
 
-*Fin du plan.*
+*Fin du plan.*/

@@ -543,6 +543,7 @@ class ScanCreate(BaseModel):
     """Payload d'un scan : soit un token QR, soit le code clair (repli manuel)."""
     token: Optional[str] = Field(None, max_length=200)
     code_clair: Optional[str] = Field(None, max_length=40)
+    code_confirmation: Optional[str] = Field(None, pattern=r"^\d{4}$")
     type_evenement: TypeEvenementScan = "livraison"
     gare_id: Optional[UUID] = None
     voyage_id: Optional[UUID] = None
@@ -555,6 +556,15 @@ class ScanCreate(BaseModel):
         if not self.token and not self.code_clair:
             raise ValueError("Fournir soit 'token', soit 'code_clair'")
         return self
+
+
+class CodeRemiseResponse(BaseModel):
+    message: str
+    expire_le: datetime
+
+
+class ConfirmationRemiseRequest(BaseModel):
+    code: str = Field(..., pattern=r"^\d{4}$")
 
 
 # ─── Notifications logistiques (SMS départ/arrivée) ──────────────────
