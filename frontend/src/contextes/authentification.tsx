@@ -36,6 +36,7 @@ import {
   restaurerSessionHorsLigne,
   synchroniserSessionLocale,
 } from "@/services/offline/session_locale";
+import { effacerCacheAPI } from "@/services/offline/cache_api";
 
 interface ContexteAuth {
   utilisateur: Utilisateur | null;
@@ -206,6 +207,9 @@ export function FournisseurAuthentification({
       
       try {
         const reponse = await seConnecterAPI(donnees);
+        // Une nouvelle session en ligne peut appartenir à un autre compte.
+        // On conserve le cache si la connexion bascule réellement hors-ligne.
+        await effacerCacheAPI().catch(() => undefined);
         setUtilisateur(reponse.utilisateur);
         setEstHorsLigne(false);
         // Le compte est memorise pour la prochaine session locale : seul le
@@ -263,6 +267,7 @@ export function FournisseurAuthentification({
       // Fermer la session locale hors-ligne (le compte reste mémorisé pour une
       // prochaine connexion sans réseau, mais la session est close).
       await effacerSessionHorsLigne().catch(() => undefined);
+      await effacerCacheAPI().catch(() => undefined);
       setEstHorsLigne(false);      
       setChargement(false);
       

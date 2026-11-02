@@ -1,9 +1,10 @@
 /**
  * Mode hors-ligne — socle IndexedDB (S3).
  *
- * Trois magasins :
+ * Magasins :
  *  - `comptes`     : comptes déjà connectés sur ce poste (session locale) ;
  *  - `file_colis`  : colis enregistrés sans réseau, en attente de synchronisation ;
+ *  - `api_cache`   : réponses métier authentifiées disponibles hors-ligne ;
  *  - `meta`        : divers (dernière synchro…).
  *
  * Aucune dépendance externe : l'API IndexedDB du navigateur suffit et reste
@@ -11,9 +12,9 @@
  */
 
 const NOM_BASE = "digiid_hors_ligne";
-const VERSION_BASE = 1;
+const VERSION_BASE = 2;
 
-export type Magasin = "comptes" | "file_colis" | "meta";
+export type Magasin = "comptes" | "file_colis" | "meta" | "api_cache";
 
 let promesseBase: Promise<IDBDatabase> | null = null;
 
@@ -36,6 +37,9 @@ function ouvrirBase(): Promise<IDBDatabase> {
       }
       if (!base.objectStoreNames.contains("meta")) {
         base.createObjectStore("meta", { keyPath: "cle" });
+      }
+      if (!base.objectStoreNames.contains("api_cache")) {
+        base.createObjectStore("api_cache", { keyPath: "cle" });
       }
     };
     requete.onsuccess = () => resoudre(requete.result);

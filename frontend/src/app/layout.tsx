@@ -14,6 +14,7 @@ import { ConteneurLayout } from "@/composants/layouts/ConteneurLayout";
 import { AssistantImpression } from "@/composants/commun/AssistantImpression";
 import { SynchronisationHorsLigne } from "@/composants/commun/SynchronisationHorsLigne";
 import { SynchronisationTempsReel } from "@/composants/commun/SynchronisationTempsReel";
+import { ServiceOffline } from "@/composants/commun/ServiceOffline";
 import { GuideVocal } from "@/composants/accessibilite/GuideVocal";
 
 // Polices Poppins hébergées localement
@@ -56,6 +57,7 @@ export default function LayoutRacine({
           {/* File de colis hors-ligne : indicateur discret + rejeu automatique. */}
           <SynchronisationHorsLigne />
           <SynchronisationTempsReel />
+          <ServiceOffline />
             </FournisseurNotifications>
           </FournisseurAuthentification>
         </FournisseurLangue>

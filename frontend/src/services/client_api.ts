@@ -16,6 +16,7 @@ import {
   peutRafraichirApres401,
   renouvelerAvantEnvoi,
 } from "@/services/jetons";
+import { lireReponseAPI, memoriserReponseAPI } from "@/services/offline/cache_api";
 
 // ✅ CORRECTION : URL_BASE vide pour éviter le doublon /api/backend/api/v1/...
 // Les appels sont déjà au format /api/v1/... dans les composants
@@ -285,6 +286,10 @@ async function appel_api<T>(
     });
   } catch (erreur) {
     console.error("Échec d'appel API vers :", url, erreur);
+    if (authentifie && reste.method === "GET") {
+      const cache = await lireReponseAPI<T>(url).catch(() => null);
+      if (cache !== null) return cache;
+    }
     throw new ErreurAPI(
       "RESEAU",
       messageErreurConnexion(),
@@ -306,6 +311,10 @@ async function appel_api<T>(
   try {
     donnees = await reponse.json();
   } catch {
+    if (authentifie && reste.method === "GET" && reponse.status >= 500) {
+      const cache = await lireReponseAPI<T>(url).catch(() => null);
+      if (cache !== null) return cache;
+    }
     throw new ErreurAPI(
       "REPONSE_INVALIDE",
       "Le serveur a renvoyé une réponse invalide.",
@@ -350,6 +359,10 @@ async function appel_api<T>(
 
   // Réponse d'erreur ?
   if (!reponse.ok) {
+    if (authentifie && reste.method === "GET" && reponse.status >= 500) {
+      const cache = await lireReponseAPI<T>(url).catch(() => null);
+      if (cache !== null) return cache;
+    }
     const erreurApi =
       typeof donnees === "object" && donnees !== null
         ? (donnees as Partial<ReponseErreurAPI> & { detail?: unknown })
@@ -380,7 +393,11 @@ async function appel_api<T>(
     );
   }
 
-  return donnees as T;
+  const resultat = donnees as T;
+  if (authentifie && reste.method === "GET" && typeReponse === "json") {
+    await memoriserReponseAPI(url, resultat).catch(() => undefined);
+  }
+  return resultat;
 }
 
 // -----------------------------------------------------------------------------
