@@ -3,8 +3,8 @@
  * Page « Ma cagnotte » — espace receveur/chauffeur/commerçant (S6).
  *
  * Affiche le solde du portefeuille, l'historique de tous les mouvements
- * (crédits de commission, débits de frais de scan…) et la liste des commissions
- * reçues (25 à 150 FCFA selon le nombre d'articles du colis).
+ * (gains et dépenses) et la liste des gains reçus (20 à 150 FCFA selon le
+ * nombre d'articles du colis).
  */
 import { useCallback, useEffect, useState } from "react";
 
@@ -17,7 +17,6 @@ import { formaterDateHeure, formaterFcfa } from "@/composants/logistique/format"
 import { ErreurAPI } from "@/services/client_api";
 import { paiementAPI } from "@/services/paiement_api";
 import {
-  LIBELLES_MOTIF,
   type Commission,
   type MouvementPortefeuille,
   type Portefeuille,
@@ -25,8 +24,8 @@ import {
 
 export function CagnotteContenu({
   titre = "Ma cagnotte",
-  sousTitre = "Vos gains de commission et l'historique de votre portefeuille.",
-  messageVide = "Aucun mouvement. Enregistrez un colis pour recevoir votre première commission.",
+  sousTitre = "Vos gains et vos dépenses.",
+  messageVide = "Aucune opération. Enregistrez un colis pour recevoir votre premier gain.",
 }: {
   /** Titre affiché (adapté au rôle : receveur, chauffeur…). */
   titre?: string;
@@ -89,7 +88,7 @@ export function CagnotteContenu({
           </div>
           <div>
             <p className="text-xs uppercase tracking-wider text-lagune font-bold">
-              Solde disponible
+              Argent disponible
             </p>
             <p className="text-3xl font-bold text-ardoise">
               {chargement ? "…" : formaterFcfa(portefeuille?.solde_fcfa ?? 0)}
@@ -103,7 +102,7 @@ export function CagnotteContenu({
         </div>
         <div className="text-right">
           <p className="text-xs uppercase tracking-wider text-ardoise-clair font-semibold">
-            Commissions cumulées
+            Total gagné
           </p>
           <p className="text-xl font-bold text-lagune">
             {chargement ? "…" : formaterFcfa(totalCommissions)}
@@ -123,8 +122,8 @@ export function CagnotteContenu({
 
       {/* Mouvements */}
       <Carte
-        titre="Historique des mouvements"
-        description="Chaque crédit de commission (25 à 150 FCFA par colis) et chaque débit (dont les frais de scan du compte prépayé)."
+        titre="Mes opérations"
+        description="Vos gains et vos dépenses, simplement."
       >
         {chargement ? (
           <p className="text-sm text-ardoise-clair italic py-6 text-center">
@@ -140,9 +139,9 @@ export function CagnotteContenu({
               <thead>
                 <tr className="text-left text-ardoise-clair border-b border-ardoise-clair/20">
                   <th className="py-2 pr-3 font-semibold">Date</th>
-                  <th className="py-2 pr-3 font-semibold">Motif</th>
+                  <th className="py-2 pr-3 font-semibold">Opération</th>
                   <th className="py-2 pr-3 font-semibold text-right">Montant</th>
-                  <th className="py-2 font-semibold text-right">Solde</th>
+                  <th className="py-2 font-semibold text-right">Reste</th>
                 </tr>
               </thead>
               <tbody>
@@ -155,7 +154,7 @@ export function CagnotteContenu({
                       {formaterDateHeure(m.cree_le)}
                     </td>
                     <td className="py-2 pr-3 text-ardoise">
-                      {LIBELLES_MOTIF[m.motif] ?? m.motif}
+                      {m.sens === "CREDIT" ? "Gain" : "Dépense"}
                     </td>
                     <td
                       className={
@@ -179,8 +178,8 @@ export function CagnotteContenu({
 
       {/* Commissions */}
       <Carte
-        titre="Mes commissions"
-        description="Commission reversée sur chaque colis réglé (25 à 150 FCFA selon son nombre d'articles)."
+        titre="Mes gains"
+        description="Vous gagnez 20 à 150 F par colis, selon le nombre d'articles."
       >
         {chargement ? (
           <p className="text-sm text-ardoise-clair italic py-6 text-center">
@@ -188,7 +187,7 @@ export function CagnotteContenu({
           </p>
         ) : commissions.length === 0 ? (
           <p className="text-sm text-ardoise-clair italic py-6 text-center">
-            Aucune commission pour l&apos;instant.
+            Aucun gain pour l&apos;instant.
           </p>
         ) : (
           <div className="overflow-x-auto">

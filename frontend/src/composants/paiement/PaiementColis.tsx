@@ -9,7 +9,7 @@
  *
  * | Articles dans le colis | Frais/colis | dont receveur | dont DigiID |
  * |------------------------|-------------|---------------|-------------|
- * | 1 à 3                  | 100 FCFA    | 25 FCFA       | 75 FCFA     |
+ * | 1 à 3                  | 100 FCFA    | 20 FCFA       | 80 FCFA     |
  * | 4 à 6                  | 200 FCFA    | 50 FCFA       | 150 FCFA    |
  * | 7 à 10                 | 350 FCFA    | 80 FCFA       | 270 FCFA    |
  * | plus de 10             | 500 FCFA    | 150 FCFA      | 350 FCFA    |
@@ -220,7 +220,7 @@ export function PaiementColis({ colis, onPaiementEffectue }: Proprietes) {
         {commission && (
           <div className="mt-3 flex items-center gap-2 text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">
             <IconePortefeuille className="w-4 h-4" />
-            {formaterFcfa(commission.montant_fcfa)} crédités sur la cagnotte du
+            {formaterFcfa(commission.montant_fcfa)} ajoutés à la cagnotte du
             receveur.
           </div>
         )}

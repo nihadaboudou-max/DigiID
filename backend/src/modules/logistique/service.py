@@ -2533,7 +2533,7 @@ async def creer_suivi_familial(
     session: AsyncSession,
     donnees: schemas.SuiviFamilialCreate,
     utilisateur: Utilisateur,
-) -> tuple[SuiviFamilial, Ticket]:
+) -> tuple[SuiviFamilial, Ticket, bool]:
     """Enregistre un enfant suivi et génère son ticket (QR + code ``ENF-…``)."""
     _exiger_gestion_suivi_familial(utilisateur)
     arret_destination_id = donnees.arret_destination_id
@@ -2685,6 +2685,8 @@ async def creer_suivi_familial(
         f"Code de suivi : {code_clair}. "
         "Vous recevrez un SMS au départ, avant l'arrivée puis à l'arrivée."
     )
+    notifications_envoyees = 0
+    notifications_plateforme: set[UUID] = set()
     for role, telephone in (
         ("parent" if suivi.type_passager == "enfant" else "passager", suivi.telephone_parent),
         ("acheteur", suivi.acheteur_tel),
@@ -2692,7 +2694,7 @@ async def creer_suivi_familial(
     ):
         if not telephone:
             continue
-        _ajouter_notification(
+        notification = _ajouter_notification(
             session,
             type_cible="suivi_familial",
             cible_id=suivi.id,
@@ -2701,11 +2703,38 @@ async def creer_suivi_familial(
             telephone=telephone,
             message=message,
         )
+        if notification.envoye:
+            notifications_envoyees += 1
+        telephone_normalise = normaliser_numero_tiers(telephone)
+        if telephone_normalise:
+            utilisateur_notifie = await session.scalar(
+                select(Utilisateur).where(
+                    Utilisateur.telephone_hash == hasher_telephone(telephone_normalise)
+                )
+            )
+            if (
+                utilisateur_notifie is not None
+                and utilisateur_notifie.id not in notifications_plateforme
+            ):
+                await creer_notification(
+                    session,
+                    utilisateur_notifie,
+                    type_notification="suivi_familial",
+                    categorie="logistique",
+                    titre="Code de suivi familial",
+                    message=(
+                        f"Le suivi de {suivi.enfant_nom} est activé. "
+                        f"Code de suivi : {code_clair}. "
+                        "Vous recevrez les prochaines étapes dans vos notifications."
+                    ),
+                    lien_action=f"/suivi/{code_clair}",
+                )
+                notifications_plateforme.add(utilisateur_notifie.id)
 
     await session.commit()
     await session.refresh(suivi)
     await session.refresh(ticket)
-    return suivi, ticket
+    return suivi, ticket, bool(notifications_plateforme) or notifications_envoyees > 0
 
 
 async def affecter_suivi_familial(

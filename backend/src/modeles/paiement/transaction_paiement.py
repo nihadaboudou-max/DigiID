@@ -88,7 +88,7 @@ class TransactionPaiement(Base, MelangeTracabilite):
     frais_plateforme: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
-    # Part reversée au receveur (25 FCFA par défaut) — créditée sur sa cagnotte.
+    # Part reversée au receveur (20 FCFA au premier palier) — créditée sur sa cagnotte.
     commission_receveur: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )

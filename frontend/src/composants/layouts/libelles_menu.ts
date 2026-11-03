@@ -1,0 +1,37 @@
+const LIBELLES_COURTS: Record<string, string> = {
+  "Tableau de bord": "Accueil",
+  "Supervision de gare": "Ma gare",
+  "Cars & chauffeurs": "Cars",
+  "Enregistrer un colis": "Nouveau colis",
+  "Enregistrer un passager": "Nouveau passager",
+  "Scanner / Livrer": "Scanner",
+  "Scanner en cas de litige": "Scanner (litige)",
+  "Colis & tickets": "Colis",
+  "Suivi familial": "Suivi famille",
+  "Affecter un car": "Affecter un car",
+  "Carte client (scan)": "Carte client",
+  "Mon dossier pro": "Mon travail",
+  "Ma cagnotte": "Mes gains",
+  "Planifier mes trajets": "Mes départs",
+  "Mes colis": "Colis",
+  "Mes passagers": "Passagers",
+  "Ma carte DigiID": "Ma carte",
+  "Activer mon mode commerçant": "Activer commerçant",
+  "Aide et Support": "Aide",
+  "Audit & Traçabilité": "Contrôle",
+  "Journal d'audit": "Contrôle",
+  "Recherche par photo": "Chercher par photo",
+  "Capture biométrique": "Photo et empreinte",
+  "Reconnaissance faciale": "Vérifier le visage",
+  "Double authentification": "Sécurité du compte",
+  "Rôle & permissions": "Mes droits",
+  "Export rapports": "Télécharger rapports",
+  "Alertes temps réel": "Alertes",
+  "Carte géographique": "Carte",
+  "Liste des Programmes": "Programmes",
+  "Missions terrain": "Missions",
+};
+
+export function libelleMenu(libelle: string): string {
+  return LIBELLES_COURTS[libelle] ?? libelle;
+}

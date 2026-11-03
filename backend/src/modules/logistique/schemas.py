@@ -773,6 +773,7 @@ class SuiviFamilialEnregistre(BaseModel):
     """Réponse d'enregistrement : le suivi + son ticket (QR + code)."""
     suivi: SuiviFamilialResponse
     ticket: TicketResponse
+    notification_envoyee: bool = False
 
 
 class SuiviFamilialUpdate(BaseModel):

@@ -358,6 +358,7 @@ export interface SuiviFamilialEvenement {
 export interface SuiviFamilialEnregistre {
   suivi: SuiviFamilial;
   ticket: Ticket;
+  notification_envoyee?: boolean;
 }
 
 /** Payload d'enregistrement d'un enfant au guichet. */

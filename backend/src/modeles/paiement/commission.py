@@ -3,7 +3,7 @@
 Modèle Commission — micro-commission versée au receveur sur un colis.
 
 Règle métier (Plan B) : sur les 100 FCFA d'un enregistrement de colis,
-**25 FCFA sont reversés au receveur** (cagnotte). La commission est la trace
+**20 FCFA sont reversés au receveur** (cagnotte) pour le premier palier. La commission est la trace
 comptable de ce reversement ; une contrainte d'unicité
 (transaction_id, receveur_id) interdit tout doublon.
 """

@@ -1603,10 +1603,16 @@ async def enregistrer_suivi_familial(
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
-    suivi, ticket = await service.creer_suivi_familial(session, donnees, utilisateur_courant)
+    suivi, ticket, notification_envoyee = await service.creer_suivi_familial(
+        session, donnees, utilisateur_courant
+    )
     await _enrichir_suivi_familial(session, suivi)
     ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
-    return {"suivi": suivi, "ticket": ticket}
+    return {
+        "suivi": suivi,
+        "ticket": ticket,
+        "notification_envoyee": notification_envoyee,
+    }
 
 
 @routeur_suivi_familial.get("",

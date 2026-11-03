@@ -160,7 +160,7 @@ export interface TarifsColis {
  * néanmoins la seule référence au moment du paiement.
  */
 export const BAREME_FRAIS_SERVICE: PalierTarifaire[] = [
-  { nb_articles_min: 1, nb_articles_max: 3, frais_fcfa: 100, part_receveur_fcfa: 25 },
+  { nb_articles_min: 1, nb_articles_max: 3, frais_fcfa: 100, part_receveur_fcfa: 20 },
   { nb_articles_min: 4, nb_articles_max: 6, frais_fcfa: 200, part_receveur_fcfa: 50 },
   { nb_articles_min: 7, nb_articles_max: 10, frais_fcfa: 350, part_receveur_fcfa: 80 },
   { nb_articles_min: 11, nb_articles_max: null, frais_fcfa: 500, part_receveur_fcfa: 150 },
@@ -202,11 +202,11 @@ export const VARIANTES_STATUT_TRANSACTION: Record<
 };
 
 export const LIBELLES_MOTIF: Record<string, string> = {
-  commission_colis: "Commission colis",
-  commission_api: "Commission API",
-  reversement: "Reversement",
+  commission_colis: "Gain sur un colis",
+  commission_api: "Gain API",
+  reversement: "Argent reçu",
   abonnement: "Abonnement",
-  ajustement: "Ajustement",
+  ajustement: "Correction",
   paiement: "Paiement",
-  frais_scan_agent: "Frais de scan (compte prépayé)",
+  frais_scan_agent: "Frais de scan",
 };

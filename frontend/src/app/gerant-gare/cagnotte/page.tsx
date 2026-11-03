@@ -9,7 +9,7 @@ export default function PageCagnotteGérant() {
     <EnvelopperEspaceProtege rolesAutorises={ROLES_GERANT_GARE}>
       <CagnotteContenu
         titre="Ma cagnotte"
-        sousTitre="Vos gains de commission et l'historique de votre portefeuille."
+        sousTitre="Vos gains et vos dépenses."
       />
     </EnvelopperEspaceProtege>
   );

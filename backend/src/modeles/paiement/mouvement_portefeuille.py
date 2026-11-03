@@ -20,7 +20,7 @@ SENS_MOUVEMENT = ("CREDIT", "DEBIT")
 
 # Motifs métier (facilite les rapports et les reçus)
 MOTIFS_MOUVEMENT = (
-    "commission_colis",   # part du receveur sur un colis (25 à 150 FCFA)
+    "commission_colis",   # part du receveur sur un colis (20 à 150 FCFA)
     "commission_api",     # reversement sur l'API de certification
     "reversement",        # virement de la cagnotte vers mobile money
     "abonnement",         # paiement d'un pack e-commerçant

@@ -15,7 +15,7 @@ export default function PageCagnotte() {
     <EnvelopperEspaceProtege rolesAutorises={ROLES_GUICHET}>
       <CagnotteContenu
         titre="Ma cagnotte"
-        sousTitre="Vos gains de commission et l'historique de votre portefeuille."
+        sousTitre="Vos gains et vos dépenses."
       />
     </EnvelopperEspaceProtege>
   );

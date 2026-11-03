@@ -112,11 +112,11 @@ class ParametresApplication(BaseSettings):
     # Barème par paliers d'articles : « min-max:frais:commission » par palier,
     # séparés par des virgules. Une borne max vide (ou suffixée « + ») désigne un
     # palier **ouvert** (« plus de 10 articles »).
-    #   « 1-3:100:25,4-6:200:50,7-10:350:80,11+:500:150 »
-    # = 100 F (commission 25 F) pour 1-3 articles, 200 F (50 F) pour 4-6,
+    #   « 1-3:100:20,4-6:200:50,7-10:350:80,11+:500:150 »
+    # = 100 F (commission 20 F) pour 1-3 articles, 200 F (50 F) pour 4-6,
     #   350 F (80 F) pour 7-10, et 500 F (150 F) au-delà de 10 articles.
     bareme_frais_service_colis: str = (
-        "1-3:100:25,4-6:200:50,7-10:350:80,11+:500:150"
+        "1-3:100:20,4-6:200:50,7-10:350:80,11+:500:150"
     )
     # Compte prépayé de l'agent : montant débité **automatiquement** du compte
     # de l'agent à chaque scan d'un colis réglé en espèces (0 pour désactiver).
@@ -175,6 +175,20 @@ class ParametresApplication(BaseSettings):
 
     # --- Email (SendGrid - API HTTP, fonctionne sur Render) ---
     sendgrid_api_key: str = ""
+
+    # --- SMS (Twilio) ---
+    sms_twilio_account_sid: str = Field(
+        default="",
+        validation_alias=AliasChoices("SMS_TWILIO_ACCOUNT_SID", "sms_twilio_account_sid"),
+    )
+    sms_twilio_auth_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("SMS_TWILIO_AUTH_TOKEN", "sms_twilio_auth_token"),
+    )
+    sms_twilio_from: str = Field(
+        default="",
+        validation_alias=AliasChoices("SMS_TWILIO_FROM", "sms_twilio_from"),
+    )
 
     # --- Configuration Pydantic ---
     model_config = SettingsConfigDict(

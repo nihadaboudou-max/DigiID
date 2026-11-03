@@ -165,6 +165,10 @@ function Contenu() {
         </Link>
       </div>
 
+      <Alerte variante="info" titre="Colis et passagers">
+        Vérifiez le contenu, puis cliquez sur <strong>Valider le départ</strong>.
+      </Alerte>
+
       {/* Infos voyage */}
       <Carte titre="Informations du voyage">
         <dl className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">

@@ -17,8 +17,8 @@ export default function PageCagnotteChauffeur() {
     <EnvelopperEspaceProtege rolesAutorises={ROLES_CHAUFFEUR}>
       <CagnotteContenu
         titre="Ma cagnotte"
-        sousTitre="Vos gains sur les colis que vous enregistrez en route, et l'historique de votre portefeuille."
-        messageVide="Aucun mouvement pour l'instant. Enregistrez un colis depuis « Enregistrer un client » : votre commission est créditée dès l'encaissement au guichet."
+        sousTitre="Vos gains et vos dépenses."
+        messageVide="Aucune opération. Enregistrez un colis pour recevoir votre premier gain."
       />
     </EnvelopperEspaceProtege>
   );

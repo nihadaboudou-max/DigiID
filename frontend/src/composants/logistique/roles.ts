@@ -9,6 +9,7 @@
 /** Opérations de guichet : réception, suivi et remise aux familles. */
 export const ROLES_GUICHET: string[] = [
   "receveur",
+  "gerant_gare",
   "super_administrateur",
   "super_admin",
 ];
@@ -23,6 +24,7 @@ export const ROLES_GERANT_GARE: string[] = [
 /** Enregistrement au guichet (`logistique.colis.creer`). */
 export const ROLES_GUICHET_ECRITURE: string[] = [
   "receveur",
+  "gerant_gare",
   "super_administrateur",
   "super_admin",
 ];
@@ -30,6 +32,7 @@ export const ROLES_GUICHET_ECRITURE: string[] = [
 /** Seul le guichet reçoit et remet les colis et passagers. */
 export const ROLES_SCAN_GUICHET: string[] = [
   "receveur",
+  "gerant_gare",
   "super_administrateur",
   "super_admin",
 ];
@@ -81,6 +84,7 @@ export const ROLES_CAGNOTTE: string[] = [
  * pour le support.
  */
 export const ROLES_REFERENTIEL_ROULANT: string[] = [
+  "receveur",
   "gerant_gare",
   "super_administrateur",
   "super_admin",

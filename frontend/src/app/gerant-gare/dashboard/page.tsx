@@ -11,6 +11,7 @@ import { ROLES_GERANT_GARE } from "@/composants/logistique/roles";
 import { ErreurAPI } from "@/services/client_api";
 import { gareDeLActeur, logistiqueAPI, type Vehicule } from "@/services/logistique_api";
 import { AnalyseDemandeLogistique } from "@/composants/logistique/AnalyseDemandeLogistique";
+import { IconeColis, IconeIdentite, IconeScan } from "@/composants/commun/Icones";
 import { useAuthentification } from "@/contextes/authentification";
 import type { Colis } from "@/types/logistique";
 
@@ -71,12 +72,17 @@ function Contenu() {
         <h1 className="text-2xl font-bold text-ardoise">Supervision de gare</h1>
         <p className="mt-1 text-sm text-ardoise-clair">
           Gérez le parc roulant et vérifiez les affectations des chauffeurs.
-          L&apos;enregistrement des colis et la remise aux familles restent des
-          opérations du receveur.
+          Vous pouvez aussi intervenir au guichet en cas de besoin.
         </p>
       </header>
 
       {erreur && <Alerte variante="erreur" titre="Erreur">{erreur}</Alerte>}
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <LienAction href="/gerant-gare/colis/nouveau" libelle="Enregistrer un colis" Icone={IconeColis} />
+        <LienAction href="/gerant-gare/passagers/nouveau" libelle="Enregistrer un passager" Icone={IconeIdentite} />
+        <LienAction href="/gerant-gare/scan" libelle="Scanner en cas de litige" Icone={IconeScan} />
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Indicateur
@@ -121,5 +127,25 @@ function Indicateur({ titre, nombre }: { titre: string; nombre: string }) {
         {titre}
       </p>
     </div>
+  );
+}
+
+function LienAction({
+  href,
+  libelle,
+  Icone,
+}: {
+  href: string;
+  libelle: string;
+  Icone: React.ComponentType<{ className?: string }>;
+}) {
+  return (
+    <Link
+      href={href}
+      className="carte flex items-center gap-3 text-sm font-semibold text-ardoise hover:border-lagune/40"
+    >
+      <Icone className="h-5 w-5 text-lagune" />
+      {libelle}
+    </Link>
   );
 }

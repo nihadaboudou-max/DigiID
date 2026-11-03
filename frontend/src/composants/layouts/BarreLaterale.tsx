@@ -18,6 +18,7 @@ import {
   IconeIdentite, IconeEmail, IconeCadenas, IconeScan, IconeFlecheBas,
   IconeCheck, IconeEnvoyer, IconeColis, IconeTicket, IconePortefeuille, IconeCamion,
 } from "@/composants/commun/Icones";
+import { libelleMenu } from "./libelles_menu";
 
 interface Lien {
   href: string;
@@ -99,7 +100,7 @@ function LienNav({ href, libelle, Icone, actif }: Lien & { actif: boolean }) {
       >
         <Icone className="w-4 h-4" />
       </div>
-      <span className="truncate">{libelle}</span>
+      <span className="truncate">{libelleMenu(libelle)}</span>
       {actif && (
         <span className="ml-auto w-1.5 h-1.5 rounded-full bg-ocre animate-pulse" />
       )}
@@ -310,6 +311,7 @@ export function BarreLaterale() {
       { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
       { href: "/receveur/suivi-familial", libelle: "Suivi familial", Icone: IconeIdentite },
       { href: "/receveur/scan", libelle: "Scanner / Livrer", Icone: IconeScan },
+      { href: "/receveur/vehicules", libelle: "Affecter un car", Icone: IconeCamion },
       { href: "/guichet/carte", libelle: "Carte client (scan)", Icone: IconeIdentite },
       { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
       { href: "/receveur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
@@ -325,6 +327,9 @@ export function BarreLaterale() {
     liens = [
       { href: "/gerant-gare/dashboard", libelle: "Supervision de gare", Icone: IconeAccueil },
       { href: "/gerant-gare/vehicules", libelle: "Cars & chauffeurs", Icone: IconeCamion },
+      { href: "/gerant-gare/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
+      { href: "/gerant-gare/passagers/nouveau", libelle: "Enregistrer un passager", Icone: IconeIdentite },
+      { href: "/gerant-gare/scan", libelle: "Scanner en cas de litige", Icone: IconeScan },
       { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
       { href: "/gerant-gare/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
       { href: "/chatbot", libelle: "Assistance", Icone: IconeChat },
@@ -487,7 +492,7 @@ export function BarreLaterale() {
         )}
       >
         <Icone className="w-3.5 h-3.5 flex-shrink-0" />
-        <span className="truncate">{libelle}</span>
+        <span className="truncate">{libelleMenu(libelle)}</span>
       </Link>
     );
   };
@@ -525,7 +530,7 @@ export function BarreLaterale() {
               <LienNav
                 key={lien.href}
                 href={lien.href}
-                libelle={lien.libelle}
+                libelle={libelleMenu(lien.libelle)}
                 Icone={lien.Icone}
                 actif={estActif(lien)}
               />
@@ -557,7 +562,7 @@ export function BarreLaterale() {
                       )}
                     >
                       <lien.Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                      <span className="truncate">{lien.libelle}</span>
+                      <span className="truncate">{libelleMenu(lien.libelle)}</span>
                     </Link>
                   );
                 })}
@@ -590,7 +595,7 @@ export function BarreLaterale() {
                       )}
                     >
                       <lien.Icone className="w-3.5 h-3.5 flex-shrink-0" />
-                      <span className="truncate">{lien.libelle}</span>
+                      <span className="truncate">{libelleMenu(lien.libelle)}</span>
                     </Link>
                   );
                 })}

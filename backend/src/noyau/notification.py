@@ -519,6 +519,37 @@ def envoyer_email_renvoyer_invitation(
 # =============================================================================
 
 def envoyer_sms(telephone: str, message: str) -> bool:
+    if (
+        parametres.sms_twilio_account_sid
+        and parametres.sms_twilio_auth_token
+        and parametres.sms_twilio_from
+    ):
+        try:
+            reponse = httpx.post(
+                f"https://api.twilio.com/2010-04-01/Accounts/"
+                f"{parametres.sms_twilio_account_sid}/Messages.json",
+                auth=(
+                    parametres.sms_twilio_account_sid,
+                    parametres.sms_twilio_auth_token,
+                ),
+                data={
+                    "To": telephone,
+                    "From": parametres.sms_twilio_from,
+                    "Body": message,
+                },
+                timeout=15.0,
+            )
+            if 200 <= reponse.status_code < 300:
+                journal.info(f"[SMS][TWILIO] OK -> {telephone}")
+                return True
+            journal.error(
+                f"[SMS][TWILIO] ERREUR -> {telephone}: "
+                f"HTTP {reponse.status_code} {reponse.text[:300]}"
+            )
+        except httpx.HTTPError as erreur:
+            journal.error(f"[SMS][TWILIO] ERREUR -> {telephone}: {erreur}")
+        return False
+
     journal.warning(
         f"[SMS][MOCK] Aucun fournisseur SMS configuré : message non envoyé "
         f"à {telephone}\nMessage: {message}"

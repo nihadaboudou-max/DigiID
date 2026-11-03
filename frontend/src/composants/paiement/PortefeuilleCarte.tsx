@@ -3,8 +3,8 @@
  * Carte « Ma cagnotte » (S6) — solde du portefeuille + derniers mouvements.
  *
  * Réutilisée sur les tableaux de bord (receveur, chauffeur, commerçant) et sur
- * la page dédiée `/receveur/cagnotte`. Le receveur y voit les commissions
- * (25 à 150 FCFA selon le nombre d'articles) créditées à chaque colis réglé.
+ * la page dédiée `/receveur/cagnotte`. Le receveur y voit ses gains
+ * (20 à 150 FCFA selon le nombre d'articles) à chaque colis réglé.
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -17,7 +17,6 @@ import { formaterDateHeure, formaterFcfa } from "@/composants/logistique/format"
 import { ErreurAPI } from "@/services/client_api";
 import { paiementAPI } from "@/services/paiement_api";
 import {
-  LIBELLES_MOTIF,
   type MouvementPortefeuille,
   type Portefeuille,
 } from "@/types/paiement";
@@ -118,8 +117,8 @@ export function PortefeuilleCarte({
           )}
           {!chargement && mouvements.length === 0 && (
             <li className="text-sm text-ardoise-clair italic">
-              Aucun mouvement pour l&apos;instant — enregistrez un colis pour
-              recevoir votre première commission.
+              Aucune opération pour l&apos;instant — enregistrez un colis pour
+              recevoir votre premier gain.
             </li>
           )}
           {mouvements.map((mouvement) => (
@@ -128,7 +127,7 @@ export function PortefeuilleCarte({
               className="flex items-center justify-between gap-3 text-sm border-b border-ardoise-clair/10 pb-1.5 last:border-0"
             >
               <span className="text-ardoise-clair">
-                {LIBELLES_MOTIF[mouvement.motif] ?? mouvement.motif}
+                {mouvement.sens === "CREDIT" ? "Gain" : "Dépense"}
               </span>
               <span
                 className={

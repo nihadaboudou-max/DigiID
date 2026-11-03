@@ -28,7 +28,7 @@ import { Badge, type BadgeVariante } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
-import { IconeColis } from "@/composants/commun/Icones";
+import { IconeColis, IconeIdentite } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { formaterDateHeure } from "@/composants/logistique/format";
 import { ROLES_CHAUFFEUR } from "@/composants/logistique/roles";
@@ -544,8 +544,11 @@ function Contenu() {
                     {!enEdition && (
                       <div className="flex flex-wrap items-center gap-2">
                         <Link href={`/chauffeur/voyages/${voyage.id}`}>
-                          <Bouton variante="secondaire" taille="petit">
-                            <IconeColis className="w-4 h-4" /> Colis à bord
+                          <Bouton variante="primaire" taille="petit">
+                            <span className="flex items-center gap-1">
+                              <IconeColis className="w-4 h-4" />
+                              Voir colis et passagers
+                            </span>
                           </Bouton>
                         </Link>
                         {voyage.statut === "planifie" && (
@@ -576,6 +579,12 @@ function Contenu() {
                       </div>
                     )}
                   </div>
+                  {!enEdition && (
+                    <p className="mt-3 flex items-center gap-1.5 text-xs text-ardoise-clair">
+                      <IconeIdentite className="h-3.5 w-3.5 text-lagune" />
+                      Puis validez le départ.
+                    </p>
+                  )}
 
                   {enEdition && edition && (
                     <div className="mt-4 grid gap-3 rounded-lg border border-ardoise-clair/15 bg-white p-3 sm:grid-cols-2">

@@ -12,12 +12,12 @@ Deux montants **distincts** sont manipulés :
 
   | Articles dans le colis | Frais/colis | dont receveur | dont DigiID |
   |------------------------|-------------|---------------|-------------|
-  | 1 à 3                  | 100 FCFA    | 25 FCFA       | 75 FCFA     |
+  | 1 à 3                  | 100 FCFA    | 20 FCFA       | 80 FCFA     |
   | 4 à 6                  | 200 FCFA    | 50 FCFA       | 150 FCFA    |
   | 7 à 10                 | 350 FCFA    | 80 FCFA       | 270 FCFA    |
   | plus de 10             | 500 FCFA    | 150 FCFA      | 350 FCFA    |
 
-La **commission du receveur** est elle aussi progressive (25 / 50 / 80 / 150) :
+La **commission du receveur** est elle aussi progressive (20 / 50 / 80 / 150) :
 plus le colis contient d'articles, plus sa rétribution augmente.
 
 Le barème est **configurable** (``BAREME_FRAIS_SERVICE_COLIS`` dans le ``.env``)
@@ -81,7 +81,7 @@ def frais_service(nombre_articles: int) -> FraisService:
     """
     Calcule le frais de service d'un colis contenant ``nombre_articles``.
 
-    La part du receveur est **progressive** (25 / 50 / 80 / 150 FCFA selon le
+    La part du receveur est **progressive** (20 / 50 / 80 / 150 FCFA selon le
     palier) ; le reste du frais constitue notre part (frais de plateforme).
     """
     n = max(int(nombre_articles), 1)

@@ -320,9 +320,14 @@ export function EnregistrementSuiviFamilial({
     const bagages = resultat.suivi.bagages ?? [];
     return (
       <div className="space-y-5 apparition">
-        <Alerte variante="succes" titre="Passager enregistré — suivi activé">
-          Un SMS de confirmation a été envoyé ({resultat.suivi.telephone_parent}). La
-          famille sera prévenue par SMS au départ, à l&apos;approche puis à l&apos;arrivée.
+        <Alerte
+          variante={resultat.notification_envoyee ? "succes" : "avertissement"}
+          titre="Passager enregistré — suivi activé"
+        >
+          {resultat.notification_envoyee
+            ? "La confirmation a été envoyée dans les notifications DigiID. Le SMS sera utilisé si un fournisseur est configuré."
+            : "Le passager est enregistré, mais aucune notification n’a été envoyée. Vérifiez le compte parent/proche ou configurez le fournisseur SMS."}{" "}
+          Les prochaines étapes seront visibles dans les notifications DigiID.
           {" "}
           <strong>
             Frais : {formaterFcfa(resultat.suivi.frais_service_fcfa)} — moyen choisi :{" "}
