@@ -32,9 +32,14 @@ export function Tableau<T>({
   colonnes, donnees, cleLigne, vide, className,
 }: ProprietesTableau<T>) {
   return (
-    <div className={clsx("overflow-x-auto rounded-xl border border-ardoise-clair/10 bg-white", className)}>
-      <table className="w-full text-sm">
-        <thead>
+    <div
+      className={clsx(
+        "tableau-scroll rounded-2xl border border-ardoise-clair/10 bg-white shadow-sm",
+        className,
+      )}
+    >
+      <table className="w-full min-w-[42rem] text-sm">
+        <thead className="sticky top-0 z-10">
           <tr className="bg-lagune text-white">
             {colonnes.map((c) => (
               <th

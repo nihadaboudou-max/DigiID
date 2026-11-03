@@ -84,6 +84,7 @@ export function ScannerTicket({
 
   const [code, setCode] = useState(tokenInitial ?? "");
   const [codeRemise, setCodeRemise] = useState("");
+  const [codeConfirmationRequis, setCodeConfirmationRequis] = useState(false);
   const [typeEvenement, setTypeEvenement] = useState<TypeEvenementScan>(typeParDefaut);
   const [gareContexte, setGareContexte] = useState<Gare | null>(null);
   const [statutActuel, setStatutActuel] = useState<StatutColis | null>(null);
@@ -182,20 +183,38 @@ export function ScannerTicket({
       );
       return;
     }
+    const codeRemiseNormalise = codeRemise.replace(/\D/g, "").slice(0, 4);
+    if (
+      typeEvenement === "livraison" &&
+      codeConfirmationRequis &&
+      codeRemiseNormalise.length !== 4
+    ) {
+      setErreur("Saisissez le code de remise à 4 chiffres reçu par le destinataire.");
+      annoncerNotification(
+        "Saisissez le code de remise à 4 chiffres reçu par le destinataire.",
+        "erreur",
+      );
+      return;
+    }
     setErreur(null);
     setResultat(null);
     setEnCours(true);
     try {
       const reponse = await logistiqueAPI.scans.scanner({
         ...cible,
-        code_confirmation: typeEvenement === "livraison" ? codeRemise : undefined,
+        code_confirmation:
+          typeEvenement === "livraison" ? codeRemiseNormalise : undefined,
         type_evenement: typeEvenement,
         gare_id: gareContexte?.id ?? null,
         voyage_id: voyageId,
         idempotency_key: genererCleIdempotence(),
       });
       setResultat(reponse);
-      setCode("");
+      setCode(reponse.code_confirmation_requis ? entreeBrute : "");
+      setCodeConfirmationRequis(Boolean(reponse.code_confirmation_requis));
+      if (!reponse.code_confirmation_requis) {
+        setCodeRemise("");
+      }
       // Le résultat du scan est **toujours annoncé** : l'agent du guichet peut
       // garder les yeux sur le colis, et l'alerte anti-fraude « DÉJÀ LIVRÉ »
       // ne peut pas passer inaperçue. (Si des .mp3 sont enregistrés plus tard
@@ -321,11 +340,13 @@ export function ScannerTicket({
             }}
           />
 
-          {typeEvenement === "livraison" && (
+          {typeEvenement === "livraison" && codeConfirmationRequis && (
             <ChampSaisie
               libelle="Code de remise à 4 chiffres"
               value={codeRemise}
-              onChange={(e) => setCodeRemise(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              onChange={(e) =>
+                setCodeRemise(e.target.value.replace(/\D/g, "").slice(0, 4))
+              }
               placeholder="Code communiqué par le destinataire"
               inputMode="numeric"
               autoComplete="one-time-code"
@@ -337,7 +358,13 @@ export function ScannerTicket({
               variante="primaire"
               cleAudio="btn.valider_scan"
               texteAudio={t("btn.valider_scan")}
-              disabled={enCours || !code.trim() || (typeEvenement === "livraison" && codeRemise.length !== 4)}
+              disabled={
+                enCours ||
+                !code.trim() ||
+                (typeEvenement === "livraison" &&
+                  codeConfirmationRequis &&
+                  codeRemise.length !== 4)
+              }
               chargement={enCours && !cameraOuverte}
               onClick={() => void executerScan(code)}
             >

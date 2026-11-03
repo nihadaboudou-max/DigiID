@@ -62,7 +62,7 @@ export interface Colis {
   valeur_fcfa: number | null;
   /** Nombre d'articles — base du calcul du frais de service DigiID. */
   nombre_articles: number;
-  /** Nombre de sacs (1 à 10) — traçabilité, sans impact sur le prix. */
+  /** Nombre de sacs — traçabilité, sans limite maximale imposée par l'interface. */
   nombre_bagages: number;
   gare_depart_id: string;
   gare_arrivee_id: string;
@@ -149,7 +149,7 @@ export interface DonneesColis {
   valeur_fcfa?: number | null;
   /** Nombre d'articles — information libre du guichet. */
   nombre_articles: number;
-  /** Nombre de sacs (1 à 10) — traçabilité, sans impact sur le prix. */
+  /** Nombre de sacs — traçabilité, sans limite maximale imposée par l'interface. */
   nombre_bagages: number;
 
   /** Prix du transport — facultatif : nul si le guichet ne le renseigne pas. */
@@ -197,6 +197,7 @@ export interface ResultatScan {
   succes: boolean;
   deja_livre: boolean;
   deja_scanne: boolean;
+  code_confirmation_requis?: boolean;
   message: string;
   statut_colis: StatutColis | null;
   colis: Colis | null;
@@ -309,7 +310,7 @@ export interface SuiviFamilial {
   acheteur_tel: string | null;
   proche_nom: string | null;
   proche_telephone: string | null;
-  /** Nombre de sacs (1 à 10) — traçabilité, sans impact sur le prix. */
+  /** Nombre de sacs — traçabilité, sans limite maximale imposée par l'interface. */
   nombre_bagages: number;
   parent_id: string | null;
   gare_depart_id: string;
@@ -378,7 +379,7 @@ export interface DonneesSuiviFamilial {
   /** Proche de confiance à prévenir (obligatoire). */
   proche_nom?: string | null;
   proche_telephone: string;
-  /** Nombre de sacs (1 à 10). */
+  /** Nombre de sacs. */
   nombre_bagages: number;
   gare_depart_id: string;
   gare_arrivee_id: string;

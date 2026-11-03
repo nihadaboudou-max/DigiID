@@ -19,11 +19,11 @@ const CLASSES_VARIANTES = {
   secondaire: "bouton-secondaire",
   ghost: "bouton-ghost",
   danger: "bouton-danger",
-  succes: "bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors",
+  succes: "bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-all duration-200 shadow-sm hover:shadow-md",
 };
 
 const CLASSES_TAILLES = {
-  petit: "px-3 py-1.5 text-sm",
+  petit: "px-3.5 py-2 text-sm",
   moyen: "px-6 py-3 text-base",
   grand: "px-8 py-4 text-lg",
 };

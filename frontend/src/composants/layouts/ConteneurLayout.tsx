@@ -3,13 +3,15 @@
  * Conteneur de layout dynamique — gère la barre latérale selon le rôle.
  * Ce composant EST un Client Component (utilise usePathname et useAuthentification).
  */
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuthentification } from "@/contextes/authentification";
 import { BarreLaterale } from "@/composants/layouts/BarreLaterale";
 // Doublon masqué (version mobile) : l'icône du menu est déjà rendue dans l'EnTete.
 // Dé-commenter cet import (et le bloc correspondant plus bas) pour le réafficher.
 // import { BoutonMenuMobile } from "@/composants/layouts/MenuMobile";
 import { EnTete } from "@/composants/layouts/EnTete";
+import { IconeFlecheRetour } from "@/composants/commun/Icones";
+import { cheminTableauDeBord } from "@/types/api";
 
 // Pages publiques sans layout (connexion, inscription, etc.)
 const PAGES_SANS_LAYOUT = [
@@ -23,6 +25,7 @@ const PAGES_SANS_LAYOUT = [
 
 export function ConteneurLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { utilisateur, chargement } = useAuthentification();
 
   // Vérifier si c'est une page publique
@@ -30,6 +33,14 @@ export function ConteneurLayout({ children }: { children: React.ReactNode }) {
     (p) => pathname === p || pathname.startsWith(p)
   );
   const estAccueil = pathname === "/";
+
+  function retourner() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.replace(utilisateur ? cheminTableauDeBord(utilisateur.role) : "/");
+  }
 
   // Pages publiques / chargement : un seul en-tête global, sans barre latérale
   // ni conteneur de contenu connecté.
@@ -57,6 +68,15 @@ export function ConteneurLayout({ children }: { children: React.ReactNode }) {
         {/* Contenu : padding réduit sur mobile pour maximiser la largeur utile */}
         <main className="flex-1 px-3 py-4 sm:p-4 md:p-6 lg:p-8 pb-24 md:pb-8">
           <div className="max-w-7xl mx-auto w-full min-w-0">
+            <button
+              type="button"
+              onClick={retourner}
+              className="mb-4 inline-flex min-h-10 items-center gap-2 rounded-xl border border-ardoise-clair/20 bg-white px-3.5 py-2 text-sm font-semibold text-ardoise transition hover:border-lagune/40 hover:bg-sable hover:text-lagune focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lagune/40"
+              aria-label="Retourner à la page précédente"
+            >
+              <IconeFlecheRetour className="h-4 w-4" />
+              Retour
+            </button>
             {children}
           </div>
         </main>

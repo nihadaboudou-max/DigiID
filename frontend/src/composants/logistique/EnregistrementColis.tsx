@@ -5,13 +5,13 @@
  * Parcours en 4 étapes pensé pour un agent peu à l'aise avec l'informatique :
  *   1. Expéditeur (qui dépose le colis ?)
  *   2. Destinataire (qui reçoit ? d'où vers où ?)
- *   3. Détails (nombre d'articles, poids, description…)
+ *   3. Détails (nombre de sacs, poids, description…)
  *   4. Récapitulatif → enregistrement (net) → impression du ticket
  *
  * ⚠️ Le **prix du transport** est facultatif et n'est pas encaissé par DigiID :
  * il ne sert qu'à l'information du guichet (on ne veut pas donner l'impression
  * de surveiller les recettes du transporteur). Les **frais de service DigiID**
- * dépendent du **nombre d'articles** (100 / 200 / 350 / 500 FCFA) et sont
+ * dépendent du **nombre de sacs** (100 / 200 / 350 / 500 FCFA) et sont
  * enregistrés **à la fin de l'inscription**, avant génération du QR.
  *
  * À l'enregistrement, le backend crée la transaction puis génère le ticket.
@@ -163,8 +163,7 @@ export function EnregistrementColis({
   const [description, setDescription] = useState("");
   const [poidsKg, setPoidsKg] = useState("");
   const [valeurFcfa, setValeurFcfa] = useState("");
-  const [nombreArticles, setNombreArticles] = useState("1");
-  // Nombre de sacs (1 à 10) — traçabilité, sans impact sur le prix.
+  // Nombre de sacs — quantité unique demandée à l'agent.
   const [nombreBagages, setNombreBagages] = useState(1);
   const [fraisFcfa, setFraisFcfa] = useState("");
   const [voyageId, setVoyageId] = useState(voyageImposeId ?? "");
@@ -366,10 +365,11 @@ export function EnregistrementColis({
   const fraisValide =
     fraisNombre === null || (!Number.isNaN(fraisNombre) && fraisNombre >= 0);
 
-  // Nombre d'articles : détermine le frais de service DigiID (barème par tranches).
-  const nombreArticlesNombre = Number(nombreArticles.replace(/\D/g, ""));
-  const nombreArticlesValide =
-    Number.isInteger(nombreArticlesNombre) && nombreArticlesNombre >= 1;
+  // Le nombre de sacs est la seule quantité demandée au guichet. Il alimente
+  // aussi la tarification historique du backend, qui attend encore
+  // `nombre_articles`.
+  const nombreArticlesNombre = nombreBagages;
+  const nombreArticlesValide = true;
   const fraisService = fraisServicePourArticles(
     nombreArticlesValide ? nombreArticlesNombre : 1,
   );
@@ -416,7 +416,6 @@ export function EnregistrementColis({
     setDescription("");
     setPoidsKg("");
     setValeurFcfa("");
-    setNombreArticles("1");
     setNombreBagages(1);
     setFraisFcfa("");
     setVoyageId(voyageImposeId ?? "");
@@ -508,7 +507,7 @@ export function EnregistrementColis({
         description: description.trim() || null,
         poids_kg: poids !== null && !Number.isNaN(poids) ? poids : null,
         valeur_fcfa: valeur !== null && !Number.isNaN(valeur) ? valeur : null,
-        nombre_articles: nombreArticlesValide ? nombreArticlesNombre : 1,
+        nombre_articles: nombreArticlesNombre,
         nombre_bagages: nombreBagages,
         frais_fcfa:
           fraisNombre !== null && !Number.isNaN(fraisNombre) ? fraisNombre : null,
@@ -1001,15 +1000,10 @@ export function EnregistrementColis({
             >
               <div className="space-y-4">
                 <div className="rounded-xl border border-lagune/20 bg-lagune/5 px-4 py-3 space-y-3">
-                  <ChampSaisie
-                    libelle="Nombre d'articles dans le colis"
-                    required
-                    value={nombreArticles}
-                    onChange={(e) => setNombreArticles(e.target.value)}
-                    inputMode="numeric"
-                    placeholder="Ex : 3"
-                    aide="Détermine le frais de service DigiID : 100 F (1-3 articles), 200 F (4-6), 350 F (7-10), 500 F (plus de 10)."
-                    erreur={nombreArticlesValide ? undefined : "Entrez un nombre entier ≥ 1"}
+                  <ControleurBagages
+                    valeur={nombreBagages}
+                    onChange={setNombreBagages}
+                    aide="Cliquez sur + ou saisissez directement le nombre de sacs."
                   />
                   <div className="flex items-baseline justify-between gap-3 flex-wrap">
                     <span className="text-sm text-ardoise-clair">
@@ -1021,12 +1015,23 @@ export function EnregistrementColis({
                   </div>
                 </div>
 
-                <ChampSaisie
-                  libelle="Description du colis"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Ex : Sac de riz 25 kg, carton de tissus…"
-                />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <ChampSaisie
+                    libelle="Description du colis"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Ex : Sac de riz 25 kg, carton de tissus…"
+                  />
+                  <ChampSaisie
+                    libelle="Prix du transport (FCFA)"
+                    value={fraisFcfa}
+                    onChange={(e) => setFraisFcfa(e.target.value)}
+                    inputMode="numeric"
+                    placeholder="Facultatif"
+                    aide="Facultatif — votre prix, purement indicatif. Il n'est pas encaissé par DigiID."
+                    erreur={fraisValide ? undefined : "Montant invalide"}
+                  />
+                </div>
 
                 <div className="space-y-2 rounded-xl border border-ardoise-clair/15 bg-sable-clair/50 p-3">
                   <p id="photo-colis-label" className="text-sm font-semibold text-ardoise">
@@ -1082,7 +1087,7 @@ export function EnregistrementColis({
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <ChampSaisie
                     libelle="Poids (kg)"
                     value={poidsKg}
@@ -1096,15 +1101,6 @@ export function EnregistrementColis({
                     onChange={(e) => setValeurFcfa(e.target.value)}
                     inputMode="numeric"
                     placeholder="Ex : 50000"
-                  />
-                  <ChampSaisie
-                    libelle="Prix du transport (FCFA)"
-                    value={fraisFcfa}
-                    onChange={(e) => setFraisFcfa(e.target.value)}
-                    inputMode="numeric"
-                    placeholder="Facultatif"
-                    aide="Facultatif — votre prix, purement indicatif. Il n'est pas encaissé par DigiID."
-                    erreur={fraisValide ? undefined : "Montant invalide"}
                   />
                 </div>
 
@@ -1250,10 +1246,6 @@ export function EnregistrementColis({
                     )}
                   />
                 )}
-                <Ligne
-                  libelle="Nombre d'articles"
-                  valeur={String(nombreArticlesValide ? nombreArticlesNombre : 1)}
-                />
                 <Ligne libelle="Nombre de sacs" valeur={String(nombreBagages)} />
                 <Ligne
                   libelle="Voyage / chauffeur"

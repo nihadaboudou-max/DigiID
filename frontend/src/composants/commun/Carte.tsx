@@ -35,7 +35,7 @@ export function Carte({
         <div className="mb-4">
           {titre && <h3 className="text-lagune mb-1">{titre}</h3>}
           {description && (
-            <p className="text-sm text-ardoise-clair">{description}</p>
+            <p className="text-base text-ardoise-clair">{description}</p>
           )}
         </div>
       )}

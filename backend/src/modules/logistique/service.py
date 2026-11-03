@@ -1315,6 +1315,20 @@ async def preparer_code_remise(
         f"Votre code de remise du colis {ticket.code_clair} est {code}. "
         "Ne le communiquez qu'au livreur présent devant vous."
     )
+    # Le destinataire peut être un tiers sans compte DigiID : la notification
+    # interne ne suffit donc pas pour lui transmettre le code. Le SMS est
+    # journalisé comme les autres alertes logistiques et indique explicitement
+    # si le fournisseur SMS est configuré.
+    if colis.destinataire_tel:
+        _ajouter_notification(
+            session,
+            type_cible="colis",
+            cible_id=colis.id,
+            type_evenement="code_remise",
+            destinataire_role="destinataire",
+            telephone=colis.destinataire_tel,
+            message=message,
+        )
     await _notifier_comptes_colis(
         session,
         colis,
@@ -1587,7 +1601,7 @@ async def creer_colis(
         poids_kg=donnees.poids_kg,
         valeur_fcfa=donnees.valeur_fcfa,
         nombre_articles=donnees.nombre_articles,
-        nombre_bagages=max(1, min(int(donnees.nombre_bagages or 1), 10)),
+        nombre_bagages=max(1, int(donnees.nombre_bagages or 1)),
         gare_depart_id=donnees.gare_depart_id,
         gare_arrivee_id=gare_arrivee_id,
         arret_destination_id=arret_destination_id,
@@ -2308,10 +2322,27 @@ async def enregistrer_scan(
 
     if donnees.type_evenement == "livraison":
         if not donnees.code_confirmation:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail="Le code à quatre chiffres du destinataire est obligatoire.",
-            )
+            ticket_colis = await obtenir_ticket_du_colis(session, colis)
+            if ticket_colis is None:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    detail="Ticket du colis introuvable.",
+                )
+            await preparer_code_remise(session, colis, ticket_colis)
+            return {
+                "succes": True,
+                "deja_livre": False,
+                "deja_scanne": False,
+                "code_confirmation_requis": True,
+                "message": (
+                    "Le code de remise a été envoyé au destinataire. "
+                    "Saisissez-le pour confirmer la remise."
+                ),
+                "statut_colis": colis.statut,
+                "colis": colis,
+                "ticket": ticket_colis,
+                "evenement": None,
+            }
         colis_confirme = await confirmer_remise_colis(
             session, colis.id, donnees.code_confirmation, utilisateur
         )
@@ -2623,7 +2654,7 @@ async def creer_suivi_familial(
         acheteur_tel=(donnees.acheteur_tel or "").strip() or None,
         proche_nom=(donnees.proche_nom or "").strip() or None,
         proche_telephone=(donnees.proche_telephone or "").strip() or None,
-        nombre_bagages=max(1, min(int(donnees.nombre_bagages or 1), 10)),
+        nombre_bagages=max(1, int(donnees.nombre_bagages or 1)),
         parent_id=donnees.parent_id,
         gare_depart_id=donnees.gare_depart_id,
         gare_arrivee_id=gare_arrivee_id,

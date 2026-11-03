@@ -1,19 +1,17 @@
 "use client";
 /**
- * ControleurBagages — compteur visuel 1 à 10 sacs (Plan B, P0 ajusté).
+ * ControleurBagages — compteur visuel du nombre de sacs.
  *
  * Le receveur précise le **nombre exact de sacs** d'un passager (ou colis) :
  * DigiID génère alors **une étiquette QR par sac** (imprimée en une seule fois).
  *
- * Rappel : le nombre de sacs sert uniquement à la **traçabilité** et à la
- * vérification **anti-fraude à l'arrivée** (recompter les sacs remis) ; il
- * **n'impacte jamais** le prix (frais fixe de 100 FCFA par passager/enfant).
+ * Le nombre de sacs est la quantité unique demandée à l'agent pour éviter
+ * de saisir deux fois une information équivalente.
  */
 import { IconeMoins, IconePlus } from "@/composants/commun/Icones";
+import { useEffect, useState } from "react";
 
 const MIN = 1;
-const MAX = 10;
-
 interface Props {
   valeur: number;
   onChange: (valeur: number) => void;
@@ -26,10 +24,29 @@ export function ControleurBagages({
   valeur,
   onChange,
   libelle = "Nombre de sacs",
-  aide = "De 1 à 10 sacs — une étiquette QR sera générée par sac (traçabilité, sans impact sur le prix).",
+  aide = "Saisissez le nombre de sacs ou utilisez les boutons + et −.",
   desactive = false,
 }: Props) {
-  const borne = (n: number) => Math.max(MIN, Math.min(MAX, n));
+  const borne = (n: number) => Math.max(MIN, n);
+  const [saisie, setSaisie] = useState(String(valeur));
+
+  useEffect(() => {
+    setSaisie(String(valeur));
+  }, [valeur]);
+
+  function modifierSaisie(valeurBrute: string) {
+    const chiffres = valeurBrute.replace(/\D/g, "");
+    setSaisie(chiffres);
+    if (chiffres) {
+      onChange(borne(Number(chiffres)));
+    }
+  }
+
+  function validerSaisie() {
+    const valeurFinale = borne(Number(saisie) || MIN);
+    setSaisie(String(valeurFinale));
+    onChange(valeurFinale);
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -46,12 +63,17 @@ export function ControleurBagages({
         </button>
 
         <div className="flex min-w-[4.5rem] flex-col items-center">
-          <span
-            className="text-3xl font-bold tabular-nums text-lagune"
-            aria-live="polite"
-          >
-            {valeur}
-          </span>
+          <input
+            type="number"
+            min={MIN}
+            step={1}
+            value={saisie}
+            disabled={desactive}
+            onChange={(e) => modifierSaisie(e.target.value)}
+            onBlur={validerSaisie}
+            className="w-20 rounded-xl border border-ardoise-clair/25 bg-white px-2 py-1 text-center text-2xl font-bold tabular-nums text-lagune focus:border-lagune focus:outline-none focus:ring-2 focus:ring-lagune/30"
+            aria-label="Nombre de sacs"
+          />
           <span className="text-xs text-ardoise-clair">
             {valeur > 1 ? "sacs" : "sac"}
           </span>
@@ -61,15 +83,12 @@ export function ControleurBagages({
           type="button"
           aria-label="Ajouter un sac"
           onClick={() => onChange(borne(valeur + 1))}
-          disabled={desactive || valeur >= MAX}
+          disabled={desactive}
           className="flex h-11 w-11 items-center justify-center rounded-full border border-ardoise/20 bg-white text-ardoise transition hover:bg-lagune-teinte disabled:cursor-not-allowed disabled:opacity-40"
         >
           <IconePlus className="h-5 w-5" />
         </button>
 
-        <span className="ml-1 text-xs italic text-ardoise-clair">
-          {Math.max(MIN, Math.min(MAX, valeur))} / {MAX}
-        </span>
       </div>
       {aide && <p className="text-xs italic text-ardoise-clair">{aide}</p>}
     </div>

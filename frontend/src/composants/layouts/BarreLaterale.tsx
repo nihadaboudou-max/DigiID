@@ -86,8 +86,8 @@ function LienNav({ href, libelle, Icone, actif }: Lien & { actif: boolean }) {
       className={clsx(
         "flex min-h-11 items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lagune/50 focus-visible:ring-offset-2",
         actif
-          ? "bg-sable text-lagune font-semibold shadow-sm"
-          : "text-ardoise-clair hover:bg-sable/60 hover:text-ardoise",
+          ? "bg-gradient-to-r from-sable to-ocre/10 text-lagune font-semibold shadow-sm"
+          : "text-ardoise hover:bg-sable/70 hover:text-lagune",
       )}
     >
       <div
@@ -498,7 +498,7 @@ export function BarreLaterale() {
   };
 
   return (
-    <aside className="flex min-h-0 flex-col w-60 h-[100dvh] sticky top-0 bg-white border-r border-ardoise-clair/10 shadow-sm">
+    <aside className="flex min-h-0 flex-col w-64 h-[100dvh] sticky top-0 bg-white border-r border-ardoise-clair/10 shadow-sm">
       {/* En-tête section — profil utilisateur */}
       <div className="px-4 pt-5 pb-4 border-b border-ardoise-clair/10">
         <div className="flex items-center gap-3">

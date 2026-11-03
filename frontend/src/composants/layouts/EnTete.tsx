@@ -36,7 +36,7 @@ export function EnTete() {
     : utilisateur?.email?.charAt(0).toUpperCase() || "?";
 
   return (
-    <header className="bg-white border-b border-ardoise-clair/10 shadow-sm sticky top-0 z-50">
+    <header className="bg-white/95 backdrop-blur border-b border-ardoise-clair/10 shadow-sm sticky top-0 z-50">
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 h-14 md:h-16 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           {estConnecte && <BoutonMenuMobile />}
@@ -51,10 +51,10 @@ export function EnTete() {
             <>
               <Link
                 href={cheminTableauDeBord}
-                className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-sable transition-all duration-200 group"
+                className="flex items-center gap-2 px-2.5 py-2 rounded-xl hover:bg-sable transition-all duration-200 group"
                 title={utilisateur.prenom || utilisateur.email}
               >
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-lagune to-lagune-clair text-white flex items-center justify-center text-xs font-bold shadow-sm">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-lagune to-lagune-clair text-white flex items-center justify-center text-xs font-bold shadow-sm">
                   {initiales}
                 </div>
                 <span className="text-sm text-ardoise-clair hidden sm:inline group-hover:text-ardoise transition-colors max-w-[120px] truncate">
@@ -66,7 +66,7 @@ export function EnTete() {
 
               <button
                 onClick={gererDeconnexion}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm text-ardoise-clair hover:text-terre hover:bg-terre/5 transition-all duration-200"
+                className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-sm font-medium text-ardoise-clair hover:text-terre hover:bg-terre/5 transition-all duration-200"
                 title="Se déconnecter"
               >
                 <IconeDeconnexion className="w-4 h-4" />

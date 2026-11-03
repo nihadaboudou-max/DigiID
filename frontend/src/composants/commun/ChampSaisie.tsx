@@ -22,8 +22,8 @@ export function ChampSaisie({
 }: ProprietesChamp) {
   const idFinal = id || libelle.toLowerCase().replace(/\s+/g, "-");
   return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={idFinal} className="text-sm font-medium text-ardoise">
+    <div className="flex flex-col gap-2">
+      <label htmlFor={idFinal} className="text-sm font-semibold text-ardoise">
         {libelle}
         {reste.required && <span className="text-terre ml-0.5">*</span>}
       </label>
@@ -40,7 +40,7 @@ export function ChampSaisie({
         <p className="text-sm text-terre">{erreur}</p>
       )}
       {aide && !erreur && (
-        <p className="text-xs text-ardoise-clair italic">{aide}</p>
+        <p className="text-sm text-ardoise-clair">{aide}</p>
       )}
     </div>
   );

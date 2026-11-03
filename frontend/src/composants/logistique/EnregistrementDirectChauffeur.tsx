@@ -53,7 +53,6 @@ export function EnregistrementDirectChauffeur({
   const [nom, setNom] = useState("");
   const [telephone, setTelephone] = useState("");
   const [description, setDescription] = useState("");
-  const [nombreArticles, setNombreArticles] = useState("1");
   const [nombreBagages, setNombreBagages] = useState(1);
   const [fraisFcfa, setFraisFcfa] = useState("");
 
@@ -79,7 +78,6 @@ export function EnregistrementDirectChauffeur({
     setNom("");
     setTelephone("");
     setDescription("");
-    setNombreArticles("1");
     setNombreBagages(1);
     setFraisFcfa("");
     setAge("");
@@ -98,7 +96,7 @@ export function EnregistrementDirectChauffeur({
     setErreur(null);
     setEnregistrement(true);
     try {
-      const articles = Math.max(1, Number(nombreArticles.replace(/\D/g, "")) || 1);
+      const articles = nombreBagages;
       const frais = fraisFcfa.trim() === "" ? null : Number(fraisFcfa);
 
       if (type === "colis") {
@@ -256,12 +254,10 @@ export function EnregistrementDirectChauffeur({
               placeholder="Ex : sac de voyage noir, 1 carton…"
             />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <ChampSaisie
-                libelle="Nombre d'articles"
-                required
-                inputMode="numeric"
-                value={nombreArticles}
-                onChange={(e) => setNombreArticles(e.target.value)}
+              <ControleurBagages
+                valeur={nombreBagages}
+                onChange={setNombreBagages}
+                aide="Cliquez sur + ou saisissez directement le nombre de sacs."
               />
               <ChampSaisie
                 libelle="Prix du transport (FCFA)"
@@ -334,8 +330,6 @@ export function EnregistrementDirectChauffeur({
             </div>
           </>
         )}
-
-        <ControleurBagages valeur={nombreBagages} onChange={setNombreBagages} />
 
         {erreur && (
           <Alerte variante="erreur" titre="Erreur">

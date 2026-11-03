@@ -345,9 +345,9 @@ class ColisCreate(BaseModel):
     description: Optional[str] = Field(None, max_length=500)
     poids_kg: Optional[float] = Field(None, ge=0)
     valeur_fcfa: Optional[int] = Field(None, ge=0)
-    # Nombre de sacs (1 à 10) — **traçabilité + anti-fraude à l'arrivée**
+    # Nombre de sacs — **traçabilité + anti-fraude à l'arrivée**
     # uniquement : cela n'impacte pas le prix.
-    nombre_bagages: int = Field(1, ge=1, le=10)
+    nombre_bagages: int = Field(1, ge=1)
     # Nombre d'articles dans le colis (information libre du guichet).
     nombre_articles: int = Field(1, ge=1, le=9999)
     # Prix du transport — **facultatif** : DigiID n'encaisse pas ce montant (les
@@ -493,7 +493,7 @@ class ColisUpdate(BaseModel):
     poids_kg: Optional[float] = Field(None, ge=0)
     valeur_fcfa: Optional[int] = Field(None, ge=0)
     nombre_articles: Optional[int] = Field(None, ge=1, le=9999)
-    nombre_bagages: Optional[int] = Field(None, ge=1, le=10)
+    nombre_bagages: Optional[int] = Field(None, ge=1)
     frais_fcfa: Optional[int] = Field(None, ge=0)
     arret_destination_id: Optional[UUID] = None
 
@@ -610,7 +610,7 @@ class SuiviFamilialCreate(BaseModel):
     proche_nom: Optional[str] = Field(None, max_length=150)
     proche_telephone: str = Field(..., min_length=6, max_length=30)
     # Nombre de sacs (1 à 10) — traçabilité, **sans impact** sur le prix.
-    nombre_bagages: int = Field(1, ge=1, le=10)
+    nombre_bagages: int = Field(1, ge=1)
     # Moyen de paiement **choisi à l'inscription** (avant la génération du QR).
     moyen_paiement: Literal["especes", "mtn", "moov"]
     telephone_paiement: Optional[str] = Field(None, max_length=30)
@@ -761,6 +761,7 @@ class ScanResponse(BaseModel):
     succes: bool
     deja_livre: bool = False
     deja_scanne: bool = False
+    code_confirmation_requis: bool = False
     message: str
     statut_colis: Optional[str] = None
     colis: Optional[ColisResponse] = None
@@ -792,7 +793,7 @@ class SuiviFamilialUpdate(BaseModel):
     acheteur_tel: Optional[str] = Field(None, min_length=6, max_length=30)
     proche_nom: Optional[str] = Field(None, max_length=150)
     proche_telephone: Optional[str] = Field(None, min_length=6, max_length=30)
-    nombre_bagages: Optional[int] = Field(None, ge=1, le=10)
+    nombre_bagages: Optional[int] = Field(None, ge=1)
     arret_destination_id: Optional[UUID] = None
 
     @field_validator(
