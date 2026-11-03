@@ -182,8 +182,8 @@ export function EnregistrementDirectChauffeur({
 
   return (
     <Carte
-      titre="Enregistrer un client monté en route"
-      description="Un passager vous fait signe entre deux arrêts, ou vous confie un sac : créez sa fiche maintenant pour qu'il soit tracé et couvert par les SMS de suivi."
+      titre="Ajouter un client en route"
+      description="Créez rapidement la fiche d'un client monté entre deux arrêts."
     >
       <div className="space-y-4">
         {/* Choix colis / passager */}
@@ -217,8 +217,9 @@ export function EnregistrementDirectChauffeur({
         {/* Le client présente sa carte : tout se remplit sans faute de frappe. */}
         <RechercheCarteDigiID
           libelle={type === "colis" ? "DigiID du client (facultatif)" : "DigiID du passager (facultatif)"}
-          titre="Le client a une carte DigiID ?"
-          description="Présentez sa carte : le nom et le téléphone se remplissent automatiquement — les SMS partiront au bon numéro."
+          titre="Identifier le client (facultatif)"
+          description="Scannez sa carte ou saisissez son DigiID pour remplir automatiquement ses coordonnées."
+          compact
           surSelection={(contact) => {
             if (!contact) return;
             setNom(contact.nom_complet);

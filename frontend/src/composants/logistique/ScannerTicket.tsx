@@ -202,8 +202,11 @@ export function ScannerTicket({
     try {
       const reponse = await logistiqueAPI.scans.scanner({
         ...cible,
-        code_confirmation:
-          typeEvenement === "livraison" ? codeRemiseNormalise : undefined,
+        ...(typeEvenement === "livraison" &&
+        codeConfirmationRequis &&
+        codeRemiseNormalise
+          ? { code_confirmation: codeRemiseNormalise }
+          : {}),
         type_evenement: typeEvenement,
         gare_id: gareContexte?.id ?? null,
         voyage_id: voyageId,

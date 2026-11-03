@@ -163,10 +163,30 @@ export function ActionsVoyageChauffeur({
 
   return (
     <Carte
-      titre="Actions groupées"
-      description="Un seul geste pour tous les passagers et colis du voyage."
+      titre="Étapes du départ et de l'arrivée"
+      description="Suivez le voyage dans l'ordre : départ, approche, puis arrivée."
     >
       <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {[
+            ["1", "Départ", statut === "en_cours" || statut === "termine" ? "Validé" : "À faire"],
+            ["2", "Approche", statut === "en_cours" ? "À envoyer" : "Après le départ"],
+            ["3", "Arrivée", statut === "en_cours" ? "À faire à l'arrêt" : "Après le départ"],
+          ].map(([numero, titre, etat]) => (
+            <div
+              key={numero}
+              className="flex items-center gap-2 rounded-xl border border-ardoise-clair/15 bg-sable-clair/60 px-3 py-2"
+            >
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-lagune text-xs font-bold text-white">
+                {numero}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-ardoise">{titre}</span>
+                <span className="block truncate text-xs text-ardoise-clair">{etat}</span>
+              </span>
+            </div>
+          ))}
+        </div>
         {erreur && (
           <Alerte variante="erreur" titre="Action impossible">
             {erreur}
@@ -206,7 +226,7 @@ export function ActionsVoyageChauffeur({
           </Alerte>
         )}
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <Bouton
             variante="succes"
             disabled={!peutDepart}
@@ -215,7 +235,7 @@ export function ActionsVoyageChauffeur({
               setAction("depart");
             }}
           >
-            <IconeCheck className="h-4 w-4" /> Valider le Départ
+            <IconeCheck className="h-4 w-4" /> 1. Valider le départ
           </Bouton>
           <Bouton
             variante="secondaire"
@@ -225,7 +245,7 @@ export function ActionsVoyageChauffeur({
               setAction("approche");
             }}
           >
-            <IconeCloche className="h-4 w-4" /> Prévenir de l&apos;approche
+            <IconeCloche className="h-4 w-4" /> 2. Prévenir de l&apos;approche
           </Bouton>
           <Bouton
             variante="primaire"
@@ -235,14 +255,14 @@ export function ActionsVoyageChauffeur({
               setAction("arrivee");
             }}
           >
-            <IconeCheck className="h-4 w-4" /> Arrivés
+            <IconeCheck className="h-4 w-4" /> 3. Confirmer l&apos;arrivée
           </Bouton>
         </div>
 
         {optionsArrivee.length > 0 && (
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-ardoise">
-              Arrêt / gare pour « Arrivés »
+              Arrêt ou gare d&apos;arrivée
             </label>
             <select
               className="champ-saisie"
@@ -258,9 +278,8 @@ export function ActionsVoyageChauffeur({
               ))}
             </select>
             <p className="text-xs italic text-ardoise-clair">
-              Choisissez l&apos;arrêt où vous êtes : seuls les colis et passagers
-              destinés à cet arrêt passent « arrivés ». Ensuite seulement, dépôt
-              au guichet (colis / enfants).
+              Choisissez votre position actuelle : seuls les colis et passagers
+              destinés à cet arrêt seront marqués arrivés.
             </p>
           </div>
         )}

@@ -142,7 +142,7 @@ function Contenu() {
   const statut = voyage.statut as keyof typeof LIBELLES_STATUT_VOYAGE;
 
   return (
-    <div className="space-y-6 apparition">
+    <div className="space-y-4 apparition">
       {/* Fil d'Ariane */}
       <nav className="flex items-center gap-2 text-sm text-ardoise-clair">
         <Link href="/chauffeur/dashboard" className="hover:text-lagune">
@@ -151,9 +151,14 @@ function Contenu() {
       </nav>
 
       {/* En-tête */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-2xl font-bold text-ardoise">{libelleLigne(ligne)}</h1>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-ardoise-clair">
+              Détail du départ
+            </p>
+            <h1 className="text-xl font-bold text-ardoise">{libelleLigne(ligne)}</h1>
+          </div>
           <Badge variante={VARIANTES_STATUT_VOYAGE[statut] ?? "neutre"} taille="moyen">
             {LIBELLES_STATUT_VOYAGE[statut] ?? voyage.statut}
           </Badge>
@@ -165,13 +170,13 @@ function Contenu() {
         </Link>
       </div>
 
-      <Alerte variante="info" titre="Colis et passagers">
-        Vérifiez le contenu, puis cliquez sur <strong>Valider le départ</strong>.
+      <Alerte variante="info" titre="Avant de partir" className="py-2">
+        Vérifiez le chargement, puis utilisez les étapes ci-dessous dans l&apos;ordre.
       </Alerte>
 
       {/* Infos voyage */}
-      <Carte titre="Informations du voyage">
-        <dl className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">
+      <Carte titre="Informations du voyage" className="p-4">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
           <Ligne libelle="Départ" valeur={formaterDate(voyage.date_depart)} />
           <Ligne
             libelle="Arrivée"
@@ -202,7 +207,7 @@ function Contenu() {
         <Compteur libelle="Livrés" valeur={compteurs.livres} couleur="text-green-700" />
       </div>
 
-      {/* Actions groupées : départ / pré-alerte / arrivée (passagers + colis) */}
+      {/* Parcours principal : départ / approche / arrivée. */}
       <ActionsVoyageChauffeur
         voyageId={voyage.id}
         dateDepart={voyage.date_depart}
@@ -245,20 +250,18 @@ function Contenu() {
         />
       )}
 
-      {/* Manifeste : tout ce qui est à bord, en une feuille imprimable */}
+      {/* Chargement détaillé : visible après les actions principales. */}
       <ManifesteVoyage voyageId={voyage.id} rafraichir={rafraichir} />
 
       {/* Détails des passagers (complémentaires au manifeste) */}
-      <Carte
-        titre="Suivi des passagers"
-      >
+      <Carte titre="Suivi des passagers" className="p-4">
         {passagers.length === 0 ? (
           <p className="text-sm italic text-ardoise-clair">
             Aucun passager suivi affecté à ce voyage pour le moment.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="tableau-scroll max-h-64">
+            <table className="min-w-[42rem] w-full text-sm">
               <thead>
                 <tr className="border-b border-ardoise-clair/20 text-left text-xs uppercase tracking-wider text-ardoise-clair">
                   <th className="py-2 pr-3">Passager</th>
@@ -311,9 +314,7 @@ function Contenu() {
       </Carte>
 
       {/* Détails des colis (complémentaires au manifeste) */}
-      <Carte
-        titre="Suivi détaillé des colis"
-      >
+      <Carte titre="Suivi détaillé des colis" className="p-4">
         <TableauColis
           colis={colis}
           baseSuivi="/chauffeur/colis"

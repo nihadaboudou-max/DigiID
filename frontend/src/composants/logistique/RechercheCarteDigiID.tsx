@@ -125,21 +125,21 @@ export function RechercheCarteDigiID({
         </div>
       </div>
 
-      {/* Scan d'abord : c'est le geste rapide. Le code dynamique du citoyen
-          (30 s, usage unique) ne peut pas être rejoué par un tiers. */}
-      <div className={compact ? "flex flex-wrap items-center justify-between gap-2" : "space-y-3"}>
-        <LecteurQRCode
-          id={idLecteur}
-          libelleBouton="Scanner le QR du client"
-          messageIndisponible="Caméra indisponible ou accès refusé. Saisissez le code à la main ci-dessous."
-          surDecode={(texte) => {
-            setValeur(texte);
-            void rechercher(texte);
-          }}
-        />
-      </div>
+      <div className={compact ? "grid grid-cols-1 gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end" : "space-y-3"}>
+        {/* Le scan et la saisie manuelle sont deux chemins équivalents. */}
+        <div className={compact ? "flex items-center" : undefined}>
+          <LecteurQRCode
+            id={idLecteur}
+            libelleBouton="Scanner le QR"
+            messageIndisponible="Caméra indisponible. Saisissez le DigiID à la main."
+            surDecode={(texte) => {
+              setValeur(texte);
+              void rechercher(texte);
+            }}
+          />
+        </div>
 
-      <div className="flex flex-col sm:flex-row sm:items-end gap-2">
+        <div className={compact ? "grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2" : "flex flex-col gap-2 sm:flex-row sm:items-end"}>
         <div className="flex-1">
           <ChampSaisie
             libelle={libelle}
@@ -168,6 +168,7 @@ export function RechercheCarteDigiID({
               Effacer
             </Bouton>
           )}
+        </div>
         </div>
       </div>
 

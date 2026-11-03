@@ -180,7 +180,7 @@ export function ManifesteVoyage({
       ) : (
         // Zone d'impression : le manifeste se vide de tout le reste à
         // l'impression (et n'est jamais coupé au milieu d'une page).
-        <div className={`zone-impression ${compact ? "space-y-4" : "space-y-6"}`}>
+        <div className={`zone-impression ${compact ? "space-y-3" : "space-y-4"}`}>
           {/* Compteurs */}
           <div className="grid grid-cols-3 gap-3">
             <Compteur libelle="Colis" valeur={manifeste.nb_colis} />
@@ -210,7 +210,7 @@ export function ManifesteVoyage({
               Rien n&apos;est encore chargé sur ce voyage.
             </p>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-3">
               <TableauManifeste
                 titre="Colis à bord"
                 lignes={manifeste.colis}
@@ -248,7 +248,7 @@ export function ManifesteVoyage({
             : undefined
         }
       >
-        <div className="space-y-4">
+        <div className="space-y-3">
           {erreurGuichetiers && (
             <Alerte variante="erreur" titre="Remise impossible">
               {erreurGuichetiers}
@@ -372,8 +372,8 @@ function TableauManifeste({
             <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-lagune">
               Descente à {arret} <span className="text-ardoise-clair">({lignesArret.length})</span>
             </p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="tableau-scroll max-h-64">
+              <table className="min-w-[48rem] w-full text-sm">
                 <thead>
                   <tr className="border-b border-ardoise-clair/20 text-left text-xs uppercase tracking-wider text-ardoise-clair">
                     <th className="py-2 pr-3">Code</th>

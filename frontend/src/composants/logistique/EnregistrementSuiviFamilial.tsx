@@ -479,12 +479,7 @@ export function EnregistrementSuiviFamilial({
 
               {/* Contacts selon le type */}
               {typePassager === "enfant" ? (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <ChampSaisie
-                    libelle="Nom du parent / tuteur (optionnel)"
-                    value={parentNom}
-                    onChange={(e) => setParentNom(e.target.value)}
-                  />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <ChampSaisie
                     libelle="Nom de l'acheteur du ticket"
                     required
@@ -577,7 +572,7 @@ export function EnregistrementSuiviFamilial({
             description="Le passager doit être lié à un chauffeur précis et à un voyage précis."
           >
             <div className="space-y-4 [&_label]:font-semibold">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium text-ardoise">
                     Gare de départ <span className="text-terre">*</span>
@@ -620,6 +615,43 @@ export function EnregistrementSuiviFamilial({
                       ))}
                   </select>
                 </div>
+
+                {!affecterPlusTard && voyageSelectionne && (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium text-ardoise">
+                      Arrêt de destination <span className="text-terre">*</span>
+                    </label>
+                    <select
+                      className="champ-saisie"
+                      value={arretDestinationId}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setArretDestinationId(v);
+                        if (v === "terminus" && ligneVoyage) {
+                          setGareArriveeId(ligneVoyage.gare_arrivee_id);
+                        } else {
+                          const arret = arretsLigne.find((a) => a.id === v);
+                          if (arret) setGareArriveeId(arret.gare_id);
+                        }
+                      }}
+                    >
+                      <option value="">— Choisir l&apos;arrêt de descente —</option>
+                      {arretsLigne.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.ordre}. {a.gare_nom ?? "Arrêt"}
+                        </option>
+                      ))}
+                      {ligneVoyage && (
+                        <option value="terminus">
+                          Terminus — {ligneVoyage.gare_arrivee_nom ?? "Arrivée"}
+                        </option>
+                      )}
+                    </select>
+                    <p className="text-xs italic text-ardoise-clair">
+                      Positionne le passager dans la feuille de route du chauffeur.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {voyageImposeId && (
@@ -675,43 +707,6 @@ export function EnregistrementSuiviFamilial({
               )}
 
               <ControleurBagages valeur={nombreBagages} onChange={setNombreBagages} />
-
-              {!affecterPlusTard && voyageSelectionne && (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium text-ardoise">
-                    Arrêt de destination <span className="text-terre">*</span>
-                  </label>
-                  <select
-                    className="champ-saisie"
-                    value={arretDestinationId}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setArretDestinationId(v);
-                      if (v === "terminus" && ligneVoyage) {
-                        setGareArriveeId(ligneVoyage.gare_arrivee_id);
-                      } else {
-                        const arret = arretsLigne.find((a) => a.id === v);
-                        if (arret) setGareArriveeId(arret.gare_id);
-                      }
-                    }}
-                  >
-                    <option value="">— Choisir l&apos;arrêt de descente —</option>
-                    {arretsLigne.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.ordre}. {a.gare_nom ?? "Arrêt"}
-                      </option>
-                    ))}
-                    {ligneVoyage && (
-                      <option value="terminus">
-                        Terminus — {ligneVoyage.gare_arrivee_nom ?? "Arrivée"}
-                      </option>
-                    )}
-                  </select>
-                  <p className="text-xs italic text-ardoise-clair">
-                    Positionne le passager dans la feuille de route du chauffeur.
-                  </p>
-                </div>
-              )}
 
               <div className="space-y-3 rounded-xl border border-lagune/20 bg-lagune/5 px-4 py-3">
                 <p className="text-sm font-semibold text-ardoise">
