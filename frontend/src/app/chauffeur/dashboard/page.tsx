@@ -18,6 +18,7 @@ import {
   IconeIdentite,
   IconeScan,
   IconeTicket,
+  IconeCamion,
 } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { RecommandationTarifaire } from "@/composants/logistique/RecommandationTarifaire";
@@ -135,6 +136,12 @@ function Contenu() {
       {/* Actions rapides : les gestes du terrain, sans passer par le guichet */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <LienRapideChauffeur
+          href="/chauffeur/voyages"
+          titre="Planifier un voyage"
+          description="Choisissez la ligne, le car et l'heure du départ."
+          icone={<IconeCamion className="w-6 h-6" />}
+        />
+        <LienRapideChauffeur
           href="/chauffeur/scan"
           titre={t("chauffeur.scan_carte")}
           description={t("chauffeur.scan_carte_desc")}
@@ -159,6 +166,15 @@ function Contenu() {
           description="Ce que vous transportez et ce qu'il reste à remettre."
           icone={<IconeTicket className="w-6 h-6" />}
         />
+      </div>
+
+      <div className="flex justify-end">
+        <Link
+          href="/chauffeur/colis"
+          className="text-sm font-semibold text-lagune hover:underline"
+        >
+          Voir tous les colis →
+        </Link>
       </div>
 
       {erreur && (

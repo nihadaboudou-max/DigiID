@@ -145,11 +145,12 @@ const LIENS_CHAUFFEUR: Lien[] = [
   { href: "/chauffeur/dashboard", libelle: "Mes voyages", Icone: IconeColis },
   // Le chauffeur est un indépendant : il déclare ses lignes et planifie ses
   // propres départs (le guichet y charge ensuite colis et passagers).
-  { href: "/chauffeur/voyages", libelle: "Planifier mes trajets", Icone: IconeCamion },
+  { href: "/chauffeur/voyages", libelle: "Planifier un voyage", Icone: IconeCamion },
   { href: "/chauffeur/colis", libelle: "Mes colis", Icone: IconeTicket },
+  { href: "/chauffeur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
   { href: "/chauffeur/passagers", libelle: "Mes passagers", Icone: IconeIdentite },
   { href: "/chauffeur/scan", libelle: "Scanner / Livrer", Icone: IconeScan },
-  { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },
+  { href: "/identite/carte", libelle: "Mon QR code DigiID", Icone: IconeIdentite },
   { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
   { href: "/chauffeur/cagnotte", libelle: "Ma cagnotte", Icone: IconePortefeuille },
   { href: "/chatbot", libelle: "Assistance", Icone: IconeChat },

@@ -12,7 +12,7 @@ const LIBELLES_COURTS: Record<string, string> = {
   "Carte client (scan)": "Carte client",
   "Mon dossier pro": "Mon travail",
   "Ma cagnotte": "Mes gains",
-  "Planifier mes trajets": "Mes départs",
+  "Planifier mes trajets": "Planifier un voyage",
   "Mes colis": "Colis",
   "Mes passagers": "Passagers",
   "Ma carte DigiID": "Ma carte",
