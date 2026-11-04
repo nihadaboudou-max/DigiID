@@ -168,6 +168,112 @@
     @apply text-sm text-ardoise-clair tracking-wide;
   }
 
+  /* Présentation sobre et cohérente des espaces chauffeur, receveur et gare. */
+  .espace-logistique main {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.3), transparent 18rem);
+  }
+
+  .espace-logistique .carte {
+    @apply rounded-xl p-4 md:p-5;
+    box-shadow: 0 6px 18px rgba(42, 45, 52, 0.06);
+  }
+
+  .espace-logistique main h1 {
+    @apply text-xl md:text-2xl;
+  }
+
+  .espace-logistique main h1 + p {
+    @apply max-w-3xl leading-relaxed;
+  }
+
+  .espace-logistique main > div > .apparition > div:first-child {
+    @apply border-b border-ardoise-clair/10 pb-4;
+  }
+
+  .espace-logistique .carte > h3,
+  .espace-logistique .carte > div:first-child h3 {
+    @apply text-base md:text-lg;
+  }
+
+  .espace-logistique main > div > .apparition {
+    @apply max-w-6xl mx-auto;
+  }
+
+  .espace-logistique input:not([type="checkbox"]):not([type="radio"]),
+  .espace-logistique select,
+  .espace-logistique textarea {
+    @apply rounded-lg border-ardoise-clair/20 bg-white text-sm shadow-none;
+  }
+
+  .espace-logistique input:not([type="checkbox"]):not([type="radio"]):focus,
+  .espace-logistique select:focus,
+  .espace-logistique textarea:focus {
+    @apply border-lagune ring-2 ring-lagune/15;
+  }
+
+  .espace-logistique table thead th {
+    @apply bg-sable text-ardoise font-semibold;
+  }
+
+  .espace-logistique table tbody tr {
+    @apply transition-colors hover:bg-sable-clair/60;
+  }
+
+  .espace-logistique .overflow-x-auto {
+    @apply rounded-lg;
+    scrollbar-width: thin;
+  }
+
+  .espace-logistique form {
+    @apply space-y-4;
+  }
+
+  .espace-logistique button:not([aria-label]) {
+    @apply min-h-10;
+  }
+
+  .espace-logistique a:focus-visible,
+  .espace-logistique button:focus-visible,
+  .espace-logistique input:focus-visible,
+  .espace-logistique select:focus-visible,
+  .espace-logistique textarea:focus-visible {
+    @apply outline-none ring-2 ring-lagune/30 ring-offset-2;
+  }
+
+  .espace-logistique [role="tablist"] {
+    @apply rounded-xl bg-white border border-ardoise-clair/10 p-1;
+  }
+
+  .espace-logistique .space-y-6 {
+    @apply space-y-5;
+  }
+
+  .espace-logistique h1 {
+    @apply text-lagune;
+  }
+
+  .espace-logistique-sidebar {
+    @apply w-60;
+  }
+
+  .espace-logistique-sidebar .border-b {
+    @apply border-ardoise-clair/10;
+  }
+
+  @media (max-width: 640px) {
+    .espace-logistique main {
+      @apply px-3 py-4;
+    }
+
+    .espace-logistique .carte {
+      @apply p-4;
+    }
+
+    .espace-logistique main > div > .apparition > div:first-child {
+      @apply pb-3;
+    }
+  }
+
   /* Les longues listes restent dans leur carte : la page conserve son rythme
      et l'en-tête du tableau reste visible pendant la lecture. */
   .tableau-scroll {

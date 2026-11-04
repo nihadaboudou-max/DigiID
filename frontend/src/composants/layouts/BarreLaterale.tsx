@@ -495,8 +495,15 @@ export function BarreLaterale() {
     );
   };
 
+  const estEspaceLogistique =
+    ["chauffeur", "receveur", "gerant_gare"].includes(utilisateur.role) ||
+    pathname.startsWith("/logistique");
+
   return (
-    <aside className="flex min-h-0 flex-col w-64 h-[100dvh] sticky top-0 bg-white border-r border-ardoise-clair/10 shadow-sm">
+    <aside className={clsx(
+      "flex min-h-0 flex-col w-64 h-[100dvh] sticky top-0 bg-white border-r border-ardoise-clair/10 shadow-sm",
+      estEspaceLogistique && "espace-logistique-sidebar",
+    )}>
       {/* En-tête section — profil utilisateur */}
       <div className="px-4 pt-5 pb-4 border-b border-ardoise-clair/10">
         <div className="flex items-center gap-3">

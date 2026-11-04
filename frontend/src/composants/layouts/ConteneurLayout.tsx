@@ -33,6 +33,11 @@ export function ConteneurLayout({ children }: { children: React.ReactNode }) {
     (p) => pathname === p || pathname.startsWith(p)
   );
   const estAccueil = pathname === "/";
+  const estEspaceLogistique =
+    pathname.startsWith("/chauffeur") ||
+    pathname.startsWith("/receveur") ||
+    pathname.startsWith("/gerant-gare") ||
+    pathname.startsWith("/logistique");
 
   function retourner() {
     if (typeof window !== "undefined" && window.history.length > 1) {
@@ -55,7 +60,7 @@ export function ConteneurLayout({ children }: { children: React.ReactNode }) {
 
   // Espace connecté → layout avec barre latérale (desktop) / menu hamburger (mobile)
   return (
-    <div className="flex min-h-screen bg-sable-clair overflow-x-clip">
+    <div className={`flex min-h-screen bg-sable-clair overflow-x-clip${estEspaceLogistique ? " espace-logistique" : ""}`}>
       {/* Barre latérale — visible sur desktop (md et plus) */}
       <div className="hidden md:block flex-shrink-0">
         <BarreLaterale />
