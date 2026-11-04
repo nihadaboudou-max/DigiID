@@ -557,6 +557,50 @@ def envoyer_sms(telephone: str, message: str) -> bool:
     return False
 
 
+def envoyer_whatsapp(telephone: str, message: str) -> bool:
+    """Envoie un message texte via WhatsApp Cloud API.
+
+    L'appel est volontairement isolé des opérations métier : une indisponibilité
+    de Meta ne doit jamais empêcher l'enregistrement ou la livraison d'un colis.
+    Les messages texte nécessitent une conversation WhatsApp ouverte ; hors de
+    cette fenêtre, Meta exige un template approuvé.
+    """
+    if not parametres.whatsapp_active:
+        journal.info("[WHATSAPP] Désactivé par configuration")
+        return False
+    if not parametres.whatsapp_access_token or not parametres.whatsapp_phone_number_id:
+        journal.warning("[WHATSAPP] Configuration incomplète : message non envoyé")
+        return False
+
+    telephone = telephone.strip().replace("+", "")
+    try:
+        reponse = httpx.post(
+            f"https://graph.facebook.com/{parametres.whatsapp_api_version}/"
+            f"{parametres.whatsapp_phone_number_id}/messages",
+            headers={
+                "Authorization": f"Bearer {parametres.whatsapp_access_token}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "messaging_product": "whatsapp",
+                "to": telephone,
+                "type": "text",
+                "text": {"preview_url": False, "body": message},
+            },
+            timeout=10.0,
+        )
+        if 200 <= reponse.status_code < 300:
+            journal.info(f"[WHATSAPP][META] OK -> {masquer_telephone('+' + telephone)}")
+            return True
+        journal.error(
+            f"[WHATSAPP][META] ERREUR HTTP {reponse.status_code}: "
+            f"{reponse.text[:300]}"
+        )
+    except httpx.HTTPError as erreur:
+        journal.error(f"[WHATSAPP][META] ERREUR -> {masquer_telephone('+' + telephone)}: {erreur}")
+    return False
+
+
 def envoyer_sms_verification(telephone: str, code: str) -> bool:
     return envoyer_sms(
         telephone,

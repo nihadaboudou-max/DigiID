@@ -58,6 +58,34 @@ def _hasher_email(email: str) -> str:
     return hashlib.sha256(email.lower().strip().encode("utf-8")).hexdigest()
 
 
+async def _trouver_utilisateur_par_identifiant(
+    session: AsyncSession,
+    identifiant: str,
+) -> Optional[Utilisateur]:
+    """Recherche un compte par email ou par numéro de téléphone."""
+    identifiant_nettoye = identifiant.strip()
+    try:
+        telephone = normaliser_telephone(identifiant_nettoye)
+    except ErreurValidation:
+        telephone = None
+
+    if telephone:
+        resultat = await session.execute(
+            select(Utilisateur).where(
+                Utilisateur.telephone_hash == hasher_telephone(telephone),
+                Utilisateur.est_supprime == False,
+            )
+        )
+    else:
+        resultat = await session.execute(
+            select(Utilisateur).where(
+                Utilisateur.email_hash == _hasher_email(identifiant_nettoye),
+                Utilisateur.est_supprime == False,
+            )
+        )
+    return resultat.scalar_one_or_none()
+
+
 def _hash_refresh_token(token: str) -> str:
     """Hash du refresh token avant stockage en base."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -269,7 +297,7 @@ async def authentifier_utilisateur(
     agent_utilisateur: Optional[str] = None,
 ) -> Tuple[Utilisateur, str, str]:
     """
-    Authentifie un utilisateur et crée une session.
+    Authentifie un utilisateur par email ou téléphone et crée une session.
 
     Retour :
         Tuple (utilisateur, token_acces, token_rafraichissement)
@@ -277,16 +305,8 @@ async def authentifier_utilisateur(
     Lève :
         ErreurAuthentification, ErreurCompteVerrouille
     """
-    email_hash = _hasher_email(email)
-
     # 1. Chercher l'utilisateur
-    resultat = await session.execute(
-        select(Utilisateur).where(
-            Utilisateur.email_hash == email_hash,
-            Utilisateur.est_supprime == False,
-        )
-    )
-    utilisateur = resultat.scalar_one_or_none()
+    utilisateur = await _trouver_utilisateur_par_identifiant(session, email)
 
     if utilisateur is None:
         # On simule un coût de vérification pour empêcher l'énumération d'emails
@@ -294,7 +314,7 @@ async def authentifier_utilisateur(
         await _enregistrer_audit(
             session, utilisateur_id=None,
             type_evenement=TypesEvenementAudit.CONNEXION_ECHOUEE.value,
-            description=f"Connexion échouée — email inconnu (hash={email_hash[:8]}...)",
+            description="Connexion échouée — identifiant inconnu",
             adresse_ip=adresse_ip,
         )
         await session.commit()
@@ -484,23 +504,15 @@ async def envoyer_code_connexion_email(
     adresse_ip: str = "",
 ) -> dict:
     """
-    Envoie un code 2FA par email pour finaliser une connexion déjà authentifiée.
+    Envoie un code 2FA par email après une connexion identifiée par email ou téléphone.
 
-    Vérifie d'abord les identifiants (email + mot de passe) et que la 2FA
+    Vérifie d'abord l'identifiant (email ou téléphone), le mot de passe et que la 2FA
     est bien activée sur le compte, puis réutilise le service de codes
     existant (generer_et_envoyer_code) avec type_verification="connexion".
 
     Retourne un dict avec destination_masquee, duree_validite_minutes, code.
     """
-    email_hash = _hasher_email(email)
-
-    resultat = await session.execute(
-        select(Utilisateur).where(
-            Utilisateur.email_hash == email_hash,
-            Utilisateur.est_supprime == False,
-        )
-    )
-    utilisateur = resultat.scalar_one_or_none()
+    utilisateur = await _trouver_utilisateur_par_identifiant(session, email)
 
     # Même message que la connexion classique (anti-énumération de comptes)
     if utilisateur is None:
@@ -508,7 +520,7 @@ async def envoyer_code_connexion_email(
         await _enregistrer_audit(
             session, utilisateur_id=None,
             type_evenement=TypesEvenementAudit.CONNEXION_ECHOUEE.value,
-            description=f"Demande de code connexion — email inconnu (hash={email_hash[:8]}...)",
+            description="Demande de code connexion — identifiant inconnu",
             adresse_ip=adresse_ip,
         )
         await session.commit()

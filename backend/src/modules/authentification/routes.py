@@ -163,7 +163,7 @@ async def envoyer_code_connexion(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
     """
-    Vérifie les identifiants (email + mot de passe) puis envoie un code
+    Vérifie l'identifiant (email ou téléphone) et le mot de passe puis envoie un code
     2FA par email pour finaliser la connexion.
 
     Réutilise le même service d'envoi de code que les messages de

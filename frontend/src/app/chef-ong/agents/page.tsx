@@ -343,7 +343,7 @@ function Contenu() {
                 libelle="Téléphone" 
                 value={formData.telephone} 
                 onChange={(e) => setFormData({ ...formData, telephone: e.target.value })} 
-                placeholder="+229 97 12 34 56" 
+                placeholder="97 12 34 56"
               />
               
               <ChampSaisie 

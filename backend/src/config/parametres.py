@@ -190,6 +190,32 @@ class ParametresApplication(BaseSettings):
         validation_alias=AliasChoices("SMS_TWILIO_FROM", "sms_twilio_from"),
     )
 
+    # --- WhatsApp Business Cloud API (Meta) ---
+    whatsapp_active: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("WHATSAPP_ACTIVE", "whatsapp_active"),
+    )
+    whatsapp_access_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("WHATSAPP_ACCESS_TOKEN", "whatsapp_access_token"),
+    )
+    whatsapp_phone_number_id: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "WHATSAPP_PHONE_NUMBER_ID", "whatsapp_phone_number_id"
+        ),
+    )
+    whatsapp_business_account_id: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "WHATSAPP_BUSINESS_ACCOUNT_ID", "whatsapp_business_account_id"
+        ),
+    )
+    whatsapp_api_version: str = Field(
+        default="v21.0",
+        validation_alias=AliasChoices("WHATSAPP_API_VERSION", "whatsapp_api_version"),
+    )
+
     # --- Configuration Pydantic ---
     model_config = SettingsConfigDict(
         env_file=".env",

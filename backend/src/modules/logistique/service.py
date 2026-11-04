@@ -29,6 +29,7 @@ from src.modules.qr_dynamique.service import (
 )
 from src.noyau.notification import (
     envoyer_sms,
+    envoyer_whatsapp,
     construire_message_colis,
     construire_message_suivi_familial,
     construire_message_pre_alerte,
@@ -2490,8 +2491,23 @@ def _ajouter_notification(
     telephone: str,
     message: str,
 ) -> NotificationLogistique:
-    """Envoie (mock) le SMS et journalise la notification dans la transaction."""
-    envoye = envoyer_sms(telephone, message)
+    """Envoie SMS et WhatsApp puis journalise séparément chaque canal."""
+    try:
+        telephone = normaliser_numero_tiers(telephone)
+    except ValueError:
+        journal.warning(f"[NOTIFICATION] Numéro invalide ignoré: {masquer_telephone(telephone)}")
+        return NotificationLogistique(
+            canal="sms",
+            type_cible=type_cible,
+            cible_id=cible_id,
+            type_evenement=type_evenement,
+            destinataire_role=destinataire_role,
+            telephone=telephone,
+            message=message,
+            envoye=False,
+        )
+
+    envoye_sms = envoyer_sms(telephone, message)
     notification = NotificationLogistique(
         canal="sms",
         type_cible=type_cible,
@@ -2500,9 +2516,22 @@ def _ajouter_notification(
         destinataire_role=destinataire_role,
         telephone=telephone,
         message=message,
-        envoye=envoye,
+        envoye=envoye_sms,
     )
     session.add(notification)
+    if parametres.whatsapp_active:
+        session.add(
+            NotificationLogistique(
+                canal="whatsapp",
+                type_cible=type_cible,
+                cible_id=cible_id,
+                type_evenement=type_evenement,
+                destinataire_role=destinataire_role,
+                telephone=telephone,
+                message=message,
+                envoye=envoyer_whatsapp(telephone, message),
+            )
+        )
     return notification
 
 

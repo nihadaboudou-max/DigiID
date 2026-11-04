@@ -17,6 +17,7 @@ from src.modules.invitations.schemas import (
     InvitationAcceptationSchema,
 )
 from src.noyau import chiffrer_donnee, hacher_mot_de_passe
+from src.noyau.telephone import hasher_telephone, normaliser_telephone
 
 
 def hasher_email(email: str) -> str:
@@ -241,7 +242,12 @@ async def accepter_invitation_service(
     mot_de_passe_hash = hacher_mot_de_passe(donnees.mot_de_passe)
     
     # 3. Chiffrer les données personnelles
-    telephone_chiffre = chiffrer_donnee(donnees.telephone) if donnees.telephone else None
+    telephone_normalise = (
+        normaliser_telephone(donnees.telephone) if donnees.telephone else None
+    )
+    telephone_chiffre = (
+        chiffrer_donnee(telephone_normalise) if telephone_normalise else None
+    )
     
     # 4. Créer l'utilisateur avec TOUS les champs requis
     utilisateur = Utilisateur(
@@ -250,6 +256,11 @@ async def accepter_invitation_service(
         prenom_chiffre=chiffrer_donnee(donnees.prenom),
         nom_chiffre=chiffrer_donnee(donnees.nom),
         telephone_chiffre=telephone_chiffre,
+        telephone_hash=(
+            hasher_telephone(telephone_normalise)
+            if telephone_normalise
+            else None
+        ),
         mot_de_passe_hash=mot_de_passe_hash,
         role=invitation.role,
         ville=donnees.ville,

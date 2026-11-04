@@ -18,6 +18,7 @@ import { useRoleUI } from "@/crochets/useRoleUI";
 import { creerEnrolement, modifierEnrolement } from "@/services/enrolement";
 import type { Enrolement } from "@/services/enrolement";
 import type { ReponseUploadCNI } from "@/services/verification_cni";
+import { normaliserTelephone } from "@/services/telephone";
 
 export default function EnrolementPage() {
   return (
@@ -139,14 +140,18 @@ function Contenu() {
   }
 
   async function handleSubmit() {
-    if (!nom || !prenom || !telephone) return;
+    const telephoneNormalise = normaliserTelephone(telephone);
+    if (!nom || !prenom || !telephoneNormalise) {
+      setErreurEnvoi("Saisis un numéro valide : les 8 derniers chiffres, par exemple 97 12 34 56.");
+      return;
+    }
     setEnvoi(true);
     setErreurEnvoi("");
     try {
       const cree = await creerEnrolement({
         citoyen_nom: nom,
         citoyen_prenom: prenom,
-        citoyen_telephone: telephone,
+        citoyen_telephone: telephoneNormalise,
         citoyen_email: email || undefined,
         notes: notes || undefined,
       });
@@ -363,8 +368,8 @@ function Contenu() {
                   type="tel"
                   value={telephone}
                   onChange={(e) => setTelephone(e.target.value)}
-                  placeholder="Ex: +229 01 97 12 34 56"
-                  aide="Numéro obligatoire pour la création du compte DigiID"
+                  placeholder="Ex: 97 12 34 56"
+                  aide="Saisis les 8 derniers chiffres. Le préfixe +229 01 est ajouté automatiquement."
                   required
                 />
                 <ChampSaisie libelle="Email (optionnel)" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Ex: fatou@email.com" />

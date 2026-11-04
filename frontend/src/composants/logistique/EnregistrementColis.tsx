@@ -864,7 +864,7 @@ export function EnregistrementColis({
                       setExpediteurTel(e.target.value);
                       setExpediteurCompteId(null);
                     }}
-                    placeholder="+229 01 97 12 34 56"
+                    placeholder="97 12 34 56"
                     inputMode="tel"
                     type="tel"
                   />
@@ -922,7 +922,7 @@ export function EnregistrementColis({
                       setDestinataireTel(e.target.value);
                       setDestinataireCompteId(null);
                     }}
-                    placeholder="+229 01 97 12 34 56"
+                    placeholder="97 12 34 56"
                     inputMode="tel"
                     type="tel"
                     aide="Format +229 · sert à prévenir le destinataire à l'arrivée."
@@ -1363,7 +1363,7 @@ export function EnregistrementColis({
                     disabled={estModeCommercant && payeurFrais === "destinataire"}
                     inputMode="tel"
                     type="tel"
-                    placeholder="+229 01 97 12 34 56"
+                    placeholder="97 12 34 56"
                   />
                 )}
                 {paiementCommercant && (

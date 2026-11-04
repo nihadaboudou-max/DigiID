@@ -17,14 +17,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 from src.base_donnees.base import Base, MelangeTracabilite
 
 # Canaux d'alerte
-CANAUX_NOTIFICATION = ("sms", "email", "appel")
+CANAUX_NOTIFICATION = ("sms", "whatsapp", "email", "appel")
 
 # Type de l'objet notifié (polymorphe, comme les tickets)
 TYPES_CIBLE_NOTIFICATION = ("colis", "suivi_familial")
 
 
 class NotificationLogistique(Base, MelangeTracabilite):
-    """Trace d'une alerte logistique envoyée (SMS mock puis réel)."""
+    """Trace d'une alerte logistique envoyée par SMS ou WhatsApp."""
 
     __tablename__ = "notifications_logistique"
     __table_args__ = (

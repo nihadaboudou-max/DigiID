@@ -59,7 +59,7 @@ export function CarteTelephone() {
   async function envoyerCode() {
     setErreur(null);
     const chiffres = normaliserLocal(local);
-    if (chiffres.length < 8) {
+    if (chiffres.length !== 8) {
       setErreur("Numéro incomplet : 8 chiffres minimum.");
       return;
     }
@@ -67,7 +67,7 @@ export function CarteTelephone() {
     try {
       const reponse = await clientAPI.put<ReponseEnvoi>(
         "/api/v1/utilisateur/telephone",
-        { telephone: `${INDICATIF}${chiffres}`, canal: "sms" },
+        { telephone: `${INDICATIF}01${chiffres}`, canal: "sms" },
         OPTIONS_AUTH,
       );
       setEnvoi(reponse);
@@ -134,7 +134,7 @@ export function CarteTelephone() {
           onClick={() => {
             setEdition(true);
             setEtape("saisie");
-            setLocal(utilisateur.telephone?.slice(-10) ?? "");
+            setLocal(utilisateur.telephone?.slice(-8) ?? "");
           }}
         >
           {renseigne ? "Modifier" : "Ajouter mon numéro"}
@@ -145,13 +145,13 @@ export function CarteTelephone() {
         <div className="mt-4 space-y-3">
           <div className="flex items-end gap-2">
             <span className="mb-2 rounded-lg bg-ardoise-clair/10 px-3 py-2 font-mono text-sm text-ardoise">
-              {INDICATIF}
+              {INDICATIF} 01
             </span>
             <ChampSaisie
               libelle="Numéro"
               value={local}
               onChange={(evenement) => setLocal(evenement.target.value)}
-              placeholder="01 97 12 34 56"
+              placeholder="97 12 34 56"
               inputMode="tel"
               className="flex-1"
             />

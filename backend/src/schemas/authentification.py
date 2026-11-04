@@ -77,7 +77,9 @@ class InscriptionRequete(BaseModel):
 
 class ConnexionRequete(BaseModel):
     """Données envoyées pour se connecter."""
-    email: EmailStr
+    # Identifiant unique affiché dans un seul champ : email ou téléphone.
+    # Le nom `email` est conservé pour compatibilité avec les clients existants.
+    email: str = Field(..., min_length=3, max_length=254)
     mot_de_passe: str = Field(..., min_length=1)
     code_2fa: Optional[str] = Field(default=None, min_length=6, max_length=6)
     # ✅ NOUVEAU : Vérification de l'email à la première connexion
@@ -90,7 +92,8 @@ class ConnexionRequete(BaseModel):
 
 class ConnexionCodeEnvoyerRequete(BaseModel):
     """Requête pour envoyer un code 2FA de connexion par email."""
-    email: EmailStr
+    # Accepte le même identifiant polymorphe que la connexion principale.
+    email: str = Field(..., min_length=3, max_length=254)
     mot_de_passe: str = Field(..., min_length=1)
 
 

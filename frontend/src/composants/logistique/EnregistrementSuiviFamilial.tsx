@@ -495,7 +495,7 @@ export function EnregistrementSuiviFamilial({
                     onChange={(e) => setAcheteurTel(e.target.value)}
                     inputMode="tel"
                     type="tel"
-                    placeholder="+229 01 97 12 34 56"
+                    placeholder="97 12 34 56"
                     erreur={
                       telAcheteurOk || acheteurTel === ""
                         ? undefined
@@ -517,7 +517,7 @@ export function EnregistrementSuiviFamilial({
                     onChange={(e) => setTelephonePassager(e.target.value)}
                     inputMode="tel"
                     type="tel"
-                    placeholder="+229 01 97 12 34 56"
+                    placeholder="97 12 34 56"
                     erreur={
                       telPassagerOk || telephonePassager === ""
                         ? undefined
@@ -555,7 +555,7 @@ export function EnregistrementSuiviFamilial({
                   onChange={(e) => setProcheTelephone(e.target.value)}
                   inputMode="tel"
                   type="tel"
-                  placeholder="+229 01 97 12 34 56"
+                  placeholder="97 12 34 56"
                   aide="Prévenu en plus du responsable (départ, approche, arrivée)."
                   erreur={
                     telProcheOk || procheTelephone === ""
@@ -745,7 +745,7 @@ export function EnregistrementSuiviFamilial({
                     onChange={(e) => setTelephonePaiement(e.target.value)}
                     inputMode="tel"
                     type="tel"
-                    placeholder="+229 01 97 12 34 56"
+                    placeholder="97 12 34 56"
                     aide={`Numéro du payeur pour ${LIBELLES_MOYEN[moyenPaiement]}. Paiement simulé en attendant l'intégration opérateur.`}
                   />
                 )}

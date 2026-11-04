@@ -15,6 +15,7 @@ import { inscrire } from "@/services/authentification";
 import { ErreurAPI } from "@/services/client_api";
 import { useAuthentification } from "@/contextes/authentification";
 import { cheminTableauDeBord } from "@/types/api";
+import { normaliserTelephone } from "@/services/telephone";
 
 export default function PageInscription() {
   const router = useRouter();
@@ -65,10 +66,16 @@ export default function PageInscription() {
 
     setChargement(true);
     try {
+      const telephone = normaliserTelephone(donnees.telephone);
+      if (!telephone) {
+        setErreur("Saisis les 8 derniers chiffres, par exemple : 97 12 34 56.");
+        setChargement(false);
+        return;
+      }
       const requete = {
         ...donnees,
         accepte_cgu: accepteCgu,
-        ...(donnees.telephone ? { telephone: donnees.telephone } : {}),
+        telephone,
         ...(donnees.code_parrainage ? { code_parrainage: donnees.code_parrainage } : {}),
       };
       const reponse = await inscrire(requete);
@@ -198,11 +205,11 @@ export default function PageInscription() {
               type="tel"
               value={donnees.telephone}
               onChange={modifierChamp("telephone")}
-              placeholder="+229 01 97 12 34 56"
+              placeholder="97 12 34 56"
               autoComplete="tel"
               required
               inputMode="tel"
-              aide="Format +229 · un numéro = un seul compte."
+              aide="Saisis les 8 derniers chiffres : 97 12 34 56. Le préfixe +229 01 est ajouté automatiquement."
             />
 
             <ChampSaisie

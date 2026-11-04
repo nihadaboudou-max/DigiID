@@ -12,6 +12,7 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Alerte } from "@/composants/commun/Alerte";
 import { Carte } from "@/composants/commun/Carte";
 import { Badge } from "@/composants/commun/Badge";
+import { normaliserTelephone } from "@/services/telephone";
 
 interface InvitationInfo {
   email: string;
@@ -112,6 +113,11 @@ export default function PageAccepterInvitation() {
       setErreurSoumission("Prénom et nom doivent faire au moins 2 caractères.");
       return;
     }
+    const telephoneNormalise = telephone ? normaliserTelephone(telephone) : null;
+    if (telephone && !telephoneNormalise) {
+      setErreurSoumission("Saisis les 8 derniers chiffres, par exemple : 97 12 34 56.");
+      return;
+    }
 
     setSoumissionEnCours(true);
     try {
@@ -122,7 +128,7 @@ export default function PageAccepterInvitation() {
           nom,
           mot_de_passe: motDePasse,
           ville: ville || null,
-          telephone: telephone || null,
+          telephone: telephoneNormalise,
         },
         { authentifie: false }
       );
@@ -307,7 +313,8 @@ export default function PageAccepterInvitation() {
               type="tel"
               value={telephone}
               onChange={(e) => setTelephone(e.target.value)}
-              placeholder="+229 01 97 12 34 56"
+              placeholder="97 12 34 56"
+              aide="Saisis les 8 derniers chiffres : 97 12 34 56."
             />
           </div>
 

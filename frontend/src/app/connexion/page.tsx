@@ -287,13 +287,13 @@ function ContenuConnexion() {
             {etape === "identifiants" && (
               <>
                 <ChampSaisie
-                  libelle="Email"
-                  type="email"
+                  libelle="Email ou numéro de téléphone"
+                  type="text"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="amadou@exemple.com"
-                  autoComplete="email"
+                  placeholder="amadou@exemple.com ou +229 01 97 12 34 56"
+                  autoComplete="username"
                 />
                 <ChampSaisie
                   libelle="Mot de passe"

@@ -337,7 +337,7 @@ export default function GestionAgentsChef({ titre, sousTitre, typeAgent }: Gesti
                 <ChampSaisie libelle="Nom *" value={formData.nom} onChange={(e) => setFormData({ ...formData, nom: e.target.value })} placeholder="Nom" required />
               </div>
               
-              <ChampSaisie libelle="Téléphone" value={formData.telephone} onChange={(e) => setFormData({ ...formData, telephone: e.target.value })} placeholder="+229 97 12 34 56" />
+              <ChampSaisie libelle="Téléphone" value={formData.telephone} onChange={(e) => setFormData({ ...formData, telephone: e.target.value })} placeholder="97 12 34 56" aide="8 derniers chiffres, préfixe +229 01 ajouté automatiquement." />
               <ChampSaisie libelle="Ville" value={formData.ville} onChange={(e) => setFormData({ ...formData, ville: e.target.value })} placeholder="Cotonou" />
               
               {typeAgent === "ong" && modeCreation === "direct" && (

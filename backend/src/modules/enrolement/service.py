@@ -5,6 +5,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modeles.enrolement import Enrolement
 from src.modeles import Utilisateur
+from src.noyau.telephone import normaliser_telephone
 
 
 # ─── Fonctions utilitaires de cloisonnement ──────────────────────────
@@ -36,6 +37,8 @@ async def creer_enrolement(
     data: dict,
 ) -> Enrolement:
     """Crée un nouvel enrôlement avec cloisonnement automatique."""
+    data = dict(data)
+    data["citoyen_telephone"] = normaliser_telephone(data["citoyen_telephone"])
     enrolement = Enrolement(
         agent_id=utilisateur.id,
         domaine_id=utilisateur.domaine_id,
@@ -91,6 +94,9 @@ async def mettre_a_jour_enrolement(
     enrolement = await obtenir_enrolement(session, enrolement_id)
     if not enrolement:
         return None
+    data = dict(data)
+    if "citoyen_telephone" in data and data["citoyen_telephone"] is not None:
+        data["citoyen_telephone"] = normaliser_telephone(data["citoyen_telephone"])
     for key, value in data.items():
         if value is not None:
             setattr(enrolement, key, value)
