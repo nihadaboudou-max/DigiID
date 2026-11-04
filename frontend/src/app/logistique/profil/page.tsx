@@ -567,53 +567,55 @@ function Contenu() {
 
             {estGuichet && (
               <div className="space-y-2 rounded-xl border border-lagune/20 bg-lagune/5 p-4">
-              <div>
-                <label
-                  htmlFor="recherche-gare"
-                  className="mb-1 block text-sm font-medium text-ardoise"
-                >
-                  Rechercher une gare
-                </label>
-                <input
-                  id="recherche-gare"
-                  type="search"
-                  value={rechercheGare}
-                  onChange={(e) => setRechercheGare(e.target.value)}
-                  placeholder="Nom, ville ou code de gare"
-                  className="champ-saisie"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="gare-appartenance"
-                  className="mb-1 block text-sm font-medium text-ardoise"
-                >
-                  Ma gare d&apos;appartenance <span className="text-terre">*</span>
-                </label>
-                <select
-                  id="gare-appartenance"
-                  value={formulaire.gare_id ?? ""}
-                  onChange={(e) => modifier("gare_id", e.target.value || null)}
-                  className="champ-saisie"
-                  required
-                >
-                  <option value="">Choisir une gare</option>
-                  {garesFiltrees.map((gare) => (
-                    <option key={gare.id} value={gare.id}>
-                      {gare.nom} — {gare.ville} ({gare.code})
-                    </option>
-                  ))}
-                </select>
-                {gares.length === 0 && (
-                  <p className="mt-1 text-xs text-terre">
-                    Aucune gare active n&apos;est disponible. Contactez un administrateur.
-                  </p>
-                )}
-              </div>
-              <p className="text-xs text-ardoise-clair">
-                Cette gare permettra d&apos;identifier les agents du guichet qui
-                peuvent recevoir les colis et enfants à destination.
-              </p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end">
+                  <div>
+                    <label
+                      htmlFor="recherche-gare"
+                      className="mb-1 block text-sm font-medium text-ardoise"
+                    >
+                      Rechercher une gare
+                    </label>
+                    <input
+                      id="recherche-gare"
+                      type="search"
+                      value={rechercheGare}
+                      onChange={(e) => setRechercheGare(e.target.value)}
+                      placeholder="Nom, ville ou code de gare"
+                      className="champ-saisie"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="gare-appartenance"
+                      className="mb-1 block text-sm font-medium text-ardoise"
+                    >
+                      Ma gare d&apos;appartenance <span className="text-terre">*</span>
+                    </label>
+                    <select
+                      id="gare-appartenance"
+                      value={formulaire.gare_id ?? ""}
+                      onChange={(e) => modifier("gare_id", e.target.value || null)}
+                      className="champ-saisie"
+                      required
+                    >
+                      <option value="">Choisir une gare</option>
+                      {garesFiltrees.map((gare) => (
+                        <option key={gare.id} value={gare.id}>
+                          {gare.nom} — {gare.ville} ({gare.code})
+                        </option>
+                      ))}
+                    </select>
+                    {gares.length === 0 && (
+                      <p className="mt-1 text-xs text-terre">
+                        Aucune gare active n&apos;est disponible. Contactez un administrateur.
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-ardoise-clair">
+                  Cette gare permettra d&apos;identifier les agents du guichet qui
+                  peuvent recevoir les colis et enfants à destination.
+                </p>
               </div>
             )}
           </section>
@@ -642,18 +644,15 @@ function Contenu() {
             />
             </div>
 
-          {/* Scan OCR (extraction universelle) : remplit les champs selon le
-              document — pièce d'identité pour tout le monde, et en plus permis /
-              véhicule pour les chauffeurs. */}
+          {/* Aide à la saisie des informations du dossier professionnel. */}
           <div className="rounded-xl border border-lagune/20 bg-lagune/5 px-4 py-3">
             <p className="text-sm font-bold text-ardoise">
-              Scanner un document (OCR)
+              Ajouter un document
             </p>
             <p className="mt-0.5 text-xs text-ardoise-clair">
-              Prenez une photo de votre pièce d&apos;identité, de votre permis, de
-              votre carte verte ou de votre carte grise : le système reconnaît le
-              document et remplit les bons champs. Vous gardez la main — rien
-              n&apos;est enregistré avant que vous ne validiez.
+              Choisissez un document et prenez-le en photo. Les informations
+              seront proposées automatiquement, puis vous pourrez les vérifier
+              avant d&apos;enregistrer.
             </p>
 
             <div className="mt-3 flex flex-wrap gap-2">
@@ -688,7 +687,7 @@ function Contenu() {
             <div className="mt-2">
               <ChampOCR
                 libelle="Photo du document"
-                description="Une photo suffit : le type de document est reconnu automatiquement (extraction universelle)."
+                description="Prenez une photo nette du document pour remplir les informations plus rapidement."
                 surFichier={analyserDocument}
               />
             </div>
@@ -998,21 +997,23 @@ function CarteMotDePasse() {
           onChange={(e) => setAncien(e.target.value)}
           autoComplete="current-password"
         />
-        <ChampSaisie
-          libelle="Nouveau mot de passe"
-          type="password"
-          value={nouveau}
-          onChange={(e) => setNouveau(e.target.value)}
-          autoComplete="new-password"
-          aide="Au moins 8 signes (lettres ou chiffres)."
-        />
-        <ChampSaisie
-          libelle="Répète le nouveau mot de passe"
-          type="password"
-          value={confirmation}
-          onChange={(e) => setConfirmation(e.target.value)}
-          autoComplete="new-password"
-        />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-start">
+          <ChampSaisie
+            libelle="Nouveau mot de passe"
+            type="password"
+            value={nouveau}
+            onChange={(e) => setNouveau(e.target.value)}
+            autoComplete="new-password"
+            aide="Au moins 8 signes (lettres ou chiffres)."
+          />
+          <ChampSaisie
+            libelle="Répète le nouveau mot de passe"
+            type="password"
+            value={confirmation}
+            onChange={(e) => setConfirmation(e.target.value)}
+            autoComplete="new-password"
+          />
+        </div>
         {erreur && <p className="text-sm font-medium text-terre">{erreur}</p>}
         {succes && <p className="text-sm font-medium text-green-700">✓ {succes}</p>}
         <Bouton

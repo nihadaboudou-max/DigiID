@@ -264,7 +264,7 @@ export default function UploadCNI({
                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
               />
             </svg>
-            Analyse en cours...
+            Lecture en cours...
           </>
         ) : (
           <>
@@ -281,7 +281,7 @@ export default function UploadCNI({
                 d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            Lancer l&apos;analyse OCR
+            Lire les informations
           </>
         )}
       </button>

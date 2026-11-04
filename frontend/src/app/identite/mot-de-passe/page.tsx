@@ -107,25 +107,27 @@ function Contenu() {
             required
             autoComplete="current-password"
           />
-          <ChampSaisie
-            libelle="Nouveau mot de passe"
-            type="password"
-            value={nouveauMotDePasse}
-            onChange={(e) => setNouveauMotDePasse(e.target.value)}
-            placeholder="Au moins 8 caractères"
-            required
-            autoComplete="new-password"
-            aide="Minimum 8 caractères, lettres et chiffres recommandés."
-          />
-          <ChampSaisie
-            libelle="Confirmer le nouveau mot de passe"
-            type="password"
-            value={confirmation}
-            onChange={(e) => setConfirmation(e.target.value)}
-            placeholder="Répète le nouveau mot de passe"
-            required
-            autoComplete="new-password"
-          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-start">
+            <ChampSaisie
+              libelle="Nouveau mot de passe"
+              type="password"
+              value={nouveauMotDePasse}
+              onChange={(e) => setNouveauMotDePasse(e.target.value)}
+              placeholder="Au moins 8 caractères"
+              required
+              autoComplete="new-password"
+              aide="Minimum 8 caractères, lettres et chiffres recommandés."
+            />
+            <ChampSaisie
+              libelle="Confirmer le nouveau mot de passe"
+              type="password"
+              value={confirmation}
+              onChange={(e) => setConfirmation(e.target.value)}
+              placeholder="Répète le nouveau mot de passe"
+              required
+              autoComplete="new-password"
+            />
+          </div>
           <div className="pt-2">
             <Bouton
               variante="primaire"

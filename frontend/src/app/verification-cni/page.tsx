@@ -198,7 +198,7 @@ export default function PageVerificationCNI() {
       <nav className="flex items-center gap-2 text-sm text-ardoise-clair mb-6">
         <a href="/identite" className="hover:text-lagune transition-colors">Identité</a>
         <span>/</span>
-        <span className="text-ardoise font-semibold">Scan CNI</span>
+        <span className="text-ardoise font-semibold">Vérifier une carte</span>
       </nav>
 
       {/* En-tête */}
@@ -209,8 +209,8 @@ export default function PageVerificationCNI() {
               Vérification d&apos;identité — CNI
             </h1>
             <p className="text-ardoise-clair mt-1">
-              Scanne ta Carte Nationale d&apos;Identité pour vérifier ton identité.
-              Les données sont extraites automatiquement par OCR et validées.
+              Prends une photo de ta carte d&apos;identité pour vérifier ton identité.
+              Les informations seront proposées automatiquement, puis validées.
             </p>
           </div>
           <a href="/identite">

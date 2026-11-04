@@ -125,9 +125,9 @@ export function RechercheCarteDigiID({
         </div>
       </div>
 
-      <div className={compact ? "grid grid-cols-1 gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end" : "space-y-3"}>
+      <div className={`grid grid-cols-1 gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end ${compact ? "" : "sm:gap-3"}`}>
         {/* Le scan et la saisie manuelle sont deux chemins équivalents. */}
-        <div className={compact ? "flex items-center" : undefined}>
+        <div className="flex items-center">
           <LecteurQRCode
             id={idLecteur}
             libelleBouton="Scanner le QR"
@@ -139,7 +139,7 @@ export function RechercheCarteDigiID({
           />
         </div>
 
-        <div className={compact ? "grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2" : "flex flex-col gap-2 sm:flex-row sm:items-end"}>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
         <div className="flex-1">
           <ChampSaisie
             libelle={libelle}

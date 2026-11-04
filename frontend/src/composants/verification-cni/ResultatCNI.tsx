@@ -300,7 +300,7 @@ export function ResultatOCR({
             donnees.taux_confiance_moyen !== undefined && (
               <span>
                 {" "}
-— Confiance OCR : {donnees.taux_confiance_moyen.toFixed(1)}%
+— Qualité de lecture : {donnees.taux_confiance_moyen.toFixed(1)}%
               </span>
             )}
         </div>

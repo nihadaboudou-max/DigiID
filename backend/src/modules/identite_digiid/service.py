@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import (
     Gare, Ligne, ArretLigne, Vehicule, Voyage, Utilisateur,
-    Colis, SuiviFamilial, ProfilLogistique,
+    Colis, SuiviFamilial, ProfilLogistique, ActeurLogistique,
 )
 from src.modules.identite_digiid import schemas
 from src.modules.qr_dynamique.service import (
@@ -457,7 +457,12 @@ async def enregistrer_profil_logistique(
 async def lister_guichetiers(
     session: AsyncSession, gare_id: UUID
 ) -> list[schemas.GuichetDisponible]:
-    """Liste les receveurs et gérants actifs rattachés à une gare."""
+    """Liste les receveurs et gérants actifs rattachés à une gare.
+
+    Les guichetiers historiques sont encore stockés dans ``ActeurLogistique``,
+    tandis que les nouveaux dossiers utilisent ``ProfilLogistique``. Les deux
+    sources sont donc réunies pendant la transition.
+    """
     gare = await session.get(Gare, gare_id)
     if gare is None or not gare.actif:
         raise HTTPException(
@@ -465,7 +470,7 @@ async def lister_guichetiers(
             detail="Gare introuvable ou inactive.",
         )
 
-    resultats = await session.execute(
+    profils = await session.execute(
         select(ProfilLogistique, Utilisateur)
         .join(Utilisateur, Utilisateur.id == ProfilLogistique.utilisateur_id)
         .where(
@@ -477,16 +482,42 @@ async def lister_guichetiers(
         .order_by(Utilisateur.cree_le.asc())
         .limit(100)
     )
-    return [
-        schemas.GuichetDisponible(
+    guichetiers: dict[UUID, schemas.GuichetDisponible] = {}
+    for _, utilisateur in profils.all():
+        guichetiers[utilisateur.id] = schemas.GuichetDisponible(
             utilisateur_id=utilisateur.id,
             nom_complet=nom_complet(utilisateur),
             role=utilisateur.role,
             gare_id=gare.id,
             gare_nom=f"{gare.nom} ({gare.ville})",
         )
-        for _, utilisateur in resultats.all()
-    ]
+
+    acteurs = await session.execute(
+        select(ActeurLogistique, Utilisateur)
+        .join(Utilisateur, Utilisateur.id == ActeurLogistique.utilisateur_id)
+        .where(
+            ActeurLogistique.gare_id == gare_id,
+            ActeurLogistique.role.in_(("receveur", "gerant_gare")),
+            ActeurLogistique.actif.is_(True),
+            Utilisateur.role.in_(("receveur", "gerant_gare")),
+            Utilisateur.est_actif.is_(True),
+        )
+        .order_by(Utilisateur.cree_le.asc())
+        .limit(100)
+    )
+    for acteur, utilisateur in acteurs.all():
+        guichetiers.setdefault(
+            utilisateur.id,
+            schemas.GuichetDisponible(
+                utilisateur_id=utilisateur.id,
+                nom_complet=nom_complet(utilisateur),
+                role=acteur.role,
+                gare_id=gare.id,
+                gare_nom=f"{gare.nom} ({gare.ville})",
+            ),
+        )
+
+    return list(guichetiers.values())
 
 
 async def verifier_profil_logistique(

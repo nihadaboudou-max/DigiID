@@ -129,26 +129,28 @@ function ContenuReinitialisation() {
         </Alerte>
 
         <form onSubmit={gererSoumission} className="space-y-4">
-          <ChampSaisie
-            libelle="Nouveau mot de passe"
-            type="password"
-            required
-            minLength={12}
-            value={nouveauMotDePasse}
-            onChange={(e) => setNouveauMotDePasse(e.target.value)}
-            autoComplete="new-password"
-            placeholder="Minimum 12 caractères"
-          />
-          <ChampSaisie
-            libelle="Confirmer le mot de passe"
-            type="password"
-            required
-            minLength={12}
-            value={confirmation}
-            onChange={(e) => setConfirmation(e.target.value)}
-            autoComplete="new-password"
-            placeholder="Ressaisis le mot de passe"
-          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-start">
+            <ChampSaisie
+              libelle="Nouveau mot de passe"
+              type="password"
+              required
+              minLength={12}
+              value={nouveauMotDePasse}
+              onChange={(e) => setNouveauMotDePasse(e.target.value)}
+              autoComplete="new-password"
+              placeholder="Minimum 12 caractères"
+            />
+            <ChampSaisie
+              libelle="Confirmer le mot de passe"
+              type="password"
+              required
+              minLength={12}
+              value={confirmation}
+              onChange={(e) => setConfirmation(e.target.value)}
+              autoComplete="new-password"
+              placeholder="Ressaisis le mot de passe"
+            />
+          </div>
           <Bouton
             type="submit"
             variante="primaire"

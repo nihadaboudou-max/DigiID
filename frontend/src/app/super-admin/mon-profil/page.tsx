@@ -370,6 +370,7 @@ function Contenu() {
                 required
               />
             </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-start">
             <div>
               <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
                 Nouveau mot de passe
@@ -395,6 +396,7 @@ function Contenu() {
                 className="w-full px-3 py-2 border border-ardoise-clair/30 rounded-lg text-sm"
                 required
               />
+            </div>
             </div>
             {mdpErreur && (
               <p className="text-sm text-terre bg-terre/10 px-3 py-2 rounded">{mdpErreur}</p>

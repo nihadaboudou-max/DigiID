@@ -307,7 +307,6 @@ export function BarreLaterale() {
   else if (utilisateur.role === "receveur") {
     liens = [
       { href: "/receveur/dashboard", libelle: "Tableau de bord", Icone: IconeAccueil },
-      { href: "/receveur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
       { href: "/receveur/tickets", libelle: "Colis & tickets", Icone: IconeTicket },
       { href: "/receveur/suivi-familial", libelle: "Suivi familial", Icone: IconeIdentite },
       { href: "/receveur/scan", libelle: "Scanner / Livrer", Icone: IconeScan },
@@ -327,7 +326,6 @@ export function BarreLaterale() {
     liens = [
       { href: "/gerant-gare/dashboard", libelle: "Supervision de gare", Icone: IconeAccueil },
       { href: "/gerant-gare/vehicules", libelle: "Cars & chauffeurs", Icone: IconeCamion },
-      { href: "/gerant-gare/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
       { href: "/gerant-gare/passagers/nouveau", libelle: "Enregistrer un passager", Icone: IconeIdentite },
       { href: "/gerant-gare/scan", libelle: "Scanner en cas de litige", Icone: IconeScan },
       { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
@@ -347,7 +345,6 @@ export function BarreLaterale() {
       // propres départs (le guichet y charge ensuite colis et passagers).
       { href: "/chauffeur/voyages", libelle: "Planifier mes trajets", Icone: IconeCamion },
       { href: "/chauffeur/colis", libelle: "Mes colis", Icone: IconeTicket },
-      { href: "/chauffeur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
       { href: "/chauffeur/passagers", libelle: "Mes passagers", Icone: IconeIdentite },
       { href: "/chauffeur/scan", libelle: "Scanner / Livrer", Icone: IconeScan },
       { href: "/identite/carte", libelle: "Ma carte DigiID", Icone: IconeIdentite },

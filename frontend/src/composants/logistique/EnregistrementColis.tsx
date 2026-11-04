@@ -848,25 +848,27 @@ export function EnregistrementColis({
                     if (contact.telephone) setExpediteurTel(contact.telephone);
                   }}
                 />
-                <ChampSaisie
-                  libelle="Nom de l'expéditeur"
-                  required
-                  value={expediteurNom}
-                  onChange={(e) => setExpediteurNom(e.target.value)}
-                  placeholder="Ex : Moussa Diallo"
-                />
-                <ChampSaisie
-                  libelle="Téléphone de l'expéditeur"
-                  required
-                  value={expediteurTel}
-                  onChange={(e) => {
-                    setExpediteurTel(e.target.value);
-                    setExpediteurCompteId(null);
-                  }}
-                  placeholder="+229 01 97 12 34 56"
-                  inputMode="tel"
-                  type="tel"
-                />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <ChampSaisie
+                    libelle="Nom de l'expéditeur"
+                    required
+                    value={expediteurNom}
+                    onChange={(e) => setExpediteurNom(e.target.value)}
+                    placeholder="Ex : Moussa Diallo"
+                  />
+                  <ChampSaisie
+                    libelle="Téléphone de l'expéditeur"
+                    required
+                    value={expediteurTel}
+                    onChange={(e) => {
+                      setExpediteurTel(e.target.value);
+                      setExpediteurCompteId(null);
+                    }}
+                    placeholder="+229 01 97 12 34 56"
+                    inputMode="tel"
+                    type="tel"
+                  />
+                </div>
                 <div className="flex justify-end">
                   <BoutonVocal
                     variante="primaire"
@@ -904,26 +906,28 @@ export function EnregistrementColis({
                     if (contact.telephone) setDestinataireTel(contact.telephone);
                   }}
                 />
-                <ChampSaisie
-                  libelle="Nom du destinataire"
-                  required
-                  value={destinataireNom}
-                  onChange={(e) => setDestinataireNom(e.target.value)}
-                  placeholder="Ex : Fatou Ndiaye"
-                />
-                <ChampSaisie
-                  libelle="Téléphone du destinataire"
-                  required
-                  value={destinataireTel}
-                  onChange={(e) => {
-                    setDestinataireTel(e.target.value);
-                    setDestinataireCompteId(null);
-                  }}
-                  placeholder="+229 01 97 12 34 56"
-                  inputMode="tel"
-                  type="tel"
-                  aide="Format +229 · sert à prévenir le destinataire à l'arrivée."
-                />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <ChampSaisie
+                    libelle="Nom du destinataire"
+                    required
+                    value={destinataireNom}
+                    onChange={(e) => setDestinataireNom(e.target.value)}
+                    placeholder="Ex : Fatou Ndiaye"
+                  />
+                  <ChampSaisie
+                    libelle="Téléphone du destinataire"
+                    required
+                    value={destinataireTel}
+                    onChange={(e) => {
+                      setDestinataireTel(e.target.value);
+                      setDestinataireCompteId(null);
+                    }}
+                    placeholder="+229 01 97 12 34 56"
+                    inputMode="tel"
+                    type="tel"
+                    aide="Format +229 · sert à prévenir le destinataire à l'arrivée."
+                  />
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">

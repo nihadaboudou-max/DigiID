@@ -225,17 +225,10 @@ export default function UploadPhoto({ onSucces }: Props) {
 
       {/* Boutons de sélection du mode */}
       {!modeCamera && (
-        <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Bouton variante="primaire" className="w-full" onClick={demarrerCamera}>
             📷 Prendre une photo (caméra)
           </Bouton>
-
-          <div className="relative">
-            <div className="border-t border-ardoise-clair/20 my-2" />
-            <p className="text-center text-xs text-ardoise-clair -mt-3 bg-white px-2 mx-auto w-fit">
-              ou
-            </p>
-          </div>
 
           <input
             ref={inputRef}

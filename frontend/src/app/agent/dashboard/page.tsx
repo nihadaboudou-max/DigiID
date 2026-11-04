@@ -210,7 +210,7 @@ function Contenu() {
       {/* Actions rapides */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {can.enroll && <CarteAction titre="Nouvel enrôlement" description="Inscrire un nouveau citoyen" href="/agent/enrolement" icone="👤" />}
-        {can.scanCNI && <CarteAction titre="Scanner CNI" description="OCR de la carte d'identité" href="/agent/scan" icone="🪪" />}
+        {can.scanCNI && <CarteAction titre="Vérifier une carte d'identité" description="Prenez une photo de la carte pour remplir les informations." href="/agent/scan" icone="🪪" />}
         {can.captureBiometrics && <CarteAction titre="Capture biométrique" description="Photo et empreinte" href="/agent/capture" icone="🔐" />}
       </div>
     </div>

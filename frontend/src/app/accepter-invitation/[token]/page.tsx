@@ -311,6 +311,7 @@ export default function PageAccepterInvitation() {
             />
           </div>
 
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-start">
           <div>
             <label className="block text-xs uppercase text-ardoise-clair font-semibold mb-1">
               Mot de passe <span className="text-terre">*</span>
@@ -359,6 +360,7 @@ export default function PageAccepterInvitation() {
             required
             placeholder="Retapez le mot de passe"
           />
+          </div>
 
           <Bouton
             type="submit"

@@ -146,14 +146,14 @@ function Contenu() {
       <nav className="text-sm text-ardoise-clair flex gap-2">
         <Link href="/agent/dashboard" className="hover:text-ocre">Tableau de bord</Link>
         <span>/</span>
-        <span className="text-ardoise font-semibold">Scan CNI</span>
+        <span className="text-ardoise font-semibold">Vérifier une carte</span>
       </nav>
 
       <div>
         <p className="text-ocre text-sm uppercase font-semibold tracking-wider">Agent terrain</p>
-        <h1 className="mt-1">Scan de carte d&apos;identité</h1>
+        <h1 className="mt-1">Vérifier une carte d&apos;identité</h1>
         <p className="text-ardoise-clair mt-2">
-          Module OCR DigiID — upload recto/verso pour extraire automatiquement les données de la CNI.
+          Prenez une photo des deux côtés de la carte pour remplir les informations plus rapidement.
         </p>
       </div>
 
@@ -189,7 +189,7 @@ function Contenu() {
       </div>
 
       {aResultat && (
-        <Carte titre="Résultats OCR">
+        <Carte titre="Informations de la carte">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <h3 className="text-sm font-bold text-ardoise uppercase tracking-wide mb-3">Recto</h3>

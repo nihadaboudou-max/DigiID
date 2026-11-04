@@ -287,7 +287,7 @@ function Contenu() {
             </Badge>
             {typeof resultat.resultat_ocr.donnees.taux_confiance_moyen === "number" && (
               <span className="text-xs text-ardoise-clair">
-                Confiance OCR : <span className="font-semibold">{resultat.resultat_ocr.donnees.taux_confiance_moyen.toFixed(1)}%</span>
+                Qualité de lecture : <span className="font-semibold">{resultat.resultat_ocr.donnees.taux_confiance_moyen.toFixed(1)}%</span>
               </span>
                         )}
           </div>
@@ -356,7 +356,7 @@ function Contenu() {
               onClick={() => setAfficherTexteBrut(!afficherTexteBrut)}
               className="text-xs text-lagune hover:underline font-medium"
             >
-              {afficherTexteBrut ? "🔽 Masquer le texte brut" : "🔍 Voir le texte brut extrait par l'OCR"}
+              {afficherTexteBrut ? "🔽 Masquer les informations lues" : "🔍 Voir les informations lues"}
             </button>
 
             {afficherTexteBrut && (

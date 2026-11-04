@@ -260,7 +260,7 @@ function Contenu() {
         <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Agent terrain</p>
         <h1 className="mt-1">Enrôlement citoyen</h1>
         <p className="text-ardoise-clair mt-2">
-          Inscris un nouveau citoyen — saisie manuelle ou préremplissage via scan CNI (OCR).
+          Inscris un nouveau citoyen — remplis les informations à la main ou avec une photo de sa carte.
         </p>
       </div>
 
@@ -268,14 +268,14 @@ function Contenu() {
       {can.scanCNI && etape === 0 && (
         <Carte titre="Scanner la CNI (optionnel)">
           <p className="text-sm text-ardoise-clair mb-4">
-            Utilise le module OCR pour préremplir nom et prénom, ou passe directement à la saisie.
+            Prends une photo de la carte pour remplir le nom et le prénom, ou passe directement à la saisie.
           </p>
           {erreurOcr && <Alerte variante="avertissement">{erreurOcr}</Alerte>}
           <div className="mb-4">
             <UploadCNI
               face="recto"
               label="Recto de la CNI"
-              description="Photo de la face avant pour extraction OCR"
+              description="Photo nette de la face avant de la carte"
               onSucces={handleSuccesOcr}
               onErreur={setErreurOcr}
               contexte="agent"
@@ -306,7 +306,7 @@ function Contenu() {
         <Carte titre="Identité du citoyen">
           {scanIntegre && (
             <Alerte variante="succes" className="mb-4">
-              Données préremplies depuis le scan OCR
+              Informations remplies depuis la photo
               {numeroCni ? ` (CNI ${numeroCni})` : ""}.
             </Alerte>
           )}
@@ -343,7 +343,7 @@ function Contenu() {
                 <ChampSaisie libelle="Nom" value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Ex: Diallo" required />
                 <ChampSaisie libelle="Prénom" value={prenom} onChange={(e) => setPrenom(e.target.value)} placeholder="Ex: Fatou" required />
                 {numeroCni && (
-                  <ChampSaisie libelle="N° CNI (OCR)" value={numeroCni} onChange={(e) => setNumeroCni(e.target.value)} />
+                  <ChampSaisie libelle="N° de carte" value={numeroCni} onChange={(e) => setNumeroCni(e.target.value)} />
                 )}
                 <div className="flex justify-between pt-2">
                   {can.scanCNI ? (
@@ -424,7 +424,7 @@ function Contenu() {
         <div className="bg-lagune/5 border border-lagune/20 rounded-xl p-4 flex items-center justify-between gap-4 flex-wrap">
           <div>
             <p className="text-sm font-semibold text-ardoise">Scanner une CNI</p>
-            <p className="text-xs text-ardoise-clair">Module OCR dédié (recto / verso)</p>
+            <p className="text-xs text-ardoise-clair">Lecture de la carte (recto / verso)</p>
           </div>
           <div className="flex gap-2">
             <Bouton variante="ghost" taille="petit" onClick={() => setEtape(0)}>

@@ -205,8 +205,8 @@ function Contenu() {
         <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Mon identité</p>
         <h1 className="mt-1">Mes documents d'identité</h1>
         <p className="text-ardoise-clair mt-2 max-w-3xl">
-          Consulte les données officielles extraites automatiquement par l'OCR. 
-          Ces informations sont verrouillées pour garantir l'intégrité et la traçabilité de ton identité numérique.
+          Consulte les informations officielles de tes documents.
+          Elles sont protégées pour garantir l'intégrité de ton identité numérique.
         </p>
       </header>
 
@@ -240,8 +240,8 @@ function Contenu() {
           {!aUnDocument ? (
             <Alerte variante="info" titre={`Aucun ${LIBELLES_TYPE_DOCUMENT[onglet].toLowerCase()} enregistré`}>
               <p className="mb-4">
-                Tu n'as pas encore scanné ce document. Les données seront extraites automatiquement 
-                et de manière sécurisée via notre moteur OCR.
+                Tu n'as pas encore ajouté ce document. Prends-le en photo pour
+                que ses informations soient proposées automatiquement.
               </p>
               <Bouton 
                 variante="primaire" 
