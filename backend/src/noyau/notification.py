@@ -578,14 +578,36 @@ def envoyer_whatsapp(telephone: str, message: str) -> bool:
             f"https://graph.facebook.com/{parametres.whatsapp_api_version}/"
             f"{parametres.whatsapp_phone_number_id}/messages",
             headers={
-                "Authorization": f"Bearer {parametres.whatsapp_access_token}",
+                "Authorization": "Bearer " + parametres.whatsapp_access_token,
                 "Content-Type": "application/json",
             },
             json={
                 "messaging_product": "whatsapp",
                 "to": telephone,
-                "type": "text",
-                "text": {"preview_url": False, "body": message},
+                **(
+                    {
+                        "type": "template",
+                        "template": {
+                            "name": parametres.whatsapp_template_name,
+                            "language": {
+                                "code": parametres.whatsapp_template_language
+                            },
+                            "components": [
+                                {
+                                    "type": "body",
+                                    "parameters": [
+                                        {"type": "text", "text": message[:1024]}
+                                    ],
+                                }
+                            ],
+                        },
+                    }
+                    if parametres.whatsapp_template_name
+                    else {
+                        "type": "text",
+                        "text": {"preview_url": False, "body": message},
+                    }
+                ),
             },
             timeout=10.0,
         )
@@ -596,7 +618,7 @@ def envoyer_whatsapp(telephone: str, message: str) -> bool:
             f"[WHATSAPP][META] ERREUR HTTP {reponse.status_code}: "
             f"{reponse.text[:300]}"
         )
-    except httpx.HTTPError as erreur:
+    except (httpx.HTTPError, ValueError) as erreur:
         journal.error(f"[WHATSAPP][META] ERREUR -> {masquer_telephone('+' + telephone)}: {erreur}")
     return False
 

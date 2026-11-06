@@ -215,6 +215,18 @@ class ParametresApplication(BaseSettings):
         default="v21.0",
         validation_alias=AliasChoices("WHATSAPP_API_VERSION", "whatsapp_api_version"),
     )
+    whatsapp_template_name: str = Field(
+        default="digiid_notification_logistique",
+        validation_alias=AliasChoices(
+            "WHATSAPP_TEMPLATE_NAME", "whatsapp_template_name"
+        ),
+    )
+    whatsapp_template_language: str = Field(
+        default="fr",
+        validation_alias=AliasChoices(
+            "WHATSAPP_TEMPLATE_LANGUAGE", "whatsapp_template_language"
+        ),
+    )
 
     # --- Configuration Pydantic ---
     model_config = SettingsConfigDict(
