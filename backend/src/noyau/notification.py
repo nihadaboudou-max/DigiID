@@ -557,7 +557,13 @@ def envoyer_sms(telephone: str, message: str) -> bool:
     return False
 
 
-def envoyer_whatsapp(telephone: str, message: str) -> bool:
+def envoyer_whatsapp(
+    telephone: str,
+    message: str,
+    *,
+    nom_template: Optional[str] = None,
+    parametres_template: Optional[list[str]] = None,
+) -> bool:
     """Envoie un message texte via WhatsApp Cloud API.
 
     L'appel est volontairement isolé des opérations métier : une indisponibilité
@@ -566,13 +572,20 @@ def envoyer_whatsapp(telephone: str, message: str) -> bool:
     cette fenêtre, Meta exige un template approuvé.
     """
     if not parametres.whatsapp_active:
-        journal.info("[WHATSAPP] Désactivé par configuration")
+        journal.warning("[WHATSAPP] Désactivé par configuration")
         return False
     if not parametres.whatsapp_access_token or not parametres.whatsapp_phone_number_id:
         journal.warning("[WHATSAPP] Configuration incomplète : message non envoyé")
         return False
 
     telephone = telephone.strip().replace("+", "")
+    nom_template = nom_template or parametres.whatsapp_template_name
+    valeurs_template = parametres_template or [message[:1024]]
+    journal.warning(
+        f"[WHATSAPP] Tentative template={nom_template} "
+        f"destinataire={masquer_telephone('+' + telephone)} "
+        f"parametres={len(valeurs_template)}"
+    )
     try:
         reponse = httpx.post(
             f"https://graph.facebook.com/{parametres.whatsapp_api_version}/"
@@ -588,7 +601,7 @@ def envoyer_whatsapp(telephone: str, message: str) -> bool:
                     {
                         "type": "template",
                         "template": {
-                            "name": parametres.whatsapp_template_name,
+                            "name": nom_template,
                             "language": {
                                 "code": parametres.whatsapp_template_language
                             },
@@ -596,7 +609,8 @@ def envoyer_whatsapp(telephone: str, message: str) -> bool:
                                 {
                                     "type": "body",
                                     "parameters": [
-                                        {"type": "text", "text": message[:1024]}
+                                        {"type": "text", "text": valeur[:1024]}
+                                        for valeur in valeurs_template
                                     ],
                                 }
                             ],
@@ -612,7 +626,10 @@ def envoyer_whatsapp(telephone: str, message: str) -> bool:
             timeout=10.0,
         )
         if 200 <= reponse.status_code < 300:
-            journal.info(f"[WHATSAPP][META] OK -> {masquer_telephone('+' + telephone)}")
+            journal.warning(
+                f"[WHATSAPP][META] OK -> {masquer_telephone('+' + telephone)} "
+                f"reponse={reponse.text[:300]}"
+            )
             return True
         journal.error(
             f"[WHATSAPP][META] ERREUR HTTP {reponse.status_code}: "

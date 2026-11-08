@@ -227,6 +227,19 @@ class ParametresApplication(BaseSettings):
             "WHATSAPP_TEMPLATE_LANGUAGE", "whatsapp_template_language"
         ),
     )
+    whatsapp_template_code_remise_name: str = Field(
+        default="digiid_code_remise",
+        validation_alias=AliasChoices(
+            "WHATSAPP_TEMPLATE_CODE_REMISE_NAME",
+            "whatsapp_template_code_remise_name",
+        ),
+    )
+    whatsapp_support_phone: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "WHATSAPP_SUPPORT_PHONE", "whatsapp_support_phone"
+        ),
+    )
 
     # --- Configuration Pydantic ---
     model_config = SettingsConfigDict(

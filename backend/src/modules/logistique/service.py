@@ -1329,6 +1329,7 @@ async def preparer_code_remise(
             destinataire_role="destinataire",
             telephone=colis.destinataire_tel,
             message=message,
+            parametres_template=[code],
         )
     await _notifier_comptes_colis(
         session,
@@ -2490,6 +2491,7 @@ def _ajouter_notification(
     destinataire_role: str,
     telephone: str,
     message: str,
+    parametres_template: list[str] | None = None,
 ) -> NotificationLogistique:
     """Envoie SMS et WhatsApp puis journalise séparément chaque canal."""
     try:
@@ -2519,7 +2521,13 @@ def _ajouter_notification(
         envoye=envoye_sms,
     )
     session.add(notification)
-    if parametres.whatsapp_active:
+    if not parametres.whatsapp_active:
+        journal.warning(
+            f"[WHATSAPP] Notification ignorée car WHATSAPP_ACTIVE=false "
+            f"evenement={type_evenement} "
+            f"destinataire={masquer_telephone(telephone)}"
+        )
+    else:
         session.add(
             NotificationLogistique(
                 canal="whatsapp",
@@ -2529,7 +2537,16 @@ def _ajouter_notification(
                 destinataire_role=destinataire_role,
                 telephone=telephone,
                 message=message,
-                envoye=envoyer_whatsapp(telephone, message),
+                envoye=envoyer_whatsapp(
+                    telephone,
+                    message,
+                    nom_template=(
+                        parametres.whatsapp_template_code_remise_name
+                        if type_evenement == "code_remise"
+                        else None
+                    ),
+                    parametres_template=parametres_template,
+                ),
             )
         )
     return notification
