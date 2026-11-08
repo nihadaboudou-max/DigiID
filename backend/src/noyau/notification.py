@@ -616,7 +616,7 @@ def envoyer_whatsapp(
                             ],
                         },
                     }
-                    if parametres.whatsapp_template_name
+                    if nom_template
                     else {
                         "type": "text",
                         "text": {"preview_url": False, "body": message},

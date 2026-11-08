@@ -228,7 +228,7 @@ class ParametresApplication(BaseSettings):
         ),
     )
     whatsapp_template_code_remise_name: str = Field(
-        default="digiid_code_remise",
+        default="",
         validation_alias=AliasChoices(
             "WHATSAPP_TEMPLATE_CODE_REMISE_NAME",
             "whatsapp_template_code_remise_name",

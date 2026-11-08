@@ -2203,6 +2203,10 @@ async def enregistrer_scan(
         if existant is not None:
             colis = await session.get(Colis, existant.colis_id)
             ticket = await obtenir_ticket_du_colis(session, colis)
+            journal.info(
+                f"[NOTIFICATION] Scan idempotent réutilisé: "
+                f"evenement={existant.type_evenement} colis={existant.colis_id}"
+            )
             return {
                 "succes": True,
                 "deja_scanne": True,
@@ -2331,6 +2335,10 @@ async def enregistrer_scan(
 
     if donnees.type_evenement == "livraison":
         if not donnees.code_confirmation:
+            journal.info(
+                f"[NOTIFICATION] Code de remise requis: colis={colis.id}; "
+                "envoi du code au destinataire"
+            )
             ticket_colis = await obtenir_ticket_du_colis(session, colis)
             if ticket_colis is None:
                 raise HTTPException(
@@ -2504,8 +2512,12 @@ def _ajouter_notification(
     try:
         telephone = normaliser_numero_tiers(telephone)
     except ValueError:
-        journal.warning(f"[NOTIFICATION] Numéro invalide ignoré: {masquer_telephone(telephone)}")
-        return NotificationLogistique(
+        telephone_masque = masquer_telephone(telephone)
+        journal.warning(
+            f"[NOTIFICATION] Numéro invalide ignoré: {telephone_masque} "
+            f"evenement={type_evenement} destinataire={destinataire_role}"
+        )
+        notification = NotificationLogistique(
             canal="sms",
             type_cible=type_cible,
             cible_id=cible_id,
@@ -2515,6 +2527,12 @@ def _ajouter_notification(
             message=message,
             envoye=False,
         )
+        session.add(notification)
+        journal.warning(
+            f"[WHATSAPP] Notification non tentée: numéro invalide "
+            f"destinataire={telephone_masque}"
+        )
+        return notification
 
     envoye_sms = envoyer_sms(telephone, message)
     notification = NotificationLogistique(
@@ -2572,7 +2590,15 @@ async def _notifier_scan_colis(
     (départ, mise en transit, arrivée, livraison) — pas l'enregistrement initial
     (le client est au guichet).
     """
+    journal.info(
+        f"[NOTIFICATION] Déclenchement scan colis={colis.id} "
+        f"evenement={type_evenement}"
+    )
     if type_evenement not in ("depart", "mise_en_transit", "arrivee", "livraison"):
+        journal.warning(
+            f"[WHATSAPP] Notification ignorée: événement non notificable "
+            f"evenement={type_evenement}"
+        )
         return
     lieu = await _libelle_gare(session, gare_id)
     message = construire_message_colis(ticket.code_clair, type_evenement, lieu)
@@ -2593,6 +2619,11 @@ async def _notifier_scan_colis(
             destinataire_role=role,
             telephone=telephone,
             message=message,
+        )
+    if not vus:
+        journal.warning(
+            f"[WHATSAPP] Notification non tentée: aucun numéro destinataire "
+            f"evenement={type_evenement} colis={colis.id}"
         )
 
 
