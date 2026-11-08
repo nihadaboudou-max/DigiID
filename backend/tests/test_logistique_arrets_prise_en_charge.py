@@ -200,6 +200,54 @@ class TestPartageChauffeurGuichet:
             )
         )
 
+    def test_code_remise_notifie_uniquement_le_destinataire(self, monkeypatch):
+        appels = []
+
+        async def notifier(*args, **kwargs):
+            appels.append((args, kwargs))
+
+        monkeypatch.setattr(service, "_notifier_comptes_colis", notifier)
+        monkeypatch.setattr(service, "_ajouter_notification", lambda *args, **kwargs: None)
+
+        destinataire = _utilisateur(RoleUtilisateur.CITOYEN.value)
+        colis = _colis(
+            expediteur_id=uuid.uuid4(),
+            destinataire_id=destinataire.id,
+            destinataire_tel="+22990000000",
+        )
+        ticket = SimpleNamespace(code_clair="BHC-2026-000010")
+
+        asyncio.run(
+            service.preparer_code_remise(
+                SessionFactice(), colis, ticket, renouveller=True
+            )
+        )
+
+        assert len(appels) == 1
+        assert appels[0][1]["destinataire_uniquement"] is True
+
+    def test_livraison_notifie_les_deux_parties(self, monkeypatch):
+        appels = []
+
+        def ajouter(*args, **kwargs):
+            appels.append((args, kwargs))
+
+        monkeypatch.setattr(service, "_ajouter_notification", ajouter)
+        asyncio.run(
+            service._notifier_scan_colis(
+                SessionFactice(),
+                _colis(expediteur_tel="+22991111111"),
+                SimpleNamespace(code_clair="BHC-2026-000010"),
+                "livraison",
+                None,
+            )
+        )
+
+        assert [appel[1]["destinataire_role"] for appel in appels] == [
+            "destinataire",
+            "expediteur",
+        ]
+
     def test_depart_refuse_si_colis_deja_en_transit(self):
         chauffeur = _utilisateur(RoleUtilisateur.CHAUFFEUR.value)
         colis = _colis(chauffeur_id=chauffeur.id, statut="en_transit")

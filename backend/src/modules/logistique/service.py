@@ -1250,12 +1250,18 @@ async def _notifier_comptes_colis(
     message: str,
     acteur_id: UUID | None = None,
     code_clair: str | None = None,
+    destinataire_uniquement: bool = False,
 ) -> None:
-    identifiants = {
-        identifiant
-        for identifiant in (colis.expediteur_id, colis.destinataire_id, acteur_id)
-        if identifiant is not None
-    }
+    if destinataire_uniquement:
+        identifiants = {
+            identifiant for identifiant in (colis.destinataire_id,) if identifiant is not None
+        }
+    else:
+        identifiants = {
+            identifiant
+            for identifiant in (colis.expediteur_id, colis.destinataire_id, acteur_id)
+            if identifiant is not None
+        }
     if colis.destinataire_id is None:
         destinataire = await _compte_par_telephone(session, colis.destinataire_tel)
         if destinataire is not None:
@@ -1337,6 +1343,7 @@ async def preparer_code_remise(
         "Code de remise du colis",
         message,
         code_clair=ticket.code_clair,
+        destinataire_uniquement=True,
     )
     await session.commit()
     await session.refresh(colis)
