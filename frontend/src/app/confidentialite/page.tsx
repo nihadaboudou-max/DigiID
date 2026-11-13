@@ -34,7 +34,7 @@ export default function PageConfidentialite() {
               <li><strong>Identité et contact :</strong> nom, prénom, téléphone, email et ville.</li>
               <li><strong>Données de transport :</strong> expéditeur, destinataire, trajet, gare, véhicule, voyage, description et photo du colis.</li>
               <li><strong>Suivi logistique :</strong> scans, statuts, dates, acteurs, gare et localisation déclarée des événements.</li>
-              <li><strong>Remise sécurisée :</strong> code de confirmation à 4 chiffres, durée de validité, tentatives et confirmation de remise.</li>
+              <li><strong>Remise sécurisée :</strong> code de confirmation à 6 chiffres, durée de validité, tentatives et confirmation de remise.</li>
               <li><strong>Qualité et réclamations :</strong> avis, étoiles, litiges et décisions de traitement.</li>
               <li><strong>Sécurité :</strong> journaux techniques et journal d'audit des actions sensibles.</li>
             </ul>

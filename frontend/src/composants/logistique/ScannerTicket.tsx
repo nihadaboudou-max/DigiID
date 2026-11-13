@@ -183,15 +183,15 @@ export function ScannerTicket({
       );
       return;
     }
-    const codeRemiseNormalise = codeRemise.replace(/\D/g, "").slice(0, 4);
+    const codeRemiseNormalise = codeRemise.replace(/\D/g, "").slice(0, 6);
     if (
       typeEvenement === "livraison" &&
       codeConfirmationRequis &&
-      codeRemiseNormalise.length !== 4
+      codeRemiseNormalise.length !== 6
     ) {
-      setErreur("Saisissez le code de remise à 4 chiffres reçu par le destinataire.");
+      setErreur("Saisissez le code de remise à 6 chiffres reçu par le destinataire.");
       annoncerNotification(
-        "Saisissez le code de remise à 4 chiffres reçu par le destinataire.",
+        "Saisissez le code de remise à 6 chiffres reçu par le destinataire.",
         "erreur",
       );
       return;
@@ -345,10 +345,10 @@ export function ScannerTicket({
 
           {typeEvenement === "livraison" && codeConfirmationRequis && (
             <ChampSaisie
-              libelle="Code de remise à 4 chiffres"
+              libelle="Code de remise à 6 chiffres"
               value={codeRemise}
               onChange={(e) =>
-                setCodeRemise(e.target.value.replace(/\D/g, "").slice(0, 4))
+                setCodeRemise(e.target.value.replace(/\D/g, "").slice(0, 6))
               }
               placeholder="Code communiqué par le destinataire"
               inputMode="numeric"
@@ -366,7 +366,7 @@ export function ScannerTicket({
                 !code.trim() ||
                 (typeEvenement === "livraison" &&
                   codeConfirmationRequis &&
-                  codeRemise.length !== 4)
+                codeRemise.length !== 6)
               }
               chargement={enCours && !cameraOuverte}
               onClick={() => void executerScan(code)}

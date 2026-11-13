@@ -1294,7 +1294,7 @@ async def preparer_code_remise(
     *,
     renouveller: bool = False,
 ) -> datetime:
-    """Génère un code à quatre chiffres et notifie le destinataire."""
+    """Génère un code à six chiffres et notifie le destinataire."""
     maintenant = datetime.now(timezone.utc)
     if (
         not renouveller
@@ -1304,7 +1304,7 @@ async def preparer_code_remise(
     ):
         return colis.code_remise_expire_le
 
-    code = f"{secrets.randbelow(10000):04d}"
+    code = f"{secrets.randbelow(1_000_000):06d}"
     expire_le = maintenant + timedelta(
         seconds=parametres.duree_validite_code_remise_secondes
     )

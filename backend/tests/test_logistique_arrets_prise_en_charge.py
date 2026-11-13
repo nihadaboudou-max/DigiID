@@ -203,12 +203,17 @@ class TestPartageChauffeurGuichet:
 
     def test_code_remise_notifie_uniquement_le_destinataire(self, monkeypatch):
         appels = []
+        notifications = []
 
         async def notifier(*args, **kwargs):
             appels.append((args, kwargs))
 
         monkeypatch.setattr(service, "_notifier_comptes_colis", notifier)
-        monkeypatch.setattr(service, "_ajouter_notification", lambda *args, **kwargs: None)
+        monkeypatch.setattr(
+            service,
+            "_ajouter_notification",
+            lambda *args, **kwargs: notifications.append(kwargs),
+        )
 
         destinataire = _utilisateur(RoleUtilisateur.CITOYEN.value)
         colis = _colis(
@@ -226,6 +231,19 @@ class TestPartageChauffeurGuichet:
 
         assert len(appels) == 1
         assert appels[0][1]["destinataire_uniquement"] is True
+        code = notifications[0]["parametres_template"][0]
+        assert len(code) == 6
+        assert code.isdigit()
+
+    def test_code_confirmation_accepte_six_chiffres_et_refuse_quatre(self):
+        assert schemas.ScanCreate(
+            token="ticket-token", code_confirmation="090431"
+        ).code_confirmation == "090431"
+        assert schemas.ConfirmationRemiseRequest(code="090431").code == "090431"
+        with pytest.raises(ValueError):
+            schemas.ScanCreate(token="ticket-token", code_confirmation="9043")
+        with pytest.raises(ValueError):
+            schemas.ConfirmationRemiseRequest(code="9043")
 
     def test_livraison_notifie_les_deux_parties(self, monkeypatch):
         appels = []
