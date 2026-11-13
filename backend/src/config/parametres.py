@@ -234,6 +234,20 @@ class ParametresApplication(BaseSettings):
             "whatsapp_template_code_remise_name",
         ),
     )
+    whatsapp_template_depart_name: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "WHATSAPP_TEMPLATE_DEPART_NAME",
+            "whatsapp_template_depart_name",
+        ),
+    )
+    whatsapp_template_arrivee_name: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "WHATSAPP_TEMPLATE_ARRIVEE_NAME",
+            "whatsapp_template_arrivee_name",
+        ),
+    )
     whatsapp_support_phone: str = Field(
         default="",
         validation_alias=AliasChoices(

@@ -2509,6 +2509,13 @@ def _ajouter_notification(
     parametres_template: list[str] | None = None,
 ) -> NotificationLogistique:
     """Envoie SMS et WhatsApp puis journalise séparément chaque canal."""
+    templates_whatsapp = {
+        "code_remise": parametres.whatsapp_template_code_remise_name,
+        "depart": parametres.whatsapp_template_depart_name,
+        "arrivee": parametres.whatsapp_template_arrivee_name,
+    }
+    nom_template = templates_whatsapp.get(type_evenement)
+    valeurs_template = parametres_template if nom_template else None
     try:
         telephone = normaliser_numero_tiers(telephone)
     except ValueError:
@@ -2565,12 +2572,8 @@ def _ajouter_notification(
                 envoye=envoyer_whatsapp(
                     telephone,
                     message,
-                    nom_template=(
-                        parametres.whatsapp_template_code_remise_name
-                        if type_evenement == "code_remise"
-                        else None
-                    ),
-                    parametres_template=parametres_template,
+                    nom_template=nom_template,
+                    parametres_template=valeurs_template,
                 ),
             )
         )
@@ -2602,15 +2605,32 @@ async def _notifier_scan_colis(
         return
     lieu = await _libelle_gare(session, gare_id)
     message = construire_message_colis(ticket.code_clair, type_evenement, lieu)
-    destinataires: list[tuple[str, str | None]] = [
-        ("destinataire", colis.destinataire_tel),
-        ("expediteur", colis.expediteur_tel),
+    if type_evenement == "depart":
+        lieu_template = (
+            await _libelle_gare(session, colis.gare_arrivee_id) or "destination"
+        )
+    elif type_evenement == "arrivee":
+        lieu_template = lieu or "destination"
+    else:
+        lieu_template = None
+    destinataires: list[tuple[str, str | None, str | None]] = [
+        ("destinataire", colis.destinataire_tel, colis.destinataire_nom),
+        ("expediteur", colis.expediteur_tel, colis.expediteur_nom),
     ]
     vus: set[str] = set()
-    for role, telephone in destinataires:
+    for role, telephone, nom in destinataires:
         if not telephone or telephone in vus:
             continue
         vus.add(telephone)
+        valeurs_template = (
+            [
+                (nom or "Client").strip() or "Client",
+                ticket.code_clair,
+                lieu_template,
+            ]
+            if type_evenement in ("depart", "arrivee")
+            else None
+        )
         _ajouter_notification(
             session,
             type_cible="colis",
@@ -2619,6 +2639,7 @@ async def _notifier_scan_colis(
             destinataire_role=role,
             telephone=telephone,
             message=message,
+            parametres_template=valeurs_template,
         )
     if not vus:
         journal.warning(

@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from src.modeles import (
     ArretLigne,
     Colis,
+    Gare,
     Ligne,
     ProfilLogistique,
     SuiviFamilial,
@@ -246,6 +247,80 @@ class TestPartageChauffeurGuichet:
         assert [appel[1]["destinataire_role"] for appel in appels] == [
             "destinataire",
             "expediteur",
+        ]
+
+    @pytest.mark.parametrize(
+        ("type_evenement", "gare_notification"),
+        [
+            ("depart", "depart"),
+            ("arrivee", "arrivee"),
+        ],
+    )
+    def test_depart_et_arrivee_incluent_les_trois_variables_meta(
+        self, monkeypatch, type_evenement, gare_notification
+    ):
+        appels = []
+        monkeypatch.setattr(
+            service,
+            "_ajouter_notification",
+            lambda *args, **kwargs: appels.append(kwargs),
+        )
+        colis = _colis(destinataire_nom="Ada Lovelace")
+        gare_depart = uuid.uuid4()
+        gare_arrivee = uuid.uuid4()
+        colis.gare_depart_id = gare_depart
+        colis.gare_arrivee_id = gare_arrivee
+        gare_id = gare_depart if gare_notification == "depart" else gare_arrivee
+        gare = SimpleNamespace(nom="Gare centrale", ville="Cotonou")
+        session = SessionFactice({(Gare, gare_arrivee): gare, (Gare, gare_id): gare})
+
+        asyncio.run(
+            service._notifier_scan_colis(
+                session,
+                colis,
+                SimpleNamespace(code_clair="COL-123"),
+                type_evenement,
+                gare_id,
+            )
+        )
+
+        assert len(appels) == 1
+        assert appels[0]["parametres_template"] == [
+            "Ada Lovelace",
+            "COL-123",
+            "Gare centrale (Cotonou)",
+        ]
+
+    def test_ajouter_notification_selectionne_template_evenement_configure(
+        self, monkeypatch
+    ):
+        appels_whatsapp = []
+        monkeypatch.setattr(service, "normaliser_numero_tiers", lambda tel: tel)
+        monkeypatch.setattr(service, "envoyer_sms", lambda *args: True)
+        monkeypatch.setattr(
+            service,
+            "envoyer_whatsapp",
+            lambda *args, **kwargs: appels_whatsapp.append(kwargs) or True,
+        )
+        monkeypatch.setattr(service.parametres, "whatsapp_active", True)
+        monkeypatch.setattr(service.parametres, "whatsapp_template_depart_name", "colis_depart")
+
+        service._ajouter_notification(
+            SessionFactice(),
+            type_cible="colis",
+            cible_id=uuid.uuid4(),
+            type_evenement="depart",
+            destinataire_role="destinataire",
+            telephone="+22990000000",
+            message="Colis en route",
+            parametres_template=["Ada", "COL-123", "Cotonou"],
+        )
+
+        assert appels_whatsapp == [
+            {
+                "nom_template": "colis_depart",
+                "parametres_template": ["Ada", "COL-123", "Cotonou"],
+            }
         ]
 
     def test_depart_refuse_si_colis_deja_en_transit(self):
