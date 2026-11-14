@@ -2514,7 +2514,12 @@ def _ajouter_notification(
         "depart": parametres.whatsapp_template_depart_name,
         "arrivee": parametres.whatsapp_template_arrivee_name,
     }
-    nom_template = templates_whatsapp.get(type_evenement)
+    # Les templates départ/arrivée configurés sont ceux des colis (trois
+    # variables). Le suivi familial utilise le template générique, qui reçoit
+    # le message complet comme une seule variable.
+    nom_template = (
+        templates_whatsapp.get(type_evenement) if type_cible == "colis" else None
+    )
     valeurs_template = parametres_template if nom_template else None
     try:
         telephone = normaliser_numero_tiers(telephone)
@@ -2574,6 +2579,11 @@ def _ajouter_notification(
                     message,
                     nom_template=nom_template,
                     parametres_template=valeurs_template,
+                    parametres_bouton_url=(
+                        parametres_template
+                        if type_evenement == "code_remise" and nom_template
+                        else None
+                    ),
                 ),
             )
         )

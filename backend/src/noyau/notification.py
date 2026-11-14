@@ -540,19 +540,23 @@ def envoyer_sms(telephone: str, message: str) -> bool:
                 timeout=15.0,
             )
             if 200 <= reponse.status_code < 300:
-                journal.info(f"[SMS][TWILIO] OK -> {telephone}")
+                journal.info(
+                    f"[SMS][TWILIO] OK -> {masquer_telephone(telephone)}"
+                )
                 return True
             journal.error(
-                f"[SMS][TWILIO] ERREUR -> {telephone}: "
+                f"[SMS][TWILIO] ERREUR -> {masquer_telephone(telephone)}: "
                 f"HTTP {reponse.status_code} {reponse.text[:300]}"
             )
         except httpx.HTTPError as erreur:
-            journal.error(f"[SMS][TWILIO] ERREUR -> {telephone}: {erreur}")
+            journal.error(
+                f"[SMS][TWILIO] ERREUR -> {masquer_telephone(telephone)}: {erreur}"
+            )
         return False
 
     journal.warning(
         f"[SMS][MOCK] Aucun fournisseur SMS configuré : message non envoyé "
-        f"à {telephone}\nMessage: {message}"
+        f"à {masquer_telephone(telephone)}"
     )
     return False
 
@@ -563,6 +567,7 @@ def envoyer_whatsapp(
     *,
     nom_template: Optional[str] = None,
     parametres_template: Optional[list[str]] = None,
+    parametres_bouton_url: Optional[list[str]] = None,
 ) -> bool:
     """Envoie un message texte via WhatsApp Cloud API.
 
@@ -586,6 +591,27 @@ def envoyer_whatsapp(
         f"destinataire={masquer_telephone('+' + telephone)} "
         f"parametres={len(valeurs_template)}"
     )
+    composants = [
+        {
+            "type": "body",
+            "parameters": [
+                {"type": "text", "text": valeur[:1024]}
+                for valeur in valeurs_template
+            ],
+        }
+    ]
+    if parametres_bouton_url:
+        composants.append(
+            {
+                "type": "button",
+                "sub_type": "url",
+                "index": "0",
+                "parameters": [
+                    {"type": "text", "text": valeur[:1024]}
+                    for valeur in parametres_bouton_url
+                ],
+            }
+        )
     try:
         reponse = httpx.post(
             f"https://graph.facebook.com/{parametres.whatsapp_api_version}/"
@@ -605,15 +631,7 @@ def envoyer_whatsapp(
                             "language": {
                                 "code": parametres.whatsapp_template_language
                             },
-                            "components": [
-                                {
-                                    "type": "body",
-                                    "parameters": [
-                                        {"type": "text", "text": valeur[:1024]}
-                                        for valeur in valeurs_template
-                                    ],
-                                }
-                            ],
+                            "components": composants,
                         },
                     }
                     if nom_template
@@ -773,8 +791,7 @@ def masquer_telephone(telephone: Optional[str]) -> Optional[str]:
 
 def passer_appel_verification(telephone: str, code: str) -> bool:
     journal.info(
-        f"[APPEL][MOCK] A: {telephone}\n"
-        f"Message vocal: Bonjour, voici votre code DigiID : {code}. "
-        f"Je répète : {code}. Ce code expire dans 10 minutes."
+        f"[APPEL][MOCK] Appel de vérification non configuré "
+        f"pour {masquer_telephone(telephone)}"
     )
     return True

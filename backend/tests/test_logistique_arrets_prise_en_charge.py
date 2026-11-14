@@ -309,7 +309,49 @@ class TestPartageChauffeurGuichet:
             "Gare centrale (Cotonou)",
         ]
 
-    def test_ajouter_notification_selectionne_template_evenement_configure(
+    @pytest.mark.parametrize(
+        ("type_evenement", "attribut_template", "nom_template"),
+        [
+            ("depart", "whatsapp_template_depart_name", "colis_depart"),
+            ("arrivee", "whatsapp_template_arrivee_name", "colis_arrivee"),
+        ],
+    )
+    def test_ajouter_notification_selectionne_template_colis_evenement_configure(
+        self, monkeypatch, type_evenement, attribut_template, nom_template
+    ):
+        appels_whatsapp = []
+        monkeypatch.setattr(service, "normaliser_numero_tiers", lambda tel: tel)
+        monkeypatch.setattr(service, "envoyer_sms", lambda *args: True)
+        monkeypatch.setattr(
+            service,
+            "envoyer_whatsapp",
+            lambda *args, **kwargs: appels_whatsapp.append(kwargs) or True,
+        )
+        monkeypatch.setattr(service.parametres, "whatsapp_active", True)
+        monkeypatch.setattr(
+            service.parametres, attribut_template, nom_template
+        )
+
+        service._ajouter_notification(
+            SessionFactice(),
+            type_cible="colis",
+            cible_id=uuid.uuid4(),
+            type_evenement=type_evenement,
+            destinataire_role="destinataire",
+            telephone="+22990000000",
+            message="Colis en route",
+            parametres_template=["Ada", "COL-123", "Cotonou"],
+        )
+
+        assert appels_whatsapp == [
+            {
+                "nom_template": nom_template,
+                "parametres_template": ["Ada", "COL-123", "Cotonou"],
+                "parametres_bouton_url": None,
+            }
+        ]
+
+    def test_ajouter_notification_suivi_familial_utilise_le_template_generique(
         self, monkeypatch
     ):
         appels_whatsapp = []
@@ -321,23 +363,62 @@ class TestPartageChauffeurGuichet:
             lambda *args, **kwargs: appels_whatsapp.append(kwargs) or True,
         )
         monkeypatch.setattr(service.parametres, "whatsapp_active", True)
-        monkeypatch.setattr(service.parametres, "whatsapp_template_depart_name", "colis_depart")
+        monkeypatch.setattr(
+            service.parametres, "whatsapp_template_depart_name", "colis_depart"
+        )
+
+        service._ajouter_notification(
+            SessionFactice(),
+            type_cible="suivi_familial",
+            cible_id=uuid.uuid4(),
+            type_evenement="depart",
+            destinataire_role="parent",
+            telephone="+22990000000",
+            message="L'enfant a pris le départ.",
+        )
+
+        assert appels_whatsapp == [
+            {
+                "nom_template": None,
+                "parametres_template": None,
+                "parametres_bouton_url": None,
+            }
+        ]
+
+    def test_ajouter_notification_transmet_le_code_au_bouton_url_whatsapp(
+        self, monkeypatch
+    ):
+        appels_whatsapp = []
+        monkeypatch.setattr(service, "normaliser_numero_tiers", lambda tel: tel)
+        monkeypatch.setattr(service, "envoyer_sms", lambda *args: True)
+        monkeypatch.setattr(
+            service,
+            "envoyer_whatsapp",
+            lambda *args, **kwargs: appels_whatsapp.append(kwargs) or True,
+        )
+        monkeypatch.setattr(service.parametres, "whatsapp_active", True)
+        monkeypatch.setattr(
+            service.parametres,
+            "whatsapp_template_code_remise_name",
+            "digiid_code_remise",
+        )
 
         service._ajouter_notification(
             SessionFactice(),
             type_cible="colis",
             cible_id=uuid.uuid4(),
-            type_evenement="depart",
+            type_evenement="code_remise",
             destinataire_role="destinataire",
             telephone="+22990000000",
-            message="Colis en route",
-            parametres_template=["Ada", "COL-123", "Cotonou"],
+            message="Votre code est 922807",
+            parametres_template=["922807"],
         )
 
         assert appels_whatsapp == [
             {
-                "nom_template": "colis_depart",
-                "parametres_template": ["Ada", "COL-123", "Cotonou"],
+                "nom_template": "digiid_code_remise",
+                "parametres_template": ["922807"],
+                "parametres_bouton_url": ["922807"],
             }
         ]
 
