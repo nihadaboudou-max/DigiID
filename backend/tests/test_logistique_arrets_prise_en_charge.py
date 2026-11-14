@@ -26,6 +26,7 @@ from src.modeles import (
 )
 from src.modules.logistique import schemas, service
 from src.noyau.constantes_roles import RoleUtilisateur
+from src.noyau.notification import ResultatEnvoiWhatsApp
 
 
 class SessionFactice:
@@ -325,7 +326,9 @@ class TestPartageChauffeurGuichet:
         monkeypatch.setattr(
             service,
             "envoyer_whatsapp",
-            lambda *args, **kwargs: appels_whatsapp.append(kwargs) or True,
+            lambda *args, **kwargs: (
+                appels_whatsapp.append(kwargs) or ResultatEnvoiWhatsApp(True)
+            ),
         )
         monkeypatch.setattr(service.parametres, "whatsapp_active", True)
         monkeypatch.setattr(
@@ -360,7 +363,9 @@ class TestPartageChauffeurGuichet:
         monkeypatch.setattr(
             service,
             "envoyer_whatsapp",
-            lambda *args, **kwargs: appels_whatsapp.append(kwargs) or True,
+            lambda *args, **kwargs: (
+                appels_whatsapp.append(kwargs) or ResultatEnvoiWhatsApp(True)
+            ),
         )
         monkeypatch.setattr(service.parametres, "whatsapp_active", True)
         monkeypatch.setattr(
@@ -394,7 +399,9 @@ class TestPartageChauffeurGuichet:
         monkeypatch.setattr(
             service,
             "envoyer_whatsapp",
-            lambda *args, **kwargs: appels_whatsapp.append(kwargs) or True,
+            lambda *args, **kwargs: (
+                appels_whatsapp.append(kwargs) or ResultatEnvoiWhatsApp(True)
+            ),
         )
         monkeypatch.setattr(service.parametres, "whatsapp_active", True)
         monkeypatch.setattr(
@@ -421,6 +428,42 @@ class TestPartageChauffeurGuichet:
                 "parametres_bouton_url": ["922807"],
             }
         ]
+
+    def test_ajouter_notification_persiste_l_identifiant_meta(self, monkeypatch):
+        session = SessionFactice()
+        monkeypatch.setattr(service, "normaliser_numero_tiers", lambda tel: tel)
+        monkeypatch.setattr(service, "envoyer_sms", lambda *args: True)
+        monkeypatch.setattr(
+            service,
+            "envoyer_whatsapp",
+            lambda *args, **kwargs: ResultatEnvoiWhatsApp(
+                True, message_id="wamid.persisted"
+            ),
+        )
+        monkeypatch.setattr(service.parametres, "whatsapp_active", True)
+        monkeypatch.setattr(
+            service.parametres,
+            "whatsapp_template_depart_name",
+            "colis_depart",
+        )
+
+        service._ajouter_notification(
+            session,
+            type_cible="colis",
+            cible_id=uuid.uuid4(),
+            type_evenement="depart",
+            destinataire_role="destinataire",
+            telephone="+22990000000",
+            message="Colis en route",
+            parametres_template=["Ada", "COL-123", "Cotonou"],
+        )
+
+        whatsapp_notification = next(
+            item for item in session.ajoutes if item.canal == "whatsapp"
+        )
+        assert whatsapp_notification.envoye is True
+        assert whatsapp_notification.whatsapp_message_id == "wamid.persisted"
+        assert whatsapp_notification.whatsapp_statut == "accepted"
 
     def test_depart_refuse_si_colis_deja_en_transit(self):
         chauffeur = _utilisateur(RoleUtilisateur.CHAUFFEUR.value)

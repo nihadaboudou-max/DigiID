@@ -211,6 +211,14 @@ class ParametresApplication(BaseSettings):
             "WHATSAPP_BUSINESS_ACCOUNT_ID", "whatsapp_business_account_id"
         ),
     )
+    whatsapp_verify_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("WHATSAPP_VERIFY_TOKEN", "whatsapp_verify_token"),
+    )
+    whatsapp_app_secret: str = Field(
+        default="",
+        validation_alias=AliasChoices("WHATSAPP_APP_SECRET", "whatsapp_app_secret"),
+    )
     whatsapp_api_version: str = Field(
         default="v21.0",
         validation_alias=AliasChoices("WHATSAPP_API_VERSION", "whatsapp_api_version"),

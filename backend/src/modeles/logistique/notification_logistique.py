@@ -8,9 +8,10 @@ agrégateur SMS configuré — cf. ``noyau/notification.py``), ce journal rend l
 SMS simulé **visible** dans l'interface (page de suivi, fiche colis).
 """
 import uuid
+from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, ForeignKey, Index, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,6 +32,11 @@ class NotificationLogistique(Base, MelangeTracabilite):
         Index("ix_notifs_logistique_cible", "type_cible", "cible_id"),
         Index("ix_notifs_logistique_evenement", "type_evenement"),
         Index("ix_notifs_logistique_telephone", "telephone"),
+        Index(
+            "uq_notifs_logistique_whatsapp_message_id",
+            "whatsapp_message_id",
+            unique=True,
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -53,6 +59,15 @@ class NotificationLogistique(Base, MelangeTracabilite):
     envoye: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
     )
+    whatsapp_message_id: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )
+    whatsapp_statut: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    whatsapp_statut_le: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    whatsapp_erreur_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    whatsapp_erreur_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     def __repr__(self) -> str:
         return (

@@ -17,6 +17,7 @@ Si aucun n'est configuré → mode mock (log console + retourne code_dev).
 import random
 import smtplib
 import string
+from dataclasses import dataclass
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
@@ -561,6 +562,17 @@ def envoyer_sms(telephone: str, message: str) -> bool:
     return False
 
 
+@dataclass(frozen=True)
+class ResultatEnvoiWhatsApp:
+    accepte: bool
+    message_id: Optional[str] = None
+    erreur_code: Optional[str] = None
+    erreur_message: Optional[str] = None
+
+    def __bool__(self) -> bool:
+        return self.accepte
+
+
 def envoyer_whatsapp(
     telephone: str,
     message: str,
@@ -568,7 +580,7 @@ def envoyer_whatsapp(
     nom_template: Optional[str] = None,
     parametres_template: Optional[list[str]] = None,
     parametres_bouton_url: Optional[list[str]] = None,
-) -> bool:
+) -> ResultatEnvoiWhatsApp:
     """Envoie un message texte via WhatsApp Cloud API.
 
     L'appel est volontairement isolé des opérations métier : une indisponibilité
@@ -578,10 +590,10 @@ def envoyer_whatsapp(
     """
     if not parametres.whatsapp_active:
         journal.warning("[WHATSAPP] Désactivé par configuration")
-        return False
+        return ResultatEnvoiWhatsApp(False, erreur_code="WHATSAPP_DESACTIVE")
     if not parametres.whatsapp_access_token or not parametres.whatsapp_phone_number_id:
         journal.warning("[WHATSAPP] Configuration incomplète : message non envoyé")
-        return False
+        return ResultatEnvoiWhatsApp(False, erreur_code="CONFIGURATION_INCOMPLETE")
 
     telephone = telephone.strip().replace("+", "")
     nom_template = nom_template or parametres.whatsapp_template_name
@@ -644,18 +656,61 @@ def envoyer_whatsapp(
             timeout=10.0,
         )
         if 200 <= reponse.status_code < 300:
-            journal.warning(
-                f"[WHATSAPP][META] OK -> {masquer_telephone('+' + telephone)} "
-                f"reponse={reponse.text[:300]}"
+            try:
+                contenu = reponse.json()
+            except ValueError:
+                contenu = {}
+            messages = contenu.get("messages", []) if isinstance(contenu, dict) else []
+            message_id = (
+                messages[0].get("id")
+                if messages and isinstance(messages[0], dict)
+                else None
             )
-            return True
+            journal.warning(
+                f"[WHATSAPP][META] accepté -> {masquer_telephone('+' + telephone)}"
+            )
+            return ResultatEnvoiWhatsApp(True, message_id=message_id)
+
+        try:
+            contenu = reponse.json()
+        except ValueError:
+            contenu = {}
+        erreur = contenu.get("error", {}) if isinstance(contenu, dict) else {}
+        if not isinstance(erreur, dict):
+            erreur = {}
+        erreur_donnees = erreur.get("error_data", {})
+        if not isinstance(erreur_donnees, dict):
+            erreur_donnees = {}
+        code = erreur.get("code")
+        messages_erreur = [
+            valeur
+            for valeur in (
+                erreur.get("title"),
+                erreur.get("message"),
+                erreur_donnees.get("details"),
+            )
+            if isinstance(valeur, str) and valeur
+        ]
+        message_erreur = " — ".join(dict.fromkeys(messages_erreur)) or None
         journal.error(
-            f"[WHATSAPP][META] ERREUR HTTP {reponse.status_code}: "
-            f"{reponse.text[:300]}"
+            f"[WHATSAPP][META] ERREUR HTTP {reponse.status_code} "
+            f"code={code or 'inconnu'}"
+        )
+        return ResultatEnvoiWhatsApp(
+            False,
+            erreur_code=str(code) if code is not None else f"HTTP_{reponse.status_code}",
+            erreur_message=str(message_erreur)[:2000] if message_erreur else None,
         )
     except (httpx.HTTPError, ValueError) as erreur:
-        journal.error(f"[WHATSAPP][META] ERREUR -> {masquer_telephone('+' + telephone)}: {erreur}")
-    return False
+        journal.error(
+            f"[WHATSAPP][META] ERREUR réseau -> "
+            f"{masquer_telephone('+' + telephone)} ({type(erreur).__name__})"
+        )
+        return ResultatEnvoiWhatsApp(
+            False,
+            erreur_code="ERREUR_RESEAU",
+            erreur_message=str(erreur)[:2000],
+        )
 
 
 def envoyer_sms_verification(telephone: str, code: str) -> bool:

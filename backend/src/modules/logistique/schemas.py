@@ -579,6 +579,11 @@ class NotificationLogistiqueResponse(BaseModel):
     telephone: Optional[str] = None
     message: str
     envoye: bool
+    whatsapp_message_id: Optional[str] = None
+    whatsapp_statut: Optional[str] = None
+    whatsapp_statut_le: Optional[datetime] = None
+    whatsapp_erreur_code: Optional[str] = None
+    whatsapp_erreur_message: Optional[str] = None
     cree_le: datetime
     model_config = ConfigDict(from_attributes=True)
 

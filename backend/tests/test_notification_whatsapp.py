@@ -16,11 +16,16 @@ def test_envoyer_whatsapp_ajoute_le_parametre_du_bouton_url(monkeypatch):
         notification.httpx,
         "post",
         lambda *args, **kwargs: (
-            requetes.append(kwargs) or SimpleNamespace(status_code=200, text="{}")
+            requetes.append(kwargs)
+            or SimpleNamespace(
+                status_code=200,
+                text="{}",
+                json=lambda: {"messages": [{"id": "wamid.test-123"}]},
+            )
         ),
     )
 
-    assert notification.envoyer_whatsapp(
+    resultat = notification.envoyer_whatsapp(
         "+2290167958834",
         "Votre code est 922807",
         nom_template="digiid_code_remise",
@@ -28,6 +33,8 @@ def test_envoyer_whatsapp_ajoute_le_parametre_du_bouton_url(monkeypatch):
         parametres_bouton_url=["922807"],
     )
 
+    assert resultat.accepte is True
+    assert resultat.message_id == "wamid.test-123"
     template = requetes[0]["json"]["template"]
     assert template["language"] == {"code": "fr"}
     assert template["components"] == [
@@ -42,6 +49,34 @@ def test_envoyer_whatsapp_ajoute_le_parametre_du_bouton_url(monkeypatch):
             "parameters": [{"type": "text", "text": "922807"}],
         },
     ]
+
+
+def test_envoyer_whatsapp_retourne_les_details_d_erreur_meta(monkeypatch):
+    monkeypatch.setattr(notification.parametres, "whatsapp_active", True)
+    monkeypatch.setattr(notification.parametres, "whatsapp_access_token", "token")
+    monkeypatch.setattr(notification.parametres, "whatsapp_phone_number_id", "123")
+    monkeypatch.setattr(notification.journal, "warning", lambda *args, **kwargs: None)
+    monkeypatch.setattr(notification.journal, "error", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        notification.httpx,
+        "post",
+        lambda *args, **kwargs: SimpleNamespace(
+            status_code=400,
+            json=lambda: {
+                "error": {
+                    "code": 131008,
+                    "title": "Paramètre manquant",
+                    "error_data": {"details": "Le bouton exige une variable."},
+                }
+            },
+        ),
+    )
+
+    resultat = notification.envoyer_whatsapp("+22990000000", "Message")
+
+    assert resultat.accepte is False
+    assert resultat.erreur_code == "131008"
+    assert "bouton" in resultat.erreur_message
 
 
 def test_envoyer_sms_ne_journalise_ni_numero_complet_ni_message(monkeypatch):

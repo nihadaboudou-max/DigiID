@@ -2565,6 +2565,17 @@ def _ajouter_notification(
             f"destinataire={masquer_telephone(telephone)}"
         )
     else:
+        resultat_whatsapp = envoyer_whatsapp(
+            telephone,
+            message,
+            nom_template=nom_template,
+            parametres_template=valeurs_template,
+            parametres_bouton_url=(
+                parametres_template
+                if type_evenement == "code_remise" and nom_template
+                else None
+            ),
+        )
         session.add(
             NotificationLogistique(
                 canal="whatsapp",
@@ -2574,17 +2585,13 @@ def _ajouter_notification(
                 destinataire_role=destinataire_role,
                 telephone=telephone,
                 message=message,
-                envoye=envoyer_whatsapp(
-                    telephone,
-                    message,
-                    nom_template=nom_template,
-                    parametres_template=valeurs_template,
-                    parametres_bouton_url=(
-                        parametres_template
-                        if type_evenement == "code_remise" and nom_template
-                        else None
-                    ),
+                envoye=resultat_whatsapp.accepte,
+                whatsapp_message_id=resultat_whatsapp.message_id,
+                whatsapp_statut=(
+                    "accepted" if resultat_whatsapp.accepte else "failed"
                 ),
+                whatsapp_erreur_code=resultat_whatsapp.erreur_code,
+                whatsapp_erreur_message=resultat_whatsapp.erreur_message,
             )
         )
     return notification
