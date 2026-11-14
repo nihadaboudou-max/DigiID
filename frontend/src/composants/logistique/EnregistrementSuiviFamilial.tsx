@@ -83,7 +83,6 @@ export function EnregistrementSuiviFamilial({
   const [enfantNom, setEnfantNom] = useState("");
   const [enfantAge, setEnfantAge] = useState("");
   const [enfantSexe, setEnfantSexe] = useState("");
-  const [parentNom, setParentNom] = useState("");
   // Enfant : acheteur du ticket. Adulte : numéro propre.
   const [acheteurNom, setAcheteurNom] = useState("");
   const [acheteurTel, setAcheteurTel] = useState("");
@@ -240,7 +239,6 @@ export function EnregistrementSuiviFamilial({
     setEnfantNom("");
     setEnfantAge("");
     setEnfantSexe("");
-    setParentNom("");
     setAcheteurNom("");
     setAcheteurTel("");
     setTelephonePassager("");
@@ -275,7 +273,6 @@ export function EnregistrementSuiviFamilial({
         enfant_nom: enfantNom.trim(),
         enfant_age: ageNombre,
         enfant_sexe: enfantSexe || null,
-        parent_nom: parentNom.trim() || null,
         // Numéros normalisés en +229… (le backend refuse le reste).
         telephone_parent:
           (typePassager === "enfant" ? telAcheteur : telPassager) ?? null,
@@ -376,7 +373,7 @@ export function EnregistrementSuiviFamilial({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-24 sm:pb-0">
       {erreur && (
         <Alerte variante="erreur" titre="Erreur">
           {erreur}
@@ -441,7 +438,11 @@ export function EnregistrementSuiviFamilial({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div
+                className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${
+                  typePassager === "adulte" ? "lg:grid-cols-4" : "lg:grid-cols-3"
+                }`}
+              >
                 <ChampSaisie
                   libelle={
                     typePassager === "enfant"
@@ -475,6 +476,22 @@ export function EnregistrementSuiviFamilial({
                     <option value="F">Féminin</option>
                   </select>
                 </div>
+                {typePassager === "adulte" && (
+                  <ChampSaisie
+                    libelle="Téléphone du passager"
+                    required
+                    value={telephonePassager}
+                    onChange={(e) => setTelephonePassager(e.target.value)}
+                    inputMode="tel"
+                    type="tel"
+                    placeholder="97 12 34 56"
+                    erreur={
+                      telPassagerOk || telephonePassager === ""
+                        ? undefined
+                        : MESSAGE_TELEPHONE_INVALIDE
+                    }
+                  />
+                )}
               </div>
 
               {/* Contacts selon le type */}
@@ -503,29 +520,7 @@ export function EnregistrementSuiviFamilial({
                     }
                   />
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <ChampSaisie
-                    libelle="Nom du proche contacté (optionnel)"
-                    value={parentNom}
-                    onChange={(e) => setParentNom(e.target.value)}
-                  />
-                  <ChampSaisie
-                    libelle="Téléphone du passager"
-                    required
-                    value={telephonePassager}
-                    onChange={(e) => setTelephonePassager(e.target.value)}
-                    inputMode="tel"
-                    type="tel"
-                    placeholder="97 12 34 56"
-                    erreur={
-                      telPassagerOk || telephonePassager === ""
-                        ? undefined
-                        : MESSAGE_TELEPHONE_INVALIDE
-                    }
-                  />
-                </div>
-              )}
+              ) : null}
 
               {/* Le proche de confiance a lui aussi le droit au scan : un numéro
                   mal recopié, et c'est le parent qui n'est pas prévenu. */}
@@ -616,11 +611,59 @@ export function EnregistrementSuiviFamilial({
                   </select>
                 </div>
 
-                {!affecterPlusTard && voyageSelectionne && (
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium text-ardoise">
-                      Arrêt de destination <span className="text-terre">*</span>
-                    </label>
+                {voyageImposeId ? (
+                  <div className="rounded-xl border border-ocre/30 bg-ocre/5 px-4 py-3">
+                    <p className="text-sm font-medium text-ardoise">
+                      Voyage / chauffeur <span className="text-terre">*</span>
+                    </p>
+                    <p className="text-xs text-ardoise-clair">
+                      {voyageSelectionne
+                        ? libelleVoyage(voyageSelectionne)
+                        : "Voyage en cours de chargement…"}
+                    </p>
+                  </div>
+                ) : (
+                  <SelectionVoyage
+                    voyages={voyages}
+                    lignes={lignes}
+                    valeur={voyageId}
+                    surSelection={(id) => {
+                      setVoyageId(id);
+                      if (id) setAffecterPlusTard(false);
+                    }}
+                    gareDepartId={gareDepartId}
+                    gareArriveeId={gareArriveeId}
+                    exigerChauffeur
+                    obligatoire={!affecterPlusTard}
+                    desactive={affecterPlusTard}
+                    aide="Le chauffeur est déduit du car choisi : vous n'avez aucun identifiant à saisir."
+                  />
+                )}
+              </div>
+
+              {!voyageImposeId && attributionFacultative && (
+                <label className="flex items-start gap-2 rounded-lg bg-sable/60 px-3 py-2 text-xs text-ardoise">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 rounded border-ardoise-clair/30"
+                    checked={affecterPlusTard}
+                    onChange={(e) => {
+                      setAffecterPlusTard(e.target.checked);
+                      if (e.target.checked) setVoyageId("");
+                    }}
+                  />
+                  <span>
+                    Je ne sais pas encore quel car partira — enregistrer
+                    maintenant et affecter le chauffeur plus tard (le parent
+                    est prévenu dès l'enregistrement).
+                  </span>
+                </label>
+              )}
+
+              {!affecterPlusTard && voyageSelectionne && (
+                <div className="max-w-xl">
+                  <label className="flex flex-col gap-1.5 text-sm font-medium text-ardoise">
+                    Arrêt de destination <span className="text-terre">*</span>
                     <select
                       className="champ-saisie"
                       value={arretDestinationId}
@@ -647,62 +690,10 @@ export function EnregistrementSuiviFamilial({
                         </option>
                       )}
                     </select>
-                    <p className="text-xs italic text-ardoise-clair">
+                    <span className="text-xs font-normal italic text-ardoise-clair">
                       Positionne le passager dans la feuille de route du chauffeur.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {voyageImposeId && (
-                <div className="rounded-xl border border-ocre/30 bg-ocre/5 px-4 py-3">
-                  <p className="text-sm font-medium text-ardoise">
-                    Car imposé : ce passager voyage dans votre car.
-                  </p>
-                  <p className="text-xs text-ardoise-clair">
-                    {voyageSelectionne
-                      ? libelleVoyage(voyageSelectionne)
-                      : "Voyage en cours de chargement…"}
-                  </p>
-                </div>
-              )}
-
-              {!voyageImposeId && (
-                <div className="space-y-2">
-                  <SelectionVoyage
-                    voyages={voyages}
-                    lignes={lignes}
-                    valeur={voyageId}
-                    surSelection={(id) => {
-                      setVoyageId(id);
-                      if (id) setAffecterPlusTard(false);
-                    }}
-                    gareDepartId={gareDepartId}
-                    gareArriveeId={gareArriveeId}
-                    exigerChauffeur
-                    obligatoire={!affecterPlusTard}
-                    desactive={affecterPlusTard}
-                    aide="Le chauffeur est déduit du car choisi : vous n'avez aucun identifiant à saisir."
-                  />
-
-                  {attributionFacultative && (
-                    <label className="flex items-start gap-2 rounded-lg bg-sable/60 px-3 py-2 text-xs text-ardoise">
-                      <input
-                        type="checkbox"
-                        className="mt-0.5 rounded border-ardoise-clair/30"
-                        checked={affecterPlusTard}
-                        onChange={(e) => {
-                          setAffecterPlusTard(e.target.checked);
-                          if (e.target.checked) setVoyageId("");
-                        }}
-                      />
-                      <span>
-                        Je ne sais pas encore quel car partira — enregistrer
-                        maintenant et affecter le chauffeur plus tard (le parent
-                        est prévenu dès l'enregistrement).
-                      </span>
-                    </label>
-                  )}
+                    </span>
+                  </label>
                 </div>
               )}
 
@@ -766,6 +757,7 @@ export function EnregistrementSuiviFamilial({
                   chargement={enregistrement}
                   disabled={enregistrement || !formulaireValide}
                   onClick={enregistrer}
+                  className="hidden sm:inline-flex"
                 >
                   <IconeCheck className="h-4 w-4" /> Payer &amp; activer le suivi{" "}
                   {libellePassager}
@@ -773,6 +765,20 @@ export function EnregistrementSuiviFamilial({
               </div>
             </div>
           </Carte>
+          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-ardoise-clair/15 bg-white/95 p-3 shadow-lg backdrop-blur sm:hidden">
+            <div className="mx-auto max-w-6xl">
+              <Bouton
+                variante="succes"
+                chargement={enregistrement}
+                disabled={enregistrement || !formulaireValide}
+                onClick={enregistrer}
+                className="w-full"
+              >
+                <IconeCheck className="h-4 w-4" /> Payer &amp; activer le suivi{" "}
+                {libellePassager}
+              </Bouton>
+            </div>
+          </div>
         </>
       )}
     </div>

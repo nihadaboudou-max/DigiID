@@ -17,6 +17,7 @@ import { IconeScan } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { AffecterChauffeur } from "@/composants/logistique/AffecterChauffeur";
 import { formaterDateHeure, formaterFcfa } from "@/composants/logistique/format";
+import { PaginationListe } from "@/composants/logistique/PaginationListe";
 import { ROLES_GUICHET } from "@/composants/logistique/roles";
 import { SuiviTimeline } from "@/composants/logistique/SuiviTimeline";
 import { TicketImprimable } from "@/composants/logistique/TicketImprimable";
@@ -52,21 +53,29 @@ function Contenu() {
 
   const [colis, setColis] = useState<Colis | null>(null);
   const [evenements, setEvenements] = useState<ColisEvenement[]>([]);
+  const [pageEvenements, setPageEvenements] = useState(1);
+  const [totalEvenements, setTotalEvenements] = useState(0);
+  const [chargementEvenements, setChargementEvenements] = useState(true);
+  const [rafraichissementEvenements, setRafraichissementEvenements] = useState(0);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [erreurEvenements, setErreurEvenements] = useState<string | null>(null);
 
   useEffect(() => {
     if (!code) return;
     let annule = false;
+    setColis(null);
+    setEvenements([]);
+    setPageEvenements(1);
+    setTotalEvenements(0);
+    setErreurEvenements(null);
     (async () => {
       setChargement(true);
       setErreur(null);
       try {
         const colisCharge = await logistiqueAPI.colis.parCode(code);
-        const evenementsCharges = await logistiqueAPI.colis.evenements(colisCharge.id);
         if (!annule) {
           setColis(colisCharge);
-          setEvenements(evenementsCharges);
         }
       } catch (e) {
         if (!annule) {
@@ -84,6 +93,35 @@ function Contenu() {
       annule = true;
     };
   }, [code]);
+
+  useEffect(() => {
+    if (!colis?.id) return;
+    let annule = false;
+    setChargementEvenements(true);
+    setErreurEvenements(null);
+    logistiqueAPI.colis
+      .evenementsPagines(colis.id, { page: pageEvenements, par_page: 5 })
+      .then((reponse) => {
+        if (annule) return;
+        setEvenements(reponse.elements);
+        setTotalEvenements(reponse.total);
+      })
+      .catch((e: unknown) => {
+        if (!annule) {
+          setErreurEvenements(
+            e instanceof ErreurAPI
+              ? e.message_utilisateur
+              : "Impossible de charger l'historique du colis.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!annule) setChargementEvenements(false);
+      });
+    return () => {
+      annule = true;
+    };
+  }, [colis?.id, pageEvenements, rafraichissementEvenements]);
 
   if (chargement) {
     return (
@@ -114,7 +152,7 @@ function Contenu() {
     reference_id: colis.id,
     voyage_id: colis.voyage_id,
     statut: colis.statut,
-    nb_scans: evenements.filter((e) => e.type_evenement !== "enregistrement").length,
+    nb_scans: Math.max(totalEvenements - 1, 0),
     premier_scan_le: null,
     imprime_le: null,
     cree_le: colis.cree_le,
@@ -213,12 +251,30 @@ function Contenu() {
                 voyage_id: voyageId,
               });
               setColis(mis_a_jour);
-              setEvenements(await logistiqueAPI.colis.evenements(mis_a_jour.id));
+              setPageEvenements(Math.max(1, Math.ceil((totalEvenements + 1) / 5)));
+              setRafraichissementEvenements((precedent) => precedent + 1);
             }}
           />
 
-          <Carte titre="Suivi du colis" description={`${evenements.length} événement(s)`}>
-            <SuiviTimeline evenements={evenements} />
+          <Carte titre="Suivi du colis" description={`${totalEvenements} événement(s)`}>
+            {erreurEvenements ? (
+              <Alerte variante="erreur" titre="Impossible de charger l'historique">
+                {erreurEvenements}
+              </Alerte>
+            ) : chargementEvenements ? (
+              <p className="py-4 text-center text-sm italic text-ardoise-clair">
+                Chargement de l'historique…
+              </p>
+            ) : (
+              <SuiviTimeline evenements={evenements} />
+            )}
+            <PaginationListe
+              page={pageEvenements}
+              total={totalEvenements}
+              parPage={5}
+              chargement={chargementEvenements}
+              surChangement={setPageEvenements}
+            />
           </Carte>
         </div>
       </div>

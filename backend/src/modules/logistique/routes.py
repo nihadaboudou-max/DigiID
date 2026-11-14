@@ -561,9 +561,18 @@ async def lister_vehicules(
     page: int = Query(1, ge=1),
     par_page: int = Query(20, ge=1, le=100),
     est_actif: bool | None = Query(None),
+    gare_id: UUID | None = Query(None),
+    recherche: str | None = Query(None, max_length=100),
     session: AsyncSession = Depends(obtenir_session),
 ):
-    vehicules, total = await service.lister_vehicules(session, page, par_page, est_actif)
+    vehicules, total = await service.lister_vehicules(
+        session,
+        page,
+        par_page,
+        est_actif,
+        gare_id=gare_id,
+        recherche=recherche,
+    )
     for vehicule in vehicules:
         await _enrichir_vehicule(session, vehicule)
     return schemas.ReponseListe(elements=vehicules, total=total, page=page, par_page=par_page)
@@ -1234,13 +1243,26 @@ async def lister_colis(
     recherche: str | None = Query(None, max_length=120),
     gare_id: UUID | None = Query(None),
     voyage_id: UUID | None = Query(None),
+    cree_depuis: datetime | None = Query(None, description="Date de création incluse"),
+    cree_jusqu_a: datetime | None = Query(None, description="Date de création exclue"),
     session: AsyncSession = Depends(obtenir_session),
 ):
+    if (
+        cree_depuis is not None
+        and cree_jusqu_a is not None
+        and cree_depuis >= cree_jusqu_a
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La date de début doit précéder la date de fin.",
+        )
     colis_liste, total = await service.lister_colis(
         session, page, par_page, statut, gare_id, voyage_id,
         utilisateur=utilisateur_courant,
         statuts=statuts,
         recherche=recherche,
+        cree_depuis=cree_depuis,
+        cree_jusqu_a=cree_jusqu_a,
     )
     for colis in colis_liste:
         await _enrichir_colis(session, colis)
@@ -1474,6 +1496,37 @@ async def lister_evenements_colis(
     return evenements
 
 
+@routeur_colis.get("/{colis_id}/evenements/pagines",
+                   response_model=schemas.ReponseListe[schemas.ColisEvenementResponse],
+                   summary="Timeline paginée d'un colis")
+@require_permission("logistique.lire", "logistique.commercant.lire")
+async def lister_evenements_colis_pagine(
+    colis_id: UUID,
+    page: int = Query(1, ge=1),
+    par_page: int = Query(5, ge=1, le=100),
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    colis = await service.obtenir_colis(session, colis_id)
+    if (
+        utilisateur_courant.role == "citoyen"
+        and utilisateur_courant.mode_commercant_actif
+        and colis.enregistre_par_id != utilisateur_courant.id
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Colis introuvable")
+    evenements, total = await service.lister_evenements_pagine(
+        session, colis_id, page, par_page
+    )
+    for evenement in evenements:
+        await _enrichir_evenement(session, evenement)
+    return {
+        "elements": evenements,
+        "total": total,
+        "page": page,
+        "par_page": par_page,
+    }
+
+
 @routeur_colis.get("/{colis_id}/notifications",
                    response_model=list[schemas.NotificationLogistiqueResponse],
                    summary="SMS envoyés pour un colis (S7)")
@@ -1630,6 +1683,7 @@ async def lister_suivi_familial(
     page: int = Query(1, ge=1),
     par_page: int = Query(20, ge=1, le=100),
     statut: str | None = Query(None),
+    statuts: list[str] | None = Query(None),
     voyage_id: UUID | None = Query(None),
     recherche: str | None = Query(None),
     session: AsyncSession = Depends(obtenir_session),
@@ -1637,6 +1691,7 @@ async def lister_suivi_familial(
     suivis, total = await service.lister_suivi_familial(
         session, page, par_page, statut, voyage_id, recherche,
         utilisateur=utilisateur_courant,
+        statuts=statuts,
     )
     for suivi in suivis:
         await _enrichir_suivi_familial(session, suivi)

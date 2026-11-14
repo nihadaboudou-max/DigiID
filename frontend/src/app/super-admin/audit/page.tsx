@@ -12,7 +12,12 @@ import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { ChampRecherche } from "@/composants/commun/ChampRecherche";
 import { Alerte } from "@/composants/commun/Alerte";
-import { clientAPI } from "@/services/client_api";
+import { PaginationListe } from "@/composants/logistique/PaginationListe";
+import {
+  exporterAuditCSV,
+  listerAudit,
+  type FiltresAudit,
+} from "@/services/super_admin_v2";
 
 interface EvenementAudit {
   id: string;
@@ -28,11 +33,13 @@ interface EvenementAudit {
   score_risque: number | null;
 }
 
-interface DonneesSuperAdmin {
-  donnees: EvenementAudit[];
-}
+const ELEMENTS_PAR_PAGE = 5;
 
-const ELEMENTS_PAR_PAGE = 50;
+const dateDebutISO = (date: string) =>
+  date ? `${date}T00:00:00+00:00` : undefined;
+
+const dateFinISO = (date: string) =>
+  date ? `${date}T23:59:59.999000+00:00` : undefined;
 
 export default function PageAuditSuperAdmin() {
   return (
@@ -43,9 +50,9 @@ export default function PageAuditSuperAdmin() {
 }
 
 function Contenu() {
-  const [allEvenements, setAllEvenements] = useState<EvenementAudit[]>([]);
-  const [evenementsFiltres, setEvenementsFiltres] = useState<EvenementAudit[]>([]);
-  
+  const [evenements, setEvenements] = useState<EvenementAudit[]>([]);
+  const [total, setTotal] = useState(0);
+  const [pages, setPages] = useState(1);
   // État des filtres
   const [recherche, setRecherche] = useState("");
   const [filtre, setFiltre] = useState<string>("");
@@ -55,90 +62,42 @@ function Contenu() {
   const [typesUniques, setTypesUniques] = useState<string[]>([]);
   const [erreurchargement, setErreur] = useState<string | null>(null);
   const [chargement, setChargement] = useState(true);
+  const [exportEnCours, setExportEnCours] = useState(false);
 
-  // Charger les données au montage
   useEffect(() => {
-    const charger = async () => {
+    let annule = false;
+    const timer = window.setTimeout(async () => {
+      setChargement(true);
+      setErreur(null);
       try {
-        const d = await clientAPI.get<DonneesSuperAdmin>(
-          "/api/v1/super-admin/audit?page=1&limite=200",
-          { authentifie: true }
-        );
-        const tous = d.donnees || [];
-        setAllEvenements(tous);
-        setEvenementsFiltres(tous);
-        
-        // Extraire les types uniques et trier
-        const types = [...new Set(tous.map((e) => e.type_evenement))].sort();
-        setTypesUniques(types);
+        const filtres: FiltresAudit = {
+          page,
+          limite: ELEMENTS_PAR_PAGE,
+          type_evenement: filtre || undefined,
+          date_debut: dateDebutISO(dateDebut),
+          date_fin: dateFinISO(dateFin),
+          recherche: recherche.trim() || undefined,
+        };
+        const resultat = await listerAudit(filtres);
+        if (annule) return;
+        setEvenements(resultat.donnees);
+        setTotal(resultat.total);
+        setPages(resultat.pages);
+        setTypesUniques(resultat.types_evenements);
       } catch (e) {
-        setErreur(e instanceof Error ? e.message : "Erreur de chargement");
+        if (!annule) {
+          setErreur(e instanceof Error ? e.message : "Erreur de chargement");
+        }
       } finally {
-        setChargement(false);
+        if (!annule) setChargement(false);
       }
+    }, recherche.trim() ? 250 : 0);
+
+    return () => {
+      annule = true;
+      window.clearTimeout(timer);
     };
-    charger();
-  }, []);
-
-  // Appliquer les filtres
-  const appliquerFiltres = (
-    donnees: EvenementAudit[],
-    rech: string,
-    filt: string,
-    debut: string,
-    fin: string
-  ) => {
-    let resultat = donnees;
-
-    if (filt) {
-      resultat = resultat.filter((e) => e.type_evenement === filt);
-    }
-
-    if (debut) {
-      const timestampDebut = new Date(debut).getTime();
-      resultat = resultat.filter((e) => new Date(e.date_evenement).getTime() >= timestampDebut);
-    }
-    if (fin) {
-      const timestampFin = new Date(fin).getTime() + 86400000;
-      resultat = resultat.filter((e) => new Date(e.date_evenement).getTime() <= timestampFin);
-    }
-
-    if (rech) {
-      const r = rech.toLowerCase();
-      resultat = resultat.filter(
-        (e) =>
-          e.type_evenement.toLowerCase().includes(r) ||
-          e.description.toLowerCase().includes(r) ||
-          (e.nom_utilisateur && e.nom_utilisateur.toLowerCase().includes(r)) ||
-          (e.utilisateur_id && e.utilisateur_id.toLowerCase().includes(r)) ||
-          (e.adresse_ip && e.adresse_ip.toLowerCase().includes(r))
-      );
-    }
-
-    setEvenementsFiltres(resultat);
-    setPage(1);
-  };
-
-  // Gestionnaires de changement de filtre
-  const gererRecherche = (value: string) => {
-    setRecherche(value);
-    appliquerFiltres(allEvenements, value, filtre, dateDebut, dateFin);
-  };
-
-  const gererFiltre = (value: string) => {
-    setFiltre(value);
-    appliquerFiltres(allEvenements, recherche, value, dateDebut, dateFin);
-  };
-
-  const gererDateDebut = (value: string) => {
-    setDateDebut(value);
-    appliquerFiltres(allEvenements, recherche, filtre, value, dateFin);
-  };
-
-  const gererDateFin = (value: string) => {
-    setDateFin(value);
-    appliquerFiltres(allEvenements, recherche, filtre, dateDebut, value);
-  };
+  }, [page, filtre, dateDebut, dateFin, recherche]);
 
   const reinitialiserFiltres = () => {
     setRecherche("");
@@ -146,48 +105,35 @@ function Contenu() {
     setDateDebut("");
     setDateFin("");
     setPage(1);
-    setEvenementsFiltres(allEvenements);
   };
 
-  // Pagination
-  const totalPages = Math.ceil(evenementsFiltres.length / ELEMENTS_PAR_PAGE);
-  const debut = (page - 1) * ELEMENTS_PAR_PAGE;
-  const fin = debut + ELEMENTS_PAR_PAGE;
-  const evenementsPagines = evenementsFiltres.slice(debut, fin);
+  const avezFiltres = Boolean(recherche || filtre || dateDebut || dateFin);
+  const debut = total > 0 ? (page - 1) * ELEMENTS_PAR_PAGE + 1 : 0;
+  const fin = Math.min(page * ELEMENTS_PAR_PAGE, total);
 
-  const avezFiltres = recherche || filtre || dateDebut || dateFin;
-
-  // Export des événements en CSV
   const gererExportCSV = async () => {
-    const donneesAExporter = evenementsFiltres;
-    
-    const enTetes = ["ID", "Date", "Type", "Description", "Utilisateur", "Nom", "IP", "Rôle"];
-    const lignes = donneesAExporter.map((e) => [
-      e.id,
-      e.date_evenement,
-      e.type_evenement,
-      `"${e.description.replace(/"/g, '""')}"`,
-      e.utilisateur_id || "",
-      e.nom_utilisateur || "",
-      e.adresse_ip || "",
-      e.role_acteur || "",
-    ]);
-
-    const csv = [
-      enTetes.join(","),
-      ...lignes.map((l) => l.join(",")),
-    ].join("\n");
-
-    const bom = "\uFEFF";
-    const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `digiid-audit-${new Date().toISOString().split("T")[0]}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setExportEnCours(true);
+    setErreur(null);
+    try {
+      const blob = await exporterAuditCSV({
+        type_evenement: filtre || undefined,
+        date_debut: dateDebutISO(dateDebut),
+        date_fin: dateFinISO(dateFin),
+        recherche: recherche.trim() || undefined,
+      });
+      const url = URL.createObjectURL(blob);
+      const lien = document.createElement("a");
+      lien.href = url;
+      lien.download = `digiid-audit-${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(lien);
+      lien.click();
+      document.body.removeChild(lien);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : "Impossible d'exporter le journal.");
+    } finally {
+      setExportEnCours(false);
+    }
   };
 
   return (
@@ -205,7 +151,12 @@ function Contenu() {
           </p>
         </header>
         <div className="flex gap-2 flex-wrap">
-          <Bouton variante="ghost" taille="petit" onClick={gererExportCSV}>
+          <Bouton
+            variante="ghost"
+            taille="petit"
+            chargement={exportEnCours}
+            onClick={gererExportCSV}
+          >
             Exporter CSV
           </Bouton>
         </div>
@@ -225,9 +176,12 @@ function Contenu() {
               Recherche textuelle
             </label>
             <ChampRecherche
-              placeholder="Type d'événement, description, utilisateur, IP..."
+              placeholder="Type, description, identifiant utilisateur, adresse IP..."
               value={recherche}
-              onChange={(e) => gererRecherche(e.target.value)}
+              onChange={(e) => {
+                setRecherche(e.target.value);
+                setPage(1);
+              }}
             />
           </div>
 
@@ -239,7 +193,10 @@ function Contenu() {
               </label>
               <select
                 value={filtre}
-                onChange={(e) => gererFiltre(e.target.value)}
+                onChange={(e) => {
+                  setFiltre(e.target.value);
+                  setPage(1);
+                }}
                 className="w-full px-3 py-2 border border-ardoise-clair/30 rounded-lg text-sm bg-blanc focus:outline-none focus:border-lagune"
               >
                 <option value="">Tous les types</option>
@@ -258,7 +215,10 @@ function Contenu() {
               <input
                 type="date"
                 value={dateDebut}
-                onChange={(e) => gererDateDebut(e.target.value)}
+                onChange={(e) => {
+                  setDateDebut(e.target.value);
+                  setPage(1);
+                }}
                 className="w-full px-3 py-2 border border-ardoise-clair/30 rounded-lg text-sm bg-blanc focus:outline-none focus:border-lagune"
               />
             </div>
@@ -270,7 +230,10 @@ function Contenu() {
               <input
                 type="date"
                 value={dateFin}
-                onChange={(e) => gererDateFin(e.target.value)}
+                onChange={(e) => {
+                  setDateFin(e.target.value);
+                  setPage(1);
+                }}
                 className="w-full px-3 py-2 border border-ardoise-clair/30 rounded-lg text-sm bg-blanc focus:outline-none focus:border-lagune"
               />
             </div>
@@ -293,18 +256,15 @@ function Contenu() {
           <div className="flex flex-wrap justify-between items-center gap-3">
             <div>
               <p className="text-sm text-ardoise-clair">
-                <strong className="text-lagune">{evenementsFiltres.length}</strong> événement
-                {evenementsFiltres.length > 1 ? "s" : ""} trouvé
-                {evenementsFiltres.length > 1 ? "s" : ""}
-                {evenementsFiltres.length > ELEMENTS_PAR_PAGE && (
+                <strong className="text-lagune">{total}</strong> événement
+                {total > 1 ? "s" : ""} correspondant
+                {total > 1 ? "s" : ""} aux filtres
+                {total > 0 && (
                   <span className="ml-2 italic text-xs">
-                    — Affichage {debut + 1} à {Math.min(fin, evenementsFiltres.length)} (Page {page}/{totalPages})
+                    — Affichage {debut} à {fin}
                   </span>
                 )}
               </p>
-            </div>
-            <div className="text-xs text-ardoise-clair">
-              <strong>{allEvenements.length}</strong> événements au total
             </div>
           </div>
         </div>
@@ -314,73 +274,26 @@ function Contenu() {
           <p className="text-center text-ardoise-clair italic py-6">
             Chargement des événements...
           </p>
-        ) : evenementsPagines.length === 0 ? (
+        ) : evenements.length === 0 ? (
           <p className="text-center text-ardoise-clair italic py-6">
             {avezFiltres
-              ? "Aucun événement ne correspond à tes critères de recherche."
+              ? "Aucun événement ne correspond à vos critères de recherche."
               : "Aucun événement enregistré pour l'instant."}
           </p>
         ) : (
-          <>
-            <div className="space-y-2 mb-4">
-              {evenementsPagines.map((e) => (
-                <LigneEvenement key={e.id} evenement={e} />
-              ))}
-            </div>
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex flex-wrap justify-center gap-2 pt-3 border-t border-ardoise-clair/10">
-                <Bouton
-                  variante="ghost"
-                  taille="petit"
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page === 1}
-                  className="disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  ← Précédent
-                </Bouton>
-
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  const pageNum =
-                    totalPages <= 5
-                      ? i + 1
-                      : page <= 3
-                      ? i + 1
-                      : page >= totalPages - 2
-                      ? totalPages - 4 + i
-                      : page - 2 + i;
-                  return (
-                    <Bouton
-                      key={pageNum}
-                      variante={page === pageNum ? "primaire" : "ghost"}
-                      taille="petit"
-                      onClick={() => setPage(pageNum)}
-                    >
-                      {pageNum}
-                    </Bouton>
-                  );
-                })}
-
-                {totalPages > 5 && page < totalPages - 2 && (
-                  <>
-                    <span className="text-ardoise-clair">...</span>
-                  </>
-                )}
-
-                <Bouton
-                  variante="ghost"
-                  taille="petit"
-                  onClick={() => setPage(Math.min(totalPages, page + 1))}
-                  disabled={page === totalPages}
-                  className="disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Suivant →
-                </Bouton>
-              </div>
-            )}
-          </>
+          <div className="space-y-2 mb-4">
+            {evenements.map((e) => (
+              <LigneEvenement key={e.id} evenement={e} />
+            ))}
+          </div>
         )}
+        <PaginationListe
+          page={page}
+          total={total}
+          parPage={ELEMENTS_PAR_PAGE}
+          chargement={chargement}
+          surChangement={setPage}
+        />
       </Carte>
     </div>
   );

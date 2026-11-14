@@ -28,12 +28,15 @@ interface Proprietes {
   afficherLien?: boolean;
   /** Chemin de la page cagnotte (selon le rôle). */
   cheminCagnotte?: string;
+  /** Résumé compact pour les tableaux de bord. */
+  compact?: boolean;
 }
 
 export function PortefeuilleCarte({
   limiteMouvements = 3,
   afficherLien = true,
   cheminCagnotte = "/receveur/cagnotte",
+  compact = false,
 }: Proprietes) {
   const [portefeuille, setPortefeuille] = useState<Portefeuille | null>(null);
   const [mouvements, setMouvements] = useState<MouvementPortefeuille[]>([]);
@@ -68,17 +71,21 @@ export function PortefeuilleCarte({
   }, [charger]);
 
   return (
-    <Carte>
+    <Carte className={compact ? "py-3" : undefined}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-lagune/10 text-lagune flex items-center justify-center flex-shrink-0">
+          <div
+            className={`rounded-xl bg-lagune/10 text-lagune flex items-center justify-center flex-shrink-0 ${
+              compact ? "h-9 w-9" : "w-11 h-11"
+            }`}
+          >
             <IconePortefeuille className="w-6 h-6" />
           </div>
           <div>
             <p className="text-xs uppercase tracking-wider text-ardoise-clair font-semibold">
               Ma cagnotte
             </p>
-            <p className="text-2xl font-bold text-lagune">
+            <p className={`${compact ? "text-lg" : "text-2xl"} font-bold text-lagune`}>
               {chargement
                 ? "…"
                 : formaterFcfa(portefeuille?.solde_fcfa ?? 0)}
@@ -88,13 +95,13 @@ export function PortefeuilleCarte({
         {afficherLien && (
           <Link href={cheminCagnotte}>
             <Bouton variante="ghost" taille="petit">
-              Détail →
+              {compact ? "Voir" : "Détail →"}
             </Bouton>
           </Link>
         )}
       </div>
 
-      {portefeuille?.maj_le && (
+      {!compact && portefeuille?.maj_le && (
         <p className="text-xs text-ardoise-clair mt-2">
           Dernier mouvement : {formaterDateHeure(portefeuille.maj_le)}
         </p>
@@ -108,7 +115,7 @@ export function PortefeuilleCarte({
         </div>
       )}
 
-      {!erreur && limiteMouvements > 0 && (
+      {!compact && !erreur && limiteMouvements > 0 && (
         <ul className="mt-4 space-y-2">
           {chargement && (
             <li className="text-sm text-ardoise-clair italic">

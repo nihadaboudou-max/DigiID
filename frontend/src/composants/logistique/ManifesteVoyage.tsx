@@ -17,6 +17,7 @@ import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import { Modal } from "@/composants/commun/Modal";
+import { PaginationListe } from "@/composants/logistique/PaginationListe";
 import { ErreurAPI } from "@/services/client_api";
 import { imprimer } from "@/services/impression";
 import { identiteAPI } from "@/services/identite_api";
@@ -44,6 +45,8 @@ export function ManifesteVoyage({
   const [manifeste, setManifeste] = useState<TypeManifeste | null>(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [pageColis, setPageColis] = useState(1);
+  const [pagePassagers, setPagePassagers] = useState(1);
   const [actionEnCours, setActionEnCours] = useState<string | null>(null);
   const [ligneEnRemise, setLigneEnRemise] = useState<LigneManifeste | null>(null);
   const [guichetiers, setGuichetiers] = useState<GuichetDisponible[]>([]);
@@ -56,7 +59,13 @@ export function ManifesteVoyage({
     setChargement(true);
     setErreur(null);
     try {
-      setManifeste(await identiteAPI.chauffeur.manifeste(voyageId));
+      setManifeste(
+        await identiteAPI.chauffeur.manifeste(voyageId, {
+          pageColis,
+          pagePassagers,
+          parPage: 5,
+        }),
+      );
     } catch (e) {
       setErreur(
         e instanceof ErreurAPI
@@ -66,7 +75,7 @@ export function ManifesteVoyage({
     } finally {
       setChargement(false);
     }
-  }, [voyageId]);
+  }, [pageColis, pagePassagers, voyageId]);
 
   useEffect(() => {
     void charger();
@@ -218,12 +227,26 @@ export function ManifesteVoyage({
                 actionEnCours={actionEnCours}
                 surAction={agir}
               />
+              <PaginationListe
+                page={pageColis}
+                total={manifeste.nb_colis}
+                parPage={5}
+                chargement={chargement}
+                surChangement={setPageColis}
+              />
               <TableauManifeste
                 titre="Passagers à bord"
                 lignes={manifeste.passagers}
                 vide="Aucun passager enregistré."
                 actionEnCours={actionEnCours}
                 surAction={agir}
+              />
+              <PaginationListe
+                page={pagePassagers}
+                total={manifeste.nb_passagers}
+                parPage={5}
+                chargement={chargement}
+                surChangement={setPagePassagers}
               />
             </div>
           )}
@@ -372,7 +395,93 @@ function TableauManifeste({
             <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-lagune">
               Descente à {arret} <span className="text-ardoise-clair">({lignesArret.length})</span>
             </p>
-            <div className="tableau-scroll max-h-64">
+            <ul className="space-y-2 sm:hidden print:hidden">
+              {lignesArret.map((ligne) => {
+                const cle = `${ligne.type}-${ligne.id}-reception`;
+                const cleRemise = `${ligne.type}-${ligne.id}-remise`;
+                return (
+                  <li
+                    key={`${ligne.type}-${ligne.id}`}
+                    className="rounded-xl border border-ardoise-clair/10 bg-white p-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-ardoise-clair">
+                          Code
+                        </span>
+                        <span className="font-mono text-sm font-semibold text-lagune">
+                          {ligne.code}
+                        </span>
+                      </div>
+                      <Badge
+                        variante={
+                          ligne.statut === "arrive"
+                            ? "succes"
+                            : ligne.statut === "en_route"
+                              ? "ocre"
+                              : "info"
+                        }
+                      >
+                        {ligne.statut}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-sm text-ardoise">
+                      {ligne.gare_depart_nom ?? "?"} →{" "}
+                      {ligne.arret_nom ?? ligne.gare_arrivee_nom ?? "?"}
+                    </p>
+                    <details className="mt-3">
+                      <summary className="inline-flex cursor-pointer list-none items-center rounded-xl border border-ardoise-clair/20 px-3 py-1.5 text-sm font-medium text-lagune hover:bg-sable">
+                        Détails
+                      </summary>
+                      <div className="mt-3 space-y-3 border-t border-ardoise-clair/10 pt-3">
+                        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                          <div>
+                            <dt className="text-xs text-ardoise-clair">Pour</dt>
+                            <dd className="text-ardoise">{ligne.libelle}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-ardoise-clair">Contact</dt>
+                            <dd className="text-ardoise">{ligne.contact_masque ?? "—"}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-ardoise-clair">Sacs</dt>
+                            <dd className="text-ardoise">{ligne.nombre_bagages}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-ardoise-clair">Origine</dt>
+                            <dd className="text-ardoise">
+                              {LIBELLES_MODE_ENREGISTREMENT[ligne.mode_enregistrement] ??
+                                ligne.mode_enregistrement}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-ardoise-clair">Statut</dt>
+                            <dd className="text-ardoise">
+                              {ligne.statut}
+                              {ligne.reception_confirmee && " · pris en charge"}
+                              {ligne.remis_guichet &&
+                                ` · déposé au guichet${
+                                  ligne.remis_guichet_a_nom
+                                    ? ` à ${ligne.remis_guichet_a_nom}`
+                                    : ""
+                                }`}
+                            </dd>
+                          </div>
+                        </dl>
+                        <GestesManifeste
+                          ligne={ligne}
+                          actionEnCours={actionEnCours}
+                          cleReception={cle}
+                          cleRemise={cleRemise}
+                          surAction={surAction}
+                        />
+                      </div>
+                    </details>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="tableau-scroll hidden max-h-64 sm:block print:block">
               <table className="min-w-[48rem] w-full text-sm">
                 <thead>
                   <tr className="border-b border-ardoise-clair/20 text-left text-xs uppercase tracking-wider text-ardoise-clair">

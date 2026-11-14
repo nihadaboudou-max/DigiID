@@ -16,6 +16,7 @@ export default function PageCagnotte() {
       <CagnotteContenu
         titre="Ma cagnotte"
         sousTitre="Vos gains et vos dépenses."
+        paginationServeur
       />
     </EnvelopperEspaceProtege>
   );

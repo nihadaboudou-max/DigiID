@@ -664,12 +664,24 @@ async def obtenir_vehicule(session: AsyncSession, vehicule_id: UUID) -> Vehicule
 
 async def lister_vehicules(session: AsyncSession, page: int, par_page: int,
                            est_actif: bool | None = None,
-                           chauffeur_id: UUID | None = None):
+                           chauffeur_id: UUID | None = None,
+                           gare_id: UUID | None = None,
+                           recherche: str | None = None):
     requete = select(Vehicule)
     if est_actif is not None:
         requete = requete.where(Vehicule.actif == est_actif)
     if chauffeur_id is not None:
         requete = requete.where(Vehicule.chauffeur_id == chauffeur_id)
+    if gare_id is not None:
+        requete = requete.where(Vehicule.gare_id == gare_id)
+    if recherche and recherche.strip():
+        terme = f"%{recherche.strip()}%"
+        requete = requete.where(
+            or_(
+                Vehicule.immatriculation.ilike(terme),
+                Vehicule.marque.ilike(terme),
+            )
+        )
     requete = requete.order_by(Vehicule.immatriculation)
     return await _paginer(session, requete, page, par_page)
 
@@ -2015,12 +2027,18 @@ async def lister_colis(
     utilisateur: Utilisateur | None = None,
     statuts: list[str] | None = None,
     recherche: str | None = None,
+    cree_depuis: datetime | None = None,
+    cree_jusqu_a: datetime | None = None,
 ):
     requete = select(Colis)
     if statuts:
         requete = requete.where(Colis.statut.in_(statuts))
     elif statut is not None:
         requete = requete.where(Colis.statut == statut)
+    if cree_depuis is not None:
+        requete = requete.where(Colis.cree_le >= cree_depuis)
+    if cree_jusqu_a is not None:
+        requete = requete.where(Colis.cree_le < cree_jusqu_a)
     if gare_id is not None:
         requete = requete.where(
             (Colis.gare_depart_id == gare_id) | (Colis.gare_arrivee_id == gare_id)
@@ -2105,6 +2123,18 @@ async def lister_evenements(
         .order_by(ColisEvenement.horodatage.asc(), ColisEvenement.cree_le.asc())
     )
     return list(resultat.scalars().all())
+
+
+async def lister_evenements_pagine(
+    session: AsyncSession, colis_id: UUID, page: int, par_page: int
+) -> tuple[list[ColisEvenement], int]:
+    await obtenir_colis(session, colis_id)  # 404 si le colis n'existe pas
+    requete = (
+        select(ColisEvenement)
+        .where(ColisEvenement.colis_id == colis_id)
+        .order_by(ColisEvenement.horodatage.asc(), ColisEvenement.cree_le.asc())
+    )
+    return await _paginer(session, requete, page, par_page)
 
 
 # ─── Scan (idempotent + règle anti-« DÉJÀ LIVRÉ ») ────────────────────
@@ -3176,11 +3206,14 @@ async def lister_suivi_familial(
     voyage_id: UUID | None = None,
     recherche: str | None = None,
     utilisateur: Utilisateur | None = None,
+    statuts: list[str] | None = None,
 ):
     if utilisateur is not None:
         exiger_acces_suivi_familial(utilisateur)
     requete = select(SuiviFamilial)
-    if statut is not None:
+    if statuts:
+        requete = requete.where(SuiviFamilial.statut.in_(statuts))
+    elif statut is not None:
         requete = requete.where(SuiviFamilial.statut == statut)
     if voyage_id is not None:
         requete = requete.where(SuiviFamilial.voyage_id == voyage_id)

@@ -12,7 +12,7 @@
  * Tout est tracé : enregistrement, affectation, retrait et mise hors service
  * sont écrits dans le journal d'audit (qui a fait quoi, quand, et d'où).
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Alerte } from "@/composants/commun/Alerte";
 import { Badge } from "@/composants/commun/Badge";
@@ -21,6 +21,7 @@ import { Carte } from "@/composants/commun/Carte";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { IconeCamion } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
+import { PaginationListe } from "@/composants/logistique/PaginationListe";
 import { ROLES_REFERENTIEL_ROULANT } from "@/composants/logistique/roles";
 import { useAuthentification } from "@/contextes/authentification";
 import { useNotifications } from "@/contextes/notifications";
@@ -50,10 +51,15 @@ function Contenu() {
   const [gares, setGares] = useState<Gare[]>([]);
   const [maGare, setMaGare] = useState<Gare | null>(null);
   const [rechercheChauffeur, setRechercheChauffeur] = useState("");
+  const [rechercheVehicule, setRechercheVehicule] = useState("");
+  const [rechercheVehiculeAppliquee, setRechercheVehiculeAppliquee] = useState("");
   const [seulementMaGare, setSeulementMaGare] = useState(true);
+  const [pageCars, setPageCars] = useState(1);
+  const [totalCars, setTotalCars] = useState(0);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [actionEnCours, setActionEnCours] = useState<string | null>(null);
+  const numeroRequeteCars = useRef(0);
 
   // ── Nouveau car ──
   const [nouveau, setNouveau] = useState({
@@ -65,39 +71,56 @@ function Contenu() {
   });
   const [enregistrement, setEnregistrement] = useState(false);
 
-  const charger = async () => {
+  const charger = useCallback(async () => {
+    const numeroRequete = ++numeroRequeteCars.current;
     setChargement(true);
     setErreur(null);
     try {
-      const [repCars, mesChauffeurs, repGares] = await Promise.all([
-        logistiqueAPI.vehicules.lister(),
+      const [mesChauffeurs, repGares, gare] = await Promise.all([
         logistiqueAPI.chauffeurs.lister().catch(() => [] as ChauffeurDisponible[]),
         logistiqueAPI.gares.lister().catch(() => ({ elements: [] as Gare[] })),
+        utilisateur?.id ? gareDeLActeur(utilisateur.id) : Promise.resolve(null),
       ]);
-      setCars(repCars.elements);
+      if (numeroRequete !== numeroRequeteCars.current) return;
       setChauffeurs(mesChauffeurs);
       setGares(repGares.elements);
-      const gare = utilisateur?.id ? await gareDeLActeur(utilisateur.id) : null;
       setMaGare(gare);
       setNouveau((precedent) => ({
         ...precedent,
         gare_id: precedent.gare_id || gare?.id || "",
       }));
+      const repCars = await logistiqueAPI.vehicules.lister({
+        page: pageCars,
+        par_page: 5,
+        ...(seulementMaGare && gare ? { gare_id: gare.id } : {}),
+        ...(rechercheVehiculeAppliquee
+          ? { recherche: rechercheVehiculeAppliquee }
+          : {}),
+      });
+      if (numeroRequete !== numeroRequeteCars.current) return;
+      setCars(repCars.elements);
+      setTotalCars(repCars.total);
     } catch (e) {
-      setErreur(
-        e instanceof ErreurAPI
-          ? e.message_utilisateur
-          : "Impossible de charger le référentiel roulant. Réessayez plus tard.",
-      );
+      if (numeroRequete === numeroRequeteCars.current) {
+        setErreur(
+          e instanceof ErreurAPI
+            ? e.message_utilisateur
+            : "Impossible de charger le référentiel roulant. Réessayez plus tard.",
+        );
+      }
     } finally {
-      setChargement(false);
+      if (numeroRequete === numeroRequeteCars.current) setChargement(false);
     }
-  };
+  }, [
+    utilisateur?.id,
+    pageCars,
+    seulementMaGare,
+    rechercheVehiculeAppliquee,
+  ]);
 
   useEffect(() => {
-    charger();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [utilisateur?.id]);
+    void charger();
+  }, [charger]);
 
   /** Recherche d'un chauffeur côté serveur : les noms sont chiffrés au repos. */
   const chercherChauffeurs = async () => {
@@ -113,11 +136,6 @@ function Contenu() {
       setActionEnCours(null);
     }
   };
-
-  const carsAffiches = useMemo(() => {
-    if (!seulementMaGare || !maGare) return cars;
-    return cars.filter((car) => car.gare_id === maGare.id);
-  }, [cars, seulementMaGare, maGare]);
 
   const nomChauffeur = (car: Vehicule) =>
     car.chauffeur_nom ?? (car.chauffeur_id ? "Chauffeur inconnu" : null);
@@ -317,10 +335,29 @@ function Contenu() {
 
       {/* ─── Les cars ─────────────────────────────────────────────── */}
       <Carte
-        titre={`Les cars (${carsAffiches.length})`}
+        titre={`Les cars (${totalCars})`}
         description="Affectez un chauffeur, retirez-en un, ou mettez un car hors service."
       >
         <div className="mb-4 flex flex-wrap items-end gap-3">
+          <div className="grow sm:max-w-xs">
+            <ChampSaisie
+              libelle="Rechercher un car"
+              placeholder="Immatriculation ou marque…"
+              value={rechercheVehicule}
+              onChange={(e) => setRechercheVehicule(e.target.value)}
+            />
+          </div>
+          <Bouton
+            variante="secondaire"
+            taille="petit"
+            chargement={chargement}
+            onClick={() => {
+              setPageCars(1);
+              setRechercheVehiculeAppliquee(rechercheVehicule.trim());
+            }}
+          >
+            Chercher
+          </Bouton>
           <div className="grow sm:max-w-xs">
             <ChampSaisie
               libelle="Rechercher un chauffeur"
@@ -342,7 +379,10 @@ function Contenu() {
               <input
                 type="checkbox"
                 checked={seulementMaGare}
-                onChange={(e) => setSeulementMaGare(e.target.checked)}
+                onChange={(e) => {
+                  setPageCars(1);
+                  setSeulementMaGare(e.target.checked);
+                }}
                 className="rounded border-ardoise-clair/30"
               />
               Seulement les cars de {maGare.nom}
@@ -354,13 +394,13 @@ function Contenu() {
           <p className="text-sm text-ardoise-clair italic py-6 text-center">
             Chargement des cars…
           </p>
-        ) : carsAffiches.length === 0 ? (
+        ) : cars.length === 0 ? (
           <p className="text-sm text-ardoise-clair italic py-6 text-center">
             Aucun car pour ces critères. Enregistrez-en un ci-dessus.
           </p>
         ) : (
           <ul className="space-y-3">
-            {carsAffiches.map((car) => {
+            {cars.map((car) => {
               const nom = nomChauffeur(car);
               const chauffeurCourantDansListe = chauffeurs.some(
                 (c) => c.utilisateur_id === car.chauffeur_id,
@@ -439,6 +479,13 @@ function Contenu() {
             })}
           </ul>
         )}
+        <PaginationListe
+          page={pageCars}
+          total={totalCars}
+          parPage={5}
+          chargement={chargement}
+          surChangement={setPageCars}
+        />
       </Carte>
 
       <p className="text-xs text-ardoise-clair">

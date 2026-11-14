@@ -18,8 +18,9 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import { IconeColis, IconeIdentite } from "@/composants/commun/Icones";
 import { formaterDateHeure } from "@/composants/logistique/format";
+import { PaginationListe } from "@/composants/logistique/PaginationListe";
 import { ErreurAPI } from "@/services/client_api";
-import { departsAVenir, type Voyage } from "@/services/logistique_api";
+import { logistiqueAPI, type Voyage } from "@/services/logistique_api";
 
 const STATUTS: Record<string, { libelle: string; variante: BadgeVariante }> = {
   planifie: { libelle: "Planifié", variante: "info" },
@@ -29,16 +30,17 @@ const STATUTS: Record<string, { libelle: string; variante: BadgeVariante }> = {
 /**
  * @param gareId Gare du guichet : les départs qui la touchent remontent en tête
  *               (un car qui passe par ma gare, c'est de la clientèle pour moi).
- * @param limite Nombre de départs affichés.
  */
 export function DepartsDesChauffeurs({
   gareId,
-  limite = 6,
+  prochainSeulement = false,
 }: {
   gareId?: string | null;
-  limite?: number;
+  prochainSeulement?: boolean;
 }) {
   const [voyages, setVoyages] = useState<Voyage[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -48,8 +50,17 @@ export function DepartsDesChauffeurs({
       setChargement(true);
       setErreur(null);
       try {
-        const reponse = await departsAVenir();
-        if (!annule) setVoyages(reponse);
+        const depuis = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+        const reponse = await logistiqueAPI.voyages.lister({
+          a_partir_de: depuis,
+          statuts: ["planifie", "en_cours"],
+          page,
+          par_page: prochainSeulement ? 1 : 5,
+        });
+        if (!annule) {
+          setVoyages(reponse.elements);
+          setTotal(reponse.total);
+        }
       } catch (e) {
         if (!annule) {
           setErreur(
@@ -65,27 +76,29 @@ export function DepartsDesChauffeurs({
     return () => {
       annule = true;
     };
-  }, []);
+  }, [page, prochainSeulement]);
 
   /** Un départ qui touche ma gare d'abord (« Ma gare »), puis l'ordre des heures. */
   const liste = useMemo(() => {
     const toucheMaGare = (v: Voyage) =>
       !!gareId && (v.gare_depart_id === gareId || v.gare_arrivee_id === gareId);
-    return [...voyages]
-      .sort((a, b) => {
-        const priorite = Number(toucheMaGare(b)) - Number(toucheMaGare(a));
-        if (priorite !== 0) return priorite;
-        return (
-          new Date(a.date_depart).getTime() - new Date(b.date_depart).getTime()
-        );
-      })
-      .slice(0, limite);
-  }, [voyages, gareId, limite]);
+    return [...voyages].sort((a, b) => {
+      const priorite = Number(toucheMaGare(b)) - Number(toucheMaGare(a));
+      if (priorite !== 0) return priorite;
+      return (
+        new Date(a.date_depart).getTime() - new Date(b.date_depart).getTime()
+      );
+    });
+  }, [voyages, gareId]);
 
   return (
     <Carte
-      titre="Départs annoncés par les chauffeurs"
-      description="Les cars planifiés par les chauffeurs. Enregistrez le colis ou le passager, puis affectez-le à ce départ : le chauffeur est prévenu et le car se remplit."
+      titre={prochainSeulement ? "Prochain départ" : "Départs annoncés par les chauffeurs"}
+      description={
+        prochainSeulement
+          ? "Le départ à venir le plus proche."
+          : "Les cars planifiés par les chauffeurs. Enregistrez le colis ou le passager, puis affectez-le à ce départ : le chauffeur est prévenu et le car se remplit."
+      }
     >
       {erreur && <p className="text-sm text-terre">{erreur}</p>}
 
@@ -146,6 +159,15 @@ export function DepartsDesChauffeurs({
             );
           })}
         </ul>
+      )}
+      {!prochainSeulement && (
+        <PaginationListe
+          page={page}
+          total={total}
+          parPage={5}
+          chargement={chargement}
+          surChangement={setPage}
+        />
       )}
     </Carte>
   );

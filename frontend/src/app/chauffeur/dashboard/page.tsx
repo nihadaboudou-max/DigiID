@@ -5,7 +5,7 @@
  * Liste les voyages affectés au chauffeur par pages de cinq, avec le nombre de
  * colis à bord, et donne accès d'un clic aux colis d'un voyage et au scan.
  */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 
 import { Alerte } from "@/composants/commun/Alerte";
@@ -13,33 +13,22 @@ import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import {
-  IconeColis,
   IconeIdentite,
   IconeScan,
   IconeTicket,
   IconeCamion,
 } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
-import { PaginationListe } from "@/composants/logistique/PaginationListe";
-import { RecommandationTarifaire } from "@/composants/logistique/RecommandationTarifaire";
-import { formaterDate } from "@/composants/logistique/format";
+import { ColisDuJour } from "@/composants/logistique/ColisDuJour";
+import { formaterDateHeure } from "@/composants/logistique/format";
 import { ROLES_CHAUFFEUR } from "@/composants/logistique/roles";
 import { PortefeuilleCarte } from "@/composants/paiement/PortefeuilleCarte";
-import { useAuthentification } from "@/contextes/authentification";
 import { useLangue } from "@/i18n/useLangue";
 import { ErreurAPI } from "@/services/client_api";
-import { identiteAPI } from "@/services/identite_api";
-import {
-  libelleLigne,
-  logistiqueAPI,
-  type Ligne,
-  type Vehicule,
-  type Voyage,
-} from "@/services/logistique_api";
+import { logistiqueAPI, type Voyage } from "@/services/logistique_api";
 import {
   LIBELLES_STATUT_VOYAGE,
   VARIANTES_STATUT_VOYAGE,
-  type Colis,
 } from "@/types/logistique";
 
 export default function PageTableauDeBordChauffeur() {
@@ -49,20 +38,10 @@ export default function PageTableauDeBordChauffeur() {
     </EnvelopperEspaceProtege>
   );
 }
-
 function Contenu() {
-  const { utilisateur } = useAuthentification();
   const { t, jouer } = useLangue();
-  const [voyages, setVoyages] = useState<Voyage[]>([]);
-  const [voyagesPage, setVoyagesPage] = useState<Voyage[]>([]);
-  const [pageVoyages, setPageVoyages] = useState(1);
-  const [totalVoyages, setTotalVoyages] = useState(0);
-  const [lignes, setLignes] = useState<Ligne[]>([]);
-  const [colis, setColis] = useState<Colis[]>([]);
-  const [vehicules, setVehicules] = useState<Vehicule[]>([]);
-  const [passagersParVoyage, setPassagersParVoyage] = useState<Record<string, number>>({});
+  const [prochainVoyage, setProchainVoyage] = useState<Voyage | null>(null);
   const [chargement, setChargement] = useState(true);
-  const [chargementListe, setChargementListe] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
   useEffect(() => {
@@ -71,27 +50,20 @@ function Contenu() {
       setChargement(true);
       setErreur(null);
       try {
-        const [repVoyages, repLignes, repColis, repVehicules, repVolumes] = await Promise.all([
-          logistiqueAPI.voyages.lister({ par_page: 100 }),
-          logistiqueAPI.lignes.lister(),
-          logistiqueAPI.colis.lister({ par_page: 100 }),
-          logistiqueAPI.vehicules.listerMesVehicules(),
-          identiteAPI.chauffeur.voyages().catch(() => []),
-        ]);
-        if (annule) return;
-        setVoyages(repVoyages.elements);
-        setLignes(repLignes.elements);
-        setColis(repColis.elements);
-        setVehicules(repVehicules);
-        setPassagersParVoyage(
-          Object.fromEntries(repVolumes.map((voyage) => [voyage.id, voyage.nb_passagers])),
-        );
+        const depuis = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+        const reponse = await logistiqueAPI.voyages.lister({
+          a_partir_de: depuis,
+          statuts: ["planifie", "en_cours"],
+          page: 1,
+          par_page: 1,
+        });
+        if (!annule) setProchainVoyage(reponse.elements[0] ?? null);
       } catch (e) {
         if (!annule) {
           setErreur(
             e instanceof ErreurAPI
               ? e.message_utilisateur
-              : "Impossible de charger les voyages. Réessayez plus tard.",
+              : "Impossible de charger le prochain départ.",
           );
         }
       } finally {
@@ -102,54 +74,6 @@ function Contenu() {
       annule = true;
     };
   }, []);
-
-  useEffect(() => {
-    let annule = false;
-    setChargementListe(true);
-    logistiqueAPI.voyages
-      .lister({ page: pageVoyages, par_page: 5 })
-      .then((reponse) => {
-        if (annule) return;
-        setVoyagesPage(reponse.elements);
-        setTotalVoyages(reponse.total);
-      })
-      .catch((e: unknown) => {
-        if (!annule) {
-          setErreur(
-            e instanceof ErreurAPI
-              ? e.message_utilisateur
-              : "Impossible de charger les voyages. Réessayez plus tard.",
-          );
-        }
-      })
-      .finally(() => {
-        if (!annule) setChargementListe(false);
-      });
-    return () => {
-      annule = true;
-    };
-  }, [pageVoyages]);
-
-  // La liste paginée est restreinte au chauffeur connecté par le serveur.
-  const mesVoyages = useMemo(
-    () => voyages.filter((v) => v.chauffeur_id === utilisateur?.id),
-    [voyages, utilisateur?.id],
-  );
-  const lignesParId = useMemo(() => {
-    const map: Record<string, Ligne> = {};
-    lignes.forEach((l) => {
-      map[l.id] = l;
-    });
-    return map;
-  }, [lignes]);
-
-  const nbColisParVoyage = useMemo(() => {
-    const map: Record<string, number> = {};
-    colis.forEach((c) => {
-      if (c.voyage_id) map[c.voyage_id] = (map[c.voyage_id] ?? 0) + 1;
-    });
-    return map;
-  }, [colis]);
 
   return (
     <div className="space-y-6 apparition">
@@ -177,12 +101,6 @@ function Contenu() {
           onClick={() => jouer("btn.scanner_un_colis")}
         />
         <LienRapideChauffeur
-          href="/chauffeur/colis/nouveau"
-          titre="Enregistrer un colis"
-          description="Un client monte avec un colis : la fiche est créée en route."
-          icone={<IconeColis className="w-6 h-6" />}
-        />
-        <LienRapideChauffeur
           href="/chauffeur/passagers/nouveau"
           titre="Enregistrer un passager"
           description="Adulte ou enfant : la famille est prévenue par SMS."
@@ -196,65 +114,75 @@ function Contenu() {
         />
       </div>
 
-      <div className="flex justify-end">
-        <Link
-          href="/chauffeur/colis"
-          className="text-sm font-semibold text-lagune hover:underline"
-        >
-          Voir tous les colis →
-        </Link>
-      </div>
-
       {erreur && (
         <Alerte variante="erreur" titre="Erreur">
           {erreur}
         </Alerte>
       )}
 
-      {/* Ma cagnotte : le chauffeur gagne sa commission sur ses propres enregistrements */}
-      <PortefeuilleCarte limiteMouvements={3} cheminCagnotte="/chauffeur/cagnotte" />
-
-      <RecommandationTarifaire
-        voyages={mesVoyages}
-        colis={colis}
-        vehicules={vehicules}
-        passagersParVoyage={passagersParVoyage}
+      <PortefeuilleCarte
+        compact
+        limiteMouvements={0}
+        cheminCagnotte="/chauffeur/cagnotte"
       />
 
-      {/* Liste des voyages */}
       <Carte
-        titre={t("chauffeur.mes_voyages")}
-        description={t("chauffeur.mes_voyages_desc")}
+        titre="Prochain départ"
+        description="Votre prochain voyage planifié ou en cours."
       >
-        {chargement || chargementListe ? (
+        {chargement ? (
           <p className="text-sm text-ardoise-clair italic py-6 text-center">
-            Chargement des voyages…
+            Chargement du prochain départ…
           </p>
-        ) : voyagesPage.length === 0 ? (
+        ) : !prochainVoyage ? (
           <p className="text-sm text-ardoise-clair italic py-6 text-center">
-            Aucun voyage ne vous est affecté pour le moment.
+            Aucun départ à venir pour le moment.
           </p>
         ) : (
-          <ul className="space-y-3">
-            {voyagesPage.map((voyage) => (
-              <CarteVoyage
-                key={voyage.id}
-                voyage={voyage}
-                ligne={lignesParId[voyage.ligne_id]}
-                nbColis={nbColisParVoyage[voyage.id] ?? 0}
-                estMien={voyage.chauffeur_id === utilisateur?.id}
-              />
-            ))}
-          </ul>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-semibold text-ardoise">
+                  {prochainVoyage.ligne_libelle ?? "Trajet à confirmer"}
+                </p>
+                <Badge
+                  variante={
+                    VARIANTES_STATUT_VOYAGE[
+                      prochainVoyage.statut as keyof typeof VARIANTES_STATUT_VOYAGE
+                    ] ?? "neutre"
+                  }
+                >
+                  {LIBELLES_STATUT_VOYAGE[
+                    prochainVoyage.statut as keyof typeof LIBELLES_STATUT_VOYAGE
+                  ] ?? prochainVoyage.statut}
+                </Badge>
+              </div>
+              <p className="mt-1 text-sm text-ardoise-clair">
+                {formaterDateHeure(prochainVoyage.date_depart)}
+                {prochainVoyage.vehicule_immatriculation
+                  ? ` · Car ${prochainVoyage.vehicule_immatriculation}`
+                  : ""}
+              </p>
+            </div>
+            <Link href={`/chauffeur/voyages/${prochainVoyage.id}`}>
+              <Bouton variante="secondaire" taille="petit">
+                Ouvrir l&apos;étape courante
+              </Bouton>
+            </Link>
+          </div>
         )}
-        <PaginationListe
-          page={pageVoyages}
-          total={totalVoyages}
-          parPage={5}
-          chargement={chargement || chargementListe}
-          surChangement={setPageVoyages}
-        />
       </Carte>
+
+      <ColisDuJour baseSuivi="/chauffeur/colis" baseScan="/chauffeur/scan" />
+
+      <div className="text-right">
+        <Link
+          href="/chauffeur/analyses"
+          className="text-sm font-semibold text-lagune hover:underline"
+        >
+          Voir les analyses et recommandations →
+        </Link>
+      </div>
     </div>
   );
 }
@@ -289,59 +217,5 @@ function LienRapideChauffeur({
         </div>
       </div>
     </Link>
-  );
-}
-
-/** Carte d'un voyage : trajet, véhicule, date, statut et nombre de colis. */
-function CarteVoyage({
-  voyage,
-  ligne,
-  nbColis,
-  estMien,
-}: {
-  voyage: Voyage;
-  ligne: Ligne | undefined;
-  nbColis: number;
-  estMien: boolean;
-}) {
-  const statut = voyage.statut as keyof typeof LIBELLES_STATUT_VOYAGE;
-  const variante = VARIANTES_STATUT_VOYAGE[statut] ?? "neutre";
-
-  return (
-    <li className="border border-ardoise-clair/10 rounded-xl p-4 hover:border-lagune/30 transition-colors">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-ardoise">{libelleLigne(ligne)}</span>
-            <Badge variante={variante}>
-              {LIBELLES_STATUT_VOYAGE[statut] ?? voyage.statut}
-            </Badge>
-            {estMien && <Badge variante="lagune">Mon voyage</Badge>}
-          </div>
-          <p className="text-sm text-ardoise-clair mt-1">
-            Départ : {formaterDate(voyage.date_depart)}
-            {voyage.vehicule_immatriculation
-              ? ` • Véhicule : ${voyage.vehicule_immatriculation}`
-              : ""}
-          </p>
-          <p className="text-xs text-ardoise-clair mt-0.5">
-            {nbColis} colis à bord
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Link href={`/chauffeur/voyages/${voyage.id}`}>
-            <Bouton variante="secondaire" taille="petit">
-              <IconeColis className="w-4 h-4" /> Voir les colis
-            </Bouton>
-          </Link>
-          <Link href={`/chauffeur/scan?voyage_id=${voyage.id}`}>
-            <Bouton variante="primaire" taille="petit">
-              <IconeScan className="w-4 h-4" /> Scanner
-            </Bouton>
-          </Link>
-        </div>
-      </div>
-    </li>
   );
 }

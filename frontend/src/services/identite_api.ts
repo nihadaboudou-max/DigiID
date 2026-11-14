@@ -104,11 +104,20 @@ export const identiteAPI = {
     voyages: () =>
       clientAPI.get<VoyageChauffeur[]>(`${BASE}/chauffeur/voyages`, opts),
     /** Manifeste d'un voyage : colis **et** passagers, sur un seul écran. */
-    manifeste: (voyageId: string) =>
-      clientAPI.get<ManifesteVoyage>(
-        `${BASE}/chauffeur/voyages/${voyageId}/manifeste`,
+    manifeste: (
+      voyageId: string,
+      filtres?: { pageColis?: number; pagePassagers?: number; parPage?: number },
+    ) => {
+      const qs = new URLSearchParams({
+        page_colis: String(filtres?.pageColis ?? 1),
+        page_passagers: String(filtres?.pagePassagers ?? 1),
+        par_page: String(filtres?.parPage ?? 5),
+      });
+      return clientAPI.get<ManifesteVoyage>(
+        `${BASE}/chauffeur/voyages/${voyageId}/manifeste?${qs.toString()}`,
         opts,
-      ),
+      );
+    },
   },
 
   // ─── Citoyen : mes envois et les voyages de mes proches ────────────

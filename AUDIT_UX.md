@@ -31,7 +31,7 @@ de largeur viennent des structures et classes de mise en page.
 La page est également autorisée au rôle `gerant_gare` et décrit le référentiel
 comme global. À garder à l'esprit pour la visibilité du gérant : la page et ses
 six onglets ne sont pas un écran de supervision limité à sa gare.
-
+p
 ## Chauffeur
 
 | Page | Blocs affichés en même temps | Listes sans pagination | Tableaux trop larges sur téléphone | Actions principales |

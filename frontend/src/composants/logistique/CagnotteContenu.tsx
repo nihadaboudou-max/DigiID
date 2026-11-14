@@ -34,7 +34,7 @@ export function CagnotteContenu({
   sousTitre?: string;
   /** Message quand aucun mouvement n'existe encore. */
   messageVide?: string;
-  /** Active les pages serveur de cinq éléments pour l'espace chauffeur. */
+  /** Active les pages serveur de cinq éléments pour le profil concerné. */
   paginationServeur?: boolean;
 } = {}) {
   const [portefeuille, setPortefeuille] = useState<Portefeuille | null>(null);
@@ -155,7 +155,59 @@ export function CagnotteContenu({
             {messageVide}
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <ul className="space-y-3 sm:hidden">
+              {mouvements.map((m) => {
+                const libelle = m.sens === "CREDIT" ? "Gain" : "Dépense";
+                const montant = `${m.sens === "CREDIT" ? "+" : "−"}${formaterFcfa(m.montant_fcfa)}`;
+                return (
+                  <li
+                    key={m.id}
+                    className="rounded-xl border border-ardoise-clair/10 bg-white p-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold text-ardoise">{libelle}</p>
+                        <p className="mt-1 text-xs text-ardoise-clair">
+                          {formaterDateHeure(m.cree_le)}
+                        </p>
+                      </div>
+                      <p
+                        className={`font-semibold ${
+                          m.sens === "CREDIT" ? "text-green-700" : "text-terre"
+                        }`}
+                      >
+                        {montant}
+                      </p>
+                    </div>
+                    <details className="mt-3">
+                      <summary className="inline-flex cursor-pointer list-none items-center rounded-xl border border-ardoise-clair/20 px-3 py-1.5 text-sm font-medium text-lagune hover:bg-sable">
+                        Détails
+                      </summary>
+                      <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-ardoise-clair/10 pt-3 text-sm">
+                        <div>
+                          <dt className="text-xs text-ardoise-clair">Date</dt>
+                          <dd className="text-ardoise">{formaterDateHeure(m.cree_le)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-ardoise-clair">Opération</dt>
+                          <dd className="text-ardoise">{libelle}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-ardoise-clair">Montant</dt>
+                          <dd className="text-ardoise">{montant}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-ardoise-clair">Solde après</dt>
+                          <dd className="text-ardoise">{formaterFcfa(m.solde_apres)}</dd>
+                        </div>
+                      </dl>
+                    </details>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="hidden overflow-x-auto sm:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-ardoise-clair border-b border-ardoise-clair/20">
@@ -193,7 +245,8 @@ export function CagnotteContenu({
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
         {paginationServeur && (
           <PaginationListe
@@ -220,7 +273,55 @@ export function CagnotteContenu({
             Aucun gain pour l&apos;instant.
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <ul className="space-y-3 sm:hidden">
+              {commissions.map((c) => (
+                <li
+                  key={c.id}
+                  className="rounded-xl border border-ardoise-clair/10 bg-white p-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs text-ardoise-clair">
+                        {formaterDateHeure(c.verse_le ?? c.cree_le)}
+                      </p>
+                      <div className="mt-1">
+                        <Badge variante={c.statut === "verse" ? "succes" : "ocre"}>
+                          {c.statut === "verse" ? "Versée" : "À verser"}
+                        </Badge>
+                      </div>
+                    </div>
+                    <p className="font-semibold text-green-700">
+                      {formaterFcfa(c.montant_fcfa)}
+                    </p>
+                  </div>
+                  <details className="mt-3">
+                    <summary className="inline-flex cursor-pointer list-none items-center rounded-xl border border-ardoise-clair/20 px-3 py-1.5 text-sm font-medium text-lagune hover:bg-sable">
+                      Détails
+                    </summary>
+                    <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-ardoise-clair/10 pt-3 text-sm">
+                      <div>
+                        <dt className="text-xs text-ardoise-clair">Date</dt>
+                        <dd className="text-ardoise">
+                          {formaterDateHeure(c.verse_le ?? c.cree_le)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-ardoise-clair">Statut</dt>
+                        <dd className="text-ardoise">
+                          {c.statut === "verse" ? "Versée" : "À verser"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-ardoise-clair">Montant</dt>
+                        <dd className="text-ardoise">{formaterFcfa(c.montant_fcfa)}</dd>
+                      </div>
+                    </dl>
+                  </details>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden overflow-x-auto sm:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-ardoise-clair border-b border-ardoise-clair/20">
@@ -250,7 +351,8 @@ export function CagnotteContenu({
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
         {paginationServeur && (
           <PaginationListe

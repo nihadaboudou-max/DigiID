@@ -92,6 +92,20 @@ interface MonitoringComplet {
   alertes: AlerteSecuriteItem[];
 }
 
+const FILTRES_ROLE = [
+  { valeur: "", libelle: "Tous" },
+  { valeur: "citoyen", libelle: "Citoyen" },
+  { valeur: "administrateur", libelle: "Administrateur" },
+  { valeur: "super_administrateur", libelle: "Super-administrateur" },
+  { valeur: "agent", libelle: "Agent" },
+  { valeur: "medecin", libelle: "Médecin" },
+  { valeur: "police", libelle: "Police" },
+  { valeur: "chauffeur", libelle: "Chauffeur" },
+  { valeur: "receveur", libelle: "Receveur" },
+  { valeur: "gerant_gare", libelle: "Gérant de gare" },
+  { valeur: "commercant", libelle: "Commerçant" },
+];
+
 // ============================================================================
 // PAGE PRINCIPALE
 // ============================================================================
@@ -241,22 +255,20 @@ function Contenu() {
             <span className="text-[10px] uppercase text-ardoise-clair font-semibold tracking-wider">
               Filtrer par rôle :
             </span>
-            {["", "citoyen", "administrateur", "super_administrateur", "agent", "medecin", "police"].map(
-              (role) => (
-                <button
-                  key={role}
-                  type="button"
-                  onClick={() => setFiltreRole(role)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                    filtreRole === role
-                      ? "bg-lagune text-white"
-                      : "bg-white border border-ardoise-clair/20 text-ardoise hover:bg-sable"
-                  }`}
-                >
-                  {role || "Tous"}
-                </button>
-              )
-            )}
+            {FILTRES_ROLE.map(({ valeur, libelle }) => (
+              <button
+                key={valeur || "tous"}
+                type="button"
+                onClick={() => setFiltreRole(valeur)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  filtreRole === valeur
+                    ? "bg-lagune text-white"
+                    : "bg-white border border-ardoise-clair/20 text-ardoise hover:bg-sable"
+                }`}
+              >
+                {libelle}
+              </button>
+            ))}
           </div>
 
           <div className="grid lg:grid-cols-2 gap-3">

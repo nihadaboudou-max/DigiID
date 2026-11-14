@@ -46,7 +46,7 @@ from uuid import UUID
 # =============================================================================
 # IMPORTS TIERS — SQLAlchemy 2.0 async
 # =============================================================================
-from sqlalchemy import func, select, update
+from sqlalchemy import String, cast, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import aliased
@@ -322,7 +322,7 @@ async def lister_audit(
     Filtres disponibles (combinables) :
         - **type_evenement** : ex: connexion, creation_admin, modification_flag
         - **date_debut/date_fin** : plage ISO 8601 inclusive
-        - **recherche** : texte libre (LIKE insensible à la casse) dans la description
+        - **recherche** : type, description, adresse IP ou identifiant utilisateur
     
     Args:
         session: Session de base de données asynchrone
@@ -342,8 +342,14 @@ async def lister_audit(
     if filtres.date_fin:
         requete = requete.where(JournalAudit.date_evenement <= filtres.date_fin)
     if filtres.recherche:
+        terme = f"%{filtres.recherche.strip()}%"
         requete = requete.where(
-            JournalAudit.description.ilike(f"%{filtres.recherche}%")
+            or_(
+                JournalAudit.description.ilike(terme),
+                JournalAudit.type_evenement.ilike(terme),
+                JournalAudit.adresse_ip.ilike(terme),
+                cast(JournalAudit.utilisateur_id, String).ilike(terme),
+            )
         )
 
     # Étape 3 : Comptage total avant pagination
@@ -366,6 +372,12 @@ async def lister_audit(
 
     resultat = await session.execute(requete)
     evenements = resultat.scalars().all()
+    resultat_types = await session.execute(
+        select(JournalAudit.type_evenement)
+        .distinct()
+        .order_by(JournalAudit.type_evenement)
+    )
+    types_evenements = list(resultat_types.scalars().all())
 
     # Étape 5bis : Collecter les noms des utilisateurs concernés
     # On regroupe les IDs utilisateur uniques pour éviter N+1 queries
@@ -407,6 +419,7 @@ async def lister_audit(
         page=filtres.page,
         pages=pages,
         limite=filtres.limite,
+        types_evenements=types_evenements,
     )
 
 
@@ -447,8 +460,14 @@ async def exporter_audit_csv(
     if date_fin:
         requete = requete.where(JournalAudit.date_evenement <= date_fin)
     if recherche:
+        terme = f"%{recherche.strip()}%"
         requete = requete.where(
-            JournalAudit.description.ilike(f"%{recherche}%")
+            or_(
+                JournalAudit.description.ilike(terme),
+                JournalAudit.type_evenement.ilike(terme),
+                JournalAudit.adresse_ip.ilike(terme),
+                cast(JournalAudit.utilisateur_id, String).ilike(terme),
+            )
         )
 
     # Étape 2 : Exécution
@@ -456,9 +475,25 @@ async def exporter_audit_csv(
     resultat = await session.execute(requete)
     evenements = resultat.scalars().all()
 
+    ids_utilisateurs = {
+        e.utilisateur_id for e in evenements
+        if e.utilisateur_id is not None
+    }
+    noms_utilisateurs: dict[UUID, str] = {}
+    if ids_utilisateurs:
+        resultat_users = await session.execute(
+            select(Utilisateur).where(Utilisateur.id.in_(ids_utilisateurs))
+        )
+        for user in resultat_users.scalars().all():
+            prenom = dechiffrer_donnee(user.prenom_chiffre) if user.prenom_chiffre else ""
+            nom = dechiffrer_donnee(user.nom_chiffre) if user.nom_chiffre else ""
+            nom_complet = f"{prenom} {nom}".strip()
+            if nom_complet:
+                noms_utilisateurs[user.id] = nom_complet
+
     # Étape 3 : Génération CSV
     en_tetes: list[str] = [
-        "ID", "Date", "Type", "Description", "Utilisateur ID",
+        "ID", "Date", "Type", "Description", "Utilisateur ID", "Nom",
         "Rôle", "IP", "User-Agent", "Score Risque",
     ]
     lignes: list[list[str]] = [
@@ -468,6 +503,7 @@ async def exporter_audit_csv(
             e.type_evenement,
             e.description,
             str(e.utilisateur_id) if e.utilisateur_id else "",
+            noms_utilisateurs.get(e.utilisateur_id, "") if e.utilisateur_id else "",
             e.role_acteur or "",
             e.adresse_ip or "",
             e.agent_utilisateur or "",

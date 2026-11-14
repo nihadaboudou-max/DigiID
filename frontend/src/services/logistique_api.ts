@@ -199,7 +199,24 @@ export const logistiqueAPI = {
     },
   },
   vehicules: {
-    lister: () => clientAPI.get<ReponseListe<Vehicule>>(`${BASE}/vehicules?par_page=100`, opts),
+    lister: (filtres?: {
+      page?: number;
+      par_page?: number;
+      est_actif?: boolean;
+      gare_id?: string;
+      recherche?: string;
+    }) => {
+      const qs = new URLSearchParams();
+      qs.set("par_page", String(filtres?.par_page ?? 100));
+      qs.set("page", String(filtres?.page ?? 1));
+      if (filtres?.est_actif !== undefined) qs.set("est_actif", String(filtres.est_actif));
+      if (filtres?.gare_id) qs.set("gare_id", filtres.gare_id);
+      if (filtres?.recherche) qs.set("recherche", filtres.recherche);
+      return clientAPI.get<ReponseListe<Vehicule>>(
+        `${BASE}/vehicules?${qs.toString()}`,
+        opts,
+      );
+    },
     /**
      * Les cars **que je peux conduire** — la question du chauffeur.
      *
@@ -359,6 +376,8 @@ export const logistiqueAPI = {
       recherche?: string;
       gare_id?: string;
       voyage_id?: string;
+      cree_depuis?: string;
+      cree_jusqu_a?: string;
       page?: number;
       par_page?: number;
     }) => {
@@ -370,6 +389,8 @@ export const logistiqueAPI = {
       if (filtres?.recherche) qs.set("recherche", filtres.recherche);
       if (filtres?.gare_id) qs.set("gare_id", filtres.gare_id);
       if (filtres?.voyage_id) qs.set("voyage_id", filtres.voyage_id);
+      if (filtres?.cree_depuis) qs.set("cree_depuis", filtres.cree_depuis);
+      if (filtres?.cree_jusqu_a) qs.set("cree_jusqu_a", filtres.cree_jusqu_a);
       return clientAPI.get<ReponseListe<Colis>>(`${BASE}/colis?${qs.toString()}`, opts);
     },
 
@@ -383,6 +404,20 @@ export const logistiqueAPI = {
     /** Timeline (événements) d'un colis. */
     evenements: (colisId: string) =>
       clientAPI.get<ColisEvenement[]>(`${BASE}/colis/${colisId}/evenements`, opts),
+
+    /** Page de la timeline d'un colis. */
+    evenementsPagines: (
+      colisId: string,
+      filtres?: { page?: number; par_page?: number },
+    ) => {
+      const qs = new URLSearchParams();
+      qs.set("page", String(filtres?.page ?? 1));
+      qs.set("par_page", String(filtres?.par_page ?? 5));
+      return clientAPI.get<ReponseListe<ColisEvenement>>(
+        `${BASE}/colis/${colisId}/evenements/pagines?${qs.toString()}`,
+        opts,
+      );
+    },
 
     /**
      * Affecte (ou réaffecte) le colis à un voyage — le chauffeur en découle.
@@ -431,6 +466,7 @@ export const logistiqueAPI = {
     /** Liste paginée des enfants suivis. */
     lister: (filtres?: {
       statut?: string;
+      statuts?: string[];
       voyage_id?: string;
       recherche?: string;
       page?: number;
@@ -440,6 +476,7 @@ export const logistiqueAPI = {
       qs.set("par_page", String(filtres?.par_page ?? 100));
       qs.set("page", String(filtres?.page ?? 1));
       if (filtres?.statut) qs.set("statut", filtres.statut);
+      filtres?.statuts?.forEach((statut) => qs.append("statuts", statut));
       if (filtres?.voyage_id) qs.set("voyage_id", filtres.voyage_id);
       if (filtres?.recherche) qs.set("recherche", filtres.recherche);
       return clientAPI.get<ReponseListe<SuiviFamilial>>(

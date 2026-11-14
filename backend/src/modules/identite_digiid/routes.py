@@ -238,6 +238,9 @@ async def mes_voyages_chauffeur(
 async def manifeste_voyage(
     voyage_id: UUID,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    page_colis: int = Query(1, ge=1),
+    page_passagers: int = Query(1, ge=1),
+    par_page: int = Query(5, ge=1, le=100),
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Ce que le chauffeur transporte réellement : colis **et** passagers.
@@ -245,7 +248,14 @@ async def manifeste_voyage(
     Accès strictement limité au chauffeur affecté au voyage (contrôle serveur) :
     les numéros des destinataires et des familles sont masqués.
     """
-    return await service.construire_manifeste(session, voyage_id, utilisateur_courant)
+    return await service.construire_manifeste(
+        session,
+        voyage_id,
+        utilisateur_courant,
+        page_colis=page_colis,
+        page_passagers=page_passagers,
+        par_page=par_page,
+    )
 
 
 # ─── Citoyen : ses envois et les voyages de ses proches ──────────────

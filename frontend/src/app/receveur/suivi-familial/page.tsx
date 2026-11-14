@@ -6,7 +6,7 @@
  * départ et l'arrivée ; le guichet ne confirme que la remise à la famille après
  * que le chauffeur lui a confié l'enfant.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { Alerte } from "@/composants/commun/Alerte";
@@ -17,6 +17,7 @@ import { IconeCheck, IconeIdentite, IconeUtilisateur } from "@/composants/commun
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { AffecterChauffeur } from "@/composants/logistique/AffecterChauffeur";
 import { formaterDateHeure } from "@/composants/logistique/format";
+import { PaginationListe } from "@/composants/logistique/PaginationListe";
 import { ROLES_GUICHET } from "@/composants/logistique/roles";
 import { useAuthentification } from "@/contextes/authentification";
 import { ErreurAPI } from "@/services/client_api";
@@ -54,6 +55,10 @@ function Contenu() {
   const [recherche, setRecherche] = useState("");
   const [filtreStatut, setFiltreStatut] = useState<"" | StatutSuiviFamilial>("");
   const [actionEnCours, setActionEnCours] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalFiltres, setTotalFiltres] = useState(0);
+  const [compteurs, setCompteurs] = useState({ total: 0, en_route: 0, arrives: 0 });
+  const requeteCourante = useRef(0);
   const [remisesConfirmees, setRemisesConfirmees] = useState<Set<string>>(
     () => new Set(),
   );
@@ -61,25 +66,67 @@ function Contenu() {
   const [affectationPour, setAffectationPour] = useState<string | null>(null);
 
   const charger = useCallback(async () => {
+    const numeroRequete = ++requeteCourante.current;
     setChargement(true);
     setErreur(null);
     try {
-      const reponse = await logistiqueAPI.suiviFamilial.lister({ par_page: 100 });
+      const reponse = await logistiqueAPI.suiviFamilial.lister({
+        page,
+        par_page: 5,
+        ...(filtreStatut ? { statut: filtreStatut } : {}),
+        ...(recherche.trim() ? { recherche: recherche.trim() } : {}),
+      });
+      if (numeroRequete !== requeteCourante.current) return;
       setSuivis(reponse.elements);
+      setTotalFiltres(reponse.total);
     } catch (e) {
+      if (numeroRequete !== requeteCourante.current) return;
       setErreur(
         e instanceof ErreurAPI
           ? e.message_utilisateur
           : "Impossible de charger les suivis familiaux. Réessayez.",
       );
     } finally {
-      setChargement(false);
+      if (numeroRequete === requeteCourante.current) setChargement(false);
+    }
+  }, [filtreStatut, page, recherche]);
+
+  const chargerCompteurs = useCallback(async () => {
+    try {
+      const [total, enRoute, arrives] = await Promise.all([
+        logistiqueAPI.suiviFamilial.lister({ page: 1, par_page: 1 }),
+        logistiqueAPI.suiviFamilial.lister({
+          page: 1,
+          par_page: 1,
+          statut: "en_route",
+        }),
+        logistiqueAPI.suiviFamilial.lister({
+          page: 1,
+          par_page: 1,
+          statut: "arrive",
+        }),
+      ]);
+      setCompteurs({
+        total: total.total,
+        en_route: enRoute.total,
+        arrives: arrives.total,
+      });
+    } catch (e) {
+      setErreur(
+        e instanceof ErreurAPI
+          ? e.message_utilisateur
+          : "Impossible de charger les compteurs des suivis familiaux.",
+      );
     }
   }, []);
 
   useEffect(() => {
     void charger();
   }, [charger]);
+
+  useEffect(() => {
+    void chargerCompteurs();
+  }, [chargerCompteurs]);
 
   /** Confirme la remise à la famille après le dépôt du chauffeur au guichet. */
   async function confirmerRemise(suivi: SuiviFamilial) {
@@ -98,6 +145,7 @@ function Contenu() {
       setRemisesConfirmees((precedentes) => new Set(precedentes).add(suivi.id));
       setMessage(`${suivi.enfant_nom} — ${resultat.message}`);
       await charger();
+      await chargerCompteurs();
     } catch (e) {
       setErreur(
         e instanceof ErreurAPI
@@ -108,29 +156,6 @@ function Contenu() {
       setActionEnCours(null);
     }
   }
-
-  const suivisFiltres = useMemo(() => {
-    const terme = recherche.trim().toLowerCase();
-    return suivis.filter((s) => {
-      if (filtreStatut && s.statut !== filtreStatut) return false;
-      if (!terme) return true;
-      return (
-        s.enfant_nom.toLowerCase().includes(terme) ||
-        (s.parent_nom ?? "").toLowerCase().includes(terme) ||
-        (s.code_clair ?? "").toLowerCase().includes(terme) ||
-        s.telephone_parent.includes(terme)
-      );
-    });
-  }, [suivis, recherche, filtreStatut]);
-
-  const compteurs = useMemo(
-    () => ({
-      total: suivis.length,
-      en_route: suivis.filter((s) => s.statut === "en_route").length,
-      arrives: suivis.filter((s) => s.statut === "arrive").length,
-    }),
-    [suivis],
-  );
 
   return (
     <div className="space-y-6 apparition">
@@ -175,7 +200,10 @@ function Contenu() {
           <input
             className="champ-saisie"
             value={recherche}
-            onChange={(e) => setRecherche(e.target.value)}
+            onChange={(e) => {
+              setRecherche(e.target.value);
+              setPage(1);
+            }}
             placeholder="Nom de l'enfant, parent, code ou téléphone"
           />
         </div>
@@ -184,7 +212,10 @@ function Contenu() {
           <select
             className="champ-saisie"
             value={filtreStatut}
-            onChange={(e) => setFiltreStatut(e.target.value as "" | StatutSuiviFamilial)}
+            onChange={(e) => {
+              setFiltreStatut(e.target.value as "" | StatutSuiviFamilial);
+              setPage(1);
+            }}
           >
             <option value="">Tous</option>
             <option value="enregistre">Enregistré</option>
@@ -201,13 +232,13 @@ function Contenu() {
           <p className="py-8 text-center text-sm italic text-ardoise-clair">
             Chargement des suivis…
           </p>
-        ) : suivisFiltres.length === 0 ? (
+        ) : suivis.length === 0 ? (
           <p className="py-8 text-center text-sm italic text-ardoise-clair">
             Aucun enfant suivi pour ces critères.
           </p>
         ) : (
           <ul className="space-y-3">
-            {suivisFiltres.map((suivi) => {
+            {suivis.map((suivi) => {
               const arrive = suivi.statut === "arrive";
               const remiseConfiee =
                 suivi.remis_guichet_le != null &&
@@ -361,6 +392,13 @@ function Contenu() {
             })}
           </ul>
         )}
+        <PaginationListe
+          page={page}
+          total={totalFiltres}
+          parPage={5}
+          chargement={chargement}
+          surChangement={setPage}
+        />
       </Carte>
 
       <div className="rounded-xl bg-lagune/5 p-3 text-xs text-ardoise-clair">

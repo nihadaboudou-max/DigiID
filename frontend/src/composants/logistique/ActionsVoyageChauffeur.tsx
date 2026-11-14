@@ -255,7 +255,7 @@ export function ActionsVoyageChauffeur({
               setAction("arrivee");
             }}
           >
-            <IconeCheck className="h-4 w-4" /> 3. Confirmer l&apos;arrivée
+            <IconeCheck className="h-4 w-4" /> 3. Marquer arrivés
           </Bouton>
         </div>
 

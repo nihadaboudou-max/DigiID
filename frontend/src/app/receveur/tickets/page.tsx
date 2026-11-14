@@ -2,10 +2,10 @@
 /**
  * Liste / recherche des colis du guichet (S3).
  *
- * Filtre par statut et recherche par numéro de ticket ou nom de destinataire
- * (filtrage côté client sur la liste chargée).
+ * Filtre par statut et recherche par numéro de ticket ou nom de destinataire,
+ * appliqués côté serveur avant la pagination.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Alerte } from "@/composants/commun/Alerte";
 import { Bouton } from "@/composants/commun/Bouton";
@@ -13,6 +13,7 @@ import { Carte } from "@/composants/commun/Carte";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { IconeColis } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
+import { PaginationListe } from "@/composants/logistique/PaginationListe";
 import { ROLES_GUICHET } from "@/composants/logistique/roles";
 import { TableauColis } from "@/composants/logistique/TableauColis";
 import { useAuthentification } from "@/contextes/authentification";
@@ -46,6 +47,8 @@ function Contenu() {
   const [filtreStatut, setFiltreStatut] = useState<StatutColis | "tous">("tous");
   const [limiterAGare, setLimiterAGare] = useState(true);
   const [gareId, setGareId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
     let annule = false;
@@ -67,10 +70,16 @@ function Contenu() {
       setErreur(null);
       try {
         const reponse = await logistiqueAPI.colis.lister({
-          par_page: 100,
+          page,
+          par_page: 5,
+          ...(filtreStatut !== "tous" ? { statut: filtreStatut } : {}),
+          ...(recherche.trim() ? { recherche: recherche.trim() } : {}),
           ...(limiterAGare && gareId ? { gare_id: gareId } : {}),
         });
-        if (!annule) setColis(reponse.elements);
+        if (!annule) {
+          setColis(reponse.elements);
+          setTotal(reponse.total);
+        }
       } catch (e) {
         if (!annule) {
           setErreur(
@@ -86,28 +95,22 @@ function Contenu() {
     return () => {
       annule = true;
     };
-  }, [limiterAGare, gareId]);
-
-  const filtres = useMemo(() => {
-    const terme = recherche.trim().toLowerCase();
-    return colis.filter((c) => {
-      if (filtreStatut !== "tous" && c.statut !== filtreStatut) return false;
-      if (!terme) return true;
-      return (
-        (c.code_clair ?? "").toLowerCase().includes(terme) ||
-        c.destinataire_nom.toLowerCase().includes(terme) ||
-        c.destinataire_tel.toLowerCase().includes(terme)
-      );
-    });
-  }, [colis, recherche, filtreStatut]);
+  }, [filtreStatut, gareId, limiterAGare, page, recherche]);
 
   return (
     <div className="space-y-6 apparition">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold text-ardoise">Colis &amp; tickets</h1>
-        <p className="text-sm text-ardoise-clair">
-          Retrouvez un colis par son numéro ou le nom du destinataire.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold text-ardoise">Colis &amp; tickets</h1>
+          <p className="text-sm text-ardoise-clair">
+            Retrouvez un colis par son numéro ou le nom du destinataire.
+          </p>
+        </div>
+        <Link href="/receveur/colis/nouveau">
+          <Bouton variante="primaire">
+            <IconeColis className="w-4 h-4" /> Enregistrer un nouveau colis
+          </Bouton>
+        </Link>
       </div>
 
       {erreur && <Alerte variante="erreur" titre="Erreur">{erreur}</Alerte>}
@@ -117,7 +120,10 @@ function Contenu() {
           <ChampSaisie
             libelle="Rechercher"
             value={recherche}
-            onChange={(e) => setRecherche(e.target.value)}
+            onChange={(e) => {
+              setRecherche(e.target.value);
+              setPage(1);
+            }}
             placeholder="Numéro de ticket, nom ou téléphone du destinataire…"
           />
 
@@ -128,7 +134,10 @@ function Contenu() {
                 <button
                   key={statut}
                   type="button"
-                  onClick={() => setFiltreStatut(statut)}
+                  onClick={() => {
+                    setFiltreStatut(statut);
+                    setPage(1);
+                  }}
                   className={
                     "px-3 py-1.5 rounded-full text-xs font-medium transition-colors " +
                     (actif
@@ -146,7 +155,10 @@ function Contenu() {
             <input
               type="checkbox"
               checked={limiterAGare}
-              onChange={(e) => setLimiterAGare(e.target.checked)}
+              onChange={(e) => {
+                setLimiterAGare(e.target.checked);
+                setPage(1);
+              }}
               className="rounded border-ardoise-clair/30"
             />
             Limiter à ma gare de rattachement
@@ -162,7 +174,8 @@ function Contenu() {
         ) : (
           <>
             <TableauColis
-              colis={filtres}
+              colis={colis}
+              cartesMobiles
               messageVide={
                 recherche || filtreStatut !== "tous"
                   ? "Aucun colis ne correspond à votre recherche."
@@ -170,20 +183,19 @@ function Contenu() {
               }
             />
             <p className="text-xs text-ardoise-clair mt-3">
-              {filtres.length} colis affiché{filtres.length > 1 ? "s" : ""}
-              {colis.length !== filtres.length ? ` sur ${colis.length}` : ""}.
+              {total} colis correspondant{total > 1 ? "s" : ""}.
             </p>
+            <PaginationListe
+              page={page}
+              total={total}
+              parPage={5}
+              chargement={chargement}
+              surChangement={setPage}
+            />
           </>
         )}
       </Carte>
 
-      <div>
-        <Link href="/receveur/colis/nouveau">
-          <Bouton variante="primaire">
-            <IconeColis className="w-4 h-4" /> Enregistrer un nouveau colis
-          </Bouton>
-        </Link>
-      </div>
     </div>
   );
 }

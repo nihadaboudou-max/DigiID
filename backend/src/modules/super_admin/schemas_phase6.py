@@ -74,9 +74,10 @@ class FiltresAudit(BaseModel):
     date_fin: Optional[datetime] = Field(
         default=None, description="Date fin (inclusif) — format ISO 8601",
     )
-    #: Recherche textuelle libre (insensible à la casse) dans la description
+    #: Recherche textuelle libre dans le type, la description, l'IP ou l'identifiant utilisateur
     recherche: Optional[str] = Field(
-        default=None, description="Recherche textuelle libre (insensible à la casse) dans la description",
+        default=None,
+        description="Recherche insensible à la casse dans le type, la description, l'IP ou l'identifiant utilisateur",
     )
 
 
@@ -129,6 +130,8 @@ class ListeAuditPaginee(BaseModel):
     pages: int
     #: Éléments par page
     limite: int
+    #: Types disponibles pour filtrer le journal
+    types_evenements: list[str] = Field(default_factory=list)
 
 
 class ExportAuditRequete(BaseModel):

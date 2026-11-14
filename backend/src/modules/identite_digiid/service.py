@@ -675,7 +675,13 @@ async def lister_voyages_chauffeur(
 
 
 async def construire_manifeste(
-    session: AsyncSession, voyage_id: UUID, utilisateur: Utilisateur
+    session: AsyncSession,
+    voyage_id: UUID,
+    utilisateur: Utilisateur,
+    *,
+    page_colis: int = 1,
+    page_passagers: int = 1,
+    par_page: int = 5,
 ) -> schemas.ManifesteVoyageResponse:
     """Manifeste complet d'un voyage : colis **et** passagers, sur un écran.
 
@@ -761,6 +767,11 @@ async def construire_manifeste(
         for suivi in passagers_liste
     ]
 
+    total_colis = len(lignes_colis)
+    total_passagers = len(lignes_passagers)
+    debut_colis = (page_colis - 1) * par_page
+    debut_passagers = (page_passagers - 1) * par_page
+
     return schemas.ManifesteVoyageResponse(
         voyage_id=voyage.id,
         date_depart=voyage.date_depart,
@@ -768,12 +779,12 @@ async def construire_manifeste(
         vehicule_immatriculation=vehicule.immatriculation if vehicule else None,
         gare_depart_nom=depart,
         gare_arrivee_nom=arrivee,
-        nb_colis=len(lignes_colis),
-        nb_passagers=len(lignes_passagers),
+        nb_colis=total_colis,
+        nb_passagers=total_passagers,
         nb_bagages=sum(l.nombre_bagages for l in lignes_colis)
         + sum(l.nombre_bagages for l in lignes_passagers),
-        colis=lignes_colis,
-        passagers=lignes_passagers,
+        colis=lignes_colis[debut_colis : debut_colis + par_page],
+        passagers=lignes_passagers[debut_passagers : debut_passagers + par_page],
     )
 
 

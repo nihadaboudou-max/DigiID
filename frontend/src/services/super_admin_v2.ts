@@ -76,6 +76,7 @@ export interface EvenementAudit {
   type_evenement: string;
   description: string;
   utilisateur_id: string | null;
+  nom_utilisateur: string | null;
   role_acteur: string | null;
   adresse_ip: string | null;
   agent_utilisateur: string | null;
@@ -99,6 +100,7 @@ export interface ListeAudit {
   page: number;
   pages: number;
   limite: number;
+  types_evenements: string[];
 }
 
 export interface StatistiquesUtilisateurs {
@@ -260,6 +262,7 @@ export const exporterAuditCSV = async (filtres: FiltresAudit): Promise<Blob> => 
   if (filtres.type_evenement) params.append("type_evenement", filtres.type_evenement);
   if (filtres.date_debut) params.append("date_debut", filtres.date_debut);
   if (filtres.date_fin) params.append("date_fin", filtres.date_fin);
+  if (filtres.recherche) params.append("recherche", filtres.recherche);
 
   const url = `${PREFIXE}/audit/export/csv?${params.toString()}`;
   const response = await fetch(url, {

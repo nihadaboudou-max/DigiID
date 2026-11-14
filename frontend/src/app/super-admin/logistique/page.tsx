@@ -13,6 +13,7 @@ import { Carte } from "@/composants/commun/Carte";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Badge } from "@/composants/commun/Badge";
 import { Alerte } from "@/composants/commun/Alerte";
+import { PaginationListe } from "@/composants/logistique/PaginationListe";
 import { useNotifications } from "@/contextes/notifications";
 import { ErreurAPI } from "@/services/client_api";
 import {
@@ -57,25 +58,113 @@ function Contenu() {
   const [gares, setGares] = useState<Gare[]>([]);
   const [lignes, setLignes] = useState<Ligne[]>([]);
   const [vehicules, setVehicules] = useState<Vehicule[]>([]);
+  const [vehiculesPage, setVehiculesPage] = useState<Vehicule[]>([]);
+  const [pageVehicules, setPageVehicules] = useState(1);
+  const [totalVehicules, setTotalVehicules] = useState(0);
+  const [chargementVehicules, setChargementVehicules] = useState(true);
   const [voyages, setVoyages] = useState<Voyage[]>([]);
+  const [pageVoyages, setPageVoyages] = useState(1);
+  const [totalVoyages, setTotalVoyages] = useState(0);
+  const [chargementVoyages, setChargementVoyages] = useState(true);
   const [acteurs, setActeurs] = useState<Acteur[]>([]);
   const [profils, setProfils] = useState<ProfilLogistique[]>([]);
+
+  const chargerPageVehicules = async (pageDemandee: number) => {
+    setChargementVehicules(true);
+    try {
+      let resultat = await api.vehicules.lister({
+        page: pageDemandee,
+        par_page: 5,
+      });
+      const dernierePage = Math.max(1, Math.ceil(resultat.total / 5));
+      if (pageDemandee > dernierePage) {
+        resultat = await api.vehicules.lister({
+          page: dernierePage,
+          par_page: 5,
+        });
+      }
+      const pageValide = Math.min(pageDemandee, dernierePage);
+      setPageVehicules(pageValide);
+      setVehiculesPage(resultat.elements);
+      setTotalVehicules(resultat.total);
+    } catch (e) {
+      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
+    } finally {
+      setChargementVehicules(false);
+    }
+  };
+
+  const chargerPageVoyages = async (pageDemandee: number) => {
+    setChargementVoyages(true);
+    try {
+      let resultat = await api.voyages.lister({
+        page: pageDemandee,
+        par_page: 5,
+      });
+      const dernierePage = Math.max(1, Math.ceil(resultat.total / 5));
+      if (pageDemandee > dernierePage) {
+        resultat = await api.voyages.lister({
+          page: dernierePage,
+          par_page: 5,
+        });
+      }
+      const pageValide = Math.min(pageDemandee, dernierePage);
+      setPageVoyages(pageValide);
+      setVoyages(resultat.elements);
+      setTotalVoyages(resultat.total);
+    } catch (e) {
+      setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
+    } finally {
+      setChargementVoyages(false);
+    }
+  };
 
   const charger = async () => {
     setChargement(true);
     setErreur(null);
     try {
-      const [g, l, v, voy, a] = await Promise.all([
+      const [g, l, v, vehiculesPaginees, voy, a] = await Promise.all([
         api.gares.lister(),
         api.lignes.lister(),
         api.vehicules.lister(),
-        api.voyages.lister(),
+        api.vehicules.lister({ page: pageVehicules, par_page: 5 }),
+        api.voyages.lister({ page: pageVoyages, par_page: 5 }),
         api.acteurs.lister(),
       ]);
       setGares(g.elements);
       setLignes(l.elements);
       setVehicules(v.elements);
-      setVoyages(voy.elements);
+      const dernierePageVehicules = Math.max(
+        1,
+        Math.ceil(vehiculesPaginees.total / 5),
+      );
+      const pageVehiculesValide = Math.min(pageVehicules, dernierePageVehicules);
+      if (pageVehiculesValide !== vehiculesPaginees.page) {
+        const resultat = await api.vehicules.lister({
+          page: pageVehiculesValide,
+          par_page: 5,
+        });
+        setVehiculesPage(resultat.elements);
+      } else {
+        setVehiculesPage(vehiculesPaginees.elements);
+      }
+      setPageVehicules(pageVehiculesValide);
+      setTotalVehicules(vehiculesPaginees.total);
+
+      const dernierePageVoyages = Math.max(1, Math.ceil(voy.total / 5));
+      const pageVoyagesValide = Math.min(pageVoyages, dernierePageVoyages);
+      if (pageVoyagesValide !== voy.page) {
+        const resultat = await api.voyages.lister({
+          page: pageVoyagesValide,
+          par_page: 5,
+        });
+        setVoyages(resultat.elements);
+      } else {
+        setVoyages(voy.elements);
+      }
+      setPageVoyages(pageVoyagesValide);
+      setTotalVoyages(voy.total);
+
       setActeurs(a.elements);
       const profilsCharges = await Promise.all(
         a.elements.map(async (acteur) => {
@@ -90,6 +179,8 @@ function Contenu() {
     } catch (e) {
       setErreur(e instanceof ErreurAPI ? e.message_utilisateur : "Erreur de chargement");
     } finally {
+      setChargementVehicules(false);
+      setChargementVoyages(false);
       setChargement(false);
     }
   };
@@ -159,7 +250,11 @@ function Contenu() {
           )}
           {onglet === "Véhicules" && (
             <SectionVehicule
-              vehicules={vehicules}
+              vehicules={vehiculesPage}
+              totalVehicules={totalVehicules}
+              page={pageVehicules}
+              chargement={chargementVehicules}
+              surChangementPage={chargerPageVehicules}
               optionsGares={optionsGares}
               rafraichir={charger}
               supprimer={(id) => supprimer(() => api.vehicules.supprimer(id), "Véhicule supprimé")}
@@ -168,6 +263,10 @@ function Contenu() {
           {onglet === "Voyages" && (
             <SectionVoyage
               voyages={voyages}
+              totalVoyages={totalVoyages}
+              page={pageVoyages}
+              chargement={chargementVoyages}
+              surChangementPage={chargerPageVoyages}
               lignes={lignes}
               vehicules={vehicules}
               rafraichir={charger}
@@ -690,9 +789,14 @@ function SectionLigne({
 // ─── Section Véhicules ───────────────────────────────────────────────
 
 function SectionVehicule({
-  vehicules, optionsGares, rafraichir, supprimer,
+  vehicules, totalVehicules, page, chargement, surChangementPage,
+  optionsGares, rafraichir, supprimer,
 }: {
   vehicules: Vehicule[];
+  totalVehicules: number;
+  page: number;
+  chargement: boolean;
+  surChangementPage: (page: number) => void;
   optionsGares: { valeur: string; libelle: string }[];
   rafraichir: () => void;
   supprimer: (id: string) => void;
@@ -804,7 +908,7 @@ function SectionVehicule({
         </form>
       </Carte>
       <Carte>
-        <h2 className="font-semibold mb-3">{vehicules.length} véhicule(s)</h2>
+        <h2 className="font-semibold mb-3">{totalVehicules} véhicule(s)</h2>
         <TableauSimple entetes={["Immatriculation", "Marque", "Capacité", "Gare", "Chauffeur", ""]}>
           {vehicules.length === 0 ? (
             <LigneVide colonnes={6} message="Aucun véhicule." />
@@ -841,6 +945,13 @@ function SectionVehicule({
             ))
           )}
         </TableauSimple>
+        <PaginationListe
+          page={page}
+          total={totalVehicules}
+          parPage={5}
+          chargement={chargement}
+          surChangement={surChangementPage}
+        />
       </Carte>
     </div>
   );
@@ -849,9 +960,14 @@ function SectionVehicule({
 // ─── Section Voyages ─────────────────────────────────────────────────
 
 function SectionVoyage({
-  voyages, lignes, vehicules, rafraichir, supprimer,
+  voyages, totalVoyages, page, chargement, surChangementPage,
+  lignes, vehicules, rafraichir, supprimer,
 }: {
   voyages: Voyage[];
+  totalVoyages: number;
+  page: number;
+  chargement: boolean;
+  surChangementPage: (page: number) => void;
   lignes: Ligne[];
   vehicules: Vehicule[];
   rafraichir: () => void;
@@ -976,7 +1092,7 @@ function SectionVoyage({
         </form>
       </Carte>
       <Carte>
-        <h2 className="font-semibold mb-3">{voyages.length} voyage(s)</h2>
+        <h2 className="font-semibold mb-3">{totalVoyages} voyage(s)</h2>
         <TableauSimple entetes={["Départ", "Trajet", "Véhicule", "Chauffeur", "Statut", ""]}>
           {voyages.length === 0 ? (
             <LigneVide colonnes={6} message="Aucun voyage." />
@@ -993,6 +1109,13 @@ function SectionVoyage({
             ))
           )}
         </TableauSimple>
+        <PaginationListe
+          page={page}
+          total={totalVoyages}
+          parPage={5}
+          chargement={chargement}
+          surChangement={surChangementPage}
+        />
       </Carte>
     </div>
   );
