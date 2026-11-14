@@ -19,6 +19,7 @@ export default function PageCagnotteChauffeur() {
         titre="Ma cagnotte"
         sousTitre="Vos gains et vos dépenses."
         messageVide="Aucune opération. Enregistrez un colis pour recevoir votre premier gain."
+        paginationServeur
       />
     </EnvelopperEspaceProtege>
   );

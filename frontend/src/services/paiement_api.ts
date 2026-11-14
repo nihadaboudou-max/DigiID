@@ -28,6 +28,10 @@ export interface ReponseListe<T> {
   par_page: number;
 }
 
+export interface ReponseListeCommissions extends ReponseListe<Commission> {
+  montant_total_fcfa?: number;
+}
+
 const BASE = "/api/v1/paiement";
 const opts = { authentifie: true } as const;
 
@@ -144,11 +148,16 @@ export const paiementAPI = {
 
   commissions: {
     /** Mes commissions (reversements reçus sur colis). */
-    moi: (filtres?: { page?: number; par_page?: number }) =>
-      clientAPI.get<ReponseListe<Commission>>(
+    moi: (filtres?: {
+      page?: number;
+      par_page?: number;
+      inclure_total_montant?: boolean;
+    }) =>
+      clientAPI.get<ReponseListeCommissions>(
         `${BASE}/commissions/moi?${construireQuery({
           page: filtres?.page ?? 1,
           par_page: filtres?.par_page ?? 20,
+          inclure_total_montant: filtres?.inclure_total_montant,
         })}`,
         opts,
       ),

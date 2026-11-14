@@ -2,9 +2,8 @@
 /**
  * Tableau de bord du chauffeur (S4).
  *
- * Liste les voyages du chauffeur (ou tous les voyages pour la démo), avec le
- * nombre de colis à bord, et donne accès d'un clic à la liste des colis d'un
- * voyage et au scan en route.
+ * Liste les voyages affectés au chauffeur par pages de cinq, avec le nombre de
+ * colis à bord, et donne accès d'un clic aux colis d'un voyage et au scan.
  */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
@@ -21,6 +20,7 @@ import {
   IconeCamion,
 } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
+import { PaginationListe } from "@/composants/logistique/PaginationListe";
 import { RecommandationTarifaire } from "@/composants/logistique/RecommandationTarifaire";
 import { formaterDate } from "@/composants/logistique/format";
 import { ROLES_CHAUFFEUR } from "@/composants/logistique/roles";
@@ -54,13 +54,16 @@ function Contenu() {
   const { utilisateur } = useAuthentification();
   const { t, jouer } = useLangue();
   const [voyages, setVoyages] = useState<Voyage[]>([]);
+  const [voyagesPage, setVoyagesPage] = useState<Voyage[]>([]);
+  const [pageVoyages, setPageVoyages] = useState(1);
+  const [totalVoyages, setTotalVoyages] = useState(0);
   const [lignes, setLignes] = useState<Ligne[]>([]);
   const [colis, setColis] = useState<Colis[]>([]);
   const [vehicules, setVehicules] = useState<Vehicule[]>([]);
   const [passagersParVoyage, setPassagersParVoyage] = useState<Record<string, number>>({});
   const [chargement, setChargement] = useState(true);
+  const [chargementListe, setChargementListe] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
-  const [mesVoyagesSeulement, setMesVoyagesSeulement] = useState(true);
 
   useEffect(() => {
     let annule = false;
@@ -100,13 +103,38 @@ function Contenu() {
     };
   }, []);
 
-  // N'affiche que les voyages affectés au chauffeur (sauf si l'option est décochée).
+  useEffect(() => {
+    let annule = false;
+    setChargementListe(true);
+    logistiqueAPI.voyages
+      .lister({ page: pageVoyages, par_page: 5 })
+      .then((reponse) => {
+        if (annule) return;
+        setVoyagesPage(reponse.elements);
+        setTotalVoyages(reponse.total);
+      })
+      .catch((e: unknown) => {
+        if (!annule) {
+          setErreur(
+            e instanceof ErreurAPI
+              ? e.message_utilisateur
+              : "Impossible de charger les voyages. Réessayez plus tard.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!annule) setChargementListe(false);
+      });
+    return () => {
+      annule = true;
+    };
+  }, [pageVoyages]);
+
+  // La liste paginée est restreinte au chauffeur connecté par le serveur.
   const mesVoyages = useMemo(
     () => voyages.filter((v) => v.chauffeur_id === utilisateur?.id),
     [voyages, utilisateur?.id],
   );
-  const voyagesAffiches = mesVoyagesSeulement ? mesVoyages : voyages;
-
   const lignesParId = useMemo(() => {
     const map: Record<string, Ligne> = {};
     lignes.forEach((l) => {
@@ -198,29 +226,17 @@ function Contenu() {
         titre={t("chauffeur.mes_voyages")}
         description={t("chauffeur.mes_voyages_desc")}
       >
-        <label className="flex items-center gap-2 text-xs text-ardoise-clair mb-4">
-          <input
-            type="checkbox"
-            checked={mesVoyagesSeulement}
-            onChange={(e) => setMesVoyagesSeulement(e.target.checked)}
-            className="rounded border-ardoise-clair/30"
-          />
-          Afficher uniquement les voyages qui me sont affectés
-        </label>
-
-        {chargement ? (
+        {chargement || chargementListe ? (
           <p className="text-sm text-ardoise-clair italic py-6 text-center">
             Chargement des voyages…
           </p>
-        ) : voyagesAffiches.length === 0 ? (
+        ) : voyagesPage.length === 0 ? (
           <p className="text-sm text-ardoise-clair italic py-6 text-center">
-            {mesVoyagesSeulement
-              ? "Aucun voyage ne vous est affecté pour le moment. Décochez la case pour voir tous les voyages."
-              : "Aucun voyage enregistré."}
+            Aucun voyage ne vous est affecté pour le moment.
           </p>
         ) : (
           <ul className="space-y-3">
-            {voyagesAffiches.map((voyage) => (
+            {voyagesPage.map((voyage) => (
               <CarteVoyage
                 key={voyage.id}
                 voyage={voyage}
@@ -231,6 +247,13 @@ function Contenu() {
             ))}
           </ul>
         )}
+        <PaginationListe
+          page={pageVoyages}
+          total={totalVoyages}
+          parPage={5}
+          chargement={chargement || chargementListe}
+          surChangement={setPageVoyages}
+        />
       </Carte>
     </div>
   );

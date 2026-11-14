@@ -394,6 +394,16 @@ async def lister_commissions(
     return await _paginer(session, requete, page, par_page)
 
 
+async def total_commissions(session: AsyncSession, receveur_id: UUID) -> int:
+    """Montant cumulé des commissions, indépendamment de la page demandée."""
+    total = await session.scalar(
+        select(func.coalesce(func.sum(Commission.montant_fcfa), 0)).where(
+            Commission.receveur_id == receveur_id
+        )
+    )
+    return int(total or 0)
+
+
 async def _resultat(
     session: AsyncSession, transaction: TransactionPaiement, message: str
 ) -> dict:

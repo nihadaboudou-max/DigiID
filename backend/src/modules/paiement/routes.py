@@ -329,7 +329,8 @@ async def lister_transactions(
 
 @routeur_paiement.get(
     "/commissions/moi",
-    response_model=schemas.ReponseListe[schemas.CommissionResponse],
+    response_model=schemas.ReponseListeCommissions,
+    response_model_exclude_none=True,
     summary="Mes commissions (reversements sur colis)",
 )
 @require_permission("paiement.lire")
@@ -337,13 +338,23 @@ async def mes_commissions(
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     page: int = Query(1, ge=1),
     par_page: int = Query(20, ge=1, le=100),
+    inclure_total_montant: bool = Query(False),
     session: AsyncSession = Depends(obtenir_session),
 ):
     commissions, total = await service.lister_commissions(
         session, utilisateur_courant.id, page, par_page
     )
-    return schemas.ReponseListe(
-        elements=commissions, total=total, page=page, par_page=par_page
+    montant_total_fcfa = None
+    if inclure_total_montant:
+        montant_total_fcfa = await service.total_commissions(
+            session, utilisateur_courant.id
+        )
+    return schemas.ReponseListeCommissions(
+        elements=commissions,
+        total=total,
+        page=page,
+        par_page=par_page,
+        montant_total_fcfa=montant_total_fcfa,
     )
 
 

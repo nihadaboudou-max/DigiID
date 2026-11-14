@@ -978,7 +978,8 @@ async def lister_voyages(session: AsyncSession, page: int, par_page: int,
                          chauffeur_id: UUID | None = None,
                          ligne_id: UUID | None = None,
                          a_partir_de: datetime | None = None,
-                         utilisateur: Utilisateur | None = None):
+                         utilisateur: Utilisateur | None = None,
+                         statuts: list[str] | None = None):
     """Liste des voyages, filtrable par chauffeur, ligne et date.
 
     Ces filtres servent trois usages concrets :
@@ -993,7 +994,9 @@ async def lister_voyages(session: AsyncSession, page: int, par_page: int,
     pas la règle.
     """
     requete = select(Voyage)
-    if statut is not None:
+    if statuts:
+        requete = requete.where(Voyage.statut.in_(statuts))
+    elif statut is not None:
         requete = requete.where(Voyage.statut == statut)
     if _est_chauffeur_role(utilisateur):
         requete = requete.where(Voyage.chauffeur_id == utilisateur.id)
@@ -1014,9 +1017,16 @@ async def lister_voyages(session: AsyncSession, page: int, par_page: int,
         requete = requete.where(Voyage.ligne_id == ligne_id)
     if a_partir_de is not None:
         requete = requete.where(Voyage.date_depart >= a_partir_de)
-        requete = requete.order_by(Voyage.date_depart.asc())
+
+    depart_chronologique = a_partir_de is not None or (
+        statuts is not None
+        and bool(statuts)
+        and set(statuts).issubset({"planifie", "en_cours"})
+    )
+    if depart_chronologique:
+        requete = requete.order_by(Voyage.date_depart.asc(), Voyage.id.asc())
     else:
-        requete = requete.order_by(Voyage.date_depart.desc())
+        requete = requete.order_by(Voyage.date_depart.desc(), Voyage.id.desc())
     return await _paginer(session, requete, page, par_page)
 
 
@@ -2003,9 +2013,13 @@ async def lister_colis(
     gare_id: UUID | None = None,
     voyage_id: UUID | None = None,
     utilisateur: Utilisateur | None = None,
+    statuts: list[str] | None = None,
+    recherche: str | None = None,
 ):
     requete = select(Colis)
-    if statut is not None:
+    if statuts:
+        requete = requete.where(Colis.statut.in_(statuts))
+    elif statut is not None:
         requete = requete.where(Colis.statut == statut)
     if gare_id is not None:
         requete = requete.where(
@@ -2013,6 +2027,28 @@ async def lister_colis(
         )
     if voyage_id is not None:
         requete = requete.where(Colis.voyage_id == voyage_id)
+    if recherche and recherche.strip():
+        terme = f"%{recherche.strip()}%"
+        ticket_correspondant = (
+            select(Ticket.id)
+            .where(
+                or_(
+                    Ticket.id == Colis.ticket_id,
+                    Ticket.reference_id == Colis.id,
+                ),
+                Ticket.type == "COLIS",
+                Ticket.code_clair.ilike(terme),
+            )
+            .exists()
+        )
+        requete = requete.where(
+            or_(
+                Colis.destinataire_nom.ilike(terme),
+                Colis.destinataire_tel.ilike(terme),
+                Colis.description.ilike(terme),
+                ticket_correspondant,
+            )
+        )
     # Périmètre du guichet : chacun voit ses propres enregistrements et ceux qui
     # touchent sa gare. On ne laisse pas un agent lire toute la base.
     if utilisateur is not None and (
@@ -2030,6 +2066,11 @@ async def lister_colis(
             conditions.append(Colis.gare_depart_id == perimetre)
             conditions.append(Colis.gare_arrivee_id == perimetre)
         requete = requete.where(or_(*conditions))
+    elif _est_chauffeur_role(utilisateur):
+        voyages_du_chauffeur = select(Voyage.id).where(
+            Voyage.chauffeur_id == utilisateur.id
+        )
+        requete = requete.where(Colis.voyage_id.in_(voyages_du_chauffeur))
     elif utilisateur is not None and utilisateur.role == RoleUtilisateur.CITOYEN.value:
         # Un colis peut avoir été enregistré avant la création du compte du
         # destinataire : le téléphone normalisé reste alors la clé de rattachement.
@@ -2050,7 +2091,7 @@ async def lister_colis(
                     Colis.destinataire_tel == telephone,
                 ])
         requete = requete.where(or_(*conditions))
-    requete = requete.order_by(Colis.cree_le.desc())
+    requete = requete.order_by(Colis.cree_le.desc(), Colis.id.desc())
     return await _paginer(session, requete, page, par_page)
 
 
@@ -3144,7 +3185,27 @@ async def lister_suivi_familial(
     if voyage_id is not None:
         requete = requete.where(SuiviFamilial.voyage_id == voyage_id)
     if recherche:
-        requete = requete.where(SuiviFamilial.enfant_nom.ilike(f"%{recherche.strip()}%"))
+        terme = f"%{recherche.strip()}%"
+        ticket_correspondant = (
+            select(Ticket.id)
+            .where(
+                or_(
+                    Ticket.id == SuiviFamilial.ticket_id,
+                    Ticket.reference_id == SuiviFamilial.id,
+                ),
+                Ticket.type == "ENFANT",
+                Ticket.code_clair.ilike(terme),
+            )
+            .exists()
+        )
+        requete = requete.where(
+            or_(
+                SuiviFamilial.enfant_nom.ilike(terme),
+                SuiviFamilial.parent_nom.ilike(terme),
+                SuiviFamilial.telephone_parent.ilike(terme),
+                ticket_correspondant,
+            )
+        )
     # Même périmètre que les colis : le guichet ne voit pas les fiches des autres.
     if _est_guichet(utilisateur):
         conditions = [SuiviFamilial.enregistre_par_id == utilisateur.id]
@@ -3153,7 +3214,12 @@ async def lister_suivi_familial(
             conditions.append(SuiviFamilial.gare_depart_id == perimetre)
             conditions.append(SuiviFamilial.gare_arrivee_id == perimetre)
         requete = requete.where(or_(*conditions))
-    requete = requete.order_by(SuiviFamilial.cree_le.desc())
+    elif _est_chauffeur_role(utilisateur):
+        voyages_du_chauffeur = select(Voyage.id).where(
+            Voyage.chauffeur_id == utilisateur.id
+        )
+        requete = requete.where(SuiviFamilial.voyage_id.in_(voyages_du_chauffeur))
+    requete = requete.order_by(SuiviFamilial.cree_le.desc(), SuiviFamilial.id.desc())
     return await _paginer(session, requete, page, par_page)
 
 

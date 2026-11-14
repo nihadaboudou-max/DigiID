@@ -131,6 +131,15 @@ class CommissionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ReponseListeCommissions(BaseModel):
+    """Liste paginée des commissions avec le montant cumulé."""
+    elements: list[CommissionResponse]
+    total: int
+    page: int
+    par_page: int
+    montant_total_fcfa: Optional[int] = None
+
+
 class PaiementResultat(BaseModel):
     """Résultat d'un paiement : transaction + commission + cagnotte bénéficiaire."""
     transaction: TransactionResponse

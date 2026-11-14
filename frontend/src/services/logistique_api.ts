@@ -232,6 +232,7 @@ export const logistiqueAPI = {
   voyages: {
     lister: (filtres?: {
       statut?: string;
+      statuts?: string[];
       /** Cars d'un chauffeur donné (« mes voyages »). */
       chauffeur_id?: string;
       /** Cars d'une ligne (trajet) donnée. */
@@ -245,6 +246,7 @@ export const logistiqueAPI = {
       qs.set("par_page", String(filtres?.par_page ?? 100));
       if (filtres?.page) qs.set("page", String(filtres.page));
       if (filtres?.statut) qs.set("statut", filtres.statut);
+      filtres?.statuts?.forEach((statut) => qs.append("statuts", statut));
       if (filtres?.chauffeur_id) qs.set("chauffeur_id", filtres.chauffeur_id);
       if (filtres?.ligne_id) qs.set("ligne_id", filtres.ligne_id);
       if (filtres?.a_partir_de) qs.set("a_partir_de", filtres.a_partir_de);
@@ -353,6 +355,8 @@ export const logistiqueAPI = {
     /** Liste paginée des colis, avec filtres (statut, gare, voyage). */
     lister: (filtres?: {
       statut?: string;
+      statuts?: string[];
+      recherche?: string;
       gare_id?: string;
       voyage_id?: string;
       page?: number;
@@ -362,6 +366,8 @@ export const logistiqueAPI = {
       qs.set("par_page", String(filtres?.par_page ?? 100));
       qs.set("page", String(filtres?.page ?? 1));
       if (filtres?.statut) qs.set("statut", filtres.statut);
+      filtres?.statuts?.forEach((statut) => qs.append("statuts", statut));
+      if (filtres?.recherche) qs.set("recherche", filtres.recherche);
       if (filtres?.gare_id) qs.set("gare_id", filtres.gare_id);
       if (filtres?.voyage_id) qs.set("voyage_id", filtres.voyage_id);
       return clientAPI.get<ReponseListe<Colis>>(`${BASE}/colis?${qs.toString()}`, opts);

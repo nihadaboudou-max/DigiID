@@ -9,7 +9,7 @@
  * Le ticket et l'impression restent au guichet (le ticket papier est collé sur
  * le colis à l'enregistrement) ; ici, l'action utile est la remise.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { Alerte } from "@/composants/commun/Alerte";
@@ -19,7 +19,7 @@ import { Carte } from "@/composants/commun/Carte";
 import { IconeColis } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { formaterDateHeure } from "@/composants/logistique/format";
-import { useMesVoyages } from "@/composants/logistique/MonVoyageDuJour";
+import { PaginationListe } from "@/composants/logistique/PaginationListe";
 import { ROLES_CHAUFFEUR } from "@/composants/logistique/roles";
 import { ErreurAPI } from "@/services/client_api";
 import { logistiqueAPI } from "@/services/logistique_api";
@@ -39,71 +39,56 @@ export default function PageMesColis() {
 }
 
 function Contenu() {
-  const { voyages, lignes, chargement: chargementVoyages } = useMesVoyages();
   const [colis, setColis] = useState<Colis[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [recherche, setRecherche] = useState("");
   const [filtre, setFiltre] = useState<"" | StatutColis>("");
-
-  const charger = useCallback(async () => {
-    if (voyages.length === 0) {
-      setColis([]);
-      setChargement(false);
-      return;
-    }
-    setChargement(true);
-    setErreur(null);
-    try {
-      // Filtre **côté serveur** : on ne rapatrie que les colis de ses propres cars.
-      const reponses = await Promise.all(
-        voyages.map((voyage) =>
-          logistiqueAPI.colis.lister({ voyage_id: voyage.id, par_page: 100 }),
-        ),
-      );
-      setColis(reponses.flatMap((reponse) => reponse.elements));
-    } catch (e) {
-      setErreur(
-        e instanceof ErreurAPI
-          ? e.message_utilisateur
-          : "Impossible de charger vos colis. Réessayez.",
-      );
-    } finally {
-      setChargement(false);
-    }
-  }, [voyages]);
+  const [page, setPage] = useState(1);
+  const [totalFiltres, setTotalFiltres] = useState(0);
+  const [totalColis, setTotalColis] = useState(0);
+  const [aLivrer, setALivrer] = useState(0);
 
   useEffect(() => {
-    void charger();
-  }, [charger]);
-
-  // L'API a déjà restreint la liste à ses cars : aucun filtrage à refaire ici.
-  const mesColis = colis;
-
-  const ligneDu = useCallback(
-    (voyageId: string | null) => {
-      const voyage = voyages.find((v) => v.id === voyageId);
-      const ligne = voyage ? lignes.find((l) => l.id === voyage.ligne_id) : null;
-      return ligne
-        ? `${ligne.gare_depart_nom ?? "?"} → ${ligne.gare_arrivee_nom ?? "?"}`
-        : null;
-    },
-    [voyages, lignes],
-  );
-
-  const colisFiltres = useMemo(() => {
-    const terme = recherche.trim().toLowerCase();
-    return mesColis.filter((c) => {
-      if (filtre && c.statut !== filtre) return false;
-      if (!terme) return true;
-      return [c.destinataire_nom, c.destinataire_tel, c.code_clair, c.description]
-        .filter(Boolean)
-        .some((champ) => String(champ).toLowerCase().includes(terme));
-    });
-  }, [mesColis, recherche, filtre]);
-
-  const aLivrer = mesColis.filter((c) => c.statut !== "livre" && c.statut !== "annule")
-    .length;
+    let annule = false;
+    setChargement(true);
+    setErreur(null);
+    void Promise.all([
+      logistiqueAPI.colis.lister({
+        page,
+        par_page: 5,
+        ...(filtre ? { statut: filtre } : {}),
+        ...(recherche.trim() ? { recherche: recherche.trim() } : {}),
+      }),
+      logistiqueAPI.colis.lister({ page: 1, par_page: 1 }),
+      logistiqueAPI.colis.lister({
+        page: 1,
+        par_page: 1,
+        statuts: ["enregistre", "enregistre_direct", "en_transit", "arrive"],
+      }),
+    ])
+      .then(([reponse, reponseTotale, reponseALivrer]) => {
+        if (annule) return;
+        setColis(reponse.elements);
+        setTotalFiltres(reponse.total);
+        setTotalColis(reponseTotale.total);
+        setALivrer(reponseALivrer.total);
+      })
+      .catch((e: unknown) => {
+        if (annule) return;
+        setErreur(
+          e instanceof ErreurAPI
+            ? e.message_utilisateur
+            : "Impossible de charger vos colis. Réessayez.",
+        );
+      })
+      .finally(() => {
+        if (!annule) setChargement(false);
+      });
+    return () => {
+      annule = true;
+    };
+  }, [filtre, page, recherche]);
 
   return (
     <div className="space-y-5 apparition">
@@ -130,7 +115,7 @@ function Contenu() {
 
       <div className="grid grid-cols-2 gap-3 sm:max-w-md">
         <div className="carte py-4 text-center">
-          <p className="text-2xl font-bold text-ardoise">{mesColis.length}</p>
+          <p className="text-2xl font-bold text-ardoise">{totalColis}</p>
           <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-ardoise-clair">
             Colis à bord
           </p>
@@ -149,7 +134,10 @@ function Contenu() {
           <input
             className="champ-saisie"
             value={recherche}
-            onChange={(e) => setRecherche(e.target.value)}
+            onChange={(e) => {
+              setRecherche(e.target.value);
+              setPage(1);
+            }}
             placeholder="Destinataire, téléphone ou code du colis"
           />
         </div>
@@ -158,7 +146,10 @@ function Contenu() {
           <select
             className="champ-saisie"
             value={filtre}
-            onChange={(e) => setFiltre(e.target.value as "" | StatutColis)}
+            onChange={(e) => {
+              setFiltre(e.target.value as "" | StatutColis);
+              setPage(1);
+            }}
           >
             <option value="">Tous les statuts</option>
             <option value="enregistre">Enregistrés</option>
@@ -172,21 +163,20 @@ function Contenu() {
       </div>
 
       <Carte
-        titre={`${colisFiltres.length} colis`}
+        titre={`${totalFiltres} colis`}
         description="Sélectionnez un colis pour consulter sa fiche et son suivi."
       >
-        {chargement || chargementVoyages ? (
+        {chargement ? (
           <p className="py-8 text-center text-sm italic text-ardoise-clair">
             Chargement de vos colis…
           </p>
-        ) : colisFiltres.length === 0 ? (
+        ) : colis.length === 0 ? (
           <p className="py-8 text-center text-sm italic text-ardoise-clair">
             Aucun colis pour ces critères.
           </p>
         ) : (
           <ul className="divide-y divide-ardoise-clair/10">
-            {colisFiltres.map((c) => {
-              const ligne = ligneDu(c.voyage_id);
+            {colis.map((c) => {
               const contenu = (
                 <span className="flex min-w-0 flex-1 flex-col gap-1">
                   <span className="flex flex-wrap items-center gap-2">
@@ -198,7 +188,7 @@ function Contenu() {
                     </Badge>
                   </span>
                   <span className="text-sm text-ardoise-clair">
-                    {ligne ?? `${c.gare_depart_nom ?? "?"} → ${c.gare_arrivee_nom ?? "?"}`}
+                    {`${c.gare_depart_nom ?? "?"} → ${c.gare_arrivee_nom ?? "?"}`}
                   </span>
                   <span className="text-xs text-ardoise-clair">
                     {c.code_clair ?? "Code en attente"} · {c.nombre_articles} article(s)
@@ -232,6 +222,13 @@ function Contenu() {
             })}
           </ul>
         )}
+        <PaginationListe
+          page={page}
+          total={totalFiltres}
+          parPage={5}
+          chargement={chargement}
+          surChangement={setPage}
+        />
       </Carte>
     </div>
   );

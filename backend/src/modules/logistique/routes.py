@@ -779,6 +779,7 @@ async def lister_voyages(
     page: int = Query(1, ge=1),
     par_page: int = Query(20, ge=1, le=100),
     statut: str | None = Query(None),
+    statuts: list[str] | None = Query(None),
     chauffeur_id: UUID | None = Query(None, description="Cars d'un chauffeur donné"),
     ligne_id: UUID | None = Query(None, description="Cars d'une ligne (trajet) donnée"),
     a_partir_de: datetime | None = Query(
@@ -789,6 +790,7 @@ async def lister_voyages(
     voyages, total = await service.lister_voyages(
         session, page, par_page, statut, chauffeur_id, ligne_id, a_partir_de,
         utilisateur=utilisateur_courant,
+        statuts=statuts,
     )
     for voyage in voyages:
         await _enrichir_voyage(session, voyage)
@@ -1228,6 +1230,8 @@ async def lister_colis(
     page: int = Query(1, ge=1),
     par_page: int = Query(20, ge=1, le=100),
     statut: str | None = Query(None),
+    statuts: list[str] | None = Query(None),
+    recherche: str | None = Query(None, max_length=120),
     gare_id: UUID | None = Query(None),
     voyage_id: UUID | None = Query(None),
     session: AsyncSession = Depends(obtenir_session),
@@ -1235,6 +1239,8 @@ async def lister_colis(
     colis_liste, total = await service.lister_colis(
         session, page, par_page, statut, gare_id, voyage_id,
         utilisateur=utilisateur_courant,
+        statuts=statuts,
+        recherche=recherche,
     )
     for colis in colis_liste:
         await _enrichir_colis(session, colis)

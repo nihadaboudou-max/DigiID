@@ -14,6 +14,7 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import { IconePortefeuille } from "@/composants/commun/Icones";
 import { formaterDateHeure, formaterFcfa } from "@/composants/logistique/format";
+import { PaginationListe } from "@/composants/logistique/PaginationListe";
 import { ErreurAPI } from "@/services/client_api";
 import { paiementAPI } from "@/services/paiement_api";
 import {
@@ -26,16 +27,24 @@ export function CagnotteContenu({
   titre = "Ma cagnotte",
   sousTitre = "Vos gains et vos dépenses.",
   messageVide = "Aucune opération. Enregistrez un colis pour recevoir votre premier gain.",
+  paginationServeur = false,
 }: {
   /** Titre affiché (adapté au rôle : receveur, chauffeur…). */
   titre?: string;
   sousTitre?: string;
   /** Message quand aucun mouvement n'existe encore. */
   messageVide?: string;
+  /** Active les pages serveur de cinq éléments pour l'espace chauffeur. */
+  paginationServeur?: boolean;
 } = {}) {
   const [portefeuille, setPortefeuille] = useState<Portefeuille | null>(null);
   const [mouvements, setMouvements] = useState<MouvementPortefeuille[]>([]);
   const [commissions, setCommissions] = useState<Commission[]>([]);
+  const [mouvementsPage, setMouvementsPage] = useState(1);
+  const [commissionsPage, setCommissionsPage] = useState(1);
+  const [totalMouvements, setTotalMouvements] = useState(0);
+  const [totalCommissions, setTotalCommissions] = useState(0);
+  const [montantTotalCommissions, setMontantTotalCommissions] = useState(0);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -45,12 +54,22 @@ export function CagnotteContenu({
     try {
       const [pf, mvs, coms] = await Promise.all([
         paiementAPI.portefeuilles.moi(),
-        paiementAPI.portefeuilles.mesMouvements({ par_page: 50 }),
-        paiementAPI.commissions.moi({ par_page: 50 }),
+        paiementAPI.portefeuilles.mesMouvements({
+          page: paginationServeur ? mouvementsPage : 1,
+          par_page: paginationServeur ? 5 : 50,
+        }),
+        paiementAPI.commissions.moi({
+          page: paginationServeur ? commissionsPage : 1,
+          par_page: paginationServeur ? 5 : 50,
+          ...(paginationServeur ? { inclure_total_montant: true } : {}),
+        }),
       ]);
       setPortefeuille(pf);
       setMouvements(mvs.elements);
       setCommissions(coms.elements);
+      setTotalMouvements(mvs.total);
+      setTotalCommissions(coms.total);
+      setMontantTotalCommissions(coms.montant_total_fcfa ?? 0);
     } catch (e) {
       setErreur(
         e instanceof ErreurAPI
@@ -60,16 +79,18 @@ export function CagnotteContenu({
     } finally {
       setChargement(false);
     }
-  }, []);
+  }, [commissionsPage, mouvementsPage, paginationServeur]);
 
   useEffect(() => {
     void charger();
   }, [charger]);
 
-  const totalCommissions = commissions.reduce(
-    (somme, c) => somme + (c.montant_fcfa || 0),
-    0,
-  );
+  const commissionsMontantAffiche = paginationServeur
+    ? montantTotalCommissions
+    : commissions.reduce(
+        (somme, commission) => somme + (commission.montant_fcfa || 0),
+        0,
+      );
 
   return (
     <div className="space-y-6 apparition">
@@ -105,7 +126,7 @@ export function CagnotteContenu({
             Total gagné
           </p>
           <p className="text-xl font-bold text-lagune">
-            {chargement ? "…" : formaterFcfa(totalCommissions)}
+            {chargement ? "…" : formaterFcfa(commissionsMontantAffiche)}
           </p>
           <div className="mt-2">
             <Bouton
@@ -174,6 +195,15 @@ export function CagnotteContenu({
             </table>
           </div>
         )}
+        {paginationServeur && (
+          <PaginationListe
+            page={mouvementsPage}
+            total={totalMouvements}
+            parPage={5}
+            chargement={chargement}
+            surChangement={setMouvementsPage}
+          />
+        )}
       </Carte>
 
       {/* Commissions */}
@@ -221,6 +251,15 @@ export function CagnotteContenu({
               </tbody>
             </table>
           </div>
+        )}
+        {paginationServeur && (
+          <PaginationListe
+            page={commissionsPage}
+            total={totalCommissions}
+            parPage={5}
+            chargement={chargement}
+            surChangement={setCommissionsPage}
+          />
         )}
       </Carte>
     </div>

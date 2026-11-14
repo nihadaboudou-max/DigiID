@@ -6,7 +6,7 @@
  * Le chauffeur marque le départ et l'arrivée directement d'ici — chaque étape
  * déclenche le SMS à la famille — sans passer par un écran « receveur ».
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 import { Alerte } from "@/composants/commun/Alerte";
@@ -16,7 +16,7 @@ import { Carte } from "@/composants/commun/Carte";
 import { IconeIdentite, IconeScan } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { formaterDateHeure } from "@/composants/logistique/format";
-import { useMesVoyages } from "@/composants/logistique/MonVoyageDuJour";
+import { PaginationListe } from "@/composants/logistique/PaginationListe";
 import { ROLES_CHAUFFEUR } from "@/composants/logistique/roles";
 import { ErreurAPI } from "@/services/client_api";
 import { logistiqueAPI } from "@/services/logistique_api";
@@ -43,30 +43,26 @@ export default function PageMesPassagers() {
 }
 
 function Contenu() {
-  const { voyages, chargement: chargementVoyages } = useMesVoyages();
   const [suivis, setSuivis] = useState<SuiviFamilial[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [recherche, setRecherche] = useState("");
   const [actionEnCours, setActionEnCours] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const charger = useCallback(async () => {
-    if (voyages.length === 0) {
-      setSuivis([]);
-      setChargement(false);
-      return;
-    }
     setChargement(true);
     setErreur(null);
     try {
-      // Filtre **côté serveur** : uniquement les passagers de ses propres cars.
-      const reponses = await Promise.all(
-        voyages.map((voyage) =>
-          logistiqueAPI.suiviFamilial.lister({ voyage_id: voyage.id, par_page: 100 }),
-        ),
-      );
-      setSuivis(reponses.flatMap((reponse) => reponse.elements));
+      const reponse = await logistiqueAPI.suiviFamilial.lister({
+        page,
+        par_page: 5,
+        ...(recherche.trim() ? { recherche: recherche.trim() } : {}),
+      });
+      setSuivis(reponse.elements);
+      setTotal(reponse.total);
     } catch (e) {
       setErreur(
         e instanceof ErreurAPI
@@ -76,24 +72,11 @@ function Contenu() {
     } finally {
       setChargement(false);
     }
-  }, [voyages]);
+  }, [page, recherche]);
 
   useEffect(() => {
     void charger();
   }, [charger]);
-
-  // L'API a déjà restreint la liste à ses cars : aucun filtrage à refaire ici.
-  const mesPassagers = suivis;
-
-  const passagersFiltres = useMemo(() => {
-    const terme = recherche.trim().toLowerCase();
-    if (!terme) return mesPassagers;
-    return mesPassagers.filter((s) =>
-      [s.enfant_nom, s.telephone_parent, s.code_clair]
-        .filter(Boolean)
-        .some((champ) => String(champ).toLowerCase().includes(terme)),
-    );
-  }, [mesPassagers, recherche]);
 
   /** Marque une étape : le SMS part vers la famille (idempotent). */
   async function marquer(suivi: SuiviFamilial, type: "depart" | "arrivee") {
@@ -152,27 +135,31 @@ function Contenu() {
         <input
           className="champ-saisie"
           value={recherche}
-          onChange={(e) => setRecherche(e.target.value)}
+          onChange={(e) => {
+            setRecherche(e.target.value);
+            setPage(1);
+          }}
           placeholder="Nom, code du ticket ou téléphone de la famille"
         />
       </div>
 
       <Carte
-        titre={`${passagersFiltres.length} passager(s) à bord`}
+        titre={`${total} passager(s) à bord`}
         description="Seuls les passagers rattachés à l'un de vos cars apparaissent ici."
       >
-        {chargement || chargementVoyages ? (
+        {chargement ? (
           <p className="py-8 text-center text-sm italic text-ardoise-clair">
             Chargement de vos passagers…
           </p>
-        ) : passagersFiltres.length === 0 ? (
+        ) : suivis.length === 0 ? (
           <p className="py-8 text-center text-sm italic text-ardoise-clair">
-            Aucun passager pour le moment. Utilisez « Enregistrer un passager »
-            lorsqu&apos;une personne monte en route.
+            {recherche.trim()
+              ? "Aucun passager ne correspond à cette recherche."
+              : "Aucun passager pour le moment. Utilisez « Enregistrer un passager » lorsqu'une personne monte en route."}
           </p>
         ) : (
           <ul className="space-y-3">
-            {passagersFiltres.map((suivi) => {
+            {suivis.map((suivi) => {
               const arrive = suivi.statut === "arrive";
               const enRoute = suivi.statut === "en_route";
               return (
@@ -237,6 +224,13 @@ function Contenu() {
             })}
           </ul>
         )}
+        <PaginationListe
+          page={page}
+          total={total}
+          parPage={5}
+          chargement={chargement}
+          surChangement={setPage}
+        />
       </Carte>
     </div>
   );

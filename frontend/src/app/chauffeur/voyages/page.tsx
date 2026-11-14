@@ -20,7 +20,7 @@
  *   - on annule un départ tant qu'il n'est pas parti — ensuite les colis et
  *     passagers à bord en dépendent, on termine le voyage.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { Alerte } from "@/composants/commun/Alerte";
@@ -31,6 +31,7 @@ import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { IconeColis, IconeIdentite } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { formaterDateHeure } from "@/composants/logistique/format";
+import { PaginationListe } from "@/composants/logistique/PaginationListe";
 import { ROLES_CHAUFFEUR } from "@/composants/logistique/roles";
 import { useAuthentification } from "@/contextes/authentification";
 import { useNotifications } from "@/contextes/notifications";
@@ -61,22 +62,6 @@ export default function PageChoisirVoyages() {
 }
 
 // ─── Utilitaires de date ─────────────────────────────────────────────
-
-/** Bornes de la journée choisie (le chauffeur raisonne en « jour de travail »). */
-function bornesDuJour(valeur: string): { debut: string; fin: string } | null {
-  if (!valeur) return null;
-  const debut = new Date(`${valeur}T00:00:00`);
-  if (Number.isNaN(debut.getTime())) return null;
-  const fin = new Date(debut.getTime() + 24 * 60 * 60 * 1000);
-  return { debut: debut.toISOString(), fin: fin.toISOString() };
-}
-
-function aujourdHui(): string {
-  const maintenant = new Date();
-  const mois = String(maintenant.getMonth() + 1).padStart(2, "0");
-  const jour = String(maintenant.getDate()).padStart(2, "0");
-  return `${maintenant.getFullYear()}-${mois}-${jour}`;
-}
 
 /** `2026-05-12T08:00` (saisie locale) → ISO UTC pour l'API. `null` si vide/invalide. */
 function versISO(valeur: string): string | null {
@@ -112,7 +97,10 @@ function Contenu() {
   const [lignes, setLignes] = useState<Ligne[]>([]);
   const [vehicules, setVehicules] = useState<Vehicule[]>([]);
   const [voyages, setVoyages] = useState<Voyage[]>([]);
-  const [jour, setJour] = useState(aujourdHui());
+  const [pageDepart, setPageDepart] = useState(1);
+  const [pageHistorique, setPageHistorique] = useState(1);
+  const [totalDepart, setTotalDepart] = useState(0);
+  const [totalHistorique, setTotalHistorique] = useState(0);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [actionEnCours, setActionEnCours] = useState<string | null>(null);
@@ -133,38 +121,42 @@ function Contenu() {
     { id: string; date_depart: string; vehicule_id: string } | null
   >(null);
 
-  const charger = async () => {
+  const charger = useCallback(async () => {
     setChargement(true);
     setErreur(null);
     try {
-      // On part du début de la journée : un car en retard (ou parti ce matin)
-      // reste visible, et les départs à venir arrivent en premier.
-      const depuis = bornesDuJour(aujourdHui())?.debut;
-      const [repGares, repLignes, mesVehicules, repVoyages, repMesVoyages] =
-        await Promise.all([
-          logistiqueAPI.gares.lister().catch(() => ({ elements: [] as Gare[] })),
-          logistiqueAPI.lignes.lister(),
-          // Mes cars uniquement : le serveur ne renvoie que ceux qui me sont
-          // affectés et celui dont j'ai déclaré la plaque dans mon dossier pro.
-          logistiqueAPI.vehicules.listerMesVehicules(),
-          logistiqueAPI.voyages.lister({
-            a_partir_de: depuis,
-            par_page: 100,
-          }),
-          // Mes voyages à part : si le réseau a plus de 100 départs à venir, les
-          // miens doivent quand même remonter (le filtre est fait côté serveur).
-          logistiqueAPI.voyages.lister({
-            chauffeur_id: utilisateur?.id,
-            par_page: 100,
-          }),
-        ]);
+      const [
+        repGares,
+        repLignes,
+        mesVehicules,
+        repDepart,
+        repHistorique,
+      ] = await Promise.all([
+        logistiqueAPI.gares.lister().catch(() => ({ elements: [] as Gare[] })),
+        logistiqueAPI.lignes.lister(),
+        // Mes cars uniquement : le serveur ne renvoie que ceux qui me sont
+        // affectés et celui dont j'ai déclaré la plaque dans mon dossier pro.
+        logistiqueAPI.vehicules.listerMesVehicules(),
+        logistiqueAPI.voyages.lister({
+          statuts: ["planifie", "en_cours"],
+          page: pageDepart,
+          par_page: 5,
+        }),
+        logistiqueAPI.voyages.lister({
+          statuts: ["termine", "annule"],
+          page: pageHistorique,
+          par_page: 5,
+        }),
+      ]);
       setGares(repGares.elements);
       setLignes(repLignes.elements);
       setVehicules(mesVehicules);
       const voyagesParId = new Map<string, Voyage>();
-      repVoyages.elements.forEach((v) => voyagesParId.set(v.id, v));
-      repMesVoyages.elements.forEach((v) => voyagesParId.set(v.id, v));
+      repDepart.elements.forEach((v) => voyagesParId.set(v.id, v));
+      repHistorique.elements.forEach((v) => voyagesParId.set(v.id, v));
       setVoyages([...voyagesParId.values()]);
+      setTotalDepart(repDepart.total);
+      setTotalHistorique(repHistorique.total);
       setPlan((precedent) => ({
         ...precedent,
         date_depart: precedent.date_depart || prochainDepartLocal(),
@@ -180,13 +172,13 @@ function Contenu() {
     } finally {
       setChargement(false);
     }
-  };
+  }, [pageDepart, pageHistorique, utilisateur?.id]);
 
   useEffect(() => {
-    charger();
+    void charger();
     // Recharge si la session change (l'identité du chauffeur conditionne ses cars).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [utilisateur?.id]);
+  }, [charger]);
 
   const lignesParId = useMemo(() => {
     const map: Record<string, Ligne> = {};
@@ -229,21 +221,6 @@ function Contenu() {
       notifier("Choisissez une ligne, un car et l'heure de départ.", "erreur");
       return;
     }
-    const departHorodatage = new Date(departISO).getTime();
-    const doublon = voyages.some(
-      (voyage) =>
-        voyage.ligne_id === plan.ligne_id &&
-        voyage.statut !== "annule" &&
-        voyage.statut !== "termine" &&
-        new Date(voyage.date_depart).getTime() === departHorodatage,
-    );
-    if (doublon) {
-      notifier(
-        "Un départ est déjà planifié sur ce trajet à cette heure. Choisissez un autre horaire.",
-        "erreur",
-      );
-      return;
-    }
     setPlanification(true);
     try {
       const duree = Number(plan.duree_min);
@@ -268,7 +245,8 @@ function Contenu() {
         date_depart: prochainDepartLocal(),
         duree_min: "",
       }));
-      await charger();
+      if (pageDepart === 1) await charger();
+      else setPageDepart(1);
     } catch (e) {
       notifier(
         e instanceof ErreurAPI ? e.message_utilisateur : "Planification impossible",
@@ -363,10 +341,7 @@ function Contenu() {
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold text-ardoise">Mes trajets &amp; départs</h1>
         <p className="text-sm text-ardoise-clair max-w-3xl">
-          Déclarez vos <strong>lignes</strong> entre les gares existantes, puis{" "}
-          <strong>planifiez vos départs</strong> avec votre car. Un départ planifié
-          est aussitôt visible des receveurs et gérants de gare : ils y chargent
-          des colis et orientent les passagers vers vous.
+          Créez vos <strong>lignes</strong> et <strong>planifiez vos départs</strong>. Les gares et receveurs les voient aussitôt pour y enregistrer colis et passagers.
         </p>
       </div>
 
@@ -501,7 +476,7 @@ function Contenu() {
       {/* ─── Mes départs ──────────────────────────────────────────── */}
       <Carte
         titre="Mes départs"
-        description="Les voyages dont vous êtes le chauffeur désigné : à corriger ou à annuler tant qu'ils ne sont pas partis."
+        description={`${totalDepart} voyage(s) dont vous êtes le chauffeur désigné : à corriger ou à annuler tant qu'ils ne sont pas partis.`}
       >
         {chargement ? (
           <p className="text-sm text-ardoise-clair italic py-4 text-center">
@@ -638,12 +613,19 @@ function Contenu() {
             })}
           </ul>
         )}
+        <PaginationListe
+          page={pageDepart}
+          total={totalDepart}
+          parPage={5}
+          chargement={chargement}
+          surChangement={setPageDepart}
+        />
       </Carte>
 
       <div id="historique" className="scroll-mt-24">
         <Carte
           titre="Historique de mes voyages"
-          description={`${historique.length} voyage(s) terminé(s) ou annulé(s).`}
+          description={`${totalHistorique} voyage(s) terminé(s) ou annulé(s).`}
         >
           {chargement ? (
             <p className="py-5 text-center text-sm italic text-ardoise-clair">
@@ -687,6 +669,13 @@ function Contenu() {
               })}
             </ul>
           )}
+          <PaginationListe
+            page={pageHistorique}
+            total={totalHistorique}
+            parPage={5}
+            chargement={chargement}
+            surChangement={setPageHistorique}
+          />
         </Carte>
       </div>
 
