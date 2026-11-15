@@ -1,23 +1,46 @@
 "use client";
 
-/**
- * Tableau de bord Citoyen — Identité numérique et score de confiance.
- * Données dynamiques issues de l'API via le contexte d'authentification.
- */
-
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
+
+import { Alerte } from "@/composants/commun/Alerte";
+import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
-import { Badge, type BadgeVariante } from "@/composants/commun/Badge";
-import { EtatVerificationsCitoyen } from "@/composants/verifications";
-import { IconeCamion } from "@/composants/commun/Icones";
-import {
-  useEtatVerifications,
-  type NiveauVerification,
-} from "@/crochets/useEtatVerifications";
+import { IconeCamion, IconeCheck, IconeFlecheRetour, IconeUtilisateur } from "@/composants/commun/Icones";
+import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { useAuthentification } from "@/contextes/authentification";
+import { ErreurAPI } from "@/services/client_api";
+import { identiteAPI, type VoyageCitoyen } from "@/services/identite_api";
+
+interface StatutAffiche {
+  libelle: string;
+  classes: string;
+}
+
+function statutAffiche(statut: string): StatutAffiche {
+  const normalise = statut
+    .toLocaleLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[_-]/g, " ");
+
+  if (["livre", "arrive", "remis", "termine"].some((mot) => normalise.includes(mot))) {
+    return { libelle: "Arrivé", classes: "bg-green-100 text-green-900" };
+  }
+  if (["route", "transit", "cours", "embarque", "depart"].some((mot) => normalise.includes(mot))) {
+    return { libelle: "En route", classes: "bg-blue-100 text-blue-900" };
+  }
+  if (["annule", "echec", "rejete"].some((mot) => normalise.includes(mot))) {
+    return { libelle: "Annulé", classes: "bg-red-100 text-red-900" };
+  }
+  if (!normalise) {
+    return { libelle: "En attente", classes: "bg-orange-100 text-orange-900" };
+  }
+
+  const libelle = normalise.charAt(0).toLocaleUpperCase() + normalise.slice(1);
+  return { libelle, classes: "bg-orange-100 text-orange-900" };
+}
 
 export default function CitoyenDashboard() {
   return (
@@ -29,127 +52,208 @@ export default function CitoyenDashboard() {
 
 function Contenu() {
   const { utilisateur, chargement: chargementAuth } = useAuthentification();
-  const etatVerifications = useEtatVerifications();
   const [codeSuivi, setCodeSuivi] = useState("");
+  const [elements, setElements] = useState<VoyageCitoyen[]>([]);
+  const [chargementEnvois, setChargementEnvois] = useState(true);
+  const [erreurEnvois, setErreurEnvois] = useState<string | null>(null);
+  const [erreurCode, setErreurCode] = useState<string | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    if (chargementAuth || !utilisateur) return;
+
+    let ignore = false;
+    setChargementEnvois(true);
+    setErreurEnvois(null);
+    identiteAPI
+      .mesVoyagesPagines({ page: 1, parPage: 5 })
+      .then((resultat) => {
+        if (!ignore) setElements(resultat.elements);
+      })
+      .catch((erreur: unknown) => {
+        if (!ignore) {
+          setErreurEnvois(
+            erreur instanceof ErreurAPI
+              ? erreur.message_utilisateur
+              : "Impossible de charger tes envois. Réessaie dans un instant.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!ignore) setChargementEnvois(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [chargementAuth, utilisateur]);
 
   if (chargementAuth) {
     return (
-      <div className="space-y-8 apparition">
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Mon espace</p>
-        <h1>Mon identité numérique</h1>
-        <p className="text-ardoise-clair italic py-12">Chargement de ton profil...</p>
+      <div className="py-12 text-center text-lg text-ardoise-clair apparition">
+        Chargement…
       </div>
     );
   }
 
   if (!utilisateur) return null;
 
-  // Initiales pour l'avatar
-  const initiales = ((utilisateur.prenom?.[0] || "") + (utilisateur.nom?.[0] || "")).toUpperCase() || "?";
-  const nomComplet = [utilisateur.prenom, utilisateur.nom].filter(Boolean).join(" ") || utilisateur.email;
+  const verifications = [
+    { libelle: "E-mail", fait: utilisateur.est_email_verifie },
+    { libelle: "WhatsApp", fait: utilisateur.est_telephone_verifie === true },
+    { libelle: "Pièce d'identité", fait: utilisateur.est_cni_verifiee === true },
+    { libelle: "Visage", fait: utilisateur.est_visage_verifie === true },
+  ];
+  const pourcentage = Math.round(
+    (verifications.filter((verification) => verification.fait).length /
+      verifications.length) *
+      100,
+  );
 
-  // Niveau de vérification (compte + documents d'identité fournis)
-  const LIBELLES_NIVEAU: Record<NiveauVerification, string> = {
-    aucune: "Non vérifié",
-    partielle: "Partiellement vérifié",
-    renforcee: "Vérifié",
-    complete: "Identité complète ✓",
-  };
-  const VARIANTES_NIVEAU: Record<NiveauVerification, BadgeVariante> = {
-    aucune: "neutre",
-    partielle: "ocre",
-    renforcee: "info",
-    complete: "succes",
-  };
-  const niveauIdentite = {
-    texte: LIBELLES_NIVEAU[etatVerifications.niveau],
-    variante: VARIANTES_NIVEAU[etatVerifications.niveau],
-  };
+  function suivreEnvoi(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const code = codeSuivi.trim();
+    if (code.length < 3) {
+      setErreurCode("Saisis le code indiqué sur le ticket.");
+      return;
+    }
+
+    setErreurCode(null);
+    router.push(`/suivi/${encodeURIComponent(code)}`);
+  }
 
   return (
-    <div className="space-y-6 apparition pb-20">
-      {/* En-tête */}
-      <div>
-        <p className="text-ocre font-semibold text-sm uppercase tracking-wider">Mon espace</p>
-        <h1 className="mt-1">Tableau de bord</h1>
-        <p className="text-ardoise-clair mt-1 text-sm">
-          Bienvenue {nomComplet.split(" ")[0]} — retrouve ici ton identité et tes suivis de transport.
-        </p>
-      </div>
-
-      {/* Identité et vérifications essentielles */}
-      <div className="grid lg:grid-cols-2 gap-4">
-        {/* Carte Identité */}
-        <Carte className="lg:col-span-1">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-ocre/10 flex items-center justify-center text-ocre text-xl font-bold flex-shrink-0">
-              {initiales}
-            </div>
-            <div className="min-w-0">
-              <h2 className="font-bold text-ardoise truncate">{nomComplet}</h2>
-              <p className="text-xs text-ardoise-clair font-mono truncate">{utilisateur.digiid_public || "—"}</p>
-              <Badge variante={niveauIdentite.variante} taille="petit" className="mt-1">{niveauIdentite.texte}</Badge>
-            </div>
+    <div className="space-y-5 apparition pb-20">
+      <Carte titre="Suivre un envoi">
+        <form onSubmit={suivreEnvoi} className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex flex-1 flex-col gap-2">
+            <label htmlFor="code-suivi" className="font-semibold text-lg text-ardoise">
+              Code de votre colis ou enfant
+            </label>
+            <input
+              id="code-suivi"
+              className="min-h-14 w-full rounded-xl border-2 border-ardoise-clair/20 px-4 text-lg text-ardoise focus:border-lagune focus:outline-none"
+              value={codeSuivi}
+              onChange={(event) => setCodeSuivi(event.target.value)}
+              placeholder="Ex. DKR-2025-000123"
+              autoComplete="off"
+              aria-describedby={erreurCode ? "erreur-code-suivi" : undefined}
+            />
+            {erreurCode && (
+              <p id="erreur-code-suivi" role="alert" className="text-lg font-semibold text-terre">
+                {erreurCode}
+              </p>
+            )}
           </div>
-          <div className="mt-4 flex gap-2 flex-wrap">
-            <Link href="/parametres">
-              <Badge variante="ocre" taille="petit" className="cursor-pointer hover:opacity-80">⚙️ Modifier</Badge>
-            </Link>
-            <Link href="/profil">
-              <Badge variante="lagune" taille="petit" className="cursor-pointer hover:opacity-80">👤 Profil complet</Badge>
-            </Link>
-          </div>
-        </Carte>
-
-        {/* État des vérifications (compte + documents fournis) */}
-        <Carte className="lg:col-span-1">
-          <p className="text-xs uppercase text-ardoise-clair font-semibold mb-3">Vérifications</p>
-          <EtatVerificationsCitoyen etat={etatVerifications} variante="compact" />
-          <Link href="/documents-identite" className="block text-center mt-3 text-xs text-ocre hover:underline font-semibold">
-            Compléter mes vérifications →
-          </Link>
-        </Carte>
-      </div>
-
-      {/* Le détail des envois se charge uniquement à l'ouverture de la carte. */}
-      <Carte titre="Transport et suivi" description="Suis tes colis et les trajets de tes proches, de la gare de départ à l'arrivée.">
-        <form
-          className="flex flex-col sm:flex-row gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const code = codeSuivi.trim();
-            if (code) router.push(`/suivi/${encodeURIComponent(code)}`);
-          }}
-        >
-          <label htmlFor="code-suivi" className="sr-only">Code de suivi</label>
-          <input
-            id="code-suivi"
-            className="champ-saisie flex-1"
-            value={codeSuivi}
-            onChange={(event) => setCodeSuivi(event.target.value)}
-            placeholder="Saisir un code de suivi"
-            autoComplete="off"
-          />
-          <button
+          <Bouton
             type="submit"
-            disabled={!codeSuivi.trim()}
-            className="inline-flex min-h-14 items-center justify-center gap-2 rounded-lg bg-lagune px-5 py-2.5 text-lg font-semibold text-white transition-colors hover:bg-lagune/90 disabled:cursor-not-allowed disabled:opacity-50"
+            taille="grand"
+            className="min-h-14 self-end sm:min-w-36"
           >
             <IconeCamion className="h-5 w-5" aria-hidden="true" />
             Suivre
-          </button>
+          </Bouton>
         </form>
+      </Carte>
+
+      <Carte titre="Mes envois">
+        {erreurEnvois ? (
+          <Alerte variante="erreur" titre="Envois indisponibles">
+            {erreurEnvois}
+          </Alerte>
+        ) : chargementEnvois ? (
+          <p className="py-4 text-center text-lg text-ardoise-clair">
+            Chargement de tes envois…
+          </p>
+        ) : elements.length === 0 ? (
+          <p className="py-4 text-center text-lg text-ardoise">
+            Tu n'as pas encore d'envoi à suivre.
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {elements.map((element) => {
+              const statut = statutAffiche(element.statut);
+              return (
+                <li
+                  key={`${element.type}-${element.id}`}
+                  className="rounded-xl border border-ardoise-clair/15 bg-white p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="break-all font-bold text-lg text-ardoise">
+                      {element.code}
+                    </p>
+                    <span
+                      className={`inline-flex min-h-10 items-center rounded-full px-4 py-1 font-bold text-lg ${statut.classes}`}
+                    >
+                      {statut.libelle}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-lg text-ardoise-clair">
+                    {element.gare_depart_nom || "Départ"} →{" "}
+                    {element.gare_arrivee_nom || "Arrivée"}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
         <Link
           href="/citoyen/envois"
-          className="mt-4 inline-flex min-h-14 items-center gap-2 text-lg font-semibold text-ocre hover:underline"
+          className="mt-4 inline-flex min-h-14 items-center justify-center gap-2 rounded-xl border-2 border-lagune px-5 font-bold text-lg text-lagune hover:bg-lagune/5"
         >
-          <IconeCamion className="h-5 w-5" aria-hidden="true" />
-          Voir mes envois
+          <IconeFlecheRetour className="h-5 w-5 rotate-180" aria-hidden="true" />
+          Voir tous
+        </Link>
+      </Carte>
+
+      <Carte titre={`Profil complet à ${pourcentage} %`}>
+        <div
+          className="h-4 overflow-hidden rounded-full bg-sable"
+          role="progressbar"
+          aria-label={`Profil complet à ${pourcentage} %`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={pourcentage}
+        >
+          <div
+            className="h-full rounded-full bg-lagune transition-[width]"
+            style={{ width: `${pourcentage}%` }}
+          />
+        </div>
+
+        <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+          {verifications.map((verification) => (
+            <li
+              key={verification.libelle}
+              className="flex min-h-12 items-center gap-2 text-lg text-ardoise"
+            >
+              <span
+                className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+                  verification.fait
+                    ? "bg-green-100 text-green-900"
+                    : "bg-orange-100 text-orange-900"
+                }`}
+              >
+                {verification.fait ? (
+                  <IconeCheck className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <span aria-hidden="true">!</span>
+                )}
+              </span>
+              {verification.libelle}
+            </li>
+          ))}
+        </ul>
+
+        <Link
+          href="/profil"
+          className="mt-4 inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-lagune px-5 font-bold text-lg text-white hover:bg-lagune/90"
+        >
+          <IconeUtilisateur className="h-5 w-5" aria-hidden="true" />
+          Compléter
         </Link>
       </Carte>
     </div>
   );
 }
-
-/* ─── Sous-composants ─── */

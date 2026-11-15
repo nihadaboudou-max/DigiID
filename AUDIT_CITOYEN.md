@@ -16,12 +16,13 @@ conditionnels sont signalés à part.
 
 | Écran | Route actuelle | Rôle / accès actuel | Blocs affichés |
 |---|---|---|---:|
-| Tableau de bord / Accueil | [`/citoyen/dashboard`](./frontend/src/app/citoyen/dashboard/page.tsx); `/citoyen` et `/tableau-de-bord` y redirigent | Accueil citoyen : résumé d'identité et vérifications, accès au suivi. Citoyen uniquement. | 4 : en-tête, carte identité, carte vérifications, carte transport et suivi. |
+| Accueil public | [`/`](./frontend/src/app/page.tsx) | Suivi public d'un colis ou enfant; horaires, connexion et choix de langue accessibles sans compte. | 2 blocs principaux : sélecteur de langue et suivi avec accès aux horaires/connexion. |
+| Tableau de bord citoyen | [`/citoyen/dashboard`](./frontend/src/app/citoyen/dashboard/page.tsx); `/citoyen` et `/tableau-de-bord` y redirigent | Suivi d'un envoi, cinq envois récents et progression de complétion du profil. Citoyen uniquement. | 3 : suivi, liste de cinq envois, progression du profil. |
 | Ma carte DigiID | [`/identite/carte`](./frontend/src/app/identite/carte/page.tsx) | Carte QR permanente pour le guichet. La page accepte tous les rôles; la section « Mes voyages » reste réservée aux autres rôles. | 3 pour le citoyen : en-tête, carte QR, explication du fonctionnement. 4 pour les autres rôles, avec « Mes voyages ». |
 | Mes envois | [`/citoyen/envois`](./frontend/src/app/citoyen/envois/page.tsx) | Colis et enfants suivis par le citoyen, recherche et pagination serveur, chronologie en trois étapes. Citoyen uniquement. | 4 : en-tête, recherche, liste paginée, pagination. La chronologie est affichée après sélection. |
 | Messages | [`/citoyen/messages`](./frontend/src/app/citoyen/messages/page.tsx) | Notifications de colis du citoyen, recherche et pagination serveur; code de remise masqué jusqu'à l'action « Afficher ». Citoyen uniquement. | 4 : en-tête, recherche, liste paginée, pagination. |
 | Mon DigiID | [`/citoyen/qr-code`](./frontend/src/app/citoyen/qr-code/page.tsx) | Code de sécurité temporaire, renouvelé toutes les 30 secondes. Citoyen uniquement, accessible depuis Profil > Vérifier mon identité. | 4 : en-tête, alerte de sécurité, zone QR protégée, retour au profil. |
-| Profil | [`/profil`](./frontend/src/app/profil/page.tsx) | Coordonnées, vérifications et identifiant DigiID; accès aux vérifications d'identité, à l'activité commerçante, à l'aide et aux paramètres. Page partagée avec plusieurs rôles. | 8 pour le citoyen : en-tête, carte identité, carte téléphone, carte identifiant DigiID, alerte sécurité et 3 cartes de raccourcis. Une alerte supplémentaire peut s'afficher si les vérifications sont incohérentes. |
+| Profil | [`/profil`](./frontend/src/app/profil/page.tsx) | Coordonnées, vérifications et identifiant DigiID; accès aux vérifications d'identité, à l'activité commerçante, à l'aide et aux paramètres. Page partagée avec plusieurs rôles. | 7 pour le citoyen après l'étape 4 : en-tête et six sections repliables; les autres rôles conservent leur affichage existant. |
 | Horaires | [`/horaires`](./frontend/src/app/horaires/page.tsx) | Consultation publique des départs et filtre par destination/période. Les notifications de colis sont désormais dans Messages. | 5 : en-tête, recherche de suivi, filtres, résultats des départs, pied de page. |
 | Mon document d'identité | [`/inspection`](./frontend/src/app/inspection/page.tsx) | Envoi d'une photo, lecture des informations et historique des vérifications. Parcours d'auto-service accessible depuis la navigation citoyenne; accès et droits existants conservés. | 3 à 5 : en-tête, envoi/analyse, historique, résultat si disponible, pagination si plusieurs pages. |
 | Gestion des documents d'identité | [`/documents-identite`](./frontend/src/app/documents-identite/page.tsx) | Consultation/gestion des documents CNI, permis et assurance. Page partagée avec plusieurs rôles, dont citoyen. | 3 : en-tête, onglets documentaires, contenu du document ou alerte d'absence. Le formulaire d'édition ajoute un bloc quand il est ouvert. |
@@ -157,4 +158,78 @@ Audit :
 - `backend/tests/test_inspection_pagination.py`
 - `frontend/src/app/inspection/page.tsx`
 - `frontend/src/services/inspectionApi.ts`
+- `AUDIT_CITOYEN.md`
+
+## Étape 3 — accueil public et tableau de bord citoyen (réalisée)
+
+- [x] Accueil public réduit à un titre court, un champ de code et le bouton
+  « Suivre », avec accès aux horaires et à la connexion.
+- [x] Sélecteur de langue conservé en petit format en haut; le score fictif et
+  les autres panneaux promotionnels ont été retirés.
+- [x] Tableau de bord limité au suivi, aux cinq derniers envois sous forme de
+  cartes avec trajet/statut coloré, et à la progression du profil.
+- [x] Progression calculée sur les quatre éléments demandés : e-mail, WhatsApp,
+  pièce d'identité et visage. « Compléter » ouvre le profil existant.
+- [x] Routes et API existantes conservées; les envois sont chargés via la
+  pagination existante à cinq éléments.
+- Vérification : type-check, build, diagnostics éditeur et `git diff --check`
+  réussis. Accueil public contrôlé en navigateur sur mobile. Le
+  tableau de bord citoyen n'a pas été vérifié en navigateur faute de session
+  citoyen de test; son rendu est compilé et ses diagnostics sont vides.
+
+### Fichiers modifiés pour l'étape 3
+
+- `frontend/src/app/page.tsx`
+- `frontend/src/app/citoyen/dashboard/page.tsx`
+- `frontend/src/composants/accessibilite/SelecteurLangue.tsx`
+- `AUDIT_CITOYEN.md`
+
+## Étape 4 — profil citoyen (réalisée)
+
+- [x] Les six rubriques du profil citoyen sont repliables; une seule peut être
+  ouverte à la fois.
+- [x] « Mes informations » permet d'enregistrer prénom, nom et ville avec l'API
+  existante; le téléphone conserve son parcours de modification/vérification.
+- [x] E-mail et photo sont affichés sans édition; la vérification d'e-mail
+  conserve son parcours existant. Aucune API de photo n'existe.
+- [x] « Vérifier mon identité » présente les cinq statuts en vert « fait » ou
+  orange « à faire » et conserve les liens de vérification existants.
+- [x] « Mes notifications » indique les canaux et le contact proche disponibles,
+  mais reste en lecture seule : aucune API ne permet d'enregistrer ces choix.
+- [x] « Mon activité », « Aide et support » et « Paramètres » conservent leurs
+  actions existantes, notamment le lien `/parametres`.
+- [x] L'affichage citoyen est isolé; la branche existante des autres rôles n'est
+  pas modifiée. Vérification visuelle avec des comptes de rôles non disponible.
+- Vérification : type-check, build frontend et contrôle whitespace réussis.
+
+### Fichiers modifiés pour l'étape 4
+
+- `frontend/src/app/profil/page.tsx`
+- `AUDIT_CITOYEN.md`
+
+## Étape 5 — paramètres (réalisée)
+
+- [x] Les rubriques Mot de passe, Double authentification, Langue et lecture à
+  voix haute, Activité récente, Exporter mes données et Supprimer mon compte
+  sont présentées dans des sections repliables, avec une seule section ouverte
+  à la fois. La rubrique Identité personnelle existante est conservée.
+- [x] Les activités sont affichées cinq par page avec pagination serveur. La
+  borne d'instantané stabilise les pages pendant la consultation; l'API
+  historique sans pagination conserve sa réponse en liste.
+- [x] La suppression est placée dans la dernière section et demande une
+  confirmation explicite avant d'utiliser l'API existante, puis de déconnecter
+  le compte.
+- [x] Les rôles et les routes existants sont conservés. Le rendu n'a pas pu
+  être vérifié visuellement avec des comptes chauffeur, receveur ou gérant.
+- Vérification : type-check et build frontend réussis; diagnostics frontend
+  sans erreur; test backend ciblé de pagination réussi; syntaxe Python valide;
+  `git diff --check` réussi.
+
+### Fichiers modifiés pour l'étape 5
+
+- `backend/src/modules/profil/routes.py`
+- `backend/src/modules/profil/service.py`
+- `backend/tests/test_profil_pagination.py`
+- `frontend/src/app/parametres/page.tsx`
+- `frontend/src/services/profil.ts`
 - `AUDIT_CITOYEN.md`

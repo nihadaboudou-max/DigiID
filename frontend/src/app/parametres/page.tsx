@@ -1,35 +1,68 @@
 "use client";
 
-/**
- * Page Paramètres — sécurité, langue, confidentialité et identité.
- * Permet de modifier son nom/prénom, gérer le 2FA, et exporter ses données.
- */
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
-import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
-import { Carte } from "@/composants/commun/Carte";
-import { Bouton } from "@/composants/commun/Bouton";
-import { Badge } from "@/composants/commun/Badge";
+
 import { Alerte } from "@/composants/commun/Alerte";
+import { Badge } from "@/composants/commun/Badge";
+import { Bouton } from "@/composants/commun/Bouton";
+import { Carte } from "@/composants/commun/Carte";
 import { Gestion2FA } from "@/composants/commun/Gestion2FA";
-import { SelecteurLangue } from "@/composants/accessibilite/SelecteurLangue";
+import { Modal } from "@/composants/commun/Modal";
+import {
+  IconeAlerte,
+  IconeBouclier,
+  IconeCheck,
+  IconeCle,
+  IconeEnvoyer,
+  IconeFlecheRetour,
+  IconeJournal,
+  IconeLangue,
+  IconeUtilisateur,
+} from "@/composants/commun/Icones";
 import { BoutonMuet } from "@/composants/accessibilite/BoutonMuet";
 import { ReglagesVoix } from "@/composants/accessibilite/ReglagesVoix";
-import {
-  IconeCle, IconeBouclier, IconeLangue, IconeJournal, IconeEnvoyer, IconeUtilisateur
-} from "@/composants/commun/Icones";
+import { SelecteurLangue } from "@/composants/accessibilite/SelecteurLangue";
+import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { useAuthentification } from "@/contextes/authentification";
 import { useNotifications } from "@/contextes/notifications";
-import { clientAPI } from "@/services/client_api";
-import { modifierMonProfil } from "@/services/profil";
+import { ErreurAPI, clientAPI } from "@/services/client_api";
+import {
+  obtenirMonActivitePaginee,
+  modifierMonProfil,
+  supprimerMonCompte,
+  type ActiviteUtilisateur,
+} from "@/services/profil";
+
+const TAILLE_PAGE_ACTIVITE = 5;
+
+type IdSectionParametres =
+  | "identite"
+  | "mot-de-passe"
+  | "2fa"
+  | "langue"
+  | "activite"
+  | "export"
+  | "suppression";
 
 export default function PageParametres() {
   return (
-    <EnvelopperEspaceProtege rolesAutorises={[      
-      "citoyen", "agent_police", "chef_police", "agent_medical", "chef_medical", 
-      "agent_ong", "chef_ong", "agent_terrain", "chef_agent", "admin_domaine", 
-      "administrateur", "super_administrateur"
-    ]}>
+    <EnvelopperEspaceProtege
+      rolesAutorises={[
+        "citoyen",
+        "agent_police",
+        "chef_police",
+        "agent_medical",
+        "chef_medical",
+        "agent_ong",
+        "chef_ong",
+        "agent_terrain",
+        "chef_agent",
+        "admin_domaine",
+        "administrateur",
+        "super_administrateur",
+      ]}
+    >
       <Contenu />
     </EnvelopperEspaceProtege>
   );
@@ -38,14 +71,29 @@ export default function PageParametres() {
 function Contenu() {
   const router = useRouter();
   const { notifier } = useNotifications();
-  const { utilisateur } = useAuthentification();
-  
+  const { utilisateur, seDeconnecter } = useAuthentification();
+
   const [nom, setNom] = useState("");
   const [prenom, setPrenom] = useState("");
   const [sauvegardeIdentite, setSauvegardeIdentite] = useState(false);
   const [exportChargement, setExportChargement] = useState(false);
+  const [sectionOuverte, setSectionOuverte] =
+    useState<IdSectionParametres | null>(null);
 
-  // Initialiser les champs avec les données de l'utilisateur
+  const [activites, setActivites] = useState<ActiviteUtilisateur[]>([]);
+  const [pageActivite, setPageActivite] = useState(1);
+  const [totalActivites, setTotalActivites] = useState(0);
+  const [instantaneActivite, setInstantaneActivite] = useState<{
+    date: string;
+    id: string;
+  } | null>(null);
+  const [chargementActivite, setChargementActivite] = useState(false);
+  const [erreurActivite, setErreurActivite] = useState<string | null>(null);
+
+  const [suppressionOuverte, setSuppressionOuverte] = useState(false);
+  const [suppressionEnCours, setSuppressionEnCours] = useState(false);
+  const [erreurSuppression, setErreurSuppression] = useState<string | null>(null);
+
   useEffect(() => {
     if (utilisateur) {
       setNom(utilisateur.nom || "");
@@ -55,6 +103,50 @@ function Contenu() {
 
   if (!utilisateur) return null;
   const idUtilisateur = utilisateur.id;
+
+  async function chargerActivite(
+    page: number,
+    instantane: { date: string; id: string } | null = null,
+  ) {
+    setChargementActivite(true);
+    setErreurActivite(null);
+    try {
+      const resultat = await obtenirMonActivitePaginee(
+        page,
+        TAILLE_PAGE_ACTIVITE,
+        instantane,
+      );
+      setActivites(resultat.elements);
+      setTotalActivites(resultat.total);
+      setPageActivite(resultat.page);
+      setInstantaneActivite(
+        resultat.snapshot_date && resultat.snapshot_id
+          ? {
+              date: resultat.snapshot_date,
+              id: resultat.snapshot_id,
+            }
+          : null,
+      );
+    } catch (erreur) {
+      setErreurActivite(
+        erreur instanceof ErreurAPI
+          ? erreur.message_utilisateur
+          : "Impossible de charger l'activité récente. Réessaie.",
+      );
+    } finally {
+      setChargementActivite(false);
+    }
+  }
+
+  function basculerSection(section: IdSectionParametres) {
+    const ouvrir = sectionOuverte !== section;
+    setSectionOuverte(ouvrir ? section : null);
+    if (ouvrir && section === "activite") {
+      setPageActivite(1);
+      setInstantaneActivite(null);
+      void chargerActivite(1);
+    }
+  }
 
   async function gererSauvegardeIdentite() {
     const nomTrim = nom.trim();
@@ -69,7 +161,7 @@ function Contenu() {
     try {
       await modifierMonProfil({ nom: nomTrim, prenom: prenomTrim });
       notifier("Identité mise à jour avec succès.", "succes");
-    } catch (e) {
+    } catch {
       notifier("Erreur lors de la mise à jour. Vérifiez les données.", "erreur");
     } finally {
       setSauvegardeIdentite(false);
@@ -82,195 +174,415 @@ function Contenu() {
       const donnees = await clientAPI.get("/api/v1/utilisateur/profil/export", {
         authentifie: true,
       });
-      const blob = new Blob([JSON.stringify(donnees, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify(donnees, null, 2)], {
+        type: "application/json",
+      });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `digiid-export-${idUtilisateur}.json`;
-      a.click();
+      const lien = document.createElement("a");
+      lien.href = url;
+      lien.download = `digiid-export-${idUtilisateur}.json`;
+      lien.click();
       URL.revokeObjectURL(url);
       notifier("Export téléchargé avec succès.", "succes");
-    } catch (e) {
+    } catch {
       notifier("Erreur lors de l'export des données.", "erreur");
     } finally {
       setExportChargement(false);
     }
   }
 
-  return (
-    <div className="max-w-3xl mx-auto space-y-5 apparition pb-20">
-      {/* En-tête compact */}
-      <div>
-        <p className="text-ocre font-semibold text-xs uppercase tracking-wider">Paramètres</p>
-        <h1 className="text-2xl font-bold text-ardoise mt-1">Sécurité et préférences</h1>
-        <p className="text-sm text-ardoise-clair mt-1">
-          Gère ton identité, ton mot de passe et tes préférences de compte.
-        </p>
-      </div>
+  async function confirmerSuppression() {
+    setSuppressionEnCours(true);
+    setErreurSuppression(null);
+    try {
+      await supprimerMonCompte();
+      notifier(
+        "Compte supprimé. La purge définitive des données est prévue sous 30 jours.",
+        "succes",
+      );
+      await seDeconnecter();
+    } catch (erreur) {
+      setErreurSuppression(
+        erreur instanceof ErreurAPI
+          ? erreur.message_utilisateur
+          : "La suppression n'a pas abouti. Réessaie.",
+      );
+      setSuppressionEnCours(false);
+    }
+  }
 
-      {/* ✅ NOUVEAU : Modification de l'identité (Nom / Prénom) */}
-      <Carte>
-        <div className="flex items-start gap-3 mb-3">
-          <div className="w-9 h-9 bg-lagune/10 text-lagune rounded-lg flex items-center justify-center flex-shrink-0">
-            <IconeUtilisateur />
-          </div>
-          <div>
-            <h3 className="text-base font-semibold text-ardoise">Identité personnelle</h3>
-            <p className="text-xs text-ardoise-clair mt-0.5">
-              Assure-toi que ces informations correspondent exactement à ta pièce d'identité (CNI).
-            </p>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-          <div>
-            <label className="block text-xs font-medium text-ardoise mb-1">Nom de famille</label>
+  const totalPagesActivite = Math.max(
+    1,
+    Math.ceil(totalActivites / TAILLE_PAGE_ACTIVITE),
+  );
+  const phrase2FA =
+    utilisateur.role === "citoyen"
+      ? "Facultative, la double authentification ajoute un code temporaire pour mieux protéger ton compte."
+      : "La double authentification ajoute un code temporaire pour renforcer la protection de ton compte.";
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-4 apparition pb-20">
+      <header className="mb-2">
+        <p className="text-ocre font-semibold text-lg uppercase tracking-wider">
+          Paramètres
+        </p>
+        <h1 className="mt-1 text-3xl font-bold text-ardoise">
+          Sécurité et préférences
+        </h1>
+      </header>
+
+      <SectionParametres
+        id="identite"
+        titre="Identité personnelle"
+        Icone={IconeUtilisateur}
+        ouverte={sectionOuverte === "identite"}
+        onBasculer={() => basculerSection("identite")}
+      >
+        <p className="mb-4 text-lg text-ardoise-clair">
+          Vérifie que ces informations correspondent à ta pièce d'identité.
+        </p>
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="block space-y-2 font-semibold text-lg text-ardoise">
+            Nom de famille
             <input
               type="text"
               value={nom}
-              onChange={(e) => setNom(e.target.value.toUpperCase())}
-              className="w-full rounded-lg border border-ardoise-clair/20 px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-lagune/50 focus:border-lagune outline-none"
+              onChange={(event) => setNom(event.target.value.toUpperCase())}
+              className="min-h-14 w-full rounded-xl border-2 border-ardoise-clair/20 bg-white px-4 font-normal focus:border-lagune focus:outline-none"
               placeholder="NOM"
             />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-ardoise mb-1">Prénom</label>
+          </label>
+          <label className="block space-y-2 font-semibold text-lg text-ardoise">
+            Prénom
             <input
               type="text"
               value={prenom}
-              onChange={(e) => setPrenom(e.target.value)}
-              className="w-full rounded-lg border border-ardoise-clair/20 px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-lagune/50 focus:border-lagune outline-none"
+              onChange={(event) => setPrenom(event.target.value)}
+              className="min-h-14 w-full rounded-xl border-2 border-ardoise-clair/20 bg-white px-4 font-normal focus:border-lagune focus:outline-none"
               placeholder="Prénom"
             />
-          </div>
+          </label>
         </div>
         <Bouton
           variante="primaire"
-          taille="petit"
+          taille="grand"
+          className="min-h-14"
           chargement={sauvegardeIdentite}
-          onClick={gererSauvegardeIdentite}
+          onClick={() => void gererSauvegardeIdentite()}
         >
-          💾 Sauvegarder les modifications
+          <IconeCheck className="h-5 w-5" aria-hidden="true" />
+          Enregistrer
         </Bouton>
-      </Carte>
+      </SectionParametres>
 
-      {/* Mot de passe */}
-      <Carte>
-        <div className="flex items-start gap-3 mb-3">
-          <div className="w-9 h-9 bg-lagune/10 text-lagune rounded-lg flex items-center justify-center flex-shrink-0">
-            <IconeCle />
-          </div>
-          <div>
-            <h3 className="text-base font-semibold text-ardoise">Mot de passe</h3>
-            <p className="text-xs text-ardoise-clair mt-0.5">
-              Choisis un mot de passe fort que tu n'utilises sur aucun autre service.
-            </p>
-          </div>
-        </div>
-        <Bouton variante="ghost" taille="petit" onClick={() => router.push("/mot-de-passe-oublie")}>
-          Réinitialiser mon mot de passe →
-        </Bouton>
-      </Carte>
-
-      {/* 2FA */}
-      <Carte>
-        <div className="flex items-start gap-3 mb-3">
-          <div className="w-9 h-9 bg-ocre/15 text-ocre rounded-lg flex items-center justify-center flex-shrink-0">
-            <IconeBouclier />
-          </div>
-          <div>
-            <h3 className="text-base font-semibold text-ardoise flex items-center gap-2">
-              Authentification à deux facteurs
-              {utilisateur.deux_fa_active ? (
-                <Badge variante="succes" taille="petit">Active</Badge>
-              ) : (
-                <Badge variante="neutre" taille="petit">Désactivée</Badge>
-              )}
-            </h3>
-            <p className="text-xs text-ardoise-clair mt-0.5">
-              Un code à 6 chiffres généré par une application (Google Authenticator) en plus de ton mot de passe.
-            </p>
-          </div>
-        </div>
-        <Gestion2FA />
-      </Carte>
-
-      {/* Langue */}
-      <Carte>
-        <div className="flex items-start gap-3 mb-3">
-          <div className="w-9 h-9 bg-lagune/10 text-lagune rounded-lg flex items-center justify-center flex-shrink-0">
-            <IconeLangue />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-base font-semibold text-ardoise">Langue d'affichage</h3>
-            <p className="text-xs text-ardoise-clair mt-0.5">
-              Choisis ta langue en l'écoutant. La voix de DigiID s'adapte à ton choix.
-            </p>
-          </div>
-        </div>
-        <SelecteurLangue variante="compacte" />
-
-        {/* Voix : couper / réactiver le son */}
-        <div className="mt-4 pt-3 border-t border-ardoise-clair/10 flex items-center justify-between gap-3">
-          <p className="text-xs text-ardoise-clair">Voix de l'application (guidage parlé)</p>
-          <BoutonMuet />
-        </div>
-
-        {/* Réglages de la voix : voix utilisée, test, débit, guide parlé */}
-        <div className="mt-4 pt-4 border-t border-ardoise-clair/10">
-          <ReglagesVoix />
-        </div>
-      </Carte>
-
-      {/* Historique de connexion */}
-      <Carte>
-        <div className="flex items-start gap-3 mb-3">
-          <div className="w-9 h-9 bg-lagune/10 text-lagune rounded-lg flex items-center justify-center flex-shrink-0">
-            <IconeJournal />
-          </div>
-          <div>
-            <h3 className="text-base font-semibold text-ardoise">Activité récente</h3>
-            <p className="text-xs text-ardoise-clair mt-0.5">
-              Consulte tes dernières connexions et actions sur ton compte.
-            </p>
-          </div>
-        </div>
-        <Bouton variante="ghost" taille="petit" onClick={() => router.push("/historique")}>
-          Voir mon activité →
-        </Bouton>
-      </Carte>
-
-      {/* Export des données */}
-      <Carte>
-        <div className="flex items-start gap-3 mb-3">
-          <div className="w-9 h-9 bg-lagune/10 text-lagune rounded-lg flex items-center justify-center flex-shrink-0">
-            <IconeEnvoyer />
-          </div>
-          <div>
-            <h3 className="text-base font-semibold text-ardoise">Export de mes données</h3>
-            <p className="text-xs text-ardoise-clair mt-0.5">
-              Télécharge toutes tes données personnelles au format JSON (conformité au Code du numérique du Bénin / APDP).
-            </p>
-          </div>
-        </div>
+      <SectionParametres
+        id="mot-de-passe"
+        titre="Mot de passe"
+        Icone={IconeCle}
+        ouverte={sectionOuverte === "mot-de-passe"}
+        onBasculer={() => basculerSection("mot-de-passe")}
+      >
+        <p className="mb-4 text-lg text-ardoise">
+          Choisis un mot de passe fort que tu n'utilises sur aucun autre service.
+        </p>
         <Bouton
           variante="ghost"
-          taille="petit"
-          chargement={exportChargement}
-          onClick={gererExportDonnees}
+          taille="grand"
+          className="min-h-14"
+          onClick={() => router.push("/mot-de-passe-oublie")}
         >
-          📥 Exporter mes données
+          <IconeCle className="h-5 w-5" aria-hidden="true" />
+          Réinitialiser mon mot de passe
         </Bouton>
-      </Carte>
+      </SectionParametres>
 
-      {/* Zone dangereuse */}
-      <Alerte variante="erreur" titre="Zone sensible">
-        <p className="text-xs mb-3">
-          Supprimer ton compte effacera toutes tes données sous 30 jours. Cette action est irréversible.
+      <SectionParametres
+        id="2fa"
+        titre="Double authentification"
+        Icone={IconeBouclier}
+        ouverte={sectionOuverte === "2fa"}
+        onBasculer={() => basculerSection("2fa")}
+      >
+        <p className="mb-4 text-lg text-ardoise">{phrase2FA}</p>
+        <p className="mb-4 flex flex-wrap items-center gap-2 text-lg font-semibold text-ardoise">
+          État :
+          <Badge
+            variante={utilisateur.deux_fa_active ? "succes" : "neutre"}
+            taille="moyen"
+          >
+            {utilisateur.deux_fa_active ? "Activée" : "Désactivée"}
+          </Badge>
         </p>
-        <Bouton variante="danger" taille="petit" onClick={() => router.push("/profil/suppression")}>
+        <Gestion2FA className="min-h-14 text-lg" />
+      </SectionParametres>
+
+      <SectionParametres
+        id="langue"
+        titre="Langue et lecture à voix haute"
+        Icone={IconeLangue}
+        ouverte={sectionOuverte === "langue"}
+        onBasculer={() => basculerSection("langue")}
+      >
+        <p className="mb-4 text-lg text-ardoise">
+          Choisis le français, le fon, le bariba ou le dendi et règle la lecture à voix haute.
+        </p>
+        <SelecteurLangue variante="compacte" />
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-ardoise-clair/10 pt-4">
+          <p className="font-semibold text-lg text-ardoise">
+            Lecture à voix haute
+          </p>
+          <BoutonMuet />
+        </div>
+        <div className="mt-4 border-t border-ardoise-clair/10 pt-4">
+          <ReglagesVoix />
+        </div>
+      </SectionParametres>
+
+      <SectionParametres
+        id="activite"
+        titre="Activité récente"
+        Icone={IconeJournal}
+        ouverte={sectionOuverte === "activite"}
+        onBasculer={() => basculerSection("activite")}
+      >
+        <p className="mb-4 text-lg text-ardoise">
+          Consulte les dernières actions enregistrées sur ton compte.
+        </p>
+        {erreurActivite && (
+          <Alerte variante="erreur" titre="Activité indisponible">
+            <p className="text-lg">{erreurActivite}</p>
+            <Bouton
+              variante="ghost"
+              taille="grand"
+              className="mt-3 min-h-14"
+              onClick={() =>
+                void chargerActivite(pageActivite, instantaneActivite)
+              }
+            >
+              <IconeJournal className="h-5 w-5" aria-hidden="true" />
+              Réessayer
+            </Bouton>
+          </Alerte>
+        )}
+
+        {!erreurActivite && chargementActivite && (
+          <p className="py-6 text-center text-lg text-ardoise-clair">
+            Chargement de l'activité…
+          </p>
+        )}
+
+        {!erreurActivite && !chargementActivite && activites.length === 0 && (
+          <p className="rounded-xl bg-sable-clair p-4 text-center text-lg text-ardoise">
+            Aucune activité enregistrée pour le moment.
+          </p>
+        )}
+
+        {!erreurActivite && !chargementActivite && activites.length > 0 && (
+          <>
+            <ol className="space-y-3">
+              {activites.map((activite) => (
+                <li
+                  key={activite.id}
+                  className="rounded-xl border border-ardoise-clair/15 bg-white p-4"
+                >
+                  <p className="font-semibold text-lg text-lagune">
+                    {activite.type.replace(/_/g, " ")}
+                  </p>
+                  <p className="mt-1 text-lg text-ardoise">
+                    {activite.description}
+                  </p>
+                  <time
+                    className="mt-2 block text-lg text-ardoise-clair"
+                    dateTime={activite.date}
+                  >
+                    {new Date(activite.date).toLocaleString("fr-FR")}
+                  </time>
+                </li>
+              ))}
+            </ol>
+            <nav
+              aria-label="Pagination de l'activité récente"
+              className="mt-4 flex flex-wrap items-center justify-between gap-3"
+            >
+              <Bouton
+                type="button"
+                variante="ghost"
+                taille="grand"
+                className="min-h-14"
+                disabled={pageActivite <= 1 || chargementActivite}
+                onClick={() =>
+                  void chargerActivite(pageActivite - 1, instantaneActivite)
+                }
+              >
+                <IconeFlecheRetour className="h-5 w-5" aria-hidden="true" />
+                Précédent
+              </Bouton>
+              <span className="font-semibold text-lg text-ardoise">
+                Page {pageActivite} sur {totalPagesActivite}
+              </span>
+              <Bouton
+                type="button"
+                variante="ghost"
+                taille="grand"
+                className="min-h-14"
+                disabled={
+                  pageActivite >= totalPagesActivite || chargementActivite
+                }
+                onClick={() =>
+                  void chargerActivite(pageActivite + 1, instantaneActivite)
+                }
+              >
+                Suivant
+                <IconeFlecheRetour
+                  className="h-5 w-5 rotate-180"
+                  aria-hidden="true"
+                />
+              </Bouton>
+            </nav>
+          </>
+        )}
+      </SectionParametres>
+
+      <SectionParametres
+        id="export"
+        titre="Exporter mes données"
+        Icone={IconeEnvoyer}
+        ouverte={sectionOuverte === "export"}
+        onBasculer={() => basculerSection("export")}
+      >
+        <p className="mb-4 text-lg text-ardoise">
+          Télécharge une copie de tes données personnelles au format JSON.
+        </p>
+        <Bouton
+          variante="ghost"
+          taille="grand"
+          className="min-h-14"
+          chargement={exportChargement}
+          onClick={() => void gererExportDonnees()}
+        >
+          <IconeEnvoyer className="h-5 w-5" aria-hidden="true" />
+          Exporter mes données
+        </Bouton>
+      </SectionParametres>
+
+      <SectionParametres
+        id="suppression"
+        titre="Supprimer mon compte"
+        Icone={IconeAlerte}
+        ouverte={sectionOuverte === "suppression"}
+        onBasculer={() => basculerSection("suppression")}
+      >
+        <Alerte variante="erreur" titre="Cette action est irréversible">
+          <p className="text-lg">
+            Ton compte sera désactivé et tes données personnelles seront
+            définitivement purgées sous 30 jours.
+          </p>
+        </Alerte>
+        <Bouton
+          variante="danger"
+          taille="grand"
+          className="mt-4 min-h-14"
+          onClick={() => {
+            setErreurSuppression(null);
+            setSuppressionOuverte(true);
+          }}
+        >
+          <IconeAlerte className="h-5 w-5" aria-hidden="true" />
           Supprimer mon compte
         </Bouton>
-      </Alerte>
+      </SectionParametres>
+
+      <Modal
+        ouvert={suppressionOuverte}
+        surFermeture={() => {
+          if (!suppressionEnCours) setSuppressionOuverte(false);
+        }}
+        titre="Confirmer la suppression du compte"
+        taille="petit"
+      >
+        <div className="space-y-4">
+          <p className="text-lg text-ardoise">
+            Ton compte sera désactivé immédiatement. La purge définitive de tes
+            données est prévue sous 30 jours.
+          </p>
+          {erreurSuppression && (
+            <Alerte variante="erreur" titre="Suppression impossible">
+              {erreurSuppression}
+            </Alerte>
+          )}
+          <div className="flex flex-col-reverse justify-end gap-3 sm:flex-row">
+            <Bouton
+              variante="ghost"
+              taille="grand"
+              className="min-h-14"
+              disabled={suppressionEnCours}
+              onClick={() => setSuppressionOuverte(false)}
+            >
+              <IconeFlecheRetour className="h-5 w-5" aria-hidden="true" />
+              Annuler
+            </Bouton>
+            <Bouton
+              variante="danger"
+              taille="grand"
+              className="min-h-14"
+              chargement={suppressionEnCours}
+              onClick={() => void confirmerSuppression()}
+            >
+              <IconeAlerte className="h-5 w-5" aria-hidden="true" />
+              Confirmer la suppression
+            </Bouton>
+          </div>
+        </div>
+      </Modal>
     </div>
+  );
+}
+
+function SectionParametres({
+  id,
+  titre,
+  Icone,
+  ouverte,
+  onBasculer,
+  children,
+}: {
+  id: IdSectionParametres;
+  titre: string;
+  Icone: typeof IconeCle;
+  ouverte: boolean;
+  onBasculer: () => void;
+  children: ReactNode;
+}) {
+  const identifiant = `parametres-${id}`;
+  return (
+    <section className="overflow-hidden rounded-2xl border border-ardoise-clair/15 bg-white shadow-sm">
+      <h2>
+        <button
+          type="button"
+          aria-expanded={ouverte}
+          aria-controls={`${identifiant}-contenu`}
+          onClick={onBasculer}
+          className="flex min-h-14 w-full items-center justify-between gap-3 px-5 py-4 text-left text-xl font-bold text-lagune hover:bg-lagune/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lagune/50"
+        >
+          <span className="flex items-center gap-3">
+            <Icone className="h-6 w-6 shrink-0" aria-hidden="true" />
+            {titre}
+          </span>
+          <IconeFlecheRetour
+            className={`h-5 w-5 shrink-0 transition-transform ${
+              ouverte ? "-rotate-90" : "rotate-180"
+            }`}
+            aria-hidden="true"
+          />
+        </button>
+      </h2>
+      <div
+        id={`${identifiant}-contenu`}
+        hidden={!ouverte}
+        className="border-t border-ardoise-clair/10 p-5"
+      >
+        {children}
+      </div>
+    </section>
   );
 }

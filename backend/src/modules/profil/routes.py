@@ -5,9 +5,11 @@ Routes API du module profil.
 Préfixe : /api/v1/utilisateur/profil
 Toutes les routes nécessitent une authentification utilisateur.
 """
+from datetime import datetime
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
@@ -122,8 +124,36 @@ async def obtenir_mon_activite(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
     limite: int = 20,
+    page: int | None = Query(default=None, ge=1),
+    par_page: int | None = Query(default=None, ge=1, le=50),
+    snapshot_date: datetime | None = None,
+    snapshot_id: UUID | None = None,
 ):
     """Retourne les dernières actions de l'utilisateur sur la plateforme."""
+    pagination_demandee = any(
+        valeur is not None for valeur in (page, par_page, snapshot_date, snapshot_id)
+    )
+    if pagination_demandee:
+        if (snapshot_date is None) != (snapshot_id is None):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Les deux bornes de pagination doivent être fournies ensemble.",
+            )
+        if page is not None and page > 1 and snapshot_date is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="La borne de pagination est requise après la première page.",
+            )
+        return await service.obtenir_activite_recente_paginee(
+            session=session,
+            utilisateur=utilisateur,
+            page=page or 1,
+            par_page=par_page or 5,
+            snapshot_date=snapshot_date,
+            snapshot_id=snapshot_id,
+            adresse_ip=obtenir_ip_client(requete),
+        )
+
     return await service.obtenir_activite_recente(
         session=session,
         utilisateur=utilisateur,

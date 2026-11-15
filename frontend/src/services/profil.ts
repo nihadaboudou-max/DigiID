@@ -57,8 +57,36 @@ export interface ActiviteUtilisateur {
   adresse_ip: string | null;
 }
 
+export interface PageActiviteUtilisateur {
+  elements: ActiviteUtilisateur[];
+  total: number;
+  page: number;
+  par_page: number;
+  snapshot_date: string | null;
+  snapshot_id: string | null;
+}
+
 export const obtenirMonActivite = (limite: number = 20) =>
   clientAPI.get<ActiviteUtilisateur[]>(`${PREFIXE}/activite?limite=${limite}`, { authentifie: true });
+
+export const obtenirMonActivitePaginee = (
+  page: number = 1,
+  parPage: number = 5,
+  snapshot?: { date: string; id: string } | null,
+) => {
+  const params = new URLSearchParams({
+    page: String(page),
+    par_page: String(parPage),
+  });
+  if (snapshot) {
+    params.set("snapshot_date", snapshot.date);
+    params.set("snapshot_id", snapshot.id);
+  }
+  return clientAPI.get<PageActiviteUtilisateur>(
+    `${PREFIXE}/activite?${params.toString()}`,
+    { authentifie: true },
+  );
+};
 
 export const exporterMesDonnees = () =>
   clientAPI.get<ExportDonnees>(`${PREFIXE}/export`, { authentifie: true });

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import parametres
@@ -566,6 +566,84 @@ async def obtenir_activite_recente(
     )
     await session.commit()
     return activites
+
+
+async def obtenir_activite_recente_paginee(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    page: int = 1,
+    par_page: int = 5,
+    snapshot_date: Optional[datetime] = None,
+    snapshot_id: Optional[UUID] = None,
+    adresse_ip: Optional[str] = None,
+) -> dict:
+    """Récupère une page stable d'activités, sans déplacer les lignes entre pages."""
+    filtre_utilisateur = JournalAudit.utilisateur_id == utilisateur.id
+
+    if snapshot_date is None and snapshot_id is None:
+        dernier_evenement = await session.execute(
+            select(JournalAudit.date_evenement, JournalAudit.id)
+            .where(filtre_utilisateur)
+            .order_by(JournalAudit.date_evenement.desc(), JournalAudit.id.desc())
+            .limit(1)
+        )
+        borne = dernier_evenement.first()
+        if borne is not None:
+            snapshot_date, snapshot_id = borne
+
+    filtres = [filtre_utilisateur]
+    if snapshot_date is not None and snapshot_id is not None:
+        filtres.append(
+            or_(
+                JournalAudit.date_evenement < snapshot_date,
+                and_(
+                    JournalAudit.date_evenement == snapshot_date,
+                    JournalAudit.id <= snapshot_id,
+                ),
+            )
+        )
+
+    total_resultat = await session.execute(
+        select(func.count(JournalAudit.id)).where(*filtres)
+    )
+    total = total_resultat.scalar_one()
+
+    resultat = await session.execute(
+        select(JournalAudit)
+        .where(*filtres)
+        .order_by(JournalAudit.date_evenement.desc(), JournalAudit.id.desc())
+        .offset((page - 1) * par_page)
+        .limit(par_page)
+    )
+    activites = [
+        {
+            "id": str(e.id),
+            "type": e.type_evenement,
+            "description": e.description,
+            "date": e.date_evenement.isoformat(),
+            "adresse_ip": e.adresse_ip,
+        }
+        for e in resultat.scalars().all()
+    ]
+
+    await _enregistrer_audit(
+        session,
+        utilisateur_id=utilisateur.id,
+        role_acteur=utilisateur.role,
+        type_evenement=TypesEvenementAudit.CONSULTATION_PROFIL.value,
+        description="Consultation de l'historique d'activité",
+        adresse_ip=adresse_ip,
+    )
+    await session.commit()
+
+    return {
+        "elements": activites,
+        "total": total,
+        "page": page,
+        "par_page": par_page,
+        "snapshot_date": snapshot_date.isoformat() if snapshot_date else None,
+        "snapshot_id": str(snapshot_id) if snapshot_id else None,
+    }
 
 
 async def _enregistrer_audit(
