@@ -142,13 +142,13 @@ const LIENS_GERANT_GARE: Lien[] = [
 ];
 
 const LIENS_CHAUFFEUR: Lien[] = [
-  { href: "/chauffeur/dashboard", libelle: "Mes voyages", Icone: IconeColis },
+  { href: "/chauffeur/dashboard", libelle: "Accueil", Icone: IconeAccueil },
   // Le chauffeur est un indépendant : il déclare ses lignes et planifie ses
   // propres départs (le guichet y charge ensuite colis et passagers).
   { href: "/chauffeur/voyages", libelle: "Planifier un voyage", Icone: IconeCamion },
   { href: "/chauffeur/colis", libelle: "Mes colis", Icone: IconeTicket },
-  { href: "/chauffeur/colis/nouveau", libelle: "Enregistrer un colis", Icone: IconeColis },
   { href: "/chauffeur/passagers", libelle: "Mes passagers", Icone: IconeIdentite },
+  { href: "/chauffeur/passagers/nouveau", libelle: "Enregistrer un passager", Icone: IconeIdentite },
   { href: "/chauffeur/scan", libelle: "Scanner / Livrer", Icone: IconeScan },
   { href: "/identite/carte", libelle: "Mon QR code DigiID", Icone: IconeIdentite },
   { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },
@@ -946,7 +946,6 @@ export function BoutonMenuMobile() {
                       })}
                     </div>
                   </SectionPlieMobile>
-                  <MenuCitoyenComplet pathname={pathname} setOuvert={setOuvert} />
                 </>
               )}
 

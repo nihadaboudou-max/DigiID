@@ -48,7 +48,7 @@ const STATUTS_PASSAGERS_NON_ANNULES = [
   "arrive",
 ];
 
-type OngletVoyage = "manifeste" | "passagers" | "colis";
+type OngletVoyage = "manifeste" | "passagers" | "colis" | "enregistrement";
 
 export default function PageDetailVoyageChauffeur() {
   return (
@@ -338,6 +338,7 @@ function Contenu() {
             ["manifeste", "Manifeste"],
             ["passagers", `Passagers (${totalPassagers})`],
             ["colis", `Colis (${totalColis})`],
+            ["enregistrement", "Enregistrer en route"],
           ] as const
         ).map(([cle, libelle]) => (
           <Bouton
@@ -564,14 +565,25 @@ function Contenu() {
         </Carte>
       </section>
 
-      {voyage.statut !== "termine" && voyage.statut !== "annule" && (
-        <EnregistrementDirectChauffeur
-          voyageId={voyage.id}
-          gareDepartId={ligne?.gare_depart_id ?? null}
-          gareArriveeId={ligne?.gare_arrivee_id ?? null}
-          surSucces={() => setRafraichir((nombre) => nombre + 1)}
-        />
-      )}
+      <section
+        id="voyage-panel-enregistrement"
+        role="tabpanel"
+        aria-labelledby="voyage-tab-enregistrement"
+        hidden={onglet !== "enregistrement"}
+      >
+        {voyage.statut !== "termine" && voyage.statut !== "annule" ? (
+          <EnregistrementDirectChauffeur
+            voyageId={voyage.id}
+            gareDepartId={ligne?.gare_depart_id ?? null}
+            gareArriveeId={ligne?.gare_arrivee_id ?? null}
+            surSucces={() => setRafraichir((nombre) => nombre + 1)}
+          />
+        ) : (
+          <Alerte variante="info" titre="Voyage terminé">
+            Les colis et passagers ne peuvent plus être enregistrés sur ce voyage.
+          </Alerte>
+        )}
+      </section>
     </div>
   );
 }

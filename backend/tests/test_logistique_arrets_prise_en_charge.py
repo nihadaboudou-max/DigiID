@@ -549,6 +549,21 @@ class TestPartageChauffeurGuichet:
 
 
 class TestEvenementsSuiviFamilial:
+    def test_chauffeur_peut_creer_une_fiche_directement_sur_son_voyage(self):
+        chauffeur = _utilisateur(RoleUtilisateur.CHAUFFEUR.value)
+
+        service._exiger_gestion_suivi_familial(
+            chauffeur, enregistrement_direct=True
+        )
+
+    def test_chauffeur_ne_peut_pas_gerer_une_fiche_de_suivi_du_guichet(self):
+        chauffeur = _utilisateur(RoleUtilisateur.CHAUFFEUR.value)
+
+        with pytest.raises(HTTPException) as erreur:
+            service._exiger_gestion_suivi_familial(chauffeur)
+
+        assert erreur.value.status_code == 403
+
     def test_gerant_ne_peut_pas_gerer_une_fiche_de_suivi(self):
         gerant = _utilisateur(RoleUtilisateur.GERANT_GARE.value)
 

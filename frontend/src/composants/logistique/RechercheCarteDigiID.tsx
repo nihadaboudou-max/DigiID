@@ -44,6 +44,7 @@ interface ProprietesRechercheCarte {
   titre?: string;
   description?: string;
   compact?: boolean;
+  scanAutorise?: boolean;
   /**
    * DigiID / lien de QR à rechercher automatiquement au montage.
    *
@@ -59,6 +60,7 @@ export function RechercheCarteDigiID({
   titre = "Client avec un compte DigiID ?",
   description = "Scannez le QR affiché par le client (code dynamique de 30 secondes, à usage unique) — ou saisissez son DigiID public : la fiche se pré-remplit automatiquement.",
   compact = false,
+  scanAutorise = true,
   rechercheInitiale,
 }: ProprietesRechercheCarte) {
   const [valeur, setValeur] = useState(rechercheInitiale ?? "");
@@ -125,19 +127,20 @@ export function RechercheCarteDigiID({
         </div>
       </div>
 
-      <div className={`grid grid-cols-1 gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end ${compact ? "" : "sm:gap-3"}`}>
-        {/* Le scan et la saisie manuelle sont deux chemins équivalents. */}
-        <div className="flex items-center">
-          <LecteurQRCode
-            id={idLecteur}
-            libelleBouton="Scanner le QR"
-            messageIndisponible="Caméra indisponible. Saisissez le DigiID à la main."
-            surDecode={(texte) => {
-              setValeur(texte);
-              void rechercher(texte);
-            }}
-          />
-        </div>
+      <div className={`grid grid-cols-1 gap-2 ${scanAutorise ? "sm:grid-cols-[auto_minmax(0,1fr)]" : "sm:grid-cols-1"} sm:items-end ${compact ? "" : "sm:gap-3"}`}>
+        {scanAutorise && (
+          <div className="flex items-center">
+            <LecteurQRCode
+              id={idLecteur}
+              libelleBouton="Scanner le QR"
+              messageIndisponible="Caméra indisponible. Saisissez le DigiID à la main."
+              surDecode={(texte) => {
+                setValeur(texte);
+                void rechercher(texte);
+              }}
+            />
+          </div>
+        )}
 
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
         <div className="flex-1">

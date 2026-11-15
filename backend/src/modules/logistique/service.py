@@ -291,7 +291,11 @@ def exiger_acces_suivi_familial(utilisateur: Utilisateur) -> None:
         )
 
 
-def _exiger_gestion_suivi_familial(utilisateur: Utilisateur) -> None:
+def _exiger_gestion_suivi_familial(
+    utilisateur: Utilisateur, *, enregistrement_direct: bool = False
+) -> None:
+    if enregistrement_direct and _est_chauffeur_role(utilisateur):
+        return
     if utilisateur.role not in ROLES_GUICHET_SUIVI and utilisateur.role not in (
         "super_admin",
         "super_administrateur",
@@ -1510,8 +1514,10 @@ async def creer_colis(
     # déclarer un enregistrement « direct » — un receveur ne peut pas se faire
     # passer pour le chauffeur pour s'attribuer un colis.
     if donnees.enregistrement_direct:
-        if voyage is None or (
-            voyage.chauffeur_id is not None and voyage.chauffeur_id != utilisateur.id
+        if (
+            not _est_chauffeur_role(utilisateur)
+            or voyage is None
+            or voyage.chauffeur_id != utilisateur.id
         ):
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
@@ -2773,7 +2779,9 @@ async def creer_suivi_familial(
     utilisateur: Utilisateur,
 ) -> tuple[SuiviFamilial, Ticket, bool]:
     """Enregistre un enfant suivi et génère son ticket (QR + code ``ENF-…``)."""
-    _exiger_gestion_suivi_familial(utilisateur)
+    _exiger_gestion_suivi_familial(
+        utilisateur, enregistrement_direct=donnees.enregistrement_direct
+    )
     arret_destination_id = donnees.arret_destination_id
     gare_arrivee_id = donnees.gare_arrivee_id
     if arret_destination_id is not None:
@@ -2814,8 +2822,10 @@ async def creer_suivi_familial(
 
     # ─── Enregistrement direct (le chauffeur inscrit son client en route) ──
     if donnees.enregistrement_direct:
-        if voyage is None or (
-            voyage.chauffeur_id is not None and voyage.chauffeur_id != utilisateur.id
+        if (
+            not _est_chauffeur_role(utilisateur)
+            or voyage is None
+            or voyage.chauffeur_id != utilisateur.id
         ):
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,

@@ -29,8 +29,16 @@ import {
   ControleurBagages,
 } from "@/composants/logistique/ControleurBagages";
 import { RechercheCarteDigiID } from "@/composants/logistique/RechercheCarteDigiID";
+import { normaliserTelephone } from "@/services/telephone";
+import {
+  fraisServicePourArticles,
+  LIBELLES_MOYEN,
+  type MoyenPaiement,
+} from "@/types/paiement";
+import { formaterFcfa } from "./format";
 
 type TypeEnregistrement = "colis" | "passager";
+const FRAIS_SERVICE_PASSAGER_FCFA = 100;
 
 interface Proprietes {
   voyageId: string;
@@ -55,6 +63,8 @@ export function EnregistrementDirectChauffeur({
   const [description, setDescription] = useState("");
   const [nombreBagages, setNombreBagages] = useState(1);
   const [fraisFcfa, setFraisFcfa] = useState("");
+  const [moyenPaiement, setMoyenPaiement] = useState<MoyenPaiement | null>(null);
+  const [telephonePaiement, setTelephonePaiement] = useState("");
 
   // Passager
   const [age, setAge] = useState("");
@@ -70,9 +80,22 @@ export function EnregistrementDirectChauffeur({
   const telOk = nombreChiffresTel >= 6;
   const nomOk = nom.trim().length >= 2;
   const garesOk = !!gareDepartId && !!gareArriveeId && gareDepartId !== gareArriveeId;
+  const telephonePaiementNormalise = normaliserTelephone(telephonePaiement);
+  const paiementValide =
+    moyenPaiement === "especes" ||
+    ((moyenPaiement === "mtn" || moyenPaiement === "moov") &&
+      telephonePaiementNormalise !== null);
+  const fraisService =
+    type === "colis"
+      ? fraisServicePourArticles(nombreBagages).frais_fcfa
+      : FRAIS_SERVICE_PASSAGER_FCFA;
 
   const formulaireValide =
-    garesOk && nomOk && telOk && (type === "colis" || procheTelephone.replace(/\D/g, "").length >= 6);
+    garesOk &&
+    nomOk &&
+    telOk &&
+    paiementValide &&
+    (type === "colis" || procheTelephone.replace(/\D/g, "").length >= 6);
 
   function reinitialiser() {
     setNom("");
@@ -80,6 +103,8 @@ export function EnregistrementDirectChauffeur({
     setDescription("");
     setNombreBagages(1);
     setFraisFcfa("");
+    setMoyenPaiement(null);
+    setTelephonePaiement("");
     setAge("");
     setSexe("");
     setProcheNom("");
@@ -98,6 +123,10 @@ export function EnregistrementDirectChauffeur({
     try {
       const articles = nombreBagages;
       const frais = fraisFcfa.trim() === "" ? null : Number(fraisFcfa);
+      if (!moyenPaiement || !paiementValide) {
+        setErreur("Choisissez un moyen de paiement valide avant de confirmer.");
+        return;
+      }
 
       if (type === "colis") {
         const reponse = await logistiqueAPI.colis.creer({
@@ -109,6 +138,11 @@ export function EnregistrementDirectChauffeur({
           nombre_articles: articles,
           nombre_bagages: nombreBagages,
           frais_fcfa: frais !== null && !Number.isNaN(frais) ? frais : null,
+          moyen_paiement: moyenPaiement,
+          telephone_paiement:
+            moyenPaiement === "mtn" || moyenPaiement === "moov"
+              ? telephonePaiementNormalise
+              : null,
           voyage_id: voyageId,
           // Le backend force le chauffeur = utilisateur connecté : inutile (et
           // impossible) de connaître son propre UUID côté téléphone.
@@ -129,6 +163,11 @@ export function EnregistrementDirectChauffeur({
           proche_nom: procheNom.trim() || null,
           proche_telephone: procheTelephone.trim(),
           nombre_bagages: nombreBagages,
+          moyen_paiement: moyenPaiement,
+          telephone_paiement:
+            moyenPaiement === "mtn" || moyenPaiement === "moov"
+              ? telephonePaiementNormalise
+              : null,
           gare_depart_id: gareDepartId,
           gare_arrivee_id: gareArriveeId,
           voyage_id: voyageId,
@@ -215,17 +254,19 @@ export function EnregistrementDirectChauffeur({
         )}
 
         {/* Le client présente sa carte : tout se remplit sans faute de frappe. */}
-        <RechercheCarteDigiID
-          libelle={type === "colis" ? "DigiID du client (facultatif)" : "DigiID du passager (facultatif)"}
-          titre="Identifier le client (facultatif)"
-          description="Scannez sa carte ou saisissez son DigiID pour remplir automatiquement ses coordonnées."
-          compact
-          surSelection={(contact) => {
-            if (!contact) return;
-            setNom(contact.nom_complet);
-            if (contact.telephone) setTelephone(contact.telephone);
-          }}
-        />
+        {type === "passager" && (
+          <RechercheCarteDigiID
+            libelle="DigiID du passager (facultatif)"
+            titre="Le passager a une carte DigiID ?"
+            description="Scannez sa carte ou saisissez son DigiID pour remplir ses coordonnées."
+            compact
+            surSelection={(contact) => {
+              if (!contact) return;
+              setNom(contact.nom_complet);
+              if (contact.telephone) setTelephone(contact.telephone);
+            }}
+          />
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <ChampSaisie
@@ -331,6 +372,44 @@ export function EnregistrementDirectChauffeur({
             </div>
           </>
         )}
+
+        <div className="space-y-3 rounded-xl border border-lagune/20 bg-lagune/5 px-4 py-3">
+          <p className="text-sm font-semibold text-ardoise">
+            Moyen de paiement des frais DigiID ({formaterFcfa(fraisService)})
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {(["especes", "mtn", "moov"] as MoyenPaiement[]).map((moyen) => (
+              <button
+                key={moyen}
+                type="button"
+                onClick={() => setMoyenPaiement(moyen)}
+                aria-pressed={moyenPaiement === moyen}
+                className={`min-h-11 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                  moyenPaiement === moyen
+                    ? "border-lagune bg-lagune text-white"
+                    : "border-ardoise/20 bg-white text-ardoise hover:bg-lagune/10"
+                }`}
+              >
+                {moyen === "especes" ? "Espèces" : LIBELLES_MOYEN[moyen]}
+              </button>
+            ))}
+          </div>
+          {(moyenPaiement === "mtn" || moyenPaiement === "moov") && (
+            <ChampSaisie
+              libelle={`Téléphone ${LIBELLES_MOYEN[moyenPaiement]}`}
+              required
+              value={telephonePaiement}
+              onChange={(e) => setTelephonePaiement(e.target.value)}
+              inputMode="tel"
+              placeholder="Ex. 97 12 34 56"
+              erreur={
+                telephonePaiement === "" || telephonePaiementNormalise
+                  ? undefined
+                  : "Numéro de téléphone invalide"
+              }
+            />
+          )}
+        </div>
 
         {erreur && (
           <Alerte variante="erreur" titre="Erreur">

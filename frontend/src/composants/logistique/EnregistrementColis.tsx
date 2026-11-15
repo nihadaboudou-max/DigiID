@@ -890,12 +890,11 @@ export function EnregistrementColis({
               titre={t("colis.destinataire.titre")}
             >
               <div className="space-y-4">
-                {/* Le destinataire peut aussi présenter son code : même geste
-                    rapide que pour l'expéditeur, mêmes SMS fiables. */}
                 <RechercheCarteDigiID
                   libelle="DigiID du destinataire (facultatif)"
                   titre="Le destinataire a une carte DigiID ?"
-                  description="Scannez sa carte pour remplir les champs."
+                  description="Saisissez son DigiID si vous le connaissez ; sinon, continuez avec son nom et son téléphone."
+                  scanAutorise={false}
                   surSelection={(contact) => {
                     if (!contact) {
                       setDestinataireCompteId(null);
