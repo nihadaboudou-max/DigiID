@@ -262,11 +262,14 @@ async def manifeste_voyage(
 
 @routeur_mes_voyages.get(
     "/mes-voyages",
-    response_model=schemas.MesVoyagesResponse,
+    response_model=schemas.MesVoyagesResponse | schemas.MesVoyagesPagineesResponse,
     summary="Mes envois et les voyages de mes proches",
 )
 async def mes_voyages(
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    page: int | None = Query(None, ge=1),
+    par_page: int = Query(5, ge=1, le=100),
+    recherche: str | None = Query(None, max_length=100),
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Vue du citoyen : colis dont il est expéditeur/destinataire et passagers
@@ -274,6 +277,14 @@ async def mes_voyages(
 
     Chaque ligne porte un lien ``/suivi/<code>`` vers la page publique de suivi.
     """
+    if page is not None or recherche:
+        return await service.mes_voyages_paginees(
+            session,
+            utilisateur_courant,
+            page=page or 1,
+            par_page=par_page,
+            recherche=recherche,
+        )
     return await service.mes_voyages(session, utilisateur_courant)
 
 

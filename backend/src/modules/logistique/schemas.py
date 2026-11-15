@@ -1,11 +1,13 @@
 
 # -*- coding: utf-8 -*-
 """Schémas Pydantic du domaine logistique (référentiel)."""
+import re
 from datetime import datetime
 from typing import Generic, Literal, Optional, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from src.noyau.telephone import masquer_telephone
 
 T = TypeVar("T")
 
@@ -586,6 +588,22 @@ class NotificationLogistiqueResponse(BaseModel):
     whatsapp_erreur_message: Optional[str] = None
     cree_le: datetime
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("telephone", mode="before")
+    @classmethod
+    def _masquer_telephone(cls, valeur: Optional[str]) -> Optional[str]:
+        if valeur and "*" not in valeur:
+            return masquer_telephone(valeur)
+        return valeur
+
+    @field_validator("message", mode="before")
+    @classmethod
+    def _masquer_code(cls, valeur: str) -> str:
+        return re.sub(
+            r"(?<!\d)\d{6}(?!\d)|\b[A-Z0-9]{2,}(?:-[A-Z0-9]{2,})+\b",
+            "[code masqué]",
+            valeur,
+        )
 
 
 # ─── Suivi familial (enfants seuls) ──────────────────────────────────

@@ -6,7 +6,16 @@ import { Carte } from "@/composants/commun/Carte";
 import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Alerte } from "@/composants/commun/Alerte";
-import { IconeCopier, IconeCheck } from "@/composants/commun/Icones";
+import {
+  IconeAlerte,
+  IconeCadenas,
+  IconeCheck,
+  IconeColis,
+  IconeCopier,
+  IconeIdentite,
+  IconeParametres,
+  IconeVisage,
+} from "@/composants/commun/Icones";
 import { EtatVerificationsCitoyen } from "@/composants/verifications";
 import { CarteTelephone } from "@/composants/profil/CarteTelephone";
 import { useEtatVerifications } from "@/crochets/useEtatVerifications";
@@ -40,6 +49,7 @@ function Contenu() {
   const initiales = ((utilisateur.prenom?.[0] || "") + (utilisateur.nom?.[0] || "")).toUpperCase() || "?";
   const nomComplet = [utilisateur.prenom, utilisateur.nom].filter(Boolean).join(" ") || utilisateur.email;
   const digiId = utilisateur.digiid_public || "DigiID non généré";
+  const estCitoyen = utilisateur.role === "citoyen";
   const urlProfil = typeof window !== "undefined"
     ? `${window.location.origin}/profil/${digiId}`
     : `https://digiid.africa/profil/${digiId}`;
@@ -230,18 +240,65 @@ function Contenu() {
         <p className="text-sm">Ne partage ton DigiID qu'avec des institutions ou personne de confiance. Chaque consultation est tracée.</p>
       </Alerte>
 
-      {/* Actions rapides */}
-      <div className="flex flex-wrap gap-3">
-        <Link href="/parametres">
-          <Bouton variante="primaire">⚙️ Modifier mes informations</Bouton>
-        </Link>
-        <Link href="/autorisations">
-          <Bouton variante="secondaire">🔑 Autorisations</Bouton>
-        </Link>
-        <Link href="/citoyen/dashboard">
-          <Bouton variante="ghost">← Retour au tableau de bord</Bouton>
-        </Link>
-      </div>
+      {estCitoyen ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          <Carte titre="Vérifier mon identité" description="Choisis l'élément à vérifier.">
+            <div className="space-y-2">
+              <LienProfil href="/inspection" libelle="Document d'identité" Icone={IconeIdentite} />
+              <LienProfil
+                href="/identite/verification-visuelle"
+                libelle="Reconnaissance faciale"
+                Icone={IconeVisage}
+              />
+              <LienProfil
+                href="/citoyen/qr-code"
+                libelle="Code de sécurité temporaire"
+                Icone={IconeCadenas}
+              />
+            </div>
+          </Carte>
+
+          <div id="mon-activite" className="scroll-mt-24">
+            <Carte titre="Mon activité" description="Gère ton activité de vente et tes colis.">
+              <p className="mb-3 text-ardoise">
+                Le mode commerçant permet d'enregistrer et de suivre les colis de ton activité.
+              </p>
+              <LienProfil
+                href={
+                  utilisateur.mode_commercant_actif
+                    ? "/commercant/dashboard"
+                    : "/commercant/activation"
+                }
+                libelle={
+                  utilisateur.mode_commercant_actif
+                    ? "Ouvrir mon espace commerçant"
+                    : "Activer le mode commerçant"
+                }
+                Icone={IconeColis}
+              />
+            </Carte>
+          </div>
+
+          <Carte titre="Aide et paramètres">
+            <div className="space-y-2">
+              <LienProfil href="/aide" libelle="Aide et Support" Icone={IconeAlerte} />
+              <LienProfil href="/parametres" libelle="Paramètres" Icone={IconeParametres} />
+            </div>
+          </Carte>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-3">
+          <Link href="/parametres">
+            <Bouton variante="primaire">⚙️ Modifier mes informations</Bouton>
+          </Link>
+          <Link href="/autorisations">
+            <Bouton variante="secondaire">🔑 Autorisations</Bouton>
+          </Link>
+          <Link href="/citoyen/dashboard">
+            <Bouton variante="ghost">← Retour au tableau de bord</Bouton>
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
@@ -261,5 +318,25 @@ function BlocUsage({ titre, detail, statut }: {
       </div>
       <p className="text-xs text-ardoise-clair">{detail}</p>
     </div>
+  );
+}
+
+function LienProfil({
+  href,
+  libelle,
+  Icone,
+}: {
+  href: string;
+  libelle: string;
+  Icone: typeof IconeIdentite;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex min-h-14 items-center gap-3 rounded-xl border border-ardoise-clair/15 bg-white px-4 py-3 text-lg font-semibold text-lagune transition hover:border-lagune/40 hover:bg-lagune/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lagune/50"
+    >
+      <Icone className="h-5 w-5 shrink-0" aria-hidden="true" />
+      <span>{libelle}</span>
+    </Link>
   );
 }

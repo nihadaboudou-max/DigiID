@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+import re
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -138,16 +139,61 @@ async def obtenir_recommandations(
 async def lister_notifications(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
+    response: Response,
     seulement_non_lues: bool = False,
+    page: int = Query(1, ge=1),
+    par_page: int = Query(50, ge=1, le=100),
+    categorie: str | None = None,
+    recherche: str | None = Query(None, max_length=120),
+    reveler_code_notification_id: UUID | None = None,
 ):
     notifs = await service_notifications.lister_notifications(
-        session, utilisateur, seulement_non_lues=seulement_non_lues,
+        session,
+        utilisateur,
+        seulement_non_lues=seulement_non_lues,
+        page=page,
+        par_page=par_page,
+        categorie=categorie,
+        recherche=recherche,
     )
-    non_lues = await service_notifications.compter_non_lues(session, utilisateur)
+    total = await service_notifications.compter_notifications(
+        session,
+        utilisateur,
+        seulement_non_lues=seulement_non_lues,
+        categorie=categorie,
+        recherche=recherche,
+    )
+    non_lues = await service_notifications.compter_non_lues(
+        session, utilisateur, categorie=categorie
+    )
+    details = []
+    for notification in notifs:
+        detail = NotificationDetail.model_validate(notification)
+        if notification.categorie == "logistique_colis":
+            detail.message = re.sub(
+                r"(?<!\d)\d{6}(?!\d)", "••••••", detail.message
+            )
+        details.append(detail)
+
+    code_remise = None
+    code_remise_expire_le = None
+    if reveler_code_notification_id is not None:
+        code_remise, code_remise_expire_le = (
+            await service_notifications.obtenir_code_remise_notification(
+                session, utilisateur, reveler_code_notification_id
+            )
+        )
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+
     return ListeNotifications(
-        notifications=[NotificationDetail.model_validate(n) for n in notifs],
-        total=len(notifs),
+        notifications=details,
+        total=total,
         non_lues=non_lues,
+        page=page,
+        par_page=par_page,
+        code_remise=code_remise,
+        code_remise_expire_le=code_remise_expire_le,
     )
 
 

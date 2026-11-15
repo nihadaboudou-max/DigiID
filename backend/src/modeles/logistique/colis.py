@@ -154,6 +154,7 @@ class Colis(Base, MelangeTracabilite):
         DateTime(timezone=True), nullable=True
     )
     code_remise_hash: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    code_remise_chiffre: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     code_remise_expire_le: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

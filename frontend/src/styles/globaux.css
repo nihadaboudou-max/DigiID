@@ -67,6 +67,20 @@
 }
 
 @layer components {
+  .citoyen-contenu p,
+  .citoyen-contenu li,
+  .citoyen-contenu label,
+  .citoyen-contenu input,
+  .citoyen-contenu select,
+  .citoyen-contenu textarea {
+    font-size: 18px;
+  }
+
+  .citoyen-contenu button {
+    min-height: 56px;
+    font-size: 18px;
+  }
+
   /* === Boutons === */
   .bouton-primaire {
     @apply bg-lagune text-white px-5 py-3 rounded-xl font-semibold text-sm

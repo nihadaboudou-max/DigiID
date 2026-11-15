@@ -17,6 +17,7 @@ import type {
   GuichetDisponible,
   ManifesteVoyage,
   MesVoyages,
+  MesVoyagesPage,
   ProfilLogistique,
   VoyageChauffeur,
 } from "@/types/identite";
@@ -30,6 +31,7 @@ export type {
   ManifesteVoyage,
   LigneManifeste,
   MesVoyages,
+  MesVoyagesPage,
   ProfilLogistique,
   TypeProfilLogistique,
   StatutVerificationProfil,
@@ -122,6 +124,14 @@ export const identiteAPI = {
 
   // ─── Citoyen : mes envois et les voyages de mes proches ────────────
   mesVoyages: () => clientAPI.get<MesVoyages>(`${BASE}/mes-voyages`, opts),
+  mesVoyagesPagines: (filtres: { page?: number; parPage?: number; recherche?: string }) => {
+    const qs = new URLSearchParams({
+      page: String(filtres.page ?? 1),
+      par_page: String(filtres.parPage ?? 5),
+    });
+    if (filtres.recherche?.trim()) qs.set("recherche", filtres.recherche.trim());
+    return clientAPI.get<MesVoyagesPage>(`${BASE}/mes-voyages?${qs.toString()}`, opts);
+  },
 };
 
 /**

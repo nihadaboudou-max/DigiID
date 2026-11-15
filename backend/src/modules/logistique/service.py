@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
+import re
 import secrets
 from urllib.parse import parse_qs, urlparse
 from uuid import UUID
@@ -1331,6 +1332,9 @@ async def preparer_code_remise(
         seconds=parametres.duree_validite_code_remise_secondes
     )
     colis.code_remise_hash = hashlib.sha256(code.encode("ascii")).hexdigest()
+    from src.noyau.chiffrement import chiffrer_donnee
+
+    colis.code_remise_chiffre = chiffrer_donnee(code)
     colis.code_remise_expire_le = expire_le
     colis.code_remise_tentatives = 0
     session.add(
@@ -1363,7 +1367,7 @@ async def preparer_code_remise(
         session,
         colis,
         "Code de remise du colis",
-        message,
+        "Un code de remise a été envoyé. Touchez « Afficher » dans Messages pour le consulter.",
         code_clair=ticket.code_clair,
         destinataire_uniquement=True,
     )
@@ -1412,6 +1416,7 @@ async def confirmer_remise_colis(
 
     colis.code_remise_confirme_le = maintenant
     colis.code_remise_hash = None
+    colis.code_remise_chiffre = None
     colis.code_remise_expire_le = None
     colis.statut = "livre"
     colis.livre_le = maintenant
@@ -2592,6 +2597,15 @@ def _ajouter_notification(
         templates_whatsapp.get(type_evenement) if type_cible == "colis" else None
     )
     valeurs_template = parametres_template if nom_template else None
+    message_journalise = (
+        "Code de remise envoyé au destinataire."
+        if type_evenement == "code_remise"
+        else re.sub(
+            r"(?<!\d)\d{6}(?!\d)|\b[A-Z0-9]{2,}(?:-[A-Z0-9]{2,})+\b",
+            "[code masqué]",
+            message,
+        )
+    )
     try:
         telephone = normaliser_numero_tiers(telephone)
     except ValueError:
@@ -2606,8 +2620,8 @@ def _ajouter_notification(
             cible_id=cible_id,
             type_evenement=type_evenement,
             destinataire_role=destinataire_role,
-            telephone=telephone,
-            message=message,
+            telephone=telephone_masque,
+            message=message_journalise,
             envoye=False,
         )
         session.add(notification)
@@ -2624,8 +2638,8 @@ def _ajouter_notification(
         cible_id=cible_id,
         type_evenement=type_evenement,
         destinataire_role=destinataire_role,
-        telephone=telephone,
-        message=message,
+        telephone=masquer_telephone(telephone),
+        message=message_journalise,
         envoye=envoye_sms,
     )
     session.add(notification)
@@ -2654,8 +2668,8 @@ def _ajouter_notification(
                 cible_id=cible_id,
                 type_evenement=type_evenement,
                 destinataire_role=destinataire_role,
-                telephone=telephone,
-                message=message,
+                telephone=masquer_telephone(telephone),
+                message=message_journalise,
                 envoye=resultat_whatsapp.accepte,
                 whatsapp_message_id=resultat_whatsapp.message_id,
                 whatsapp_statut=(
@@ -3916,8 +3930,20 @@ def _notifications_publiques(notifications: list[NotificationLogistique]):
         schemas.NotificationSuiviPublic(
             type_evenement=n.type_evenement,
             destinataire_role=n.destinataire_role,
-            telephone_masque=masquer_telephone(n.telephone),
-            message=n.message,
+            telephone_masque=(
+                n.telephone
+                if n.telephone and "*" in n.telephone
+                else masquer_telephone(n.telephone)
+            ),
+            message=(
+                "Code de remise envoyé au destinataire."
+                if n.type_evenement == "code_remise"
+                else re.sub(
+                    r"(?<!\d)\d{6}(?!\d)|\b[A-Z0-9]{2,}(?:-[A-Z0-9]{2,})+\b",
+                    "[code masqué]",
+                    n.message,
+                )
+            ),
             envoye=n.envoye,
             cree_le=n.cree_le,
         )

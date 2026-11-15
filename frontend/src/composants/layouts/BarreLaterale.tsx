@@ -76,15 +76,34 @@ const LIENS_SUPER_ADMIN: Lien[] = [
   { href: "/super-admin/mon-profil", libelle: "Mon profil", Icone: IconeUtilisateur },
 ];
 
+const LIENS_CITOYEN: Lien[] = [
+  { href: "/citoyen/dashboard", libelle: "Accueil", Icone: IconeAccueil },
+  { href: "/citoyen/envois", libelle: "Mes envois", Icone: IconeColis },
+  { href: "/horaires", libelle: "Horaires", Icone: IconePortefeuille },
+  { href: "/identite/carte", libelle: "Ma carte", Icone: IconeIdentite },
+  { href: "/profil", libelle: "Profil", Icone: IconeUtilisateur },
+];
+
+function estRoleCitoyen(role: string): boolean {
+  return role === "citoyen";
+}
+
 // ---- Composant LienNav ----
 
-function LienNav({ href, libelle, Icone, actif }: Lien & { actif: boolean }) {
+function LienNav({
+  href,
+  libelle,
+  Icone,
+  actif,
+  hauteurConfort = false,
+}: Lien & { actif: boolean; hauteurConfort?: boolean }) {
   return (
     <Link
       href={href}
       aria-current={actif ? "page" : undefined}
       className={clsx(
-        "flex min-h-11 items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lagune/50 focus-visible:ring-offset-2",
+        "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lagune/50 focus-visible:ring-offset-2",
+        hauteurConfort ? "min-h-14 text-lg" : "min-h-11 text-sm",
         actif
           ? "bg-gradient-to-r from-sable to-ocre/10 text-lagune font-semibold shadow-sm"
           : "text-ardoise hover:bg-sable/70 hover:text-lagune",
@@ -199,6 +218,58 @@ export function BarreLaterale() {
   const { utilisateur } = useAuthentification();
 
   if (!utilisateur) return null;
+
+  if (estRoleCitoyen(utilisateur.role)) {
+    const initiales = utilisateur.prenom
+      ? (utilisateur.prenom.charAt(0) + (utilisateur.nom?.charAt(0) || "")).toUpperCase()
+      : utilisateur.email?.charAt(0).toUpperCase() || "?";
+    return (
+      <aside className="flex min-h-0 flex-col w-64 h-[100dvh] sticky top-0 bg-white border-r border-ardoise-clair/10 shadow-sm">
+        <div className="px-4 pt-5 pb-4 border-b border-ardoise-clair/10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-sm flex-shrink-0 bg-lagune">
+              {initiales}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-wider font-bold text-lagune">
+                Espace citoyen
+              </p>
+              <p className="text-sm text-ardoise truncate mt-0.5">
+                {utilisateur.prenom
+                  ? `${utilisateur.prenom} ${utilisateur.nom || ""}`
+                  : utilisateur.email}
+              </p>
+            </div>
+          </div>
+        </div>
+        <nav
+          aria-label="Navigation principale"
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2.5 py-3 space-y-1"
+        >
+          {LIENS_CITOYEN.map((lien) => (
+            <LienNav
+              key={lien.href}
+              {...lien}
+              actif={
+                pathname === lien.href ||
+                (lien.href === "/profil" &&
+                  [
+                    "/inspection",
+                    "/documents-identite",
+                    "/identite/verification-visuelle",
+                    "/citoyen/qr-code",
+                    "/aide",
+                    "/parametres",
+                    "/commercant",
+                  ].some((route) => pathname.startsWith(route)))
+              }
+              hauteurConfort
+            />
+          ))}
+        </nav>
+      </aside>
+    );
+  }
 
   const estSuperAdmin = utilisateur.role === "super_administrateur" || utilisateur.role === "super_admin";
   const estAdmin = utilisateur.role === "administrateur" || utilisateur.role === "admin_domaine";
@@ -607,7 +678,7 @@ export function BarreLaterale() {
         )}
 
         {/* ───── Menu citoyen hiérarchique avec groupes pliables ───── */}
-        {utilisateur.role === "citoyen" && (
+        {estRoleCitoyen(utilisateur.role) && (
           <>
             <div className="border-t border-ardoise-clair/10 my-1.5" />
 
@@ -710,7 +781,7 @@ export function BarreLaterale() {
             >
               <div className="space-y-0.5">
                 
-                {cbLienSousMenu("/parametre", "Paramètre")}
+                {cbLienSousMenu("/parametres", "Paramètres")}
                 {cbLienSousMenu("/identite/email", "Vérification de l'email")}
                 {/* Menu masqué (simplification) — dé-commenter pour le réafficher :
                 {cbLienSousMenu("/identite/verification-cni", "Vérification CNIL")}

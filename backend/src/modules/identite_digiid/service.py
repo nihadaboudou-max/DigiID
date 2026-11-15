@@ -11,12 +11,12 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import String, and_, cast, func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import (
     Gare, Ligne, ArretLigne, Vehicule, Voyage, Utilisateur,
-    Colis, SuiviFamilial, ProfilLogistique, ActeurLogistique,
+    Ticket, Colis, SuiviFamilial, ProfilLogistique, ActeurLogistique,
 )
 from src.modules.identite_digiid import schemas
 from src.modules.qr_dynamique.service import (
@@ -606,6 +606,174 @@ async def _codes_suivi(session: AsyncSession, suivi: SuiviFamilial) -> str:
     return str(suivi.id)[:8].upper()
 
 
+async def _voyage_citoyen_colis(
+    session: AsyncSession, colis: Colis
+) -> schemas.VoyageCitoyen:
+    code = await _codes_colis(session, colis)
+    date_depart, immatriculation, chauffeur = await _details_voyage(
+        session, colis.voyage_id
+    )
+    return schemas.VoyageCitoyen(
+        id=colis.id,
+        type="colis",
+        code=code,
+        libelle=colis.destinataire_nom,
+        statut=colis.statut,
+        gare_depart_nom=await _nom_gare(session, colis.gare_depart_id),
+        gare_arrivee_nom=await _nom_gare(session, colis.gare_arrivee_id),
+        date_depart=date_depart,
+        vehicule_immatriculation=immatriculation,
+        chauffeur_nom=chauffeur,
+        nombre_bagages=colis.nombre_bagages or 1,
+        lien=f"/suivi/{code}",
+    )
+
+
+async def _voyage_citoyen_passager(
+    session: AsyncSession, suivi: SuiviFamilial
+) -> schemas.VoyageCitoyen:
+    code = await _codes_suivi(session, suivi)
+    date_depart, immatriculation, chauffeur = await _details_voyage(
+        session, suivi.voyage_id
+    )
+    return schemas.VoyageCitoyen(
+        id=suivi.id,
+        type="passager",
+        code=code,
+        libelle=suivi.enfant_nom,
+        statut=suivi.statut,
+        gare_depart_nom=await _nom_gare(session, suivi.gare_depart_id),
+        gare_arrivee_nom=await _nom_gare(session, suivi.gare_arrivee_id),
+        date_depart=date_depart,
+        vehicule_immatriculation=immatriculation,
+        chauffeur_nom=chauffeur,
+        nombre_bagages=suivi.nombre_bagages or 1,
+        lien=f"/suivi/{code}",
+    )
+
+
+async def mes_voyages_paginees(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    *,
+    page: int,
+    par_page: int,
+    recherche: str | None = None,
+) -> schemas.MesVoyagesPagineesResponse:
+    """Recherche et pagine côté serveur les colis et proches liés au citoyen."""
+    mon_tel = telephone(utilisateur)
+    conditions_colis = [Colis.expediteur_id == utilisateur.id]
+    if mon_tel:
+        conditions_colis.append(Colis.destinataire_tel == mon_tel)
+
+    conditions_suivi = [SuiviFamilial.parent_id == utilisateur.id]
+    if mon_tel:
+        conditions_suivi.extend(
+            [
+                SuiviFamilial.telephone_parent == mon_tel,
+                SuiviFamilial.acheteur_tel == mon_tel,
+                SuiviFamilial.proche_telephone == mon_tel,
+            ]
+        )
+
+    filtre_colis = or_(*conditions_colis)
+    filtre_suivi = or_(*conditions_suivi)
+    terme = (recherche or "").strip()
+    if terme:
+        motif = f"%{terme}%"
+        filtre_colis = and_(
+            filtre_colis,
+            or_(
+                Ticket.code_clair.ilike(motif),
+                cast(Colis.id, String).ilike(motif),
+            ),
+        )
+        filtre_suivi = and_(
+            filtre_suivi,
+            or_(
+                Ticket.code_clair.ilike(motif),
+                cast(SuiviFamilial.id, String).ilike(motif),
+            ),
+        )
+
+    requete_colis = (
+        select(
+            literal("colis").label("type"),
+            Colis.id.label("id"),
+            Colis.cree_le.label("cree_le"),
+        )
+        .select_from(Colis)
+        .outerjoin(Ticket, Ticket.id == Colis.ticket_id)
+        .where(filtre_colis)
+    )
+    requete_suivi = (
+        select(
+            literal("passager").label("type"),
+            SuiviFamilial.id.label("id"),
+            SuiviFamilial.cree_le.label("cree_le"),
+        )
+        .select_from(SuiviFamilial)
+        .outerjoin(Ticket, Ticket.id == SuiviFamilial.ticket_id)
+        .where(filtre_suivi)
+    )
+    total_colis = await session.scalar(
+        select(func.count(Colis.id))
+        .select_from(Colis)
+        .outerjoin(Ticket, Ticket.id == Colis.ticket_id)
+        .where(filtre_colis)
+    )
+    total_passagers = await session.scalar(
+        select(func.count(SuiviFamilial.id))
+        .select_from(SuiviFamilial)
+        .outerjoin(Ticket, Ticket.id == SuiviFamilial.ticket_id)
+        .where(filtre_suivi)
+    )
+    union = union_all(requete_colis, requete_suivi).subquery()
+    resultat = await session.execute(
+        select(union.c.type, union.c.id)
+        .order_by(union.c.cree_le.desc(), cast(union.c.id, String).desc())
+        .offset((page - 1) * par_page)
+        .limit(par_page)
+    )
+    lignes = list(resultat.all())
+    ids_colis = [ligne.id for ligne in lignes if ligne.type == "colis"]
+    ids_passagers = [ligne.id for ligne in lignes if ligne.type == "passager"]
+
+    colis_par_id: dict[UUID, Colis] = {}
+    if ids_colis:
+        resultat_colis = await session.execute(
+            select(Colis).where(Colis.id.in_(ids_colis))
+        )
+        colis_par_id = {colis.id: colis for colis in resultat_colis.scalars().all()}
+
+    passagers_par_id: dict[UUID, SuiviFamilial] = {}
+    if ids_passagers:
+        resultat_passagers = await session.execute(
+            select(SuiviFamilial).where(SuiviFamilial.id.in_(ids_passagers))
+        )
+        passagers_par_id = {
+            suivi.id: suivi for suivi in resultat_passagers.scalars().all()
+        }
+
+    elements: list[schemas.VoyageCitoyen] = []
+    for ligne in lignes:
+        if ligne.type == "colis":
+            colis = colis_par_id.get(ligne.id)
+            if colis is not None:
+                elements.append(await _voyage_citoyen_colis(session, colis))
+        else:
+            suivi = passagers_par_id.get(ligne.id)
+            if suivi is not None:
+                elements.append(await _voyage_citoyen_passager(session, suivi))
+
+    return schemas.MesVoyagesPagineesResponse(
+        elements=elements,
+        total=(total_colis or 0) + (total_passagers or 0),
+        page=page,
+        par_page=par_page,
+    )
+
+
 async def _colis_du_voyage(session: AsyncSession, voyage_id: UUID) -> list[Colis]:
     resultat = await session.execute(
         select(Colis).where(Colis.voyage_id == voyage_id).order_by(Colis.cree_le.asc())
@@ -849,50 +1017,11 @@ async def mes_voyages(
     )
     suivis = list(resultat_suivi.scalars().all())
 
-    voyages_colis: list[schemas.VoyageCitoyen] = []
-    for colis in colis_liste:
-        code = await _codes_colis(session, colis)
-        date_depart, immatriculation, chauffeur = await _details_voyage(
-            session, colis.voyage_id
-        )
-        voyages_colis.append(
-            schemas.VoyageCitoyen(
-                id=colis.id,
-                type="colis",
-                code=code,
-                libelle=colis.destinataire_nom,
-                statut=colis.statut,
-                gare_depart_nom=await _nom_gare(session, colis.gare_depart_id),
-                gare_arrivee_nom=await _nom_gare(session, colis.gare_arrivee_id),
-                date_depart=date_depart,
-                vehicule_immatriculation=immatriculation,
-                chauffeur_nom=chauffeur,
-                nombre_bagages=colis.nombre_bagages or 1,
-                lien=f"/suivi/{code}",
-            )
-        )
-
-    voyages_passagers: list[schemas.VoyageCitoyen] = []
-    for suivi in suivis:
-        code = await _codes_suivi(session, suivi)
-        date_depart, immatriculation, chauffeur = await _details_voyage(
-            session, suivi.voyage_id
-        )
-        voyages_passagers.append(
-            schemas.VoyageCitoyen(
-                id=suivi.id,
-                type="passager",
-                code=code,
-                libelle=suivi.enfant_nom,
-                statut=suivi.statut,
-                gare_depart_nom=await _nom_gare(session, suivi.gare_depart_id),
-                gare_arrivee_nom=await _nom_gare(session, suivi.gare_arrivee_id),
-                date_depart=date_depart,
-                vehicule_immatriculation=immatriculation,
-                chauffeur_nom=chauffeur,
-                nombre_bagages=suivi.nombre_bagages or 1,
-                lien=f"/suivi/{code}",
-            )
-        )
+    voyages_colis = [
+        await _voyage_citoyen_colis(session, colis) for colis in colis_liste
+    ]
+    voyages_passagers = [
+        await _voyage_citoyen_passager(session, suivi) for suivi in suivis
+    ]
 
     return schemas.MesVoyagesResponse(colis=voyages_colis, passagers=voyages_passagers)

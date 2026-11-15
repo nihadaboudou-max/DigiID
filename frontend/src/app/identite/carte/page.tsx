@@ -24,6 +24,7 @@ import { TOUS_LES_ROLES } from "@/composants/logistique/roles";
 import { ErreurAPI } from "@/services/client_api";
 import { imprimer } from "@/services/impression";
 import { identiteAPI, type CarteDigiID, type VoyageCitoyen } from "@/services/identite_api";
+import { useAuthentification } from "@/contextes/authentification";
 
 export default function PageMaCarteDigiID() {
   return (
@@ -34,6 +35,7 @@ export default function PageMaCarteDigiID() {
 }
 
 function Contenu() {
+  const { utilisateur } = useAuthentification();
   const [carte, setCarte] = useState<CarteDigiID | null>(null);
   const [colis, setColis] = useState<VoyageCitoyen[]>([]);
   const [passagers, setPassagers] = useState<VoyageCitoyen[]>([]);
@@ -53,6 +55,7 @@ function Contenu() {
         if (annule) return;
         setCarte(carteChargee);
 
+        if (utilisateur?.role === "citoyen") return;
         const voyages = await identiteAPI.mesVoyages().catch(() => null);
         if (annule || !voyages) return;
         setColis(voyages.colis);
@@ -72,7 +75,7 @@ function Contenu() {
     return () => {
       annule = true;
     };
-  }, []);
+  }, [utilisateur?.role]);
 
   async function copierLien() {
     if (!carte) return;
@@ -200,31 +203,32 @@ function Contenu() {
         </Carte>
       </div>
 
-      {/* ─── Mes voyages ──────────────────────────────────────────── */}
-      <Carte
-        titre="Mes voyages"
-        description="Vos envois et les passagers dont vous êtes responsable — chaque ligne mène au suivi."
-      >
-        {colis.length === 0 && passagers.length === 0 ? (
-          <p className="text-sm italic text-ardoise-clair">
-            Aucun voyage pour le moment. Dès qu'un colis vous est adressé ou que vous
-            enregistrez un passager, il apparaîtra ici.
-          </p>
-        ) : (
-          <div className="space-y-6">
-            <TableauVoyages
-              titre="Mes envois (colis)"
-              lignes={colis}
-              messageVide="Aucun colis dont vous êtes expéditeur ou destinataire."
-            />
-            <TableauVoyages
-              titre="Mes passagers"
-              lignes={passagers}
-              messageVide="Aucun passager dont vous êtes responsable."
-            />
-          </div>
-        )}
-      </Carte>
+      {utilisateur?.role !== "citoyen" && (
+        <Carte
+          titre="Mes voyages"
+          description="Vos envois et les passagers dont vous êtes responsable — chaque ligne mène au suivi."
+        >
+          {colis.length === 0 && passagers.length === 0 ? (
+            <p className="text-sm italic text-ardoise-clair">
+              Aucun voyage pour le moment. Dès qu'un colis vous est adressé ou que vous
+              enregistrez un passager, il apparaîtra ici.
+            </p>
+          ) : (
+            <div className="space-y-6">
+              <TableauVoyages
+                titre="Mes envois (colis)"
+                lignes={colis}
+                messageVide="Aucun colis dont vous êtes expéditeur ou destinataire."
+              />
+              <TableauVoyages
+                titre="Mes passagers"
+                lignes={passagers}
+                messageVide="Aucun passager dont vous êtes responsable."
+              />
+            </div>
+          )}
+        </Carte>
+      )}
     </div>
   );
 }

@@ -216,6 +216,20 @@ export const IconeScan = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const IconeRecherche = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...proprietesDefaut} {...p}>
+    <circle cx="11" cy="11" r="7" />
+    <line x1="16" y1="16" x2="21" y2="21" />
+  </svg>
+);
+
+export const IconeVue = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...proprietesDefaut} {...p}>
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
 export const IconeFlecheBas = (p: SVGProps<SVGSVGElement>) => (
   <svg {...proprietesDefaut} {...p}>
     <polyline points="6 9 12 15 18 9" />

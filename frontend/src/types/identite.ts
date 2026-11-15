@@ -217,3 +217,10 @@ export interface MesVoyages {
   colis: VoyageCitoyen[];
   passagers: VoyageCitoyen[];
 }
+
+export interface MesVoyagesPage {
+  elements: VoyageCitoyen[];
+  total: number;
+  page: number;
+  par_page: number;
+}

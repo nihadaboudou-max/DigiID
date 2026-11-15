@@ -91,13 +91,38 @@ export interface ListeNotifications {
   notifications: NotificationDetail[];
   total: number;
   non_lues: number;
+  page: number;
+  par_page: number;
+  code_remise: string | null;
+  code_remise_expire_le: string | null;
 }
 
-export const listerMesNotifications = (seulementNonLues = false) =>
-  clientAPI.get<ListeNotifications>(
-    `${PREFIXE}/notifications?seulement_non_lues=${seulementNonLues}`,
-    { authentifie: true },
-  );
+export interface FiltresNotifications {
+  page?: number;
+  parPage?: number;
+  categorie?: string;
+  recherche?: string;
+  revelerCodeNotificationId?: string;
+}
+
+export const listerMesNotifications = (
+  seulementNonLues = false,
+  filtres?: FiltresNotifications,
+) => {
+  const qs = new URLSearchParams({
+    seulement_non_lues: String(seulementNonLues),
+    page: String(filtres?.page ?? 1),
+    par_page: String(filtres?.parPage ?? 50),
+  });
+  if (filtres?.categorie) qs.set("categorie", filtres.categorie);
+  if (filtres?.recherche?.trim()) qs.set("recherche", filtres.recherche.trim());
+  if (filtres?.revelerCodeNotificationId) {
+    qs.set("reveler_code_notification_id", filtres.revelerCodeNotificationId);
+  }
+  return clientAPI.get<ListeNotifications>(`${PREFIXE}/notifications?${qs.toString()}`, {
+    authentifie: true,
+  });
+};
 
 export const marquerNotificationLue = (id: string) =>
   clientAPI.patch<void>(`${PREFIXE}/notifications/${id}/lue`, undefined, { authentifie: true });

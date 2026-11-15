@@ -90,6 +90,10 @@ class ListeNotifications(BaseModel):
     notifications: list[NotificationDetail]
     total: int
     non_lues: int
+    page: int = 1
+    par_page: int = 50
+    code_remise: Optional[str] = None
+    code_remise_expire_le: Optional[datetime] = None
 
 
 # ============================================================================

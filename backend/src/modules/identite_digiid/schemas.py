@@ -218,3 +218,11 @@ class MesVoyagesResponse(BaseModel):
     """Vue « mes voyages » du citoyen : ses envois et les passagers qu'il suit."""
     colis: list[VoyageCitoyen] = []
     passagers: list[VoyageCitoyen] = []
+
+
+class MesVoyagesPagineesResponse(BaseModel):
+    """Page globale des colis et passagers liés au citoyen."""
+    elements: list[VoyageCitoyen]
+    total: int
+    page: int
+    par_page: int

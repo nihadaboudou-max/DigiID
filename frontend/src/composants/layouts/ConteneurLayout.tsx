@@ -10,6 +10,7 @@ import { BarreLaterale } from "@/composants/layouts/BarreLaterale";
 // Dé-commenter cet import (et le bloc correspondant plus bas) pour le réafficher.
 // import { BoutonMenuMobile } from "@/composants/layouts/MenuMobile";
 import { EnTete } from "@/composants/layouts/EnTete";
+import { BarreNavigationCitoyen } from "@/composants/layouts/BarreNavigationCitoyen";
 import { IconeFlecheRetour } from "@/composants/commun/Icones";
 import { cheminTableauDeBord } from "@/types/api";
 
@@ -33,6 +34,7 @@ export function ConteneurLayout({ children }: { children: React.ReactNode }) {
     (p) => pathname === p || pathname.startsWith(p)
   );
   const estAccueil = pathname === "/";
+  const estCitoyen = utilisateur?.role === "citoyen";
   const estEspaceLogistique =
     pathname.startsWith("/chauffeur") ||
     pathname.startsWith("/receveur") ||
@@ -53,7 +55,10 @@ export function ConteneurLayout({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen bg-sable-clair flex flex-col">
         <EnTete />
-        <div className="flex-1 min-w-0 overflow-x-clip">{children}</div>
+        <div className={`flex-1 min-w-0 overflow-x-clip${estCitoyen && !estPagePublique ? " pb-24" : ""}`}>
+          {children}
+        </div>
+        {estCitoyen && !estPagePublique && <BarreNavigationCitoyen />}
       </div>
     );
   }
@@ -71,12 +76,12 @@ export function ConteneurLayout({ children }: { children: React.ReactNode }) {
         <EnTete />
 
         {/* Contenu : padding réduit sur mobile pour maximiser la largeur utile */}
-        <main className="flex-1 px-3 py-4 sm:p-4 md:p-6 lg:p-8 pb-24 md:pb-8">
+        <main className={`flex-1 px-3 py-4 sm:p-4 md:p-6 lg:p-8 pb-24 md:pb-8${estCitoyen ? " citoyen-contenu" : ""}`}>
           <div className="max-w-7xl mx-auto w-full min-w-0">
             <button
               type="button"
               onClick={retourner}
-              className="mb-4 inline-flex min-h-10 items-center gap-2 rounded-xl border border-ardoise-clair/20 bg-white px-3.5 py-2 text-sm font-semibold text-ardoise transition hover:border-lagune/40 hover:bg-sable hover:text-lagune focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lagune/40"
+              className={`mb-4 inline-flex items-center gap-2 rounded-xl border border-ardoise-clair/20 bg-white px-3.5 py-2 font-semibold text-ardoise transition hover:border-lagune/40 hover:bg-sable hover:text-lagune focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lagune/40${estCitoyen ? " min-h-14 text-lg" : " min-h-10 text-sm"}`}
               aria-label="Retourner à la page précédente"
             >
               <IconeFlecheRetour className="h-4 w-4" />
@@ -86,6 +91,7 @@ export function ConteneurLayout({ children }: { children: React.ReactNode }) {
           </div>
         </main>
       </div>
+      {estCitoyen && <BarreNavigationCitoyen />}
     </div>
   );
 }
