@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from typing import Optional, List
 from uuid import UUID
 from fastapi import UploadFile
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
@@ -452,11 +452,32 @@ async def obtenir_synthese_verification(session: AsyncSession, utilisateur: Util
     champs_verifies = sum(1 for v in scores.values() if v) if isinstance(scores, dict) else 0
     return SyntheseVerification(id_recto=dernier_recto.id if dernier_recto else None, id_verso=dernier_verso.id if dernier_verso else None, statut=StatutVerification(doc_cible.statut), message=f"Synthèse basée sur {doc_cible.type_document}", champs_verifies=champs_verifies)
 
-async def obtenir_historique(session: AsyncSession, utilisateur: Utilisateur, limite: int = 20) -> ListeVerifications:
-    resultats = await session.execute(select(InspectionDocument).where(InspectionDocument.utilisateur_id == utilisateur.id, InspectionDocument.est_supprime == False).order_by(desc(InspectionDocument.cree_le)).limit(limite))
+async def obtenir_historique(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    limite: int = 20,
+    decalage: int = 0,
+) -> ListeVerifications:
+    filtres = (
+        InspectionDocument.utilisateur_id == utilisateur.id,
+        InspectionDocument.est_supprime == False,
+    )
+    total = await session.scalar(
+        select(func.count(InspectionDocument.id)).where(*filtres)
+    )
+    resultats = await session.execute(
+        select(InspectionDocument)
+        .where(*filtres)
+        .order_by(
+            desc(InspectionDocument.cree_le),
+            desc(InspectionDocument.id),
+        )
+        .limit(limite)
+        .offset(decalage)
+    )
     verifs = resultats.scalars().all()
     historique = [DetailVerification(id=v.id, utilisateur_id=v.utilisateur_id, type_document=TypeDocument(v.type_document), statut=StatutVerification(v.statut), face=FaceDocument(v.face), nom_fichier=v.nom_fichier, numero_document=v.numero_document, nom_famille=v.nom_famille, prenoms=v.prenoms, date_naissance=v.date_naissance, taux_confiance_ocr=v.taux_confiance_ocr, est_valide=v.est_valide, cree_le=v.cree_le, est_supprime=v.est_supprime) for v in verifs]
-    return ListeVerifications(historique=historique, total=len(historique), limite=limite)
+    return ListeVerifications(historique=historique, total=total or 0, limite=limite)
 
 async def supprimer_verification(session: AsyncSession, utilisateur: Utilisateur, verification_id: UUID) -> ReponseSuppression:
     res = await session.execute(select(InspectionDocument).where(InspectionDocument.id == verification_id, InspectionDocument.utilisateur_id == utilisateur.id))

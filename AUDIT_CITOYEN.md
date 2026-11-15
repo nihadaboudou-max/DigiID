@@ -23,7 +23,8 @@ conditionnels sont signalés à part.
 | Mon DigiID | [`/citoyen/qr-code`](./frontend/src/app/citoyen/qr-code/page.tsx) | Code de sécurité temporaire, renouvelé toutes les 30 secondes. Citoyen uniquement, accessible depuis Profil > Vérifier mon identité. | 4 : en-tête, alerte de sécurité, zone QR protégée, retour au profil. |
 | Profil | [`/profil`](./frontend/src/app/profil/page.tsx) | Coordonnées, vérifications et identifiant DigiID; accès aux vérifications d'identité, à l'activité commerçante, à l'aide et aux paramètres. Page partagée avec plusieurs rôles. | 8 pour le citoyen : en-tête, carte identité, carte téléphone, carte identifiant DigiID, alerte sécurité et 3 cartes de raccourcis. Une alerte supplémentaire peut s'afficher si les vérifications sont incohérentes. |
 | Horaires | [`/horaires`](./frontend/src/app/horaires/page.tsx) | Consultation publique des départs et filtre par destination/période. Les notifications de colis sont désormais dans Messages. | 5 : en-tête, recherche de suivi, filtres, résultats des départs, pied de page. |
-| Document d'identité | [`/documents-identite`](./frontend/src/app/documents-identite/page.tsx) | Consultation/gestion des documents CNI, permis et assurance. Page partagée avec plusieurs rôles, dont citoyen. | 3 : en-tête, onglets documentaires, contenu du document ou alerte d'absence. Le formulaire d'édition ajoute un bloc quand il est ouvert. |
+| Mon document d'identité | [`/inspection`](./frontend/src/app/inspection/page.tsx) | Envoi d'une photo, lecture des informations et historique des vérifications. Parcours d'auto-service accessible depuis la navigation citoyenne; accès et droits existants conservés. | 3 à 5 : en-tête, envoi/analyse, historique, résultat si disponible, pagination si plusieurs pages. |
+| Gestion des documents d'identité | [`/documents-identite`](./frontend/src/app/documents-identite/page.tsx) | Consultation/gestion des documents CNI, permis et assurance. Page partagée avec plusieurs rôles, dont citoyen. | 3 : en-tête, onglets documentaires, contenu du document ou alerte d'absence. Le formulaire d'édition ajoute un bloc quand il est ouvert. |
 | Reconnaissance faciale | [`/verification-visuelle`](./frontend/src/app/verification-visuelle/page.tsx); [`/identite/verification-visuelle`](./frontend/src/app/identite/verification-visuelle/page.tsx) redirige vers cette page | Envoi d'un selfie, état et historique de la vérification. Page partagée avec plusieurs rôles, dont citoyen. | 6 : en-tête, nouvelle vérification, statut, historique, retour, note de confidentialité. Une alerte d'erreur peut s'ajouter; le statut approuvé affiche une comparaison dans son bloc. |
 | Aide et Support | [`/aide`](./frontend/src/app/aide/page.tsx) | Aide adaptée au rôle connecté; contenu public pour les visiteurs. Le citoyen voit 4 actions et 8 questions. | 4 groupes : introduction/recherche, actions, FAQ, assistant. Les 8 questions sont des éléments repliables du groupe FAQ. |
 | Paramètres | [`/parametres`](./frontend/src/app/parametres/page.tsx) | Identité, mot de passe, 2FA, langue, activité, export et suppression. Page partagée avec plusieurs rôles, dont citoyen. | 8 : en-tête, identité, mot de passe, 2FA, langue, activité récente, export, zone sensible. |
@@ -33,16 +34,16 @@ conditionnels sont signalés à part.
 
 - La page « Ma carte DigiID » contient aussi « Mes voyages »; il n'existe pas
   aujourd'hui de route distincte dédiée aux envois du citoyen.
-- Le menu citoyen nomme « Document d'identité » mais pointe vers
-  [`/inspection`](./frontend/src/app/inspection/page.tsx), dont le titre est
-  « Test Inspection de Documents ». Le tableau de bord et le profil pointent,
-  eux, vers `/documents-identite`.
+- Le menu citoyen « Document d'identité » ouvre le parcours de lecture de
+  document à [`/inspection`](./frontend/src/app/inspection/page.tsx). La page
+  de gestion documentaire partagée reste distincte à `/documents-identite`.
 - Le menu latéral contient le lien `/parametre` (singulier), alors que la page
   existante est `/parametres` (pluriel).
 - « Ma carte DigiID » (QR permanent destiné au guichet) et « Mon DigiID » (QR
   dynamique d'identité) sont deux usages distincts.
 
-Les écarts ci-dessus décrivent l'état avant la réalisation de l'étape 1.
+Les constats de navigation initiaux décrivent l'état avant la réalisation de
+l'étape 1; les étapes réalisées sont consignées ci-dessous.
 
 ## Organisation retenue — navigation du citoyen
 
@@ -129,4 +130,31 @@ Frontend :
 - `frontend/src/types/identite.ts`
 
 Audit :
+- `AUDIT_CITOYEN.md`
+
+## Étape 2 — mon document d'identité (réalisée)
+
+- [x] Remplacement de l'interface d'essai par « Mon document d'identité » et
+  son texte d'aide; aucun libellé d'essai ne reste sur `/inspection`.
+- [x] Choix de photo, sélection du type avec détection automatique par défaut,
+  analyse et recommencement avec des boutons tactiles d'au moins 56 px.
+- [x] Résultat présentant nom, numéro, date de naissance et validité avec les
+  badges « Document lu », « À vérifier » et « Document non lisible ».
+- [x] Historique sous forme de cartes, détails repliables, état vide demandé et
+  pagination serveur de cinq éléments.
+- [x] Extension rétrocompatible de l'API d'historique avec un décalage optionnel;
+  la réponse historique et les droits existants sont conservés.
+- [x] Les branches d'accès des autres rôles ne sont pas modifiées. La page n'a
+  pas pu être vérifiée visuellement avec des comptes chauffeur, receveur et gérant.
+- Vérification : type-check et build frontend réussis; syntaxe Python valide.
+  Le test backend ciblé n'a pas pu être collecté, car `pytesseract` manque dans
+  l'environnement local malgré sa présence dans `backend/requirements.txt`.
+
+### Fichiers modifiés pour l'étape 2
+
+- `backend/src/modules/inspection_documents/routes.py`
+- `backend/src/modules/inspection_documents/service.py`
+- `backend/tests/test_inspection_pagination.py`
+- `frontend/src/app/inspection/page.tsx`
+- `frontend/src/services/inspectionApi.ts`
 - `AUDIT_CITOYEN.md`

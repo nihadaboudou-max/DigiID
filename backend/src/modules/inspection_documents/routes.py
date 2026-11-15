@@ -5,7 +5,16 @@ Endpoints universels pour tous les types de documents.
 """
 from typing import Annotated, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
@@ -131,12 +140,14 @@ async def historique_verifications(
     utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)] = None,
     session: Annotated[AsyncSession, Depends(obtenir_session)] = None,
     limite: int = 20,
+    decalage: int = Query(default=0, ge=0),
 ):
-    """Retourne l'historique des vérifications de documents de l'utilisateur."""
+    """Retourne une page de l'historique des vérifications de l'utilisateur."""
     return await service.obtenir_historique(
         session=session,
         utilisateur=utilisateur,
         limite=limite,
+        decalage=decalage,
     )
 
 

@@ -68,9 +68,12 @@ export async function uploadDocument(
 /**
  * Récupérer l'historique des documents scannés.
  */
-export async function obtenirHistorique(limite: number = 10): Promise<ListeVerifications> {
+export async function obtenirHistorique(
+  limite: number = 10,
+  decalage: number = 0
+): Promise<ListeVerifications> {
   return clientAPI.get<ListeVerifications>(
-    `${PREFIXE}/historique?limite=${limite}`,
+    `${PREFIXE}/historique?limite=${limite}&decalage=${decalage}`,
     { authentifie: true }
   );
 }
