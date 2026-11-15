@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,12 +37,13 @@ from src.noyau.telephone import hasher_telephone, normaliser_telephone
 from src.modules.authentification.totp import verifier_code_totp
 from src.modules.authentification.verification_code import (
     CANAL_EMAIL,
+    CANAL_WHATSAPP,
     renvoyer_code,
     verifier_code,
     verifier_code_connexion,
+    verifier_code_recuperation_mot_de_passe,
 )
 from src.modeles.token_reinitialisation import TokenReinitialisation
-from src.noyau.notification import envoyer_email
 from src.noyau.journal import journal_audit
 
 
@@ -360,7 +361,7 @@ async def authentifier_utilisateur(
     # 4. Vérification de l'email — première connexion d'un compte qui n'a pas
     #    encore confirmé son adresse : on envoie un code par email et on exige
     #    qu'il soit saisi avant d'émettre les jetons.
-    if not utilisateur.est_email_verifie:
+    if not (utilisateur.est_email_verifie or utilisateur.est_telephone_verifie):
         if code_email:
             try:
                 await verifier_code(
@@ -408,7 +409,6 @@ async def authentifier_utilisateur(
                 donnees_supplementaires={
                     "destination_masquee": resultat_envoi["destination_masquee"],
                     "duree_validite_minutes": resultat_envoi["duree_validite_minutes"],
-                    "code_dev": resultat_envoi.get("code"),
                 },
             )
 
@@ -716,182 +716,232 @@ def _masquer_email(email: str) -> str:
     return f"{nom_masque}@{domaine}"
 
 
-async def demander_reinitialisation_mot_de_passe(
+async def demander_code_reinitialisation_mot_de_passe(
     session: AsyncSession,
-    email: str,
-    frontend_url: str | None = None,
+    identifiant: str,
+    canal: str,
     adresse_ip: str = "",
 ) -> dict:
-    """
-    Demande un lien de réinitialisation de mot de passe.
-    
-    Si l'email existe, génère un token, le stocke en base
-    et envoie un email avec le lien de réinitialisation.
-    
-    La réponse est délibérément identique que l'email existe ou non
-    (message d'évitement d'énumération de comptes).
-    
-    Retourne un dict avec :
-        - succes: bool
-        - message: str
-        - destination_masquee: str (si compte trouvé)
-        - duree_validite_minutes: int
-        - token_dev: str | None (visible uniquement en dev)
-    """
-    email_hash = _hasher_email(email)
-    duree_validite_minutes = 30
+    """Envoie un OTP sans révéler si l'identifiant correspond à un compte."""
+    identifiant_saisi = identifiant.strip()
+    canal_principal = "email" if "@" in identifiant_saisi else CANAL_WHATSAPP
+    utilisateur = None
 
-    # Chercher l'utilisateur
-    resultat = await session.execute(
-        select(Utilisateur).where(
-            Utilisateur.email_hash == email_hash,
-            Utilisateur.est_supprime == False,
+    if "@" in identifiant_saisi:
+        identifiant_normalise = identifiant_saisi.lower()
+        resultat = await session.execute(
+            select(Utilisateur).where(
+                Utilisateur.email_hash == _hasher_email(identifiant_normalise),
+                Utilisateur.est_supprime == False,
+            )
         )
-    )
-    utilisateur = resultat.scalar_one_or_none()
+        utilisateur = resultat.scalar_one_or_none()
+        empreinte_identifiant = hashlib.sha256(
+            f"email:{identifiant_normalise}".encode("utf-8")
+        ).hexdigest()
+    else:
+        try:
+            telephone = normaliser_telephone(identifiant_saisi)
+        except ErreurValidation:
+            telephone = None
+        if telephone:
+            resultat = await session.execute(
+                select(Utilisateur).where(
+                    Utilisateur.telephone_hash == hasher_telephone(telephone),
+                    Utilisateur.est_supprime == False,
+                )
+            )
+            utilisateur = resultat.scalar_one_or_none()
+            identifiant_normalise = telephone
+        else:
+            identifiant_normalise = identifiant_saisi
+        empreinte_identifiant = hashlib.sha256(
+            f"telephone:{identifiant_normalise}".encode("utf-8")
+        ).hexdigest()
 
-    # Message identique dans tous les cas (prévention énumération)
-    message = (
-        "Si un compte existe avec cet email, un lien de réinitialisation "
-        "vient d'être envoyé. Vérifie ta boîte de réception et tes spams."
-    )
+    message = "Si ce compte existe, un code a été envoyé."
+    date_limite = datetime.now(timezone.utc) - timedelta(hours=1)
+    demandes_ip = 0
+    if adresse_ip:
+        demandes_ip = await session.scalar(
+            select(func.count(JournalAudit.id)).where(
+                JournalAudit.type_evenement
+                == TypesEvenementAudit.DEMANDE_CODE_REINITIALISATION_MDP.value,
+                JournalAudit.adresse_ip == adresse_ip,
+                JournalAudit.date_evenement >= date_limite,
+            )
+        ) or 0
 
-    if utilisateur is None:
-        journal.info(
-            f"Demande de réinitialisation pour email inconnu (hash={email_hash[:8]}...)"
+    canal_envoye = canal if canal in (CANAL_EMAIL, CANAL_WHATSAPP) else canal_principal
+    tentatives_envoi: list[tuple[str, bool]] = []
+    if (
+        utilisateur is not None
+        and utilisateur.est_actif
+        and demandes_ip < 5
+    ):
+        email = dechiffrer_donnee(utilisateur.email_chiffre)
+        telephone = (
+            dechiffrer_donnee(utilisateur.telephone_chiffre)
+            if utilisateur.telephone_chiffre
+            else None
         )
-        # On simule quand même un log pour éviter l'énumération
+
+        async def envoyer(canal_cible: str) -> bool:
+            try:
+                resultat_envoi = await renvoyer_code(
+                    session=session,
+                    utilisateur=utilisateur,
+                    email=email,
+                    telephone=telephone,
+                    canal=canal_cible,
+                    type_verification="mot_de_passe",
+                    adresse_ip=adresse_ip,
+                )
+                return resultat_envoi["succes_envoi"]
+            except ErreurValidation:
+                return False
+
+        succes = await envoyer(canal_envoye)
+        tentatives_envoi.append((canal_envoye, succes))
+        if canal_envoye == CANAL_WHATSAPP and not succes:
+            canal_envoye = CANAL_EMAIL
+            succes = await envoyer(canal_envoye)
+            tentatives_envoi.append((canal_envoye, succes))
+
+    for canal_tentative, succes_tentative in tentatives_envoi:
         await _enregistrer_audit(
             session,
-            type_evenement="demande_reinitialisation_mdp",
-            description=f"Demande pour email inconnu (hash={email_hash[:8]}...)",
+            utilisateur_id=utilisateur.id if utilisateur else None,
+            role_acteur=utilisateur.role if utilisateur else None,
+            type_evenement=TypesEvenementAudit.TENTATIVE_ENVOI_CODE_REINITIALISATION_MDP.value,
+            description="Tentative d'envoi d'un code de réinitialisation",
             adresse_ip=adresse_ip,
+            donnees_supplementaires={
+                "canal": canal_tentative,
+                "succes": succes_tentative,
+                "identifiant_hash": empreinte_identifiant,
+            },
         )
-        await session.commit()
-        return {
-            "succes": True,
-            "message": message,
-            "destination_masquee": _masquer_email(email),
-            "duree_validite_minutes": duree_validite_minutes,
-            "token_dev": None,
-        }
 
-    # L'utilisateur existe — vérifier qu'il est actif
-    if not utilisateur.est_actif:
-        journal.warning(
-            f"Demande de réinitialisation pour compte désactivé id={utilisateur.id}"
+    await _enregistrer_audit(
+        session,
+        utilisateur_id=utilisateur.id if utilisateur else None,
+        role_acteur=utilisateur.role if utilisateur else None,
+        type_evenement=TypesEvenementAudit.DEMANDE_CODE_REINITIALISATION_MDP.value,
+        description="Demande de code de réinitialisation du mot de passe",
+        adresse_ip=adresse_ip,
+        donnees_supplementaires={
+            "canal": canal,
+            "identifiant_hash": empreinte_identifiant,
+            "limite_atteinte": demandes_ip >= 5,
+        },
+    )
+    await session.commit()
+    return {
+        "succes": True,
+        "message": message,
+        "duree_validite_minutes": 2,
+    }
+
+
+async def verifier_code_reinitialisation_mot_de_passe(
+    session: AsyncSession,
+    identifiant: str,
+    code: str,
+    adresse_ip: str = "",
+) -> str:
+    """Valide l'OTP, puis délivre un jeton de réinitialisation à usage unique."""
+    identifiant_saisi = identifiant.strip()
+    utilisateur = None
+    if "@" in identifiant_saisi:
+        resultat = await session.execute(
+            select(Utilisateur).where(
+                Utilisateur.email_hash == _hasher_email(identifiant_saisi),
+                Utilisateur.est_supprime == False,
+            )
         )
+        utilisateur = resultat.scalar_one_or_none()
+    else:
+        try:
+            telephone = normaliser_telephone(identifiant_saisi)
+        except ErreurValidation:
+            telephone = None
+        if telephone:
+            resultat = await session.execute(
+                select(Utilisateur).where(
+                    Utilisateur.telephone_hash == hasher_telephone(telephone),
+                    Utilisateur.est_supprime == False,
+                )
+            )
+            utilisateur = resultat.scalar_one_or_none()
+
+    if utilisateur is None or not utilisateur.est_actif:
         await _enregistrer_audit(
             session,
-            type_evenement="demande_reinitialisation_mdp",
-            description=f"Compte désactivé id={utilisateur.id}",
+            utilisateur_id=utilisateur.id if utilisateur else None,
+            role_acteur=utilisateur.role if utilisateur else None,
+            type_evenement=TypesEvenementAudit.VERIFICATION_CODE_REINITIALISATION_MDP.value,
+            description="Échec de vérification du code de réinitialisation",
             adresse_ip=adresse_ip,
+            donnees_supplementaires={"succes": False},
         )
         await session.commit()
-        return {
-            "succes": True,
-            "message": message,
-            "destination_masquee": _masquer_email(email),
-            "duree_validite_minutes": duree_validite_minutes,
-            "token_dev": None,
-        }
+        raise ErreurValidation(
+            "Code de récupération absent ou invalide",
+            message_utilisateur="Code incorrect ou expiré. Demande un nouveau code.",
+        )
 
-    # Générer le token
-    token = _generer_token_reinitialisation()
-    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    try:
+        await verifier_code_recuperation_mot_de_passe(
+            session=session,
+            utilisateur_id=utilisateur.id,
+            code_saisi=code,
+        )
+    except ErreurValidation:
+        await _enregistrer_audit(
+            session,
+            utilisateur_id=utilisateur.id,
+            role_acteur=utilisateur.role,
+            type_evenement=TypesEvenementAudit.VERIFICATION_CODE_REINITIALISATION_MDP.value,
+            description="Échec de vérification du code de réinitialisation",
+            adresse_ip=adresse_ip,
+            donnees_supplementaires={"succes": False},
+        )
+        await session.commit()
+        raise ErreurValidation(
+            "Code de récupération absent ou invalide",
+            message_utilisateur="Code incorrect ou expiré. Demande un nouveau code.",
+        )
 
-    # Révoquer les anciens tokens non utilisés
     anciens_tokens = await session.execute(
         select(TokenReinitialisation).where(
             TokenReinitialisation.utilisateur_id == utilisateur.id,
             TokenReinitialisation.est_utilise == False,
-            TokenReinitialisation.date_expiration > datetime.now(timezone.utc),
         )
     )
     for ancien in anciens_tokens.scalars().all():
         ancien.est_utilise = True
 
-    # Sauvegarder le nouveau token
-    nouveau_token = TokenReinitialisation(
-        utilisateur_id=utilisateur.id,
-        token_hash=token_hash,
-        date_expiration=datetime.now(timezone.utc) + timedelta(minutes=duree_validite_minutes),
-        adresse_ip_demande=adresse_ip,
+    token = _generer_token_reinitialisation()
+    session.add(
+        TokenReinitialisation(
+            utilisateur_id=utilisateur.id,
+            token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest(),
+            date_expiration=datetime.now(timezone.utc) + timedelta(minutes=10),
+            adresse_ip_demande=adresse_ip,
+        )
     )
-    session.add(nouveau_token)
-
-    # Envoyer l'email
-    email_destinataire = dechiffrer_donnee(utilisateur.email_chiffre)
-    prenom_utilisateur = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else None
-
-    # Construire le lien de réinitialisation (URL dynamique du frontend)
-    url_frontend = frontend_url or parametres.url_frontend or "http://localhost:3000"
-    lien_reinitialisation = f"{url_frontend}/mot-de-passe-oublie/reinitialiser?token={token}"
-
-    sujet = "DigiID — Réinitialisation de ton mot de passe"
-    prenom_texte = f"{prenom_utilisateur}, " if prenom_utilisateur else ""
-    corps_texte = f"""
-Bonjour {prenom_texte}
-
-Tu as demandé la réinitialisation de ton mot de passe DigiID.
-
-Clique sur le lien ci-dessous pour choisir un nouveau mot de passe :
-
-{lien_reinitialisation}
-
-Ce lien expire dans {duree_validite_minutes} minutes.
-
-Si tu n'as pas demandé cette réinitialisation, ignore cet email.
-Ton mot de passe actuel reste valide.
-
----
-L'équipe DigiID
-"""
-    corps_html = f"""
-<div style="max-width:480px;margin:0 auto;padding:20px;font-family:Arial,sans-serif">
-    <h1 style="color:#1a73e8;font-size:24px;text-align:center">DigiID</h1>
-    <p>Bonjour {prenom_texte}</p>
-    <p>Tu as demandé la réinitialisation de ton mot de passe DigiID.</p>
-    <div style="text-align:center;margin:20px 0">
-        <a href="{lien_reinitialisation}"
-           style="display:inline-block;background:#1a73e8;color:white;padding:14px 28px;
-                  border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">
-            Réinitialiser mon mot de passe
-        </a>
-    </div>
-    <p style="color:#666;font-size:14px">Ce lien expire dans {duree_validite_minutes} minutes.</p>
-    <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
-    <p style="color:#999;font-size:12px">
-        Si tu n'as pas demandé cette réinitialisation, ignore cet email.<br>
-        Ton mot de passe actuel reste valide.
-    </p>
-</div>"""
-
-    envoyer_email(email_destinataire, sujet, corps_texte, corps_html)
-
-    # Audit
     await _enregistrer_audit(
         session,
         utilisateur_id=utilisateur.id,
         role_acteur=utilisateur.role,
-        type_evenement="demande_reinitialisation_mdp",
-        description=f"Lien de réinitialisation envoyé à {_masquer_email(email_destinataire)}",
+        type_evenement=TypesEvenementAudit.VERIFICATION_CODE_REINITIALISATION_MDP.value,
+        description="Code de réinitialisation vérifié avec succès",
         adresse_ip=adresse_ip,
+        donnees_supplementaires={"succes": True},
     )
     await session.commit()
-
-    journal.info(
-        f"Lien de réinitialisation envoyé : utilisateur={utilisateur.id} "
-        f"email={_masquer_email(email_destinataire)}"
-    )
-
-    return {
-        "succes": True,
-        "message": message,
-        "destination_masquee": _masquer_email(email_destinataire),
-        "duree_validite_minutes": duree_validite_minutes,
-        "token_dev": token if parametres.est_developpement else None,
-    }
+    return token
 
 
 async def reinitialiser_mot_de_passe(

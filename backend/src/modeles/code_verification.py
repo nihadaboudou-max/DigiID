@@ -13,9 +13,10 @@ from src.config.constantes import NiveauxRisque
 
 
 class CodeVerification(Base, MelangeTracabilite):
-    """Code de verification envoye par email ou SMS pour confirmer une identite."""
+    """Code de vérification email, WhatsApp, SMS ou appel."""
 
     CANAL_EMAIL = "email"
+    CANAL_WHATSAPP = "whatsapp"
     CANAL_SMS = "sms"
     CANAL_APPEL = "appel"
 
@@ -34,9 +35,15 @@ class CodeVerification(Base, MelangeTracabilite):
     code: Mapped[str] = mapped_column(
         String(6), nullable=False, doc="Code a 6 chiffres",
     )
+    code_hash: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, doc="HMAC-SHA-256 du code OTP",
+    )
     destination: Mapped[str] = mapped_column(
         String(256), nullable=False,
         doc="Email ou numero de telephone destination",
+    )
+    adresse_ip: Mapped[Optional[str]] = mapped_column(
+        String(45), nullable=True, doc="Adresse IP de la demande d'envoi",
     )
     tentative: Mapped[int] = mapped_column(
         default=0, nullable=False, doc="Nombre de tentatives echouees",

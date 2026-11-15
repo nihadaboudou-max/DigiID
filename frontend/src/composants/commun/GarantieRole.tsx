@@ -74,6 +74,7 @@ export function GarantieRole({ rolesAutorises, children }: ProprietesGarantie) {
     if (
       utilisateur &&
       !utilisateur.est_email_verifie &&
+      !utilisateur.est_telephone_verifie &&
       utilisateur.role !== "super_administrateur" &&
       pathname !== "/verification-email" &&
       pathname !== "/connexion" &&

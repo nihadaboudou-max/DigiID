@@ -3,7 +3,7 @@
 
 /**
  * Page de réinitialisation de mot de passe.
- * L'utilisateur arrive ici après avoir cliqué sur le lien dans l'email.
+ * L'utilisateur arrive ici après la validation du code de récupération.
  * Le token est dans l'URL (paramètre ?token=...).
  */
 import Link from "next/link";
@@ -32,16 +32,28 @@ function ContenuReinitialisation() {
     evt.preventDefault();
     setErreur(null);
 
-    // Vérifier que les mots de passe correspondent
     if (nouveauMotDePasse !== confirmation) {
       setErreur("Les mots de passe ne correspondent pas.");
+      return;
+    }
+    if (
+      !/\p{Ll}/u.test(nouveauMotDePasse) ||
+      !/\p{Lu}/u.test(nouveauMotDePasse) ||
+      !/\p{N}/u.test(nouveauMotDePasse) ||
+      ![...nouveauMotDePasse].some((caractere) =>
+        "!@#$%^&*()_+-=[]{}|;:,.<>?/~`".includes(caractere),
+      )
+    ) {
+      setErreur(
+        "Le mot de passe doit contenir une majuscule, une minuscule, un chiffre et un caractère spécial.",
+      );
       return;
     }
 
     setChargement(true);
 
     try {
-      const reponse = await reinitialiserMotDePasse(token!, nouveauMotDePasse);
+      await reinitialiserMotDePasse(token!, nouveauMotDePasse);
       setReussi(true);
     } catch (e) {
       if (e instanceof ErreurAPI) {
@@ -62,16 +74,15 @@ function ContenuReinitialisation() {
           <div className="w-16 h-16 bg-terre/10 text-terre rounded-full flex items-center justify-center mx-auto text-3xl mb-4">
             ⚠
           </div>
-          <h1 className="text-2xl mb-2">Lien invalide</h1>
+          <h1 className="text-2xl mb-2">Session invalide</h1>
           <p className="text-ardoise-clair mb-6">
-            Ce lien de réinitialisation est invalide. Vérifie que tu as bien
-            cliqué sur le lien complet reçu par email.
+            La vérification a expiré. Demande un nouveau code de récupération.
           </p>
           <Link
             href="/mot-de-passe-oublie"
             className="inline-block text-lagune font-medium"
           >
-            ← Demander un nouveau lien
+            ← Demander un nouveau code
           </Link>
         </div>
       </main>
@@ -155,7 +166,7 @@ function ContenuReinitialisation() {
             type="submit"
             variante="primaire"
             chargement={chargement}
-            className="w-full"
+            className="w-full min-h-14"
           >
             Réinitialiser mon mot de passe
           </Bouton>

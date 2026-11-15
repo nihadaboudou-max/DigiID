@@ -166,6 +166,9 @@ class TypesEvenementAudit(str, Enum):
     CHANGEMENT_MOT_DE_PASSE = "changement_mot_de_passe"
     ACTIVATION_2FA = "activation_2fa"
     VERIFICATION_2FA_ECHOUEE = "verification_2fa_echouee"
+    DEMANDE_CODE_REINITIALISATION_MDP = "demande_code_reinitialisation_mdp"
+    TENTATIVE_ENVOI_CODE_REINITIALISATION_MDP = "tentative_envoi_code_reinitialisation_mdp"
+    VERIFICATION_CODE_REINITIALISATION_MDP = "verification_code_reinitialisation_mdp"
 
     # Données personnelles
     CONSULTATION_PROFIL = "consultation_profil"

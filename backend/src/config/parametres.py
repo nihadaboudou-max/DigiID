@@ -229,6 +229,12 @@ class ParametresApplication(BaseSettings):
             "WHATSAPP_TEMPLATE_NAME", "whatsapp_template_name"
         ),
     )
+    whatsapp_template_auth_name: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "WHATSAPP_TEMPLATE_AUTH_NAME", "whatsapp_template_auth_name"
+        ),
+    )
     whatsapp_template_language: str = Field(
         default="fr",
         validation_alias=AliasChoices(

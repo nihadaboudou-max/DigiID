@@ -197,5 +197,4 @@ async def modifier_telephone(
         "message": "Code envoyé. Validez-le pour vérifier votre numéro.",
         "destination_masquee": envoi.get("destination_masquee"),
         "duree_validite_minutes": envoi.get("duree_validite_minutes"),
-        "code_dev": envoi.get("code"),
     }

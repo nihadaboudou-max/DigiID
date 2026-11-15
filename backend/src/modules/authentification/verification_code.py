@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Service de vérification par code — email, SMS ou appel vocal.
+Service de vérification par code — email, WhatsApp, SMS ou appel vocal.
 
 Fonctions :
   - generer_et_envoyer_code   : génère un code, le stocke, et l'envoie
@@ -9,7 +9,7 @@ Fonctions :
 
 NOUVEAU FLUX D'INSCRIPTION :
   1. L'utilisateur remplit le formulaire d'inscription
-  2. On crée l'utilisateur en base avec est_actif=False, est_email_verifie=False
+  2. On crée l'utilisateur en base avec est_email_verifie=False
   3. On lui envoie un code de vérification
   4. Tant qu'il n'a pas vérifié son email, il peut se reconnecter (email+mdp)
      MAIS sera redirigé vers la page de vérification (ne peut pas accéder au tableau de bord)
@@ -18,45 +18,62 @@ NOUVEAU FLUX D'INSCRIPTION :
      pour finaliser la vérification
 """
 from datetime import datetime, timedelta, timezone
+import hashlib
+import hmac
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import parametres
 from src.modeles import Utilisateur, CodeVerification
 from src.noyau.exceptions import Erreur2FAInvalide, ErreurValidation
 from src.noyau.notification import (
     generer_code_verification,
     envoyer_email_verification,
+    envoyer_email_code_recuperation,
     envoyer_email_code_connexion,
     envoyer_sms_verification,
     passer_appel_verification,
+    envoyer_whatsapp,
 )
 from src.noyau import journal, dechiffrer_donnee
 
-# Durée de validité d'un code (10 minutes)
-DUREE_VALIDITE_CODE_MINUTES = 10
+# Durée de validité d'un code (2 minutes)
+DUREE_VALIDITE_CODE_MINUTES = 2
 
 # Nombre maximum de tentatives avant invalidation
-MAX_TENTATIVES = 5
+MAX_TENTATIVES = 3
 
 # Types de canaux supportés
 CANAL_EMAIL = "email"
 CANAL_SMS = "sms"
 CANAL_APPEL = "appel"
+CANAL_WHATSAPP = "whatsapp"
 
-# Durée minimale avant renvoi (30 secondes)
-DELAI_RENVOI_SECONDES = 30
+# Durée minimale avant renvoi (60 secondes)
+DELAI_RENVOI_SECONDES = 60
+LIMITE_ENVOIS_PAR_HEURE = 5
+
+
+def _hacher_code(code: str) -> str:
+    """HMAC empêche une recherche exhaustive des codes à six chiffres en base."""
+    return hmac.new(
+        parametres.cle_secrete_jwt.encode("utf-8"),
+        code.encode("ascii"),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 async def generer_et_envoyer_code(
     session: AsyncSession,
     utilisateur: Utilisateur,
-    email: str,
+    email: Optional[str],
     telephone: Optional[str] = None,
     canal: str = CANAL_EMAIL,
     type_verification: str = "inscription",
+    adresse_ip: Optional[str] = None,
 ) -> dict:
     """
     Génère un code de vérification, le sauvegarde en base et l'envoie
@@ -67,7 +84,7 @@ async def generer_et_envoyer_code(
         utilisateur: L'utilisateur à vérifier
         email: Adresse email en clair
         telephone: Numéro de téléphone (pour SMS/appel)
-        canal: "email", "sms" ou "appel"
+        canal: "email", "whatsapp", "sms" ou "appel"
         type_verification: "inscription", "connexion", "changement_email", "changement_telephone"
 
     Returns:
@@ -76,7 +93,7 @@ async def generer_et_envoyer_code(
     Lève:
         ErreurValidation si le canal n'est pas supporté
     """
-    if canal not in (CANAL_EMAIL, CANAL_SMS, CANAL_APPEL):
+    if canal not in (CANAL_EMAIL, CANAL_SMS, CANAL_APPEL, CANAL_WHATSAPP):
         raise ErreurValidation(
             f"Canal de vérification non supporté : {canal}",
             message_utilisateur="Le canal de vérification choisi n'est pas valide.",
@@ -84,8 +101,13 @@ async def generer_et_envoyer_code(
 
     # 1. Définir la destination selon le canal
     if canal == CANAL_EMAIL:
+        if not email:
+            raise ErreurValidation(
+                "Email requis pour la vérification",
+                message_utilisateur="Aucune adresse e-mail associée à ce compte.",
+            )
         destination = email
-    elif canal in (CANAL_SMS, CANAL_APPEL):
+    elif canal in (CANAL_SMS, CANAL_APPEL, CANAL_WHATSAPP):
         if not telephone:
             raise ErreurValidation(
                 "Téléphone requis pour SMS/appel",
@@ -94,6 +116,30 @@ async def generer_et_envoyer_code(
         destination = telephone
     else:
         raise ErreurValidation(f"Canal inconnu : {canal}")
+
+    if type_verification in ("inscription", "mot_de_passe"):
+        depuis = datetime.now(timezone.utc) - timedelta(hours=1)
+        nombre_destination = await session.scalar(
+            select(func.count(CodeVerification.id)).where(
+                CodeVerification.type_verification == type_verification,
+                CodeVerification.destination == destination,
+                CodeVerification.cree_le >= depuis,
+            )
+        )
+        nombre_ip = 0
+        if adresse_ip:
+            nombre_ip = await session.scalar(
+                select(func.count(CodeVerification.id)).where(
+                    CodeVerification.type_verification == type_verification,
+                    CodeVerification.adresse_ip == adresse_ip,
+                    CodeVerification.cree_le >= depuis,
+                )
+            ) or 0
+        if (nombre_destination or 0) >= LIMITE_ENVOIS_PAR_HEURE or nombre_ip >= LIMITE_ENVOIS_PAR_HEURE:
+            raise ErreurValidation(
+                "Limite d'envois de codes atteinte",
+                message_utilisateur="Trop de demandes. Réessaie dans une heure.",
+            )
 
     # 2. Invalider tout code existant non utilisé (un seul code actif à la fois)
     resultat_anciens = await session.execute(
@@ -107,6 +153,7 @@ async def generer_et_envoyer_code(
     )
     for ancien_code in resultat_anciens.scalars().all():
         ancien_code.est_utilise = True
+        ancien_code.code_hash = None
 
     # 3. Générer le code
     code = generer_code_verification(6)
@@ -115,8 +162,10 @@ async def generer_et_envoyer_code(
     nouveau_code = CodeVerification(
         utilisateur_id=utilisateur.id,
         canal=canal,
-        code=code,
+        code="",
+        code_hash=_hacher_code(code),
         destination=destination,
+        adresse_ip=adresse_ip,
         tentative=0,
         est_utilise=False,
         date_expiration=datetime.now(timezone.utc) + timedelta(minutes=DUREE_VALIDITE_CODE_MINUTES),
@@ -132,14 +181,30 @@ async def generer_et_envoyer_code(
         prenom = dechiffrer_donnee(utilisateur.prenom_chiffre) if utilisateur.prenom_chiffre else None
         if type_verification == "connexion":
             succes = envoyer_email_code_connexion(destination, code, prenom)
+        elif type_verification == "mot_de_passe":
+            succes = envoyer_email_code_recuperation(destination, code, prenom)
         else:
             succes = envoyer_email_verification(destination, code, prenom)
     elif canal == CANAL_SMS:
         succes = envoyer_sms_verification(destination, code)
     elif canal == CANAL_APPEL:
         succes = passer_appel_verification(destination, code)
+    elif canal == CANAL_WHATSAPP:
+        template_auth = parametres.whatsapp_template_auth_name
+        if template_auth:
+            succes = bool(envoyer_whatsapp(
+                destination,
+                f"Ton code de confirmation DigiID est {code}.",
+                nom_template=template_auth,
+                parametres_template=[code],
+                parametres_bouton_url=[code],
+            ))
+        else:
+            journal.warning("[WHATSAPP] Modèle d'authentification non configuré")
 
     if not succes:
+        nouveau_code.est_utilise = True
+        nouveau_code.code_hash = None
         journal.warning(
             f"Échec d'envoi du code de vérification : "
             f"utilisateur={utilisateur.id} canal={canal}"
@@ -152,15 +217,9 @@ async def generer_et_envoyer_code(
 
     await session.commit()
 
-    from src.config import parametres
-
-    # En mode développement, toujours retourner le code pour affichage
-    # En production, uniquement si l'envoi a échoué (fallback de secours)
-    code_dev = code if (parametres.est_developpement or not succes) else None
-
     return {
         "canal": canal,
-        "code": code_dev,
+        "code": None,
         "succes_envoi": succes,
         "destination_masquee": _masquer_destination(destination),
         "duree_validite_minutes": DUREE_VALIDITE_CODE_MINUTES,
@@ -217,6 +276,7 @@ async def verifier_code(
     # Vérifier le nombre de tentatives
     if code_verification.tentative >= MAX_TENTATIVES:
         code_verification.est_utilise = True  # Invalider après trop de tentatives
+        code_verification.code_hash = None
         await session.commit()
         raise ErreurValidation(
             "Trop de tentatives échouées",
@@ -227,16 +287,35 @@ async def verifier_code(
     code_verification.tentative += 1
 
     # Vérifier le code
-    if code_verification.code != code_saisi.strip():
+    code_normalise = code_saisi.strip()
+    code_valide = (
+        len(code_normalise) == 6
+        and code_normalise.isascii()
+        and code_normalise.isdigit()
+        and code_verification.code_hash is not None
+        and hmac.compare_digest(
+            code_verification.code_hash,
+            _hacher_code(code_normalise),
+        )
+    )
+    if not code_valide:
+        if code_verification.tentative >= MAX_TENTATIVES:
+            code_verification.est_utilise = True
+            code_verification.code_hash = None
         await session.commit()
         tentatives_restantes = MAX_TENTATIVES - code_verification.tentative
         raise ErreurValidation(
             "Code incorrect",
-            message_utilisateur=f"Code incorrect. Il te reste {tentatives_restantes} tentative(s).",
+            message_utilisateur=(
+                "Code invalidé. Demande un nouveau code."
+                if tentatives_restantes == 0
+                else f"Code incorrect. Il te reste {tentatives_restantes} tentative(s)."
+            ),
         )
 
     # ✅ Code valide — marquer comme utilisé
     code_verification.est_utilise = True
+    code_verification.code_hash = None
 
     # Marquer l'email comme vérifié et activer le compte
     utilisateur_resultat = await session.execute(
@@ -259,7 +338,7 @@ async def verifier_code(
 
         # 📱 OTP/SMS (ou appel) : le NUMÉRO est prouvé — condition d'activation
         # du compte (contrainte S3 : « validé par OTP/SMS avant activation »).
-        if canal in (CANAL_SMS, CANAL_APPEL) and not utilisateur.est_telephone_verifie:
+        if canal in (CANAL_SMS, CANAL_APPEL, CANAL_WHATSAPP) and not utilisateur.est_telephone_verifie:
             from datetime import datetime, timezone
             utilisateur.est_telephone_verifie = True
             utilisateur.date_verification_telephone = datetime.now(timezone.utc)
@@ -316,6 +395,7 @@ async def verifier_code_connexion(
     # Vérifier le nombre de tentatives
     if code_verification.tentative >= MAX_TENTATIVES:
         code_verification.est_utilise = True  # Invalider après trop de tentatives
+        code_verification.code_hash = None
         await session.commit()
         raise Erreur2FAInvalide(
             "Trop de tentatives échouées",
@@ -326,16 +406,35 @@ async def verifier_code_connexion(
     code_verification.tentative += 1
 
     # Vérifier le code
-    if code_verification.code != code_saisi.strip():
+    code_normalise = code_saisi.strip()
+    code_valide = (
+        len(code_normalise) == 6
+        and code_normalise.isascii()
+        and code_normalise.isdigit()
+        and code_verification.code_hash is not None
+        and hmac.compare_digest(
+            code_verification.code_hash,
+            _hacher_code(code_normalise),
+        )
+    )
+    if not code_valide:
+        if code_verification.tentative >= MAX_TENTATIVES:
+            code_verification.est_utilise = True
+            code_verification.code_hash = None
         await session.commit()
         tentatives_restantes = MAX_TENTATIVES - code_verification.tentative
         raise Erreur2FAInvalide(
             "Code incorrect",
-            message_utilisateur=f"Code incorrect. Il te reste {tentatives_restantes} tentative(s).",
+            message_utilisateur=(
+                "Code invalidé. Demande un nouveau code."
+                if tentatives_restantes == 0
+                else f"Code incorrect. Il te reste {tentatives_restantes} tentative(s)."
+            ),
         )
 
     # ✅ Code valide — marquer comme utilisé
     code_verification.est_utilise = True
+    code_verification.code_hash = None
     await session.commit()
     journal.info(
         f"Code 2FA de connexion validé : utilisateur={utilisateur_id}"
@@ -343,19 +442,72 @@ async def verifier_code_connexion(
     return True
 
 
+async def verifier_code_recuperation_mot_de_passe(
+    session: AsyncSession,
+    utilisateur_id: UUID,
+    code_saisi: str,
+) -> None:
+    """Valide le code de récupération le plus récent, quel que soit son canal."""
+    resultat = await session.execute(
+        select(CodeVerification)
+        .where(
+            CodeVerification.utilisateur_id == utilisateur_id,
+            CodeVerification.canal.in_((CANAL_EMAIL, CANAL_WHATSAPP)),
+            CodeVerification.est_utilise == False,
+            CodeVerification.type_verification == "mot_de_passe",
+            CodeVerification.date_expiration > datetime.now(timezone.utc),
+        )
+        .order_by(CodeVerification.cree_le.desc())
+        .limit(1)
+    )
+    code_verification = resultat.scalar_one_or_none()
+    if code_verification is None:
+        raise ErreurValidation(
+            "Code de récupération absent ou expiré",
+            message_utilisateur="Code incorrect ou expiré. Demande un nouveau code.",
+        )
+
+    code_verification.tentative += 1
+    code_normalise = code_saisi.strip()
+    code_valide = (
+        len(code_normalise) == 6
+        and code_normalise.isascii()
+        and code_normalise.isdigit()
+        and code_verification.code_hash is not None
+        and hmac.compare_digest(
+            code_verification.code_hash,
+            _hacher_code(code_normalise),
+        )
+    )
+    if not code_valide:
+        if code_verification.tentative >= MAX_TENTATIVES:
+            code_verification.est_utilise = True
+            code_verification.code_hash = None
+        await session.commit()
+        raise ErreurValidation(
+            "Code de récupération incorrect",
+            message_utilisateur="Code incorrect ou expiré. Demande un nouveau code.",
+        )
+
+    code_verification.est_utilise = True
+    code_verification.code_hash = None
+    await session.commit()
+
+
 async def renvoyer_code(
     session: AsyncSession,
     utilisateur: Utilisateur,
-    email: str,
+    email: Optional[str],
     telephone: Optional[str] = None,
     canal: str = CANAL_EMAIL,
     type_verification: str = "inscription",
+    adresse_ip: Optional[str] = None,
 ) -> dict:
     """
     Invalide les codes existants et en génère un nouveau.
 
     Vérifie aussi qu'on n'a pas renvoyé de code trop récemment
-    (protection anti-spam, délai minimum de 30 secondes).
+    (protection anti-spam, délai minimum de 60 secondes).
     """
     # Vérifier le délai depuis le dernier code
     resultat = await session.execute(
@@ -382,6 +534,7 @@ async def renvoyer_code(
 
         # Invalider l'ancien code
         dernier_code.est_utilise = True
+        dernier_code.code_hash = None
 
     # Générer et envoyer un nouveau code
     return await generer_et_envoyer_code(
@@ -391,6 +544,7 @@ async def renvoyer_code(
         telephone=telephone,
         canal=canal,
         type_verification=type_verification,
+        adresse_ip=adresse_ip,
     )
 
 

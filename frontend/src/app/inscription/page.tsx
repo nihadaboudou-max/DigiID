@@ -14,13 +14,12 @@ import { Logo } from "@/composants/commun/Logo";
 import { inscrire } from "@/services/authentification";
 import { ErreurAPI } from "@/services/client_api";
 import { useAuthentification } from "@/contextes/authentification";
-import { cheminTableauDeBord } from "@/types/api";
 import { normaliserTelephone } from "@/services/telephone";
 
 export default function PageInscription() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { rafraichirProfil, utilisateur } = useAuthentification();
+  const { rafraichirProfil } = useAuthentification();
   const [donnees, setDonnees] = useState({
     email: "",
     mot_de_passe: "",
@@ -33,7 +32,6 @@ export default function PageInscription() {
   const [accepteCgu, setAccepteCgu] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [chargement, setChargement] = useState(false);
-  const [succes, setSucces] = useState(false);
 
   useEffect(() => {
     const code = searchParams.get("code");
@@ -79,19 +77,12 @@ export default function PageInscription() {
         ...(donnees.code_parrainage ? { code_parrainage: donnees.code_parrainage } : {}),
       };
       const reponse = await inscrire(requete);
-      setSucces(true);
-
       // Recharger le profil utilisateur dans le contexte d'authentification
       // (les tokens ont déjà été stockés par le service)
       if (reponse.jetons) {
         await rafraichirProfil();
       }
-
-      // Rediriger automatiquement vers la vérification d'identité
-      // après un court délai pour que l'utilisateur voie le message de succès
-      setTimeout(() => {
-        router.push("/verification");
-      }, 1500);
+      router.push("/verification-email?apres_inscription=1");
     } catch (e) {
       if (e instanceof ErreurAPI) {
         setErreur(e.message_utilisateur);
@@ -100,56 +91,6 @@ export default function PageInscription() {
       }
       setChargement(false);
     }
-  }
-
-  if (succes) {
-    return (
-      <>
-        <main className="flex-grow flex items-center justify-center px-6 py-12 bg-sable-clair">
-          <div className="max-w-md w-full carte apparition">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-3xl text-green-700">✓</span>
-              </div>
-              <h1 className="text-2xl mb-1">Compte crée !</h1>
-              <p className="text-ardoise-clair mb-6">
-                Ton DigiID a été généré. Voici tes informations :
-              </p>
-            </div>
-
-            <div className="bg-sable rounded-xl p-4 space-y-3 mb-6">
-              <InfoRow label="Email" value={donnees.email} />
-              {donnees.telephone && <InfoRow label="Téléphone" value={donnees.telephone} />}
-              <InfoRow label="Prénom" value={donnees.prenom} />
-              <InfoRow label="Nom" value={donnees.nom} />
-              <InfoRow label="Ville" value={donnees.ville} />
-            </div>
-
-            <p className="text-sm text-ardoise-clair text-center mb-6">
-              Pour sécuriser ton compte, vérifie ton email dès maintenant.
-              Tu pourras aussi le faire plus tard depuis ton profil.
-            </p>
-
-            <div className="space-y-3">
-              <Bouton
-                variante="primaire"
-                className="w-full"
-                onClick={() => router.push("/verification")}
-              >
-                Vérifier mon identité
-              </Bouton>
-              <Bouton
-                variante="ghost"
-                className="w-full"
-                onClick={() => router.push(utilisateur ? cheminTableauDeBord(utilisateur.role) : "/tableau-de-bord")}
-              >
-                Passer pour l'instant
-              </Bouton>
-            </div>
-          </div>
-        </main>
-      </>
-    );
   }
 
   return (
@@ -273,14 +214,5 @@ export default function PageInscription() {
         </div>
       </main>
     </>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between items-center text-sm">
-      <span className="text-ardoise-clair">{label}</span>
-      <span className="font-medium text-ardoise">{value}</span>
-    </div>
   );
 }

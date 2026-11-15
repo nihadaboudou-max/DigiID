@@ -28,6 +28,8 @@ from src.modules.authentification.dependances import (
 )
 from src.modules.authentification import verification_code as service_verification
 from src.noyau.chiffrement import dechiffrer_donnee
+from src.noyau.exceptions import ErreurValidation
+from src.noyau.journal import enregistrer_evenement_audit
 from src.schemas.authentification import (
     InscriptionRequete, InscriptionReponse,
     ConnexionRequete, ConnexionReponse,
@@ -42,6 +44,7 @@ from src.schemas.authentification import (
     StatutModeCommercantReponse,
     AssistanceModeCommercantRequete,
     MotDePasseOublieRequete, MotDePasseOublieReponse,
+    MotDePasseCodeVerifierRequete, MotDePasseCodeVerifierReponse,
     MotDePasseReinitialisationRequete, MotDePasseReinitialisationReponse,
 )
 
@@ -180,7 +183,6 @@ async def envoyer_code_connexion(
         message="Code de connexion envoyé par email.",
         destination_masquee=resultat["destination_masquee"],
         duree_validite_minutes=resultat["duree_validite_minutes"],
-        code_dev=resultat.get("code"),
     )
 
 
@@ -480,12 +482,28 @@ async def envoyer_code_verification(
     Si l'email est déjà vérifié, renvoie simplement un message d'info.
     Utile pour renvoyer le code si l'utilisateur ne l'a pas reçu.
     """
-    if utilisateur.est_email_verifie:
+    if utilisateur.est_email_verifie or utilisateur.est_telephone_verifie:
         return VerifEnvoyerRep(
             succes=True,
-            message="Email déjà vérifié. Aucun code nécessaire.",
+            message="Compte déjà confirmé. Aucun code nécessaire.",
             destination_masquee="",
             duree_validite_minutes=0,
+        )
+    if donnees.canal == "sms" and not (
+        parametres.sms_twilio_account_sid
+        and parametres.sms_twilio_auth_token
+        and parametres.sms_twilio_from
+    ):
+        return VerifEnvoyerRep(
+            succes=False,
+            message="L'envoi par SMS n'est pas configuré.",
+            destination_masquee="",
+            duree_validite_minutes=0,
+        )
+    if donnees.canal not in ("email", "whatsapp", "sms", "appel"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Canal de vérification invalide.",
         )
     email = dechiffrer_donnee(utilisateur.email_chiffre)
     telephone = dechiffrer_donnee(utilisateur.telephone_chiffre) if utilisateur.telephone_chiffre else None
@@ -496,13 +514,38 @@ async def envoyer_code_verification(
         telephone=telephone,
         canal=donnees.canal,
         type_verification="inscription",
+        adresse_ip=obtenir_ip_client(requete),
     )
+    await enregistrer_evenement_audit(
+        session=session,
+        type_evenement="code_confirmation_envoye",
+        description=(
+            f"Envoi du code de confirmation via {donnees.canal} "
+            f"({'réussi' if resultat['succes_envoi'] else 'échoué'})"
+        ),
+        utilisateur_id=utilisateur.id,
+        role_acteur=utilisateur.role,
+        adresse_ip=obtenir_ip_client(requete),
+        donnees_supplementaires={
+            "canal": donnees.canal,
+            "succes": resultat["succes_envoi"],
+            "destination_masquee": resultat["destination_masquee"],
+        },
+    )
+    await session.commit()
     return VerifEnvoyerRep(
-        succes=True,
-        message="Code de vérification envoyé.",
+        succes=resultat["succes_envoi"],
+        message=(
+            "Code de vérification envoyé."
+            if resultat["succes_envoi"]
+            else (
+                "WhatsApp indisponible. Essaie par e-mail."
+                if donnees.canal == "whatsapp"
+                else "Impossible d'envoyer le code avec ce moyen."
+            )
+        ),
         destination_masquee=resultat["destination_masquee"],
         duree_validite_minutes=resultat["duree_validite_minutes"],
-        code_dev=resultat.get("code"),
     )
 
 
@@ -520,17 +563,40 @@ async def verifier_code_verification(
     """
     Vérifie le code reçu par email/SMS et active le compte si valide.
     """
-    resultat = await service_verification.verifier_code(
+    try:
+        resultat = await service_verification.verifier_code(
+            session=session,
+            utilisateur_id=utilisateur.id,
+            code_saisi=donnees.code,
+            canal=donnees.canal,
+            type_verification="inscription",
+            activer_compte=True,
+        )
+    except ErreurValidation:
+        await enregistrer_evenement_audit(
+            session=session,
+            type_evenement="code_confirmation_verifie",
+            description="Échec de vérification du code de confirmation",
+            utilisateur_id=utilisateur.id,
+            role_acteur=utilisateur.role,
+            adresse_ip=obtenir_ip_client(requete),
+            donnees_supplementaires={"canal": donnees.canal, "succes": False},
+        )
+        await session.commit()
+        raise
+    await enregistrer_evenement_audit(
         session=session,
+        type_evenement="code_confirmation_verifie",
+        description="Code de confirmation vérifié avec succès",
         utilisateur_id=utilisateur.id,
-        code_saisi=donnees.code,
-        canal=donnees.canal,
-        type_verification="inscription",
-        activer_compte=True,
+        role_acteur=utilisateur.role,
+        adresse_ip=obtenir_ip_client(requete),
+        donnees_supplementaires={"canal": donnees.canal, "succes": True},
     )
+    await session.commit()
     if resultat["est_email_verifie"]:
         message = "Email vérifié avec succès ! Ton compte est maintenant actif."
-    elif resultat["est_actif"]:
+    elif resultat.get("est_telephone_verifie"):
         message = "Téléphone vérifié avec succès ! Ton compte est maintenant actif."
     else:
         message = "Code vérifié mais une erreur est survenue. Contacte le support."
@@ -538,6 +604,7 @@ async def verifier_code_verification(
         succes=resultat["succes"],
         message=message,
         est_email_verifie=resultat["est_email_verifie"],
+        est_telephone_verifie=resultat.get("est_telephone_verifie", False),
     )
 
 
@@ -555,7 +622,9 @@ async def statut_verification(
     """
     return VerifStatutRep(
         est_email_verifie=utilisateur.est_email_verifie,
-        doit_verifier=not utilisateur.est_email_verifie,
+        doit_verifier=not (
+            utilisateur.est_email_verifie or utilisateur.est_telephone_verifie
+        ),
     )
 
 
@@ -566,31 +635,45 @@ async def statut_verification(
 @routeur_authentification.post(
     "/mot-de-passe/oublie",
     response_model=MotDePasseOublieReponse,
-    summary="Demander un lien de réinitialisation de mot de passe",
+    summary="Demander un code de réinitialisation de mot de passe",
 )
 async def mot_de_passe_oublie(
     requete: Request,
     donnees: MotDePasseOublieRequete,
     session: Annotated[AsyncSession, Depends(obtenir_session)],
 ):
-    """
-    Envoie un email avec un lien de réinitialisation si le compte existe.
-    La réponse est délibérément identique que l'email existe ou non
-    pour éviter l'énumération des comptes existants.
-    """
-    resultat = await service.demander_reinitialisation_mot_de_passe(
+    """Envoie un OTP sans révéler si l'identifiant correspond à un compte."""
+    resultat = await service.demander_code_reinitialisation_mot_de_passe(
         session=session,
-        email=donnees.email,
-        frontend_url=donnees.frontend_url,
+        identifiant=donnees.identifiant,
+        canal=donnees.canal,
         adresse_ip=obtenir_ip_client(requete),
     )
     return MotDePasseOublieReponse(
         succes=resultat["succes"],
         message=resultat["message"],
-        destination_masquee=resultat.get("destination_masquee"),
         duree_validite_minutes=resultat["duree_validite_minutes"],
-        token_dev=resultat.get("token_dev"),
     )
+
+
+@routeur_authentification.post(
+    "/mot-de-passe/code/verifier",
+    response_model=MotDePasseCodeVerifierReponse,
+    summary="Valider le code avant réinitialisation",
+)
+async def mot_de_passe_verifier_code(
+    requete: Request,
+    donnees: MotDePasseCodeVerifierRequete,
+    session: Annotated[AsyncSession, Depends(obtenir_session)],
+):
+    """Émet un jeton à usage unique après validation du code OTP."""
+    token = await service.verifier_code_reinitialisation_mot_de_passe(
+        session=session,
+        identifiant=donnees.identifiant,
+        code=donnees.code,
+        adresse_ip=obtenir_ip_client(requete),
+    )
+    return MotDePasseCodeVerifierReponse(token=token)
 
 
 @routeur_authentification.post(

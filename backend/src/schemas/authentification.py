@@ -7,7 +7,7 @@ des schémas de sortie (ce que retourne l'API), pour éviter de
 divulguer accidentellement des données sensibles.
 """
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -103,10 +103,6 @@ class ConnexionCodeEnvoyerReponse(BaseModel):
     message: str
     destination_masquee: str
     duree_validite_minutes: int
-    code_dev: Optional[str] = Field(
-        default=None,
-        description="Code visible uniquement en mode développement",
-    )
 
 
 class RafraichissementRequete(BaseModel):
@@ -191,7 +187,10 @@ class InscriptionReponse(BaseModel):
 
 class VerificationEnvoyerRequete(BaseModel):
     """Requête pour envoyer/renvoyer un code de vérification."""
-    canal: str = Field(default="email", description="Canal : 'email', 'sms' ou 'appel'")
+    canal: str = Field(
+        default="email",
+        description="Canal : 'email', 'whatsapp', 'sms' ou 'appel'",
+    )
 
 
 class VerificationEnvoyerReponse(BaseModel):
@@ -200,10 +199,6 @@ class VerificationEnvoyerReponse(BaseModel):
     message: str
     destination_masquee: str
     duree_validite_minutes: int
-    code_dev: Optional[str] = Field(
-        default=None,
-        description="Code de vérification visible uniquement en mode développement",
-    )
 
 
 class VerificationVerifierRequete(BaseModel):
@@ -217,6 +212,7 @@ class VerificationVerifierReponse(BaseModel):
     succes: bool
     message: str
     est_email_verifie: bool
+    est_telephone_verifie: bool = False
 
 
 class VerificationStatutReponse(BaseModel):
@@ -230,35 +226,32 @@ class VerificationStatutReponse(BaseModel):
 # =============================================================================
 
 class MotDePasseOublieRequete(BaseModel):
-    """Requête pour demander un lien de réinitialisation de mot de passe."""
-    email: EmailStr = Field(..., description="Adresse email du compte")
-    frontend_url: Optional[str] = Field(
-        default=None,
-        description="URL du frontend pour construire le lien de réinitialisation. "
-        "Si non fourni, utilise la valeur configurée côté serveur.",
+    """Requête pour demander un code de réinitialisation."""
+    identifiant: str = Field(..., min_length=3, max_length=254)
+    canal: Literal["email", "whatsapp"] = Field(
+        ..., description="Canal demandé pour l'envoi du code",
     )
 
 
 class MotDePasseOublieReponse(BaseModel):
-    """Réponse après demande de réinitialisation.
-    
-    Le message est identique que l'email existe ou non pour
-    éviter l'énumération de comptes.
-    """
+    """Réponse neutre après demande de code."""
     succes: bool
     message: str
-    destination_masquee: Optional[str] = Field(
-        default=None,
-        description="Email partiellement masqué si le compte existe",
-    )
     duree_validite_minutes: int = Field(
-        default=30,
-        description="Durée de validité du lien en minutes",
+        default=2,
+        description="Durée de validité du code en minutes",
     )
-    token_dev: Optional[str] = Field(
-        default=None,
-        description="Token visible uniquement en mode développement",
-    )
+
+
+class MotDePasseCodeVerifierRequete(BaseModel):
+    """Requête de validation du code avant autorisation de changer le mot de passe."""
+    identifiant: str = Field(..., min_length=3, max_length=254)
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^[0-9]{6}$")
+
+
+class MotDePasseCodeVerifierReponse(BaseModel):
+    """Jeton de courte durée remis uniquement après validation du code."""
+    token: str
 
 
 class MotDePasseReinitialisationRequete(BaseModel):

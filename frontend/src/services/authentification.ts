@@ -98,7 +98,6 @@ export interface EnvoyerCodeConnexionReponse {
   message: string;
   destination_masquee: string;
   duree_validite_minutes: number;
-  code_dev?: string | null;
 }
 
 /**
@@ -166,13 +165,13 @@ export interface EnvoyerCodeReponse {
   message: string;
   destination_masquee: string;
   duree_validite_minutes: number;
-  code_dev?: string | null;
 }
 
 export interface VerifierCodeReponse {
   succes: boolean;
   message: string;
   est_email_verifie: boolean;
+  est_telephone_verifie: boolean;
 }
 
 export interface StatutVerificationReponse {
@@ -184,7 +183,7 @@ export interface StatutVerificationReponse {
  * Envoie ou renvoie un code de vérification par email/SMS/appel.
  */
 export async function envoyerCodeVerification(
-  canal: "email" | "sms" | "appel" = "email",
+  canal: "email" | "whatsapp" | "sms" | "appel" = "email",
 ): Promise<EnvoyerCodeReponse> {
   return clientAPI.post<EnvoyerCodeReponse>(
     `${PREFIXE}/verification/envoyer`,
@@ -198,7 +197,7 @@ export async function envoyerCodeVerification(
  */
 export async function verifierCode(
   code: string,
-  canal: "email" | "sms" | "appel" = "email",
+  canal: "email" | "whatsapp" | "sms" | "appel" = "email",
 ): Promise<VerifierCodeReponse> {
   return clientAPI.post<VerifierCodeReponse>(
     `${PREFIXE}/verification/verifier`,
@@ -224,9 +223,11 @@ export async function obtenirStatutVerification(): Promise<StatutVerificationRep
 export interface MotDePasseOublieReponse {
   succes: boolean;
   message: string;
-  destination_masquee?: string | null;
   duree_validite_minutes: number;
-  token_dev?: string | null;
+}
+
+export interface MotDePasseCodeVerifierReponse {
+  token: string;
 }
 
 export interface MotDePasseReinitialisationReponse {
@@ -235,23 +236,28 @@ export interface MotDePasseReinitialisationReponse {
 }
 
 /**
- * Demande un lien de réinitialisation de mot de passe.
- * Le frontend envoie son origine pour que le lien dans l'email
- * pointe vers le bon déploiement.
+ * Demande l'envoi d'un code sans révéler si le compte existe.
  */
 export async function demanderReinitialisationMotDePasse(
-  email: string,
+  identifiant: string,
+  canal: "email" | "whatsapp",
 ): Promise<MotDePasseOublieReponse> {
-  const frontendUrl = typeof window !== "undefined"
-    ? window.location.origin
-    : undefined;
-
   return clientAPI.post<MotDePasseOublieReponse>(
     `${PREFIXE}/mot-de-passe/oublie`,
-    {
-      email,
-      ...(frontendUrl ? { frontend_url: frontendUrl } : {}),
-    },
+    { identifiant, canal },
+  );
+}
+
+/**
+ * Vérifie le code reçu puis retourne un jeton temporaire de réinitialisation.
+ */
+export async function verifierCodeReinitialisationMotDePasse(
+  identifiant: string,
+  code: string,
+): Promise<MotDePasseCodeVerifierReponse> {
+  return clientAPI.post<MotDePasseCodeVerifierReponse>(
+    `${PREFIXE}/mot-de-passe/code/verifier`,
+    { identifiant, code },
   );
 }
 

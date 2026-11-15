@@ -47,7 +47,7 @@ const CODE_EMAIL_NON_VERIFIE = "AUTH_003";
 // Code d'erreur : double authentification requise
 const CODE_2FA_REQUIS = "AUTH_004";
 // Délai minimum avant de renvoyer un code (secondes) — aligné sur le backend (30 s)
-const DELAI_RENVOI_CODE_SECONDES = 30;
+const DELAI_RENVOI_CODE_SECONDES = 60;
 
 type EtapeConnexion = "identifiants" | "verification_email" | "2fa";
 
@@ -139,11 +139,7 @@ function ContenuConnexion() {
               `Un code de vérification a été envoyé à ${destination}. ` +
               "Saisis-le pour confirmer ton adresse email et finaliser ta connexion.",
             );
-            if (details.code_dev) {
-              setCode(String(details.code_dev));
-            } else {
-              setCompteARebours(DELAI_RENVOI_CODE_SECONDES);
-            }
+            setCompteARebours(DELAI_RENVOI_CODE_SECONDES);
           } else {
             // Code incorrect / expiré → on reste sur l'étape avec le message d'erreur
             setErreur(e.message_utilisateur);
@@ -184,11 +180,7 @@ function ContenuConnexion() {
         if (destination) {
           setDestinationMasquee(destination);
           setInfo(`Un nouveau code de vérification a été envoyé à ${destination}.`);
-          if (details.code_dev) {
-            setCode(String(details.code_dev));
-          } else {
-            setCompteARebours(DELAI_RENVOI_CODE_SECONDES);
-          }
+          setCompteARebours(DELAI_RENVOI_CODE_SECONDES);
         } else {
           setErreur(e.message_utilisateur);
         }
@@ -210,11 +202,7 @@ function ContenuConnexion() {
       const reponse = await envoyerCodeConnexion(email, motDePasse);
       setDestinationMasquee(reponse.destination_masquee);
       setInfo(`Un code de connexion a été envoyé à ${reponse.destination_masquee}.`);
-      if (reponse.code_dev) {
-        setCode(String(reponse.code_dev));
-      } else {
-        setCompteARebours(DELAI_RENVOI_CODE_SECONDES);
-      }
+      setCompteARebours(DELAI_RENVOI_CODE_SECONDES);
     } catch (e) {
       if (e instanceof ErreurAPI) {
         setErreur(e.message_utilisateur);

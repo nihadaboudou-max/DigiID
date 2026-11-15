@@ -12,7 +12,7 @@ Configuration :
   - SMTP Gmail : définir SMTP_MOT_DE_PASSE (mot de passe d'application Google)
     https://myaccount.google.com/apppasswords
 
-Si aucun n'est configuré → mode mock (log console + retourne code_dev).
+Si aucun n'est configuré, l'envoi échoue sans exposer le code dans l'API.
 """
 import random
 import smtplib
@@ -106,7 +106,7 @@ def envoyer_email(
         "[EMAIL][MOCK] ⚠️ AUCUN SERVICE D'EMAIL CONFIGURÉ : l'email n'a PAS été envoyé. "
         "Définir SENDGRID_API_KEY ou SMTP_MOT_DE_PASSE dans .env, "
         "puis recréer le conteneur backend (docker compose up -d --force-recreate backend). "
-        f"Destinataire: {destinataire} | Sujet: {sujet}\nCorps:\n{corps_texte}"
+        f"Destinataire: {destinataire} | Sujet: {sujet}"
     )
     return False
 
@@ -150,11 +150,14 @@ def _envoyer_via_sendgrid(
         
         journal.error(
             f"[EMAIL][SENDGRID] ERREUR → {destinataire} : "
-            f"HTTP {reponse.status_code} - {reponse.text}"
+            f"HTTP {reponse.status_code}"
         )
         return False
     except Exception as erreur:
-        journal.error(f"[EMAIL][SENDGRID] ERREUR → {destinataire} : {erreur}")
+        journal.error(
+            f"[EMAIL][SENDGRID] ERREUR → {destinataire} : "
+            f"{type(erreur).__name__}"
+        )
         return False
 
 
@@ -213,7 +216,10 @@ def _envoyer_via_smtp(
         journal.error(f"[EMAIL][SMTP] DESTINATAIRE REFUSÉ → {destinataire}")
         return False
     except Exception as erreur:
-        journal.error(f"[EMAIL][SMTP] ERREUR → {destinataire} : {erreur}")
+        journal.error(
+            f"[EMAIL][SMTP] ERREUR → {destinataire} : "
+            f"{type(erreur).__name__}"
+        )
         return False
 
 
@@ -235,7 +241,7 @@ def envoyer_email_verification(
         "Merci de t'être inscrit sur DigiID ! Pour finaliser ton inscription,\n"
         "confirme ton adresse email avec le code suivant :\n\n"
         "    " + code + "\n\n"
-        "Ce code expire dans 10 minutes.\n\n"
+        "Ce code expire dans 2 minutes.\n\n"
         "Si tu n'as pas demandé cette vérification, ignore cet email.\n\n"
         "---\n"
         "L'équipe DigiID\n"
@@ -249,12 +255,43 @@ def envoyer_email_verification(
         '<div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;margin:20px 0">'
         f'<span style="font-size:32px;letter-spacing:8px;font-weight:bold;color:#1a73e8">{code}</span>'
         "</div>"
-        '<p style="color:#666;font-size:14px">Ce code expire dans 10 minutes.</p>'
+        '<p style="color:#666;font-size:14px">Ce code expire dans 2 minutes.</p>'
         '<hr style="border:none;border-top:1px solid #eee;margin:20px 0">'
         '<p style="color:#999;font-size:12px">Si tu n\'as pas demandé cette vérification, ignore cet email.</p>'
         "</div>"
     )
     
+    return envoyer_email(destinataire, sujet, corps_texte, corps_html)
+
+
+def envoyer_email_code_recuperation(
+    destinataire: str,
+    code: str,
+    prenom: Optional[str] = None,
+) -> bool:
+    """Envoie un code permettant de choisir un nouveau mot de passe."""
+    prenom_texte = f"{prenom}, " if prenom else ""
+    sujet = "DigiID — Code de réinitialisation du mot de passe"
+    corps_texte = (
+        f"Bonjour {prenom_texte}\n\n"
+        "Tu as demandé à réinitialiser ton mot de passe DigiID.\n"
+        f"Entre ce code à 6 chiffres : {code}\n\n"
+        "Ce code expire dans 2 minutes. Si tu n'es pas à l'origine de cette "
+        "demande, ignore cet email.\n\n"
+        "L'équipe DigiID\n"
+    )
+    corps_html = (
+        '<div style="max-width:480px;margin:0 auto;padding:20px;font-family:Arial,sans-serif">'
+        '<h1 style="color:#1a73e8;font-size:24px;text-align:center">DigiID</h1>'
+        f"<p>Bonjour {prenom_texte}</p>"
+        "<p>Tu as demandé à réinitialiser ton mot de passe DigiID.</p>"
+        '<div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;margin:20px 0">'
+        f'<span style="font-size:32px;letter-spacing:8px;font-weight:bold;color:#1a73e8">{code}</span>'
+        "</div>"
+        '<p style="color:#666;font-size:14px">Ce code expire dans 2 minutes.</p>'
+        '<p style="color:#999;font-size:12px">Si tu n\'es pas à l\'origine de cette demande, ignore cet email.</p>'
+        "</div>"
+    )
     return envoyer_email(destinataire, sujet, corps_texte, corps_html)
 
 
@@ -272,7 +309,7 @@ def envoyer_email_code_connexion(
         "Une tentative de connexion à ton compte DigiID est en cours.\n"
         "Pour la sécuriser, saisis le code de connexion suivant :\n\n"
         "    " + code + "\n\n"
-        "Ce code expire dans 10 minutes.\n\n"
+        "Ce code expire dans 2 minutes.\n\n"
         "Si tu n'es pas à l'origine de cette connexion, ignore cet email\n"
         "et contacte immédiatement le support DigiID.\n\n"
         "---\n"
@@ -288,7 +325,7 @@ def envoyer_email_code_connexion(
         '<div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;margin:20px 0">'
         f'<span style="font-size:32px;letter-spacing:8px;font-weight:bold;color:#1a73e8">{code}</span>'
         "</div>"
-        '<p style="color:#666;font-size:14px">Ce code expire dans 10 minutes.</p>'
+        '<p style="color:#666;font-size:14px">Ce code expire dans 2 minutes.</p>'
         '<hr style="border:none;border-top:1px solid #eee;margin:20px 0">'
         '<p style="color:#999;font-size:12px">Si tu n\'es pas à l\'origine de cette connexion, ignore cet email '
         'et contacte immédiatement le support DigiID.</p>'
@@ -309,7 +346,7 @@ def envoyer_email_changement(
         "Bonjour,\n\n"
         "Tu as demandé le changement de ton adresse email. Voici le code de confirmation :\n\n"
         "    " + code + "\n\n"
-        "Ce code expire dans 10 minutes.\n\n"
+        "Ce code expire dans 2 minutes.\n\n"
         "Si tu n'as pas demandé ce changement, contacte le support immédiatement.\n\n"
         "---\n"
         "L'équipe DigiID\n"
@@ -323,7 +360,7 @@ def envoyer_email_changement(
         '<div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;margin:20px 0">'
         f'<span style="font-size:32px;letter-spacing:8px;font-weight:bold;color:#1a73e8">{code}</span>'
         "</div>"
-        '<p style="color:#666;font-size:14px">Ce code expire dans 10 minutes.</p>'
+        '<p style="color:#666;font-size:14px">Ce code expire dans 2 minutes.</p>'
         '<hr style="border:none;border-top:1px solid #eee;margin:20px 0">'
         '<p style="color:#999;font-size:12px">Si tu n\'as pas demandé ce changement, contacte le support immédiatement.</p>'
         "</div>"
@@ -716,7 +753,7 @@ def envoyer_whatsapp(
 def envoyer_sms_verification(telephone: str, code: str) -> bool:
     return envoyer_sms(
         telephone,
-        f"DigiID — Ton code de vérification est : {code}. Ce code expire dans 10 minutes."
+        f"DigiID — Ton code de vérification est : {code}. Ce code expire dans 2 minutes."
     )
 
 

@@ -49,6 +49,24 @@ backend/
 - **Trois rôles strictement séparés** — utilisateur, administrateur, super administrateur
 - **Audit immuable** — chaque action sensible enregistrée
 
+## Confirmation à l'inscription
+
+Le nom du modèle WhatsApp d'authentification est configurable avec
+`WHATSAPP_TEMPLATE_AUTH_NAME` dans `.env`. Configurez dans Meta un modèle
+approuvé de catégorie **Authentification** avec le code dans le corps et un
+bouton « Copier le code ». Aucun code OTP n'est renvoyé par l'API.
+
+## Mot de passe oublié
+
+L'API `/api/v1/auth/mot-de-passe/oublie` accepte un numéro béninois ou une
+adresse e-mail et le canal choisi (`whatsapp` ou `email`). Les codes expirent
+après deux minutes, sont limités à trois tentatives, et les envois sont limités
+à cinq par heure et par destination ainsi que par adresse IP. Si WhatsApp ne
+peut pas envoyer le code, l'e-mail est essayé automatiquement. L'endpoint
+`/api/v1/auth/mot-de-passe/code/verifier` délivre un jeton temporaire uniquement
+après validation du code; ce jeton autorise ensuite le choix d'un nouveau mot
+de passe via `/api/v1/auth/mot-de-passe/reinitialiser`.
+
 ## Démarrage rapide en local
 
 Voir le README à la racine du projet (`/digiid/README.md`).
