@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Schémas Pydantic du domaine logistique (référentiel)."""
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Generic, Literal, Optional, TypeVar
 from uuid import UUID
 
@@ -276,6 +276,27 @@ class ChauffeurDisponible(BaseModel):
     # déjà un voyage (planifié / en cours) sur cette ligne.
     fait_le_trajet: bool = False
     prochain_depart_le: Optional[datetime] = None
+
+
+class ScoreConfianceChauffeurResponse(BaseModel):
+    """Score agrégé du chauffeur connecté, sans identifiant personnel."""
+
+    disponible: bool
+    date_calcul: Optional[date] = None
+    score_total: Optional[int] = None
+    niveau: Optional[Literal["vert", "orange", "rouge"]] = None
+    score_litiges: Optional[int] = None
+    score_regularite: Optional[int] = None
+    score_volume: Optional[int] = None
+    score_avis: Optional[int] = None
+    litiges_mesures: bool = False
+    regularite_mesuree: bool = False
+    volume_mesure: bool = False
+    avis_mesures: bool = False
+    est_provisoire: bool = True
+    nombre_depart_analyse: int = 0
+    nombre_depart_a_lheure: int = 0
+    nombre_colis_livres: int = 0
 
 
 class VoyagePublic(BaseModel):
@@ -941,3 +962,23 @@ class PreAlerteResponse(BaseModel):
     nb_sms: int = 0
     nb_passagers: int = 0
     nb_colis: int = 0
+
+
+class PrevisionDemandeAnalyse(BaseModel):
+    date_prevue: date
+    depart: str
+    arrivee: str
+    demande_prevue: float
+    moyenne_simple: float
+
+
+class AnalysesLogistiquesResponse(BaseModel):
+    previsions: list[PrevisionDemandeAnalyse]
+    erreur_modele_moyenne: Optional[float] = None
+    erreur_moyenne_simple: Optional[float] = None
+    previsions_evaluees: int
+    taux_remplissage_pct: Optional[float] = None
+    coefficient_suggere: Optional[float] = None
+    voyages_mesurables: int
+    saisonnalite_confirmee: bool
+    action_suggeree: str

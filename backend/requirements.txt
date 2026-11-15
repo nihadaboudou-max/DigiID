@@ -53,6 +53,7 @@ tiktoken==0.6.0
 # --- Machine Learning (scoring) ---
 pandas==2.2.0
 numpy==1.26.4  # ✅ Mis à jour (compatible TF 2.16+)
+scikit-learn==1.8.0
 faker==23.2.1
 
 # --- Deep Learning (vérification visuelle + recherche faciale) ---

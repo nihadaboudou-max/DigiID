@@ -91,7 +91,15 @@ function Contenu() {
     sessions,
     scores,
     flux_logistiques,
+    flux_logistiques_simules,
     saturation_gares,
+    previsions_demande,
+    erreur_prevision_modele,
+    erreur_prevision_moyenne_simple,
+    previsions_evaluees,
+    remplissage_voyages,
+    incidents_gares,
+    alertes_anomalies_scans,
     indice_performance_logistique,
   } = stats;
   const tauxActivite = Math.round((utilisateurs.total_actifs / (utilisateurs.total_utilisateurs || 1)) * 100);
@@ -186,9 +194,9 @@ function Contenu() {
       <section className="space-y-2">
         <h2 className="text-base font-bold text-ardoise">Analyse descriptive (BI)</h2>
         <div className="grid lg:grid-cols-2 gap-3">
-          <Carte titre="Cartographie thermique — flux interurbains">
+          <Carte titre="Cartographie thermique — flux réels">
             <p className="text-xs text-ardoise-clair mb-3">
-              Flux les plus denses et gares présentant le plus fort volume de colis.
+              Flux réels les plus denses et gares présentant le plus fort volume de colis.
             </p>
             <div className="space-y-2">
               {flux_logistiques.length === 0 ? (
@@ -241,6 +249,145 @@ function Contenu() {
               <p className="text-xs text-ardoise-clair mt-3">
                 IPL non calculé : les retours de satisfaction client ne sont pas encore collectés.
               </p>
+            )}
+          </Carte>
+        </div>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-base font-bold text-ardoise">Analyses logistiques</h2>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Carte titre="Prévision de la demande par ligne">
+            <div className="mb-3 grid grid-cols-2 gap-2">
+              <StatLigne
+                libelle="Erreur modèle (30 jours)"
+                valeur={erreur_prevision_modele == null ? "N/D" : `${erreur_prevision_modele} colis`}
+                couleur="lagune"
+              />
+              <StatLigne
+                libelle="Erreur moyenne simple"
+                valeur={erreur_prevision_moyenne_simple == null ? "N/D" : `${erreur_prevision_moyenne_simple} colis`}
+                couleur="ocre"
+              />
+            </div>
+            <p className="mb-2 text-xs text-ardoise-clair">
+              {previsions_evaluees} prévisions évaluées sur les 30 derniers jours.
+            </p>
+            {previsions_demande.length === 0 ? (
+              <p className="text-sm text-ardoise-clair">Aucune prévision disponible.</p>
+            ) : (
+              <ul className="space-y-2">
+                {previsions_demande.slice(0, 5).map((prevision) => (
+                  <li
+                    key={`${prevision.depart}-${prevision.arrivee}-${prevision.date_prevue}`}
+                    className="flex justify-between gap-3 text-sm"
+                  >
+                    <span>{prevision.depart} → {prevision.arrivee}</span>
+                    <span className="text-right">
+                      <strong>{prevision.demande_prevue} colis</strong>
+                      <span className="block text-xs text-ardoise-clair">
+                        moyenne simple : {prevision.moyenne_simple}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Carte>
+
+          <Carte titre="Remplissage des voyages">
+            {remplissage_voyages.length === 0 ? (
+              <p className="text-sm text-ardoise-clair">
+                Aucun voyage mesurable sur les 30 derniers jours.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {remplissage_voyages.slice(0, 5).map((ligne) => (
+                  <li
+                    key={`${ligne.depart}-${ligne.arrivee}`}
+                    className="flex justify-between gap-3 text-sm"
+                  >
+                    <span>{ligne.depart} → {ligne.arrivee}</span>
+                    <span className="text-right">
+                      <strong>
+                        {ligne.taux_remplissage_pct == null
+                          ? "N/D"
+                          : `${ligne.taux_remplissage_pct}%`}
+                      </strong>
+                      <span className="block text-xs text-ardoise-clair">
+                        {ligne.voyages} voyages mesurables
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Carte>
+
+          <Carte titre="Incidents signalés par gare">
+            {incidents_gares.length === 0 ? (
+              <p className="text-sm text-ardoise-clair">
+                Aucun incident signalé sur les 30 derniers jours.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {incidents_gares.slice(0, 5).map((incident) => (
+                  <li
+                    key={`${incident.gare}-${incident.ville}`}
+                    className="flex justify-between gap-3 text-sm"
+                  >
+                    <span>{incident.gare} ({incident.ville})</span>
+                    <strong>{incident.incidents_signales}</strong>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Carte>
+
+          <Carte titre="Alertes de scans atypiques">
+            {alertes_anomalies_scans.length === 0 ? (
+              <p className="text-sm text-ardoise-clair">
+                Aucune anomalie détectée sur les 30 derniers jours.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {alertes_anomalies_scans.slice(0, 5).map((alerte) => (
+                  <li
+                    key={`${alerte.gare}-${alerte.periode_debut}`}
+                    className="rounded-lg border border-terre/20 bg-terre/5 p-2 text-sm"
+                  >
+                    <p className="font-semibold text-ardoise">
+                      {alerte.gare} ({alerte.ville})
+                    </p>
+                    <p className="text-xs text-ardoise-clair">
+                      {new Date(alerte.periode_debut).toLocaleString("fr-FR")} · {alerte.nombre_scans} scans
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Carte>
+
+          <Carte titre="Flux simulés (hors données réelles)">
+            <p className="mb-3 text-xs text-ardoise-clair">
+              Ces données d’exemple sont identifiées « simulé » et ne sont pas incluses dans les indicateurs réels.
+            </p>
+            {flux_logistiques_simules.length === 0 ? (
+              <p className="text-sm text-ardoise-clair">
+                Aucun jeu de données simulé chargé.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {flux_logistiques_simules.slice(0, 5).map((flux) => (
+                  <li
+                    key={`${flux.depart}-${flux.arrivee}`}
+                    className="flex justify-between gap-3 text-sm"
+                  >
+                    <span>{flux.depart} → {flux.arrivee}</span>
+                    <strong>{flux.colis} colis</strong>
+                  </li>
+                ))}
+              </ul>
             )}
           </Carte>
         </div>

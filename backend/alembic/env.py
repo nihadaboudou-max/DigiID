@@ -35,6 +35,12 @@ from src.modeles import (  # noqa: F401
     carte_sejour,
     consulaire,
     passeport,
+    DimensionGareAnalytique,
+    DimensionLigneAnalytique,
+    DimensionChauffeurAnalytique,
+    DimensionDateAnalytique,
+    EvenementAnalytique,
+    ScoreConfianceChauffeurAnalytique,
 )
 from src.config import parametres
 

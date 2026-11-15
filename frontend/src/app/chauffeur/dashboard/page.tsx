@@ -10,6 +10,7 @@ import Link from "next/link";
 
 import { Alerte } from "@/composants/commun/Alerte";
 import { Badge } from "@/composants/commun/Badge";
+import type { BadgeVariante } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import {
@@ -25,11 +26,36 @@ import { ROLES_CHAUFFEUR } from "@/composants/logistique/roles";
 import { PortefeuilleCarte } from "@/composants/paiement/PortefeuilleCarte";
 import { useLangue } from "@/i18n/useLangue";
 import { ErreurAPI } from "@/services/client_api";
-import { logistiqueAPI, type Voyage } from "@/services/logistique_api";
+import {
+  logistiqueAPI,
+  type ScoreConfianceChauffeur,
+  type Voyage,
+} from "@/services/logistique_api";
 import {
   LIBELLES_STATUT_VOYAGE,
   VARIANTES_STATUT_VOYAGE,
 } from "@/types/logistique";
+
+const STYLE_NIVEAU_CONFIANCE: Record<
+  "vert" | "orange" | "rouge",
+  { badge: BadgeVariante; panneau: string; libelle: string }
+> = {
+  vert: {
+    badge: "succes",
+    panneau: "border-green-300 bg-green-50 text-green-900",
+    libelle: "Bon niveau",
+  },
+  orange: {
+    badge: "ocre",
+    panneau: "border-amber-300 bg-amber-50 text-amber-900",
+    libelle: "À améliorer",
+  },
+  rouge: {
+    badge: "terre",
+    panneau: "border-red-300 bg-red-50 text-red-900",
+    libelle: "À suivre",
+  },
+};
 
 export default function PageTableauDeBordChauffeur() {
   return (
@@ -43,6 +69,10 @@ function Contenu() {
   const [prochainVoyage, setProchainVoyage] = useState<Voyage | null>(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [scoreConfiance, setScoreConfiance] =
+    useState<ScoreConfianceChauffeur | null>(null);
+  const [chargementScore, setChargementScore] = useState(true);
+  const [erreurScore, setErreurScore] = useState<string | null>(null);
 
   useEffect(() => {
     let annule = false;
@@ -70,6 +100,30 @@ function Contenu() {
         if (!annule) setChargement(false);
       }
     })();
+    return () => {
+      annule = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let annule = false;
+    logistiqueAPI.chauffeurs
+      .monScoreConfiance()
+      .then((score) => {
+        if (!annule) setScoreConfiance(score);
+      })
+      .catch((e) => {
+        if (!annule) {
+          setErreurScore(
+            e instanceof ErreurAPI
+              ? e.message_utilisateur
+              : "Impossible de charger votre score de confiance.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!annule) setChargementScore(false);
+      });
     return () => {
       annule = true;
     };
@@ -125,6 +179,29 @@ function Contenu() {
         limiteMouvements={0}
         cheminCagnotte="/chauffeur/cagnotte"
       />
+
+      <Carte
+        titre="Mon score de confiance"
+        description="Calculé chaque nuit à partir de vos activités des 30 derniers jours."
+      >
+        {chargementScore ? (
+          <p className="py-4 text-center text-sm italic text-ardoise-clair">
+            Chargement de votre score…
+          </p>
+        ) : erreurScore ? (
+          <Alerte variante="erreur" titre="Score indisponible">
+            {erreurScore}
+          </Alerte>
+        ) : !scoreConfiance?.disponible ||
+          scoreConfiance.score_total === null ||
+          scoreConfiance.niveau === null ? (
+          <p className="py-4 text-sm text-ardoise-clair">
+            Le premier score sera disponible après le prochain calcul quotidien.
+          </p>
+        ) : (
+          <ScoreConfiance score={scoreConfiance} />
+        )}
+      </Carte>
 
       <Carte
         titre="Prochain départ"
@@ -183,6 +260,89 @@ function Contenu() {
           Voir les analyses et recommandations →
         </Link>
       </div>
+    </div>
+  );
+}
+
+function ScoreConfiance({ score }: { score: ScoreConfianceChauffeur }) {
+  if (!score.niveau || score.score_total === null) return null;
+  const style = STYLE_NIVEAU_CONFIANCE[score.niveau];
+
+  return (
+    <div className="space-y-4">
+      <div
+        className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4 ${style.panneau}`}
+      >
+        <div>
+          <p className="text-sm font-semibold">Votre score</p>
+          <p className="text-4xl font-bold">{score.score_total}/100</p>
+        </div>
+        <Badge variante={style.badge} taille="moyen">
+          {style.libelle}
+        </Badge>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <ComposanteConfiance
+          libelle="Régularité"
+          score={score.score_regularite}
+          mesuree={score.regularite_mesuree}
+          detail={
+            score.regularite_mesuree
+              ? `${score.nombre_depart_a_lheure} départ(s) à l’heure sur ${score.nombre_depart_analyse}`
+              : undefined
+          }
+        />
+        <ComposanteConfiance
+          libelle="Volume livré"
+          score={score.score_volume}
+          mesuree={score.volume_mesure}
+          detail={
+            score.volume_mesure
+              ? `${score.nombre_colis_livres} colis livrés`
+              : undefined
+          }
+        />
+        <ComposanteConfiance
+          libelle="Litiges"
+          score={score.score_litiges}
+          mesuree={score.litiges_mesures}
+        />
+        <ComposanteConfiance
+          libelle="Avis"
+          score={score.score_avis}
+          mesuree={score.avis_mesures}
+        />
+      </div>
+      {score.est_provisoire && (
+        <p className="text-xs text-ardoise-clair">
+          Score provisoire : litiges et avis ne sont pas encore mesurés; leurs
+          composantes utilisent une valeur neutre de 50/100.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ComposanteConfiance({
+  libelle,
+  score,
+  mesuree,
+  detail,
+}: {
+  libelle: string;
+  score: number | null;
+  mesuree: boolean;
+  detail?: string;
+}) {
+  return (
+    <div className="rounded-lg bg-sable p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-semibold text-ardoise">{libelle}</p>
+        <span className="font-bold text-ardoise">{score ?? "—"}/100</span>
+      </div>
+      <p className="mt-1 text-xs text-ardoise-clair">
+        {detail ?? (mesuree ? "Mesuré" : "Non mesuré — valeur neutre")}
+      </p>
     </div>
   );
 }

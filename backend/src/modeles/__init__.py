@@ -57,6 +57,17 @@ from src.modeles.logistique import (
     Bagage, STATUTS_BAGAGE,
     ProfilLogistique, TYPES_PROFIL_LOGISTIQUE, STATUTS_VERIFICATION_PROFIL,
 )
+from src.modeles.analytique import (
+    DimensionGareAnalytique,
+    DimensionLigneAnalytique,
+    DimensionChauffeurAnalytique,
+    DimensionDateAnalytique,
+    EvenementAnalytique,
+    ScoreConfianceChauffeurAnalytique,
+    PrevisionDemandeLigneAnalytique,
+    AlerteAnomalieScanAnalytique,
+    anonymiser_identifiant_analytique,
+)
 from src.modeles.paiement import (
     Portefeuille, DEVISES,
     MouvementPortefeuille, SENS_MOUVEMENT, MOTIFS_MOUVEMENT,
@@ -148,6 +159,15 @@ __all__ = [
     "ProfilLogistique",
     "TYPES_PROFIL_LOGISTIQUE",
     "STATUTS_VERIFICATION_PROFIL",
+    "DimensionGareAnalytique",
+    "DimensionLigneAnalytique",
+    "DimensionChauffeurAnalytique",
+    "DimensionDateAnalytique",
+    "EvenementAnalytique",
+    "ScoreConfianceChauffeurAnalytique",
+    "PrevisionDemandeLigneAnalytique",
+    "AlerteAnomalieScanAnalytique",
+    "anonymiser_identifiant_analytique",
     "Portefeuille",
     "DEVISES",
     "MouvementPortefeuille",

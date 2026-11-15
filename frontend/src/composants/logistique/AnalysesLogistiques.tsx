@@ -8,19 +8,14 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { AnalyseDemandeLogistique } from "@/composants/logistique/AnalyseDemandeLogistique";
 import { RecommandationTarifaire } from "@/composants/logistique/RecommandationTarifaire";
 import { ErreurAPI } from "@/services/client_api";
-import { identiteAPI } from "@/services/identite_api";
-import { logistiqueAPI, type Vehicule, type Voyage } from "@/services/logistique_api";
-import type { Colis } from "@/types/logistique";
+import { logistiqueAPI, type AnalysesLogistiques as DonneesAnalyses } from "@/services/logistique_api";
 
 export function AnalysesLogistiques({
   profil,
 }: {
   profil: "chauffeur" | "receveur";
 }) {
-  const [voyages, setVoyages] = useState<Voyage[]>([]);
-  const [colis, setColis] = useState<Colis[]>([]);
-  const [vehicules, setVehicules] = useState<Vehicule[]>([]);
-  const [passagersParVoyage, setPassagersParVoyage] = useState<Record<string, number>>({});
+  const [analyses, setAnalyses] = useState<DonneesAnalyses | null>(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -29,27 +24,11 @@ export function AnalysesLogistiques({
     (async () => {
       setChargement(true);
       setErreur(null);
+      setAnalyses(null);
       try {
-        const [reponseVoyages, reponseColis, listeVehicules, voyagesChauffeur] =
-          await Promise.all([
-            logistiqueAPI.voyages.lister({ page: 1, par_page: 100 }),
-            logistiqueAPI.colis.lister({ page: 1, par_page: 100 }),
-            profil === "chauffeur"
-              ? logistiqueAPI.vehicules.listerMesVehicules()
-              : logistiqueAPI.vehicules
-                  .lister({ page: 1, par_page: 100 })
-                  .then((reponse) => reponse.elements),
-            profil === "chauffeur" ? identiteAPI.chauffeur.voyages() : Promise.resolve([]),
-          ]);
+        const resultat = await logistiqueAPI.analyses.obtenir();
         if (annule) return;
-        setVoyages(reponseVoyages.elements);
-        setColis(reponseColis.elements);
-        setVehicules(listeVehicules);
-        setPassagersParVoyage(
-          Object.fromEntries(
-            voyagesChauffeur.map((voyage) => [voyage.id, voyage.nb_passagers]),
-          ),
-        );
+        setAnalyses(resultat);
       } catch (e) {
         if (!annule) {
           setErreur(
@@ -98,13 +77,12 @@ export function AnalysesLogistiques({
         </p>
       ) : (
         <>
-          <RecommandationTarifaire
-            voyages={voyages}
-            colis={colis}
-            vehicules={vehicules}
-            passagersParVoyage={passagersParVoyage}
-          />
-          <AnalyseDemandeLogistique colis={colis} vehicules={vehicules} />
+          {analyses && (
+            <>
+              <RecommandationTarifaire analyses={analyses} />
+              <AnalyseDemandeLogistique analyses={analyses} />
+            </>
+          )}
         </>
       )}
     </div>

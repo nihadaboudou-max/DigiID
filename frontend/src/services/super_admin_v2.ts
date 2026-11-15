@@ -152,6 +152,37 @@ export interface SaturationGare {
   colis: number;
 }
 
+export interface PrevisionDemandeLigne {
+  date_prevue: string;
+  depart: string;
+  arrivee: string;
+  demande_prevue: number;
+  moyenne_simple: number;
+}
+
+export interface RemplissageVoyageAnalytique {
+  depart: string;
+  arrivee: string;
+  voyages: number;
+  taux_remplissage_pct: number | null;
+}
+
+export interface IncidentGareAnalytique {
+  gare: string;
+  ville: string;
+  incidents_signales: number;
+}
+
+export interface AlerteAnomalieScanAnalytique {
+  gare: string;
+  ville: string;
+  periode_debut: string;
+  nombre_scans: number;
+  nombre_colis: number;
+  nombre_chauffeurs: number;
+  score_anomalie: number;
+}
+
 export interface IndicePerformanceLogistique {
   score: number | null;
   ponctualite: number | null;
@@ -168,7 +199,15 @@ export interface StatistiquesCompletes {
   sessions: StatistiquesSessions;
   scores: StatistiquesScore;
   flux_logistiques: FluxLogistique[];
+  flux_logistiques_simules: FluxLogistique[];
   saturation_gares: SaturationGare[];
+  previsions_demande: PrevisionDemandeLigne[];
+  erreur_prevision_modele: number | null;
+  erreur_prevision_moyenne_simple: number | null;
+  previsions_evaluees: number;
+  remplissage_voyages: RemplissageVoyageAnalytique[];
+  incidents_gares: IncidentGareAnalytique[];
+  alertes_anomalies_scans: AlerteAnomalieScanAnalytique[];
   indice_performance_logistique: IndicePerformanceLogistique;
   total_evenements_audit: number;
   evenements_aujourd_hui: number;

@@ -21,7 +21,12 @@ from src.modeles import (
     SuiviFamilial, SuiviFamilialEvenement,
 )
 from src.modules.authentification.dependances import utilisateur_courant
-from src.modules.logistique import service, schemas
+from src.modules.logistique import (
+    service,
+    schemas,
+    service_confiance,
+    service_analyses,
+)
 from src.modules.logistique.stockage_colis import (
     TAILLE_MAX_PHOTO,
     chemin_photo_colis,
@@ -1025,6 +1030,45 @@ async def supprimer_acteur(
 routeur_chauffeurs = APIRouter(prefix="/chauffeurs", tags=["Logistique — Chauffeurs"])
 
 
+@routeur_chauffeurs.get(
+    "/moi/confiance",
+    response_model=schemas.ScoreConfianceChauffeurResponse,
+    summary="Obtenir mon score de confiance chauffeur",
+)
+async def obtenir_mon_score_confiance_chauffeur(
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    if utilisateur_courant.role != RoleUtilisateur.CHAUFFEUR.value:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Cette information est réservée au chauffeur connecté.",
+        )
+    score = await service_confiance.obtenir_dernier_score(
+        session, utilisateur_courant.id
+    )
+    if score is None:
+        return schemas.ScoreConfianceChauffeurResponse(disponible=False)
+    return schemas.ScoreConfianceChauffeurResponse(
+        disponible=True,
+        date_calcul=score.date_calcul,
+        score_total=score.score_total,
+        niveau=score.niveau,
+        score_litiges=score.score_litiges,
+        score_regularite=score.score_regularite,
+        score_volume=score.score_volume,
+        score_avis=score.score_avis,
+        litiges_mesures=score.litiges_mesures,
+        regularite_mesuree=score.regularite_mesuree,
+        volume_mesure=score.volume_mesure,
+        avis_mesures=score.avis_mesures,
+        est_provisoire=score.est_provisoire,
+        nombre_depart_analyse=score.nombre_depart_analyse,
+        nombre_depart_a_lheure=score.nombre_depart_a_lheure,
+        nombre_colis_livres=score.nombre_colis_livres,
+    )
+
+
 @routeur_chauffeurs.get("", response_model=list[schemas.ChauffeurDisponible],
                         summary="Chauffeurs proposables pour un trajet (liste + recherche)")
 @require_permission("logistique.lire")
@@ -1898,6 +1942,24 @@ async def horaires_publics(
 # ─── Agrégation ──────────────────────────────────────────────────────
 
 routeur_logistique = APIRouter(prefix="/api/v1/logistique")
+
+
+@routeur_logistique.get(
+    "/analyses",
+    response_model=schemas.AnalysesLogistiquesResponse,
+    tags=["Logistique — Analyses"],
+    summary="Obtenir les analyses logistiques du périmètre connecté",
+)
+@require_permission("logistique.lire")
+async def obtenir_analyses_logistiques(
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    return await service_analyses.obtenir_analyses_logistiques(
+        session, utilisateur_courant
+    )
+
+
 routeur_logistique.include_router(routeur_gares)
 routeur_logistique.include_router(routeur_lignes)
 routeur_logistique.include_router(routeur_vehicules)

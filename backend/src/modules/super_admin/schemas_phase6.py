@@ -16,7 +16,7 @@ Architecture : héritage de BaseModel (Pydantic v2) pour validation native.
 # =============================================================================
 # Imports standards
 # =============================================================================
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 
@@ -263,6 +263,37 @@ class SaturationGare(BaseModel):
     colis: int
 
 
+class PrevisionDemandeLigne(BaseModel):
+    date_prevue: date
+    depart: str
+    arrivee: str
+    demande_prevue: float
+    moyenne_simple: float
+
+
+class RemplissageVoyageAnalytique(BaseModel):
+    depart: str
+    arrivee: str
+    voyages: int
+    taux_remplissage_pct: Optional[float] = None
+
+
+class IncidentGareAnalytique(BaseModel):
+    gare: str
+    ville: str
+    incidents_signales: int
+
+
+class AlerteAnomalieScanAnalytique(BaseModel):
+    gare: str
+    ville: str
+    periode_debut: datetime
+    nombre_scans: int
+    nombre_colis: int
+    nombre_chauffeurs: int
+    score_anomalie: float
+
+
 class IndicePerformanceLogistique(BaseModel):
     """Indice calculé à partir des données logistiques disponibles."""
 
@@ -292,7 +323,19 @@ class StatistiquesCompletes(BaseModel):
     scores: StatistiquesScore
     #: Flux et saturation du réseau logistique
     flux_logistiques: list[FluxLogistique]
+    flux_logistiques_simules: list[FluxLogistique] = Field(default_factory=list)
     saturation_gares: list[SaturationGare]
+    previsions_demande: list[PrevisionDemandeLigne] = Field(default_factory=list)
+    erreur_prevision_modele: Optional[float] = None
+    erreur_prevision_moyenne_simple: Optional[float] = None
+    previsions_evaluees: int = 0
+    remplissage_voyages: list[RemplissageVoyageAnalytique] = Field(
+        default_factory=list
+    )
+    incidents_gares: list[IncidentGareAnalytique] = Field(default_factory=list)
+    alertes_anomalies_scans: list[AlerteAnomalieScanAnalytique] = Field(
+        default_factory=list
+    )
     #: Indice de performance des transporteurs
     indice_performance_logistique: IndicePerformanceLogistique
     #: Nombre total d'événements d'audit

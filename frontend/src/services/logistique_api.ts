@@ -128,6 +128,45 @@ export interface VoyagePublic {
   capacite: number | null;
 }
 
+export interface ScoreConfianceChauffeur {
+  disponible: boolean;
+  date_calcul: string | null;
+  score_total: number | null;
+  niveau: "vert" | "orange" | "rouge" | null;
+  score_litiges: number | null;
+  score_regularite: number | null;
+  score_volume: number | null;
+  score_avis: number | null;
+  litiges_mesures: boolean;
+  regularite_mesuree: boolean;
+  volume_mesure: boolean;
+  avis_mesures: boolean;
+  est_provisoire: boolean;
+  nombre_depart_analyse: number;
+  nombre_depart_a_lheure: number;
+  nombre_colis_livres: number;
+}
+
+export interface PrevisionDemandeAnalyse {
+  date_prevue: string;
+  depart: string;
+  arrivee: string;
+  demande_prevue: number;
+  moyenne_simple: number;
+}
+
+export interface AnalysesLogistiques {
+  previsions: PrevisionDemandeAnalyse[];
+  erreur_modele_moyenne: number | null;
+  erreur_moyenne_simple: number | null;
+  previsions_evaluees: number;
+  taux_remplissage_pct: number | null;
+  coefficient_suggere: number | null;
+  voyages_mesurables: number;
+  saisonnalite_confirmee: boolean;
+  action_suggeree: string;
+}
+
 export interface Acteur {
   id: string;
   utilisateur_id: string;
@@ -303,6 +342,11 @@ export const logistiqueAPI = {
   // Le receveur scanne la carte du chauffeur, saisit son code, ou le choisit
   // dans la liste des chauffeurs qui font ce trajet (recherche par nom).
   chauffeurs: {
+    monScoreConfiance: () =>
+      clientAPI.get<ScoreConfianceChauffeur>(
+        `${BASE}/chauffeurs/moi/confiance`,
+        opts,
+      ),
     lister: (filtres?: {
       gare_depart_id?: string;
       ligne_id?: string;
@@ -549,6 +593,10 @@ export const logistiqueAPI = {
       clientAPI.get<SuiviPublic>(
         `${BASE}/public/suivi/${encodeURIComponent(code)}`,
       ),
+  },
+
+  analyses: {
+    obtenir: () => clientAPI.get<AnalysesLogistiques>(`${BASE}/analyses`, opts),
   },
 };
 

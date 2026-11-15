@@ -46,7 +46,7 @@ from uuid import UUID
 # =============================================================================
 # IMPORTS TIERS — SQLAlchemy 2.0 async
 # =============================================================================
-from sqlalchemy import String, cast, func, or_, select, update
+from sqlalchemy import String, cast, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import aliased
@@ -62,6 +62,11 @@ from src.modeles import (
     ConfigurationSysteme,
 )
 from src.modeles.logistique import Colis, ColisEvenement, Gare, Ligne, Voyage
+from src.modeles.analytique import (
+    AlerteAnomalieScanAnalytique,
+    DimensionGareAnalytique,
+    PrevisionDemandeLigneAnalytique,
+)
 from src.modules.super_admin.schemas import AdminApercu as AdminApercuSchema
 from src.modules.super_admin.schemas_phase6 import (
     # Audit
@@ -70,6 +75,8 @@ from src.modules.super_admin.schemas_phase6 import (
     StatistiquesCompletes, StatistiquesUtilisateurs, StatistiquesAdmins,
     StatistiquesSessions, StatistiquesScore,
     FluxLogistique, SaturationGare, IndicePerformanceLogistique,
+    PrevisionDemandeLigne, RemplissageVoyageAnalytique,
+    IncidentGareAnalytique, AlerteAnomalieScanAnalytique as AlerteAnomalieSchema,
     # Feature flags
     FeatureFlagItem, ListeFeatureFlags, MiseAJourFeatureFlags,
     # Sessions
@@ -663,47 +670,173 @@ async def calculer_statistiques(session: AsyncSession) -> StatistiquesCompletes:
     )
 
     # -------------------------------------------------------------------------
-    # Bloc 4 bis : Analyse descriptive des flux logistiques
+    # Bloc 4 bis : vues matérialisées d'analyse logistique
     # -------------------------------------------------------------------------
-    gare_depart = aliased(Gare)
-    gare_arrivee = aliased(Gare)
     resultat_flux = await session.execute(
-        select(
-            gare_depart.ville,
-            gare_arrivee.ville,
-            func.count(Colis.id),
+        text(
+            """
+            SELECT depart, arrivee, SUM(colis_livres)::INTEGER AS colis
+            FROM vue_flux_par_ligne_analytique
+            WHERE est_simule IS FALSE
+            GROUP BY depart, arrivee
+            ORDER BY SUM(colis_livres) DESC
+            LIMIT 10
+            """
         )
-        .join(gare_depart, Colis.gare_depart_id == gare_depart.id)
-        .join(gare_arrivee, Colis.gare_arrivee_id == gare_arrivee.id)
-        .group_by(gare_depart.ville, gare_arrivee.ville)
-        .order_by(func.count(Colis.id).desc())
-        .limit(10)
     )
     flux_logistiques = [
-        FluxLogistique(depart=depart, arrivee=arrivee, colis=nombre)
-        for depart, arrivee, nombre in resultat_flux.all()
+        FluxLogistique(**ligne)
+        for ligne in resultat_flux.mappings().all()
+    ]
+    resultat_flux_simule = await session.execute(
+        text(
+            """
+            SELECT depart, arrivee, SUM(colis_livres)::INTEGER AS colis
+            FROM vue_flux_par_ligne_analytique
+            WHERE est_simule IS TRUE
+            GROUP BY depart, arrivee
+            ORDER BY SUM(colis_livres) DESC
+            LIMIT 10
+            """
+        )
+    )
+    flux_logistiques_simules = [
+        FluxLogistique(**ligne)
+        for ligne in resultat_flux_simule.mappings().all()
     ]
 
-    resultat_depart = await session.execute(
-        select(gare_depart.ville, func.count(Colis.id))
-        .join(gare_depart, Colis.gare_depart_id == gare_depart.id)
-        .group_by(gare_depart.ville)
+    resultat_saturation = await session.execute(
+        text(
+            """
+            SELECT gare, SUM(colis)::INTEGER AS colis
+            FROM (
+                SELECT depart AS gare, SUM(colis_livres) AS colis
+                FROM vue_flux_par_ligne_analytique
+                WHERE est_simule IS FALSE
+                GROUP BY depart
+                UNION ALL
+                SELECT arrivee AS gare, SUM(colis_livres) AS colis
+                FROM vue_flux_par_ligne_analytique
+                WHERE est_simule IS FALSE
+                GROUP BY arrivee
+            ) AS volumes
+            GROUP BY gare
+            ORDER BY SUM(colis) DESC
+            LIMIT 10
+            """
+        )
     )
-    resultat_arrivee = await session.execute(
-        select(gare_arrivee.ville, func.count(Colis.id))
-        .join(gare_arrivee, Colis.gare_arrivee_id == gare_arrivee.id)
-        .group_by(gare_arrivee.ville)
-    )
-    volumes_gares: dict[str, int] = {}
-    for ville, nombre in resultat_depart.all():
-        volumes_gares[ville] = volumes_gares.get(ville, 0) + nombre
-    for ville, nombre in resultat_arrivee.all():
-        volumes_gares[ville] = volumes_gares.get(ville, 0) + nombre
     saturation_gares = [
-        SaturationGare(gare=ville, colis=nombre)
-        for ville, nombre in sorted(
-            volumes_gares.items(), key=lambda element: element[1], reverse=True
-        )[:10]
+        SaturationGare(**ligne)
+        for ligne in resultat_saturation.mappings().all()
+    ]
+
+    date_courante = maintenant.date()
+    resultat_previsions = await session.scalars(
+        select(PrevisionDemandeLigneAnalytique)
+        .where(PrevisionDemandeLigneAnalytique.date_prevue == date_courante)
+        .order_by(
+            PrevisionDemandeLigneAnalytique.depart,
+            PrevisionDemandeLigneAnalytique.arrivee,
+        )
+        .limit(10)
+    )
+    previsions_demande = [
+        PrevisionDemandeLigne(
+            date_prevue=prevision.date_prevue,
+            depart=prevision.depart,
+            arrivee=prevision.arrivee,
+            demande_prevue=prevision.demande_prevue,
+            moyenne_simple=prevision.moyenne_simple,
+        )
+        for prevision in resultat_previsions
+    ]
+    erreur_previsions = (
+        await session.execute(
+            select(
+                func.avg(
+                    PrevisionDemandeLigneAnalytique.erreur_absolue
+                ).label("erreur_modele"),
+                func.avg(
+                    PrevisionDemandeLigneAnalytique.erreur_moyenne_simple
+                ).label("erreur_simple"),
+                func.count(PrevisionDemandeLigneAnalytique.id).label("nombre"),
+            ).where(
+                PrevisionDemandeLigneAnalytique.date_prevue
+                >= date_courante - timedelta(days=30),
+                PrevisionDemandeLigneAnalytique.date_prevue < date_courante,
+                PrevisionDemandeLigneAnalytique.erreur_absolue.is_not(None),
+            )
+        )
+    ).mappings().one()
+
+    resultat_remplissage = await session.execute(
+        text(
+            """
+            SELECT
+                depart,
+                arrivee,
+                SUM(voyages_mesurables)::INTEGER AS voyages,
+                ROUND(
+                    100.0 * SUM(passagers_mesures)
+                    / NULLIF(SUM(places_disponibles), 0),
+                    1
+                ) AS taux_remplissage_pct
+            FROM vue_remplissage_voyages_analytique
+            WHERE jour >= CURRENT_DATE - INTERVAL '30 days'
+            GROUP BY depart, arrivee
+            ORDER BY SUM(passagers_mesures) DESC
+            LIMIT 10
+            """
+        )
+    )
+    remplissage_voyages = [
+        RemplissageVoyageAnalytique(**ligne)
+        for ligne in resultat_remplissage.mappings().all()
+    ]
+
+    resultat_incidents = await session.execute(
+        text(
+            """
+            SELECT gare, ville, SUM(incidents_signales)::INTEGER AS incidents_signales
+            FROM vue_incidents_par_gare_analytique
+            WHERE jour >= CURRENT_DATE - INTERVAL '30 days'
+            GROUP BY gare, ville
+            ORDER BY SUM(incidents_signales) DESC
+            LIMIT 10
+            """
+        )
+    )
+    incidents_gares = [
+        IncidentGareAnalytique(**ligne)
+        for ligne in resultat_incidents.mappings().all()
+    ]
+
+    resultat_alertes = await session.execute(
+        select(
+            DimensionGareAnalytique.nom.label("gare"),
+            DimensionGareAnalytique.ville.label("ville"),
+            AlerteAnomalieScanAnalytique.periode_debut,
+            AlerteAnomalieScanAnalytique.nombre_scans,
+            AlerteAnomalieScanAnalytique.nombre_colis,
+            AlerteAnomalieScanAnalytique.nombre_chauffeurs,
+            AlerteAnomalieScanAnalytique.score_anomalie,
+        )
+        .join(
+            DimensionGareAnalytique,
+            DimensionGareAnalytique.gare_id
+            == AlerteAnomalieScanAnalytique.gare_id,
+        )
+        .where(
+            AlerteAnomalieScanAnalytique.periode_debut
+            >= maintenant - timedelta(days=30)
+        )
+        .order_by(AlerteAnomalieScanAnalytique.periode_debut.desc())
+        .limit(10)
+    )
+    alertes_anomalies_scans = [
+        AlerteAnomalieSchema(**ligne)
+        for ligne in resultat_alertes.mappings().all()
     ]
 
     # Aucun modèle de satisfaction client n'existe encore : l'IPL reste
@@ -768,7 +901,23 @@ async def calculer_statistiques(session: AsyncSession) -> StatistiquesCompletes:
         sessions=stats_sessions,
         scores=stats_scores,
         flux_logistiques=flux_logistiques,
+        flux_logistiques_simules=flux_logistiques_simules,
         saturation_gares=saturation_gares,
+        previsions_demande=previsions_demande,
+        erreur_prevision_modele=(
+            round(float(erreur_previsions["erreur_modele"]), 2)
+            if erreur_previsions["erreur_modele"] is not None
+            else None
+        ),
+        erreur_prevision_moyenne_simple=(
+            round(float(erreur_previsions["erreur_simple"]), 2)
+            if erreur_previsions["erreur_simple"] is not None
+            else None
+        ),
+        previsions_evaluees=int(erreur_previsions["nombre"]),
+        remplissage_voyages=remplissage_voyages,
+        incidents_gares=incidents_gares,
+        alertes_anomalies_scans=alertes_anomalies_scans,
         indice_performance_logistique=indice_performance,
         total_evenements_audit=total_evenements,
         evenements_aujourd_hui=evenements_ajd,

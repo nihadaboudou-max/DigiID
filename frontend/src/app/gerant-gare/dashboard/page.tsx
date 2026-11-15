@@ -9,11 +9,13 @@ import { Carte } from "@/composants/commun/Carte";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { ROLES_GERANT_GARE } from "@/composants/logistique/roles";
 import { ErreurAPI } from "@/services/client_api";
-import { gareDeLActeur, logistiqueAPI, type Vehicule } from "@/services/logistique_api";
+import {
+  logistiqueAPI,
+  type AnalysesLogistiques,
+  type Vehicule,
+} from "@/services/logistique_api";
 import { AnalyseDemandeLogistique } from "@/composants/logistique/AnalyseDemandeLogistique";
 import { IconeColis, IconeIdentite, IconeScan } from "@/composants/commun/Icones";
-import { useAuthentification } from "@/contextes/authentification";
-import type { Colis } from "@/types/logistique";
 
 export default function PageTableauDeBordGérant() {
   return (
@@ -24,9 +26,8 @@ export default function PageTableauDeBordGérant() {
 }
 
 function Contenu() {
-  const { utilisateur } = useAuthentification();
   const [vehicules, setVehicules] = useState<Vehicule[]>([]);
-  const [colis, setColis] = useState<Colis[]>([]);
+  const [analyses, setAnalyses] = useState<AnalysesLogistiques | null>(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -34,15 +35,12 @@ function Contenu() {
     let annule = false;
     void Promise.all([
       logistiqueAPI.vehicules.lister(),
-      utilisateur?.id ? gareDeLActeur(utilisateur.id) : Promise.resolve(null),
+      logistiqueAPI.analyses.obtenir(),
     ])
-      .then(async ([reponse, gare]) => {
+      .then(([reponse, resultatAnalyses]) => {
         if (annule) return;
         setVehicules(reponse.elements);
-        const colisGare = await logistiqueAPI.colis.lister(
-          gare ? { gare_id: gare.id, par_page: 100 } : { par_page: 100 },
-        );
-        if (!annule) setColis(colisGare.elements);
+        setAnalyses(resultatAnalyses);
       })
       .catch((e: unknown) => {
         if (!annule) {
@@ -59,7 +57,7 @@ function Contenu() {
     return () => {
       annule = true;
     };
-  }, [utilisateur?.id]);
+  }, []);
 
   const vehiculesActifs = vehicules.filter((vehicule) => vehicule.actif);
   const sansChauffeur = vehiculesActifs.filter(
@@ -103,7 +101,7 @@ function Contenu() {
         />
       </div>
 
-      <AnalyseDemandeLogistique colis={colis} vehicules={vehicules} />
+      {analyses && <AnalyseDemandeLogistique analyses={analyses} />}
 
       <Carte titre="Parc roulant" description="Une affectation claire évite qu'un chauffeur engage le car d'un collègue.">
         <p className="mb-4 text-sm text-ardoise-clair">
