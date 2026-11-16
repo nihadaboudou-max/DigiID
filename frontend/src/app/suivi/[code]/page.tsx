@@ -58,6 +58,11 @@ const LIBELLES_EVENEMENT_PUBLIC: Record<string, string> = {
 /** Icône sobre par type d'événement. */
 const ICONES_EVENEMENT: Record<string, string> = {
   enregistrement: "📦",
+  affectation: "🟠",
+  desaffectation: "↩️",
+  reception: "✅",
+  refus_reception: "❌",
+  retrait_depart: "↩️",
   depart: "🚚",
   mise_en_transit: "🛣️",
   arrivee: "📍",

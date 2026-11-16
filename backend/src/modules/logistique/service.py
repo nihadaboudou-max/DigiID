@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +23,7 @@ from src.modules.logistique import schemas
 from src.modules.gamification.service_notifications import creer_notification
 from src.noyau import dechiffrer_donnee, journal
 from src.noyau.constantes_roles import RoleUtilisateur
+from src.noyau.journal import enregistrer_evenement_audit
 from src.noyau.telephone import hasher_telephone, normaliser_numero_tiers
 from src.modules.qr_dynamique.service import (
     generer_token_durable,
@@ -337,7 +338,14 @@ def _exiger_fiche_modifiable(objet, utilisateur: Utilisateur) -> None:
                 "la fiche est figée."
             ),
         )
-    if statut in ("en_transit", "en_route", "arrive", "livre", "annule"):
+    if statut in (
+        "recu_chauffeur",
+        "en_transit",
+        "en_route",
+        "arrive",
+        "livre",
+        "annule",
+    ):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail="Cet enregistrement est déjà en route (ou terminé) : il est figé.",
@@ -1314,6 +1322,140 @@ async def _notifier_comptes_colis(
         )
 
 
+async def _notifier_utilisateur_colis(
+    session: AsyncSession,
+    utilisateur: Utilisateur,
+    colis: Colis,
+    *,
+    titre: str,
+    message: str,
+    destinataire_role: str,
+    type_evenement: str,
+    lien_action: str,
+) -> None:
+    await creer_notification(
+        session,
+        utilisateur,
+        type_notification="info",
+        categorie="logistique_colis",
+        titre=titre,
+        message=message,
+        lien_action=lien_action,
+    )
+    if not utilisateur.telephone_chiffre:
+        journal.warning(
+            f"Notification {type_evenement} colis non envoyée par SMS/WhatsApp : "
+            f"aucun téléphone associé à l'utilisateur {utilisateur.id}."
+        )
+        return
+    telephone = dechiffrer_donnee(utilisateur.telephone_chiffre)
+    _ajouter_notification(
+        session,
+        type_cible="colis",
+        cible_id=colis.id,
+        type_evenement=type_evenement,
+        destinataire_role=destinataire_role,
+        telephone=telephone,
+        message=message,
+    )
+
+
+async def _notifier_chauffeur_affectation(
+    session: AsyncSession,
+    colis: Colis,
+    chauffeur: Utilisateur,
+) -> None:
+    await _notifier_utilisateur_colis(
+        session,
+        chauffeur,
+        colis,
+        titre="Colis à valider",
+        message=(
+            "Un colis du guichet vous a été affecté. Confirmez sa réception "
+            "dans votre liste de colis."
+        ),
+        destinataire_role="chauffeur",
+        type_evenement="affectation",
+        lien_action="/chauffeur/colis",
+    )
+
+
+async def _notifier_guichet_colis(
+    session: AsyncSession,
+    colis: Colis,
+    *,
+    titre: str,
+    message: str,
+    type_evenement: str,
+) -> None:
+    utilisateur_id = getattr(colis, "enregistre_par_id", None) or getattr(
+        colis, "receveur_id", None
+    )
+    if utilisateur_id is None:
+        journal.warning(
+            f"Notification guichet {type_evenement} impossible pour le colis "
+            f"{colis.id} : aucun agent d'enregistrement n'est associé."
+        )
+        return
+    utilisateur = await session.get(Utilisateur, utilisateur_id)
+    if utilisateur is None:
+        journal.warning(
+            f"Notification guichet {type_evenement} impossible pour le colis "
+            f"{colis.id} : agent {utilisateur_id} introuvable."
+        )
+        return
+    ticket = await obtenir_ticket_du_colis(session, colis)
+    code = ticket.code_clair if ticket is not None else None
+    await _notifier_utilisateur_colis(
+        session,
+        utilisateur,
+        colis,
+        titre=titre,
+        message=message,
+        destinataire_role="guichet",
+        type_evenement=type_evenement,
+        lien_action=(
+            f"/receveur/tickets/{code}"
+            if code
+            else f"/receveur/tickets?colis={colis.id}"
+        ),
+    )
+
+
+async def _auditer_transition_colis(
+    session: AsyncSession,
+    colis: Colis,
+    utilisateur: Utilisateur,
+    *,
+    operation: str,
+    ancien_statut: str,
+    nouveau_statut: str,
+    ancien_voyage_id: UUID | None = None,
+    nouveau_voyage_id: UUID | None = None,
+) -> None:
+    await enregistrer_evenement_audit(
+        session,
+        type_evenement=f"colis_{operation}",
+        description=(
+            f"{operation} du colis {colis.id} : "
+            f"{ancien_statut} → {nouveau_statut}."
+        ),
+        utilisateur_id=utilisateur.id,
+        role_acteur=utilisateur.role,
+        donnees_supplementaires={
+            "colis_id": str(colis.id),
+            "ancien_statut": ancien_statut,
+            "nouveau_statut": nouveau_statut,
+            "ancien_voyage_id": (
+                str(ancien_voyage_id) if ancien_voyage_id else None
+            ),
+            "nouveau_voyage_id": (
+                str(nouveau_voyage_id) if nouveau_voyage_id else None
+            ),
+        },
+    )
+
+
 async def preparer_code_remise(
     session: AsyncSession,
     colis: Colis,
@@ -1531,7 +1673,11 @@ async def creer_colis(
         # sinon la fiche reste « à affecter » jusqu'à complétion par un receveur.
         chauffeur_id = donnees.chauffeur_id or (voyage.chauffeur_id if voyage else None)
         mode_enregistrement = "guichet"
-        statut_initial = "enregistre"
+        statut_initial = (
+            "a_valider"
+            if chauffeur_id is not None
+            else "non_attribue"
+        )
 
     chauffeur = (
         await _verifier_existe(session, Utilisateur, chauffeur_id, "Chauffeur")
@@ -1704,6 +1850,26 @@ async def creer_colis(
         horodatage=datetime.now(timezone.utc),
     )
     session.add(evenement)
+    if chauffeur is not None and statut_initial == "a_valider":
+        session.add(
+            ColisEvenement(
+                colis_id=colis.id,
+                type_evenement="affectation",
+                acteur_id=utilisateur.id,
+                gare_id=colis.gare_depart_id,
+                horodatage=datetime.now(timezone.utc),
+            )
+        )
+        await _auditer_transition_colis(
+            session,
+            colis,
+            utilisateur,
+            operation="affectation",
+            ancien_statut="non_attribue",
+            nouveau_statut="a_valider",
+            nouveau_voyage_id=colis.voyage_id,
+        )
+        await _notifier_chauffeur_affectation(session, colis, chauffeur)
     await _notifier_comptes_colis(
         session,
         colis,
@@ -1733,19 +1899,71 @@ async def affecter_colis(
     — et le chauffeur en découle (c'est celui du voyage).
     """
     colis = await obtenir_colis(session, colis_id)
-    if colis.statut in ("livre", "annule"):
+    if colis.statut in ("livre", "annule", "en_transit", "arrive"):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            detail="Un colis livré ou annulé ne peut plus être réaffecté",
+            detail="Un colis en route, arrivé, livré ou annulé ne peut plus être réaffecté",
         )
-    if colis.reception_confirmee_le is not None:
+    if (
+        colis.reception_confirmee_le is not None
+        or colis.statut == "recu_chauffeur"
+    ):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail=(
                 "Le chauffeur a déjà confirmé la prise en charge : le colis ne "
-                "peut plus changer de voyage."
+                "peut plus être réaffecté. Le chauffeur doit d'abord le refuser."
             ),
         )
+
+    if colis.mode_enregistrement == "chauffeur_direct" or colis.statut == "enregistre_direct":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Un colis enregistré directement par le chauffeur ne peut pas être réaffecté.",
+        )
+    if colis.statut not in ("non_attribue", "enregistre", "a_valider"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Ce colis ne peut plus être affecté à un voyage.",
+        )
+
+    ancien_statut = colis.statut
+    ancien_voyage_id = colis.voyage_id
+    ancien_chauffeur_id = colis.chauffeur_id
+    if donnees.voyage_id is None:
+        if donnees.chauffeur_id is not None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Un chauffeur ne peut pas être affecté sans voyage.",
+            )
+        colis.voyage_id = None
+        colis.chauffeur_id = None
+        colis.statut = "non_attribue"
+        ticket = await obtenir_ticket_du_colis(session, colis)
+        if ticket is not None:
+            ticket.voyage_id = None
+            session.add(ticket)
+        session.add(
+            ColisEvenement(
+                colis_id=colis.id,
+                type_evenement="desaffectation",
+                acteur_id=utilisateur.id,
+                gare_id=colis.gare_depart_id,
+                horodatage=datetime.now(timezone.utc),
+            )
+        )
+        await _auditer_transition_colis(
+            session,
+            colis,
+            utilisateur,
+            operation="desaffectation",
+            ancien_statut=ancien_statut,
+            nouveau_statut="non_attribue",
+            ancien_voyage_id=ancien_voyage_id,
+        )
+        await session.commit()
+        await session.refresh(colis)
+        return colis
 
     voyage = await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
     if colis.arret_destination_id is not None:
@@ -1777,10 +1995,15 @@ async def affecter_colis(
             status.HTTP_400_BAD_REQUEST,
             detail="Le chauffeur indiqué ne correspond pas à celui du voyage",
         )
-    await _verifier_existe(session, Utilisateur, chauffeur_id, "Chauffeur")
+    chauffeur = await _verifier_existe(
+        session, Utilisateur, chauffeur_id, "Chauffeur"
+    )
 
     colis.voyage_id = voyage.id
     colis.chauffeur_id = chauffeur_id
+    colis.statut = "a_valider"
+    colis.reception_confirmee_le = None
+    colis.reception_confirmee_par_id = None
     # Le ticket porte aussi le voyage : le scan s'en sert pour vérifier la
     # cohérence (on ne « livre » pas un colis sur un trajet qui n'est pas le sien).
     ticket = await obtenir_ticket_du_colis(session, colis)
@@ -1798,6 +2021,22 @@ async def affecter_colis(
             horodatage=datetime.now(timezone.utc),
         )
     )
+    await _auditer_transition_colis(
+        session,
+        colis,
+        utilisateur,
+        operation="affectation",
+        ancien_statut=ancien_statut,
+        nouveau_statut="a_valider",
+        ancien_voyage_id=ancien_voyage_id,
+        nouveau_voyage_id=voyage.id,
+    )
+    if (
+        chauffeur.id != ancien_chauffeur_id
+        or ancien_voyage_id != voyage.id
+        or ancien_statut != "a_valider"
+    ):
+        await _notifier_chauffeur_affectation(session, colis, chauffeur)
     await session.commit()
     await session.refresh(colis)
     return colis
@@ -1865,9 +2104,22 @@ async def confirmer_reception_colis(
             status.HTTP_403_FORBIDDEN,
             detail="Ce colis ne vous est pas affecté : seul son chauffeur peut le réceptionner.",
         )
+    if colis.statut == "recu_chauffeur":
+        return colis
+    if colis.statut == "enregistre_direct":
+        return colis
+    if colis.statut not in ("a_valider", "enregistre"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Ce colis n'attend pas de confirmation de réception.",
+        )
+    ancien_statut = colis.statut
+    mise_a_jour = False
     if colis.reception_confirmee_le is None:
         colis.reception_confirmee_le = datetime.now(timezone.utc)
         colis.reception_confirmee_par_id = utilisateur.id
+        colis.statut = "recu_chauffeur"
+        mise_a_jour = True
         session.add(
             ColisEvenement(
                 colis_id=colis.id,
@@ -1877,8 +2129,96 @@ async def confirmer_reception_colis(
                 horodatage=colis.reception_confirmee_le,
             )
         )
+    elif colis.statut != "recu_chauffeur":
+        colis.statut = "recu_chauffeur"
+        mise_a_jour = True
+    if mise_a_jour:
+        await _auditer_transition_colis(
+            session,
+            colis,
+            utilisateur,
+            operation="reception_confirmee",
+            ancien_statut=ancien_statut,
+            nouveau_statut="recu_chauffeur",
+            ancien_voyage_id=colis.voyage_id,
+            nouveau_voyage_id=colis.voyage_id,
+        )
+        await _notifier_guichet_colis(
+            session,
+            colis,
+            titre="Réception confirmée",
+            message="Le chauffeur a confirmé la réception du colis.",
+            type_evenement="validation",
+        )
         await session.commit()
         await session.refresh(colis)
+    return colis
+
+
+async def refuser_reception_colis(
+    session: AsyncSession,
+    colis_id: UUID,
+    utilisateur: Utilisateur,
+    motif: str,
+) -> Colis:
+    """Retire un colis du chauffeur et le rend au guichet en cas de refus."""
+    colis = await obtenir_colis(session, colis_id)
+    if colis.chauffeur_id != utilisateur.id:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Ce colis ne vous est pas affecté : seul son chauffeur peut le refuser.",
+        )
+    if colis.mode_enregistrement == "chauffeur_direct":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Un colis enregistré directement par vous ne peut pas être refusé.",
+        )
+    if colis.statut not in ("a_valider", "enregistre", "recu_chauffeur"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Ce colis ne peut plus être refusé.",
+        )
+
+    ancien_statut = colis.statut
+    ancien_voyage_id = colis.voyage_id
+    maintenant = datetime.now(timezone.utc)
+    colis.statut = "non_attribue"
+    colis.voyage_id = None
+    colis.chauffeur_id = None
+    colis.reception_confirmee_le = None
+    colis.reception_confirmee_par_id = None
+    ticket = await obtenir_ticket_du_colis(session, colis)
+    if ticket is not None:
+        ticket.voyage_id = None
+        session.add(ticket)
+    session.add(
+        ColisEvenement(
+            colis_id=colis.id,
+            type_evenement="refus_reception",
+            acteur_id=utilisateur.id,
+            gare_id=colis.gare_depart_id,
+            localisation=motif.strip(),
+            horodatage=maintenant,
+        )
+    )
+    await _auditer_transition_colis(
+        session,
+        colis,
+        utilisateur,
+        operation="reception_refusee",
+        ancien_statut=ancien_statut,
+        nouveau_statut="non_attribue",
+        ancien_voyage_id=ancien_voyage_id,
+    )
+    await _notifier_guichet_colis(
+        session,
+        colis,
+        titre="Réception refusée",
+        message=f"Le chauffeur a refusé le colis. Motif : {motif.strip()}",
+        type_evenement="refus_reception",
+    )
+    await session.commit()
+    await session.refresh(colis)
     return colis
 
 
@@ -2042,8 +2382,32 @@ async def lister_colis(
     cree_jusqu_a: datetime | None = None,
 ):
     requete = select(Colis)
-    if statuts:
+    if statuts == ["a_valider"]:
+        requete = requete.where(
+            or_(
+                Colis.statut == "a_valider",
+                and_(
+                    Colis.statut == "enregistre",
+                    Colis.chauffeur_id.is_not(None),
+                    Colis.reception_confirmee_le.is_(None),
+                    Colis.mode_enregistrement != "chauffeur_direct",
+                ),
+            )
+        )
+    elif statuts:
         requete = requete.where(Colis.statut.in_(statuts))
+    elif statut == "a_valider":
+        requete = requete.where(
+            or_(
+                Colis.statut == "a_valider",
+                and_(
+                    Colis.statut == "enregistre",
+                    Colis.chauffeur_id.is_not(None),
+                    Colis.reception_confirmee_le.is_(None),
+                    Colis.mode_enregistrement != "chauffeur_direct",
+                ),
+            )
+        )
     elif statut is not None:
         requete = requete.where(Colis.statut == statut)
     if cree_depuis is not None:
@@ -3509,6 +3873,14 @@ async def _passagers_du_voyage(
     return list(resultat.scalars().all())
 
 
+def _colis_en_attente_de_validation(colis: Colis) -> bool:
+    return (
+        colis.mode_enregistrement != "chauffeur_direct"
+        and colis.reception_confirmee_le is None
+        and colis.statut in ("non_attribue", "a_valider", "enregistre")
+    )
+
+
 def _exiger_charge_a_bord(
     colis: list, passagers: list, *, action: str
 ) -> None:
@@ -3526,7 +3898,11 @@ def _exiger_charge_a_bord(
 
 
 async def valider_depart_voyage(
-    session: AsyncSession, voyage_id: UUID, utilisateur: Utilisateur
+    session: AsyncSession,
+    voyage_id: UUID,
+    utilisateur: Utilisateur,
+    *,
+    confirmer_colis_non_valides: bool = False,
 ) -> dict:
     """« Valider le Départ » : marque **tous** les passagers et colis d'un clic.
 
@@ -3557,12 +3933,74 @@ async def valider_depart_voyage(
     _exiger_charge_a_bord(
         colis_voyage, passagers_voyage, action="valider le départ"
     )
+    colis_a_valider = [
+        colis for colis in colis_voyage
+        if _colis_en_attente_de_validation(colis)
+    ]
+    if colis_a_valider and not confirmer_colis_non_valides:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "code": "COLIS_A_VALIDER",
+                "nb_colis": len(colis_a_valider),
+                "message": (
+                    f"{len(colis_a_valider)} colis non validé(s) "
+                    "doivent être retirés avant le départ."
+                ),
+            },
+        )
 
     maintenant = datetime.now(timezone.utc)
 
+    for colis in colis_a_valider:
+        ancien_statut = colis.statut
+        ancien_voyage_id = colis.voyage_id
+        session.add(
+            ColisEvenement(
+                colis_id=colis.id,
+                type_evenement="retrait_depart",
+                acteur_id=utilisateur.id,
+                gare_id=colis.gare_depart_id,
+                horodatage=maintenant,
+            )
+        )
+        colis.statut = "non_attribue"
+        colis.voyage_id = None
+        colis.chauffeur_id = None
+        colis.reception_confirmee_le = None
+        colis.reception_confirmee_par_id = None
+        ticket = await obtenir_ticket_du_colis(session, colis)
+        if ticket is not None:
+            ticket.voyage_id = None
+            session.add(ticket)
+        await _auditer_transition_colis(
+            session,
+            colis,
+            utilisateur,
+            operation="retrait_depart",
+            ancien_statut=ancien_statut,
+            nouveau_statut="non_attribue",
+            ancien_voyage_id=ancien_voyage_id,
+        )
+        await _notifier_guichet_colis(
+            session,
+            colis,
+            titre="Colis retiré du départ",
+            message=(
+                "Le colis a été retiré du voyage car sa réception n'avait pas "
+                "été confirmée avant le départ."
+            ),
+            type_evenement="retrait_depart",
+        )
+
     nb_colis = 0
     for colis in colis_voyage:
-        if colis.statut not in ("enregistre", "enregistre_direct"):
+        colis_valide = (
+            colis.statut in ("recu_chauffeur", "enregistre_direct")
+            or colis.reception_confirmee_le is not None
+            or colis.mode_enregistrement == "chauffeur_direct"
+        )
+        if not colis_valide:
             continue
         session.add(ColisEvenement(
             colis_id=colis.id, type_evenement="depart", acteur_id=utilisateur.id,
@@ -3573,7 +4011,10 @@ async def valider_depart_voyage(
         # car : la fiche de chacun se fige à cet instant (plus de correction
         # guichet, plus de réaffectation). C'est la confirmation de réception
         # groupée du chauffeur.
-        if colis.reception_confirmee_le is None:
+        if (
+            colis.reception_confirmee_le is None
+            and colis.mode_enregistrement != "chauffeur_direct"
+        ):
             colis.reception_confirmee_le = maintenant
             colis.reception_confirmee_par_id = utilisateur.id
         ticket = await obtenir_ticket_du_colis(session, colis)
@@ -3621,10 +4062,12 @@ async def valider_depart_voyage(
         "type_action": "depart",
         "voyage_id": voyage_id,
         "nb_colis": nb_colis,
+        "nb_colis_retires": len(colis_a_valider),
         "nb_passagers": nb_passagers,
         "statut_voyage": voyage.statut,
         "message": (
-            f"Départ validé : {nb_passagers} passager(s) et {nb_colis} colis en route."
+            f"Départ validé : {nb_passagers} passager(s) et {nb_colis} colis "
+            f"en route. {len(colis_a_valider)} colis non validé(s) retiré(s)."
         ),
     }
 
@@ -3928,7 +4371,11 @@ def _evenements_publics(evenements, noms: dict[UUID, str]):
         schemas.EvenementSuiviPublic(
             type_evenement=e.type_evenement,
             horodatage=e.horodatage,
-            localisation=e.localisation,
+            localisation=(
+                None
+                if e.type_evenement == "refus_reception"
+                else e.localisation
+            ),
             gare_nom=noms.get(e.gare_id),
         )
         for e in evenements
@@ -3958,6 +4405,8 @@ def _notifications_publiques(notifications: list[NotificationLogistique]):
             cree_le=n.cree_le,
         )
         for n in notifications
+        if n.type_evenement
+        not in {"affectation", "validation", "refus_reception", "retrait_depart"}
     ]
 
 

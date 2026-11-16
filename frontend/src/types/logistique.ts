@@ -8,6 +8,10 @@
 
 /** Cycle de vie d'un colis. */
 export type StatutColis =
+  | "non_attribue"
+  | "a_valider"
+  | "recu_chauffeur"
+  /** Alias conservé pour les colis enregistrés avant la validation chauffeur. */
   | "enregistre"
   /** Enregistré **par le chauffeur en route** (client monté en cours de trajet). */
   | "enregistre_direct"
@@ -27,7 +31,14 @@ export type ModeEnregistrement = "guichet" | "chauffeur_direct";
 export type TypeEvenementScan = "livraison" | "depart" | "mise_en_transit" | "arrivee";
 
 /** Événements traçables d'un colis (le scan + l'enregistrement initial). */
-export type TypeEvenementColis = TypeEvenementScan | "enregistrement" | "affectation";
+export type TypeEvenementColis =
+  | TypeEvenementScan
+  | "enregistrement"
+  | "affectation"
+  | "desaffectation"
+  | "reception"
+  | "refus_reception"
+  | "retrait_depart";
 
 /** Étiquette QR d'un sac (une par sac — traçabilité, sans impact sur le prix). */
 export interface Bagage {
@@ -89,6 +100,8 @@ export interface Colis {
   expediteur_tel: string | null;
   receveur_nom: string | null;
   chauffeur_nom: string | null;
+  reception_confirmee_le: string | null;
+  remis_guichet_le: string | null;
   /** URL de la photo privée du colis, vide après sa période de conservation. */
   photo_url: string | null;
   /** Étiquettes QR générées (une par sac). */
@@ -210,6 +223,9 @@ export interface ResultatScan {
 
 /** Libellé lisible d'un statut de colis. */
 export const LIBELLES_STATUT_COLIS: Record<StatutColis, string> = {
+  non_attribue: "Non attribué",
+  a_valider: "À valider",
+  recu_chauffeur: "Reçu par le chauffeur",
   enregistre: "Enregistré",
   enregistre_direct: "Enregistré en route",
   en_transit: "En transit",
@@ -223,6 +239,9 @@ export const VARIANTES_STATUT_COLIS: Record<
   StatutColis,
   "lagune" | "ocre" | "terre" | "neutre" | "succes" | "info"
 > = {
+  non_attribue: "neutre",
+  a_valider: "ocre",
+  recu_chauffeur: "succes",
   enregistre: "info",
   enregistre_direct: "ocre",
   en_transit: "ocre",
@@ -239,8 +258,12 @@ export const LIBELLES_MODE_ENREGISTREMENT: Record<ModeEnregistrement, string> = 
 
 /** Libellé lisible d'un type d'événement. */
 export const LIBELLES_EVENEMENT: Record<TypeEvenementColis, string> = {
+  desaffectation: "Désaffectation du chauffeur",
   affectation: "Affectation au chauffeur",
   enregistrement: "Enregistrement",
+  reception: "Réception confirmée par le chauffeur",
+  refus_reception: "Réception refusée par le chauffeur",
+  retrait_depart: "Retrait du voyage avant le départ",
   depart: "Départ",
   mise_en_transit: "Mise en transit",
   arrivee: "Arrivée à destination",
@@ -405,6 +428,8 @@ export interface DonneesSuiviFamilial {
 
 /** Payload d'une action en lot (départ / arrivée). */
 export interface DonneesActionLot {
+  /** Confirme le retrait automatique des colis encore à valider au départ. */
+  confirmer_colis_non_valides?: boolean;
   /** Gare ciblée (optionnelle) : pour « Arrivés », ne traiter qu'une gare. */
   gare_id?: string | null;
   /** Arrêt intermédiaire : prioritaire sur gare_id. */
@@ -420,6 +445,7 @@ export interface ResultatActionLot {
   voyage_id: string;
   nb_passagers: number;
   nb_colis: number;
+  nb_colis_retires?: number;
   arret_id?: string | null;
   /** Statut du voyage après l'action (planifie → en_cours → termine). */
   statut_voyage?: string | null;

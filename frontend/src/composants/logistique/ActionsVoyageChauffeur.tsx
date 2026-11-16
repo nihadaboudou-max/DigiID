@@ -15,6 +15,7 @@
  * Garde-fous UI : pas d'action sur un car vide, et boutons alignés sur le statut.
  */
 import { useState } from "react";
+import Link from "next/link";
 
 import { Alerte } from "@/composants/commun/Alerte";
 import { Bouton } from "@/composants/commun/Bouton";
@@ -44,6 +45,8 @@ interface Props {
   statut: StatutVoyage | string;
   /** Nombre de colis non annulés à bord. */
   nbColis: number;
+  /** Nombre de colis guichet qui attendent la confirmation du chauffeur. */
+  nbColisAValider: number;
   /** Nombre de passagers non annulés à bord. */
   nbPassagers: number;
   /** Gares connues du voyage (repli si pas d'arrêts structurés). */
@@ -60,7 +63,8 @@ const CONFIG: Record<
 > = {
   depart: {
     titre: "Valider le Départ ?",
-    description: "Tous les passagers et colis de ce voyage seront marqués en route.",
+    description:
+      "Les passagers et les colis reçus par le chauffeur seront marqués en route.",
     messageAlerte:
       "Un SMS de départ sera envoyé aux familles et aux destinataires. Cette action s'applique au voyage entier.",
     texteBouton: "Valider le départ",
@@ -88,6 +92,7 @@ export function ActionsVoyageChauffeur({
   dateDepart,
   statut,
   nbColis,
+  nbColisAValider,
   nbPassagers,
   gares = [],
   pointsArrivee = [],
@@ -133,7 +138,9 @@ export function ActionsVoyageChauffeur({
     setErreur(null);
     try {
       if (action === "depart") {
-        const r = await logistiqueAPI.voyages.validerDepart(voyageId, {});
+        const r = await logistiqueAPI.voyages.validerDepart(voyageId, {
+          confirmer_colis_non_valides: nbColisAValider > 0,
+        });
         setSucces(r.message);
       } else if (action === "approche") {
         const r = await logistiqueAPI.voyages.preAlerte(voyageId, {});
@@ -160,6 +167,12 @@ export function ActionsVoyageChauffeur({
   }
 
   const config = action ? CONFIG[action] : null;
+  const descriptionAction =
+    action === "depart" && nbColisAValider > 0
+      ? `${nbColisAValider} colis non validé${nbColisAValider > 1 ? "s" : ""} ${
+          nbColisAValider > 1 ? "seront retirés" : "sera retiré"
+        } de ce voyage. Seuls les colis reçus par le chauffeur partiront en route.`
+      : config?.description;
 
   return (
     <Carte
@@ -190,6 +203,19 @@ export function ActionsVoyageChauffeur({
         {erreur && (
           <Alerte variante="erreur" titre="Action impossible">
             {erreur}
+          </Alerte>
+        )}
+        {nbColisAValider > 0 && (
+          <Alerte variante="avertissement" titre="Colis à valider">
+            {nbColisAValider} colis{" "}
+            {nbColisAValider === 1 ? "est" : "sont"} à valider avant le départ.{" "}
+            <Link
+              href="/chauffeur/colis#onglet-a-valider"
+              className="font-semibold underline underline-offset-2"
+            >
+              Les valider maintenant
+            </Link>
+            .
           </Alerte>
         )}
         {succes && (
@@ -236,6 +262,7 @@ export function ActionsVoyageChauffeur({
             }}
           >
             <IconeCheck className="h-4 w-4" /> 1. Valider le départ
+            {nbColisAValider > 0 ? ` (${nbColisAValider} à valider)` : ""}
           </Bouton>
           <Bouton
             variante="secondaire"
@@ -288,7 +315,7 @@ export function ActionsVoyageChauffeur({
       <ModalConfirmation
         ouvert={action !== null}
         titre={config?.titre ?? ""}
-        description={config?.description}
+        description={descriptionAction}
         messageAlerte={config?.messageAlerte}
         varianteAlerte="avertissement"
         texteBoutonConfirmer={config?.texteBouton ?? "Confirmer"}

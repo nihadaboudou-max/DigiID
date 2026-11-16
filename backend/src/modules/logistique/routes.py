@@ -918,7 +918,14 @@ async def valider_depart_voyage(
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
-    return await service.valider_depart_voyage(session, voyage_id, utilisateur_courant)
+    return await service.valider_depart_voyage(
+        session,
+        voyage_id,
+        utilisateur_courant,
+        confirmer_colis_non_valides=(
+            donnees.confirmer_colis_non_valides if donnees is not None else False
+        ),
+    )
 
 
 @routeur_voyages.post("/{voyage_id}/arrivee",
@@ -1497,6 +1504,24 @@ async def confirmer_reception_colis(
     """Fige la fiche : le chauffeur déclare avoir physiquement le colis."""
     colis = await service.confirmer_reception_colis(
         session, colis_id, utilisateur_courant
+    )
+    return await _enrichir_colis(session, colis)
+
+
+@routeur_colis.post(
+    "/{colis_id}/refus-reception",
+    response_model=schemas.ColisResponse,
+    summary="Chauffeur : refuser la prise en charge d'un colis",
+)
+@require_permission("logistique.scan")
+async def refuser_reception_colis(
+    colis_id: UUID,
+    donnees: schemas.RefusReceptionRequest,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    colis = await service.refuser_reception_colis(
+        session, colis_id, utilisateur_courant, donnees.motif
     )
     return await _enrichir_colis(session, colis)
 

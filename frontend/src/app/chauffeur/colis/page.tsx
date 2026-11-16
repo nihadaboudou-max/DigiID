@@ -27,8 +27,24 @@ import {
   LIBELLES_STATUT_COLIS,
   VARIANTES_STATUT_COLIS,
   type Colis,
-  type StatutColis,
 } from "@/types/logistique";
+
+type OngletColis = "a_valider" | "recu" | "en_route" | "livre";
+const ONGLETS_COLIS: OngletColis[] = ["a_valider", "recu", "en_route", "livre"];
+
+const STATUTS_PAR_ONGLET: Record<OngletColis, string[]> = {
+  a_valider: ["a_valider"],
+  recu: ["recu_chauffeur", "enregistre_direct"],
+  en_route: ["en_transit", "arrive"],
+  livre: ["livre"],
+};
+
+const LIBELLES_ONGLET: Record<OngletColis, string> = {
+  a_valider: "À valider",
+  recu: "Reçus",
+  en_route: "En route",
+  livre: "Livrés",
+};
 
 export default function PageMesColis() {
   return (
@@ -43,36 +59,50 @@ function Contenu() {
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [recherche, setRecherche] = useState("");
-  const [filtre, setFiltre] = useState<"" | StatutColis>("");
+  const [onglet, setOnglet] = useState<OngletColis>("a_valider");
   const [page, setPage] = useState(1);
   const [totalFiltres, setTotalFiltres] = useState(0);
-  const [totalColis, setTotalColis] = useState(0);
-  const [aLivrer, setALivrer] = useState(0);
+  const [compteurs, setCompteurs] = useState<Record<OngletColis, number>>({
+    a_valider: 0,
+    recu: 0,
+    en_route: 0,
+    livre: 0,
+  });
+  const [colisEnAction, setColisEnAction] = useState<string | null>(null);
+  const [rechargement, setRechargement] = useState(0);
 
   useEffect(() => {
     let annule = false;
     setChargement(true);
     setErreur(null);
+    const filtresRecherche = recherche.trim()
+      ? { recherche: recherche.trim() }
+      : {};
     void Promise.all([
       logistiqueAPI.colis.lister({
         page,
         par_page: 5,
-        ...(filtre ? { statut: filtre } : {}),
-        ...(recherche.trim() ? { recherche: recherche.trim() } : {}),
+        statuts: STATUTS_PAR_ONGLET[onglet],
+        ...filtresRecherche,
       }),
-      logistiqueAPI.colis.lister({ page: 1, par_page: 1 }),
-      logistiqueAPI.colis.lister({
-        page: 1,
-        par_page: 1,
-        statuts: ["enregistre", "enregistre_direct", "en_transit", "arrive"],
-      }),
+      ...ONGLETS_COLIS.map((cle) =>
+        logistiqueAPI.colis.lister({
+          page: 1,
+          par_page: 1,
+          statuts: STATUTS_PAR_ONGLET[cle],
+        }),
+      ),
     ])
-      .then(([reponse, reponseTotale, reponseALivrer]) => {
+      .then(([reponse, ...reponsesCompteurs]) => {
         if (annule) return;
         setColis(reponse.elements);
         setTotalFiltres(reponse.total);
-        setTotalColis(reponseTotale.total);
-        setALivrer(reponseALivrer.total);
+        setCompteurs({
+          a_valider: reponsesCompteurs[0].total,
+          recu: reponsesCompteurs[1].total,
+          en_route: reponsesCompteurs[2].total,
+          livre: reponsesCompteurs[3].total,
+        });
       })
       .catch((e: unknown) => {
         if (annule) return;
@@ -88,7 +118,32 @@ function Contenu() {
     return () => {
       annule = true;
     };
-  }, [filtre, page, recherche]);
+  }, [onglet, page, recherche, rechargement]);
+
+  async function traiterReception(colisId: string, accepte: boolean) {
+    setColisEnAction(colisId);
+    setErreur(null);
+    try {
+      if (accepte) {
+        await logistiqueAPI.colis.confirmerReception(colisId);
+      } else {
+        await logistiqueAPI.colis.refuserReception(
+          colisId,
+          "Colis non reçu lors du chargement.",
+        );
+      }
+      setPage(1);
+      setRechargement((valeur) => valeur + 1);
+    } catch (e: unknown) {
+      setErreur(
+        e instanceof ErreurAPI
+          ? e.message_utilisateur
+          : "Impossible d'enregistrer votre réponse. Réessayez.",
+      );
+    } finally {
+      setColisEnAction(null);
+    }
+  }
 
   return (
     <div className="space-y-5 apparition">
@@ -96,8 +151,8 @@ function Contenu() {
         <div>
           <h1 className="text-2xl font-bold text-ardoise">Mes colis</h1>
           <p className="text-sm text-ardoise-clair">
-            Ce que vous transportez. À la remise, scannez le QR du colis : le
-            destinataire et l&apos;expéditeur sont prévenus.
+            Confirmez d&apos;abord les colis reçus au guichet, puis suivez ceux
+            qui partent en route.
           </p>
         </div>
         <Link href="/chauffeur/colis/nouveau">
@@ -113,19 +168,27 @@ function Contenu() {
         </Alerte>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:max-w-md">
-        <div className="carte py-4 text-center">
-          <p className="text-2xl font-bold text-ardoise">{totalColis}</p>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-ardoise-clair">
-            Colis à bord
-          </p>
-        </div>
-        <div className="carte py-4 text-center">
-          <p className="text-2xl font-bold text-ocre-fonce">{aLivrer}</p>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-ardoise-clair">
-            À remettre
-          </p>
-        </div>
+      <div
+        id="onglet-a-valider"
+        role="tablist"
+        aria-label="Statut des colis"
+        className="flex flex-wrap gap-2"
+      >
+        {ONGLETS_COLIS.map((cle) => (
+          <Bouton
+            key={cle}
+            variante={onglet === cle ? "primaire" : "ghost"}
+            taille="petit"
+            role="tab"
+            aria-selected={onglet === cle}
+            onClick={() => {
+              setOnglet(cle);
+              setPage(1);
+            }}
+          >
+            {LIBELLES_ONGLET[cle]} ({compteurs[cle]})
+          </Bouton>
+        ))}
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -140,25 +203,6 @@ function Contenu() {
             }}
             placeholder="Destinataire, téléphone ou code du colis"
           />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-ardoise">Statut</label>
-          <select
-            className="champ-saisie"
-            value={filtre}
-            onChange={(e) => {
-              setFiltre(e.target.value as "" | StatutColis);
-              setPage(1);
-            }}
-          >
-            <option value="">Tous les statuts</option>
-            <option value="enregistre">Enregistrés</option>
-            <option value="enregistre_direct">Enregistrés en route</option>
-            <option value="en_transit">En transit</option>
-            <option value="arrive">Arrivés</option>
-            <option value="livre">Livrés</option>
-            <option value="annule">Annulés</option>
-          </select>
         </div>
       </div>
 
@@ -194,29 +238,63 @@ function Contenu() {
                     {c.code_clair ?? "Code en attente"} · {c.nombre_articles} article(s)
                     {" · "}{formaterDateHeure(c.cree_le)}
                   </span>
+                  <span className="text-xs font-medium text-ardoise-clair">
+                    {c.mode_enregistrement === "chauffeur_direct"
+                      ? "Origine : Chauffeur"
+                      : `Guichet : ${c.gare_depart_nom ?? "Gare de départ"}${
+                          c.enregistre_par_nom ? ` / ${c.enregistre_par_nom}` : ""
+                        }`}
+                  </span>
                 </span>
               );
 
               return (
-                <li key={c.id}>
-                  {c.code_clair ? (
-                    <Link
-                      href={`/chauffeur/colis/${encodeURIComponent(c.code_clair)}`}
-                      className="flex items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-sable-clair focus-visible:outline focus-visible:outline-2 focus-visible:outline-lagune"
-                    >
-                      {contenu}
-                      <span className="shrink-0 text-sm font-medium text-lagune">
-                        Détails →
-                      </span>
-                    </Link>
-                  ) : (
-                    <div className="flex items-center gap-3 px-2 py-3">
-                      {contenu}
-                      <span className="shrink-0 text-xs text-ardoise-clair">
-                        En attente
-                      </span>
-                    </div>
-                  )}
+                <li key={c.id} className="space-y-2 py-3">
+                  <div className="flex items-center gap-3">
+                    {c.code_clair ? (
+                      <Link
+                        href={`/chauffeur/colis/${encodeURIComponent(c.code_clair)}`}
+                        className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-sable-clair focus-visible:outline focus-visible:outline-2 focus-visible:outline-lagune"
+                      >
+                        {contenu}
+                        <span className="shrink-0 text-sm font-medium text-lagune">
+                          Détails →
+                        </span>
+                      </Link>
+                    ) : (
+                      <div className="flex min-w-0 flex-1 items-center gap-3 px-2 py-3">
+                        {contenu}
+                        <span className="shrink-0 text-xs text-ardoise-clair">
+                          En attente
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {(c.statut === "a_valider" || c.statut === "enregistre") &&
+                    c.mode_enregistrement === "guichet" && (
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <Bouton
+                          variante="succes"
+                          taille="moyen"
+                          className="h-14 w-full"
+                          chargement={colisEnAction === c.id}
+                          disabled={colisEnAction !== null && colisEnAction !== c.id}
+                          onClick={() => void traiterReception(c.id, true)}
+                        >
+                          J&apos;ai reçu le colis
+                        </Bouton>
+                        <Bouton
+                          variante="danger"
+                          taille="moyen"
+                          className="h-14 w-full"
+                          chargement={colisEnAction === c.id}
+                          disabled={colisEnAction !== null && colisEnAction !== c.id}
+                          onClick={() => void traiterReception(c.id, false)}
+                        >
+                          Je n&apos;ai pas reçu ce colis
+                        </Bouton>
+                      </div>
+                    )}
                 </li>
               );
             })}

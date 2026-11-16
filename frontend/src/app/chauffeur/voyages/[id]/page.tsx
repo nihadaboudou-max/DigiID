@@ -35,6 +35,9 @@ import {
 
 const ELEMENTS_PAR_PAGE = 5;
 const STATUTS_COLIS_NON_ANNULES = [
+  "non_attribue",
+  "a_valider",
+  "recu_chauffeur",
   "enregistre",
   "enregistre_direct",
   "en_transit",
@@ -68,6 +71,7 @@ function Contenu() {
   const [colis, setColis] = useState<Colis[]>([]);
   const [totalColis, setTotalColis] = useState(0);
   const [nbColisActifs, setNbColisActifs] = useState(0);
+  const [nbColisAValider, setNbColisAValider] = useState(0);
   const [passagers, setPassagers] = useState<SuiviFamilial[]>([]);
   const [totalPassagers, setTotalPassagers] = useState(0);
   const [nbPassagersActifs, setNbPassagersActifs] = useState(0);
@@ -202,7 +206,7 @@ function Contenu() {
       setChargementCompteurs(true);
       setErreurCompteurs(null);
       try {
-        const [colisActifs, passagersActifs] = await Promise.all([
+        const [colisActifs, passagersActifs, colisAValider] = await Promise.all([
           logistiqueAPI.colis.lister({
             voyage_id: voyageId,
             statuts: STATUTS_COLIS_NON_ANNULES,
@@ -215,10 +219,17 @@ function Contenu() {
             page: 1,
             par_page: 1,
           }),
+          logistiqueAPI.colis.lister({
+            voyage_id: voyageId,
+            statuts: ["a_valider"],
+            page: 1,
+            par_page: 1,
+          }),
         ]);
         if (annule) return;
         setNbColisActifs(colisActifs.total);
         setNbPassagersActifs(passagersActifs.total);
+        setNbColisAValider(colisAValider.total);
       } catch (e) {
         if (!annule) {
           setErreurCompteurs(
@@ -302,6 +313,7 @@ function Contenu() {
         dateDepart={voyage.date_depart}
         statut={voyage.statut}
         nbColis={nbColisActifs}
+        nbColisAValider={nbColisAValider}
         nbPassagers={nbPassagersActifs}
         gares={
           ligne

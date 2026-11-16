@@ -21,8 +21,11 @@ from src.base_donnees.base import Base, MelangeTracabilite
 TYPES_EVENEMENT_COLIS = (
     "enregistrement",
     "affectation",
+    "desaffectation",
     # Prise en charge physique par le chauffeur (fige la fiche).
     "reception",
+    "refus_reception",
+    "retrait_depart",
     "depart",
     "mise_en_transit",
     "arrivee",

@@ -469,8 +469,23 @@ export const logistiqueAPI = {
      * Répond au terrain : au guichet on enregistre souvent le colis **avant**
      * de savoir quel car partira. On revient ensuite désigner le voyage.
      */
-    affecter: (colisId: string, donnees: { voyage_id: string; chauffeur_id?: string }) =>
+    affecter: (
+      colisId: string,
+      donnees: { voyage_id?: string | null; chauffeur_id?: string | null },
+    ) =>
       clientAPI.post<Colis>(`${BASE}/colis/${colisId}/affectation`, donnees, opts),
+
+    /** Le chauffeur confirme avoir reçu le colis affecté. */
+    confirmerReception: (colisId: string) =>
+      clientAPI.post<Colis>(`${BASE}/colis/${colisId}/reception`, {}, opts),
+
+    /** Le chauffeur refuse la réception et rend le colis au guichet. */
+    refuserReception: (colisId: string, motif: string) =>
+      clientAPI.post<Colis>(
+        `${BASE}/colis/${colisId}/refus-reception`,
+        { motif },
+        opts,
+      ),
 
     /** Corrige une fiche colis **avant** la prise en charge (guichet). */
     modifier: (colisId: string, donnees: Record<string, unknown>) =>
@@ -487,10 +502,6 @@ export const logistiqueAPI = {
     /** Confirme la remise finale avec le code communiqué par le destinataire. */
     confirmerRemise: (colisId: string, code: string) =>
       clientAPI.post<Colis>(`${BASE}/colis/${colisId}/confirmer-remise`, { code }, opts),
-
-    /** Le chauffeur confirme avoir physiquement pris le colis en charge. */
-    confirmerReception: (colisId: string) =>
-      clientAPI.post<Colis>(`${BASE}/colis/${colisId}/reception`, {}, opts),
 
     /** Le chauffeur dépose le colis au guichet d'arrivée. */
     remettreGuichet: (colisId: string, agentId: string) =>

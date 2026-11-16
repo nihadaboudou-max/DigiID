@@ -21,7 +21,15 @@ from src.base_donnees.base import Base, MelangeTracabilite
 # qui monte en cours de trajet). Il entre dans le même flux que les autres colis
 # (départ/arrivée en lot) et reste traçable via le ticket QR.
 STATUTS_COLIS = (
-    "enregistre", "enregistre_direct", "en_transit", "arrive", "livre", "annule"
+    "non_attribue",
+    "a_valider",
+    "recu_chauffeur",
+    "enregistre",
+    "enregistre_direct",
+    "en_transit",
+    "arrive",
+    "livre",
+    "annule",
 )
 
 # Origine d'un colis : guichet (receveur/commerçant) ou chauffeur directement.

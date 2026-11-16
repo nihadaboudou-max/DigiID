@@ -529,15 +529,20 @@ class ColisUpdate(BaseModel):
 
 
 class AffectationRequest(BaseModel):
-    """Affectation (ou réaffectation) d'un enregistrement à un voyage.
+    """Affectation, réaffectation ou désaffectation d'un colis.
 
     Répond au terrain : au guichet, on enregistre un colis **avant** de savoir
     quel car partira. Le receveur revient ensuite sur la fiche choisir le
     voyage — le chauffeur en découle automatiquement (il est celui du voyage).
+    ``voyage_id = None`` retire l'affectation d'un colis encore à valider.
     """
-    voyage_id: UUID
+    voyage_id: Optional[UUID] = None
     # Facultatif : si omis, le chauffeur affecté au voyage est retenu.
     chauffeur_id: Optional[UUID] = None
+
+
+class RefusReceptionRequest(BaseModel):
+    motif: str = Field(..., min_length=3, max_length=200)
 
 
 # ─── Événements (timeline) ───────────────────────────────────────────
@@ -919,6 +924,7 @@ class SuiviPublicResponse(BaseModel):
 
 class ActionLotVoyageRequest(BaseModel):
     """Action en lot du chauffeur sur un voyage (passagers ET colis à la fois)."""
+    confirmer_colis_non_valides: bool = False
     # Gare ciblée (optionnelle) : pour « Arrivés », ne traiter que les colis et
     # passagers destinés à cette gare d'arrivée. Par défaut, tous.
     gare_id: Optional[UUID] = None
@@ -937,6 +943,7 @@ class ActionLotVoyageResponse(BaseModel):
     voyage_id: Optional[UUID] = None
     nb_passagers: int = 0
     nb_colis: int = 0
+    nb_colis_retires: int = 0
     # Arrêt intermédiaire effectivement traité (None = toutes les gares).
     arret_id: Optional[UUID] = None
     # Statut du voyage après l'action (ex. planifie → en_cours → termine).

@@ -18,7 +18,11 @@ interface Proprietes {
 /** Icône (emoji sobre) par type d'événement. */
 const ICONES: Record<TypeEvenementColis, string> = {
   affectation: "🧑‍✈️",
+  desaffectation: "↩️",
   enregistrement: "📦",
+  reception: "✅",
+  refus_reception: "❌",
+  retrait_depart: "↩️",
   depart: "🚚",
   mise_en_transit: "🛣️",
   arrivee: "📍",
@@ -28,7 +32,11 @@ const ICONES: Record<TypeEvenementColis, string> = {
 /** Couleur de la pastille par type d'événement. */
 const COULEURS: Record<TypeEvenementColis, string> = {
   affectation: "bg-terre",
+  desaffectation: "bg-ardoise-clair",
   enregistrement: "bg-lagune",
+  reception: "bg-green-600",
+  refus_reception: "bg-terre",
+  retrait_depart: "bg-terre",
   depart: "bg-ocre",
   mise_en_transit: "bg-ocre",
   arrivee: "bg-lagune",

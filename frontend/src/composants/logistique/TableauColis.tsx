@@ -31,6 +31,21 @@ interface Proprietes {
   cartesMobiles?: boolean;
 }
 
+function libelleStatutColis(colis: Colis): string {
+  if (colis.statut === "recu_chauffeur") {
+    return colis.chauffeur_nom
+      ? `Reçu par ${colis.chauffeur_nom}`
+      : "Reçu par le chauffeur";
+  }
+  if (colis.statut === "a_valider" || (colis.statut === "enregistre" && colis.chauffeur_id)) {
+    return "À valider";
+  }
+  if (colis.statut === "non_attribue" || (colis.statut === "enregistre" && !colis.chauffeur_id)) {
+    return "Non attribué";
+  }
+  return LIBELLES_STATUT_COLIS[colis.statut] ?? colis.statut;
+}
+
 export function TableauColis({
   colis,
   messageVide = "Aucun colis pour le moment.",
@@ -61,7 +76,7 @@ export function TableauColis({
                   </span>
                 </span>
                 <Badge variante={VARIANTES_STATUT_COLIS[c.statut] ?? "neutre"}>
-                  {LIBELLES_STATUT_COLIS[c.statut] ?? c.statut}
+                  {libelleStatutColis(c)}
                 </Badge>
               </div>
 
@@ -81,7 +96,7 @@ export function TableauColis({
                   <div>
                     <dt className="text-xs text-ardoise-clair">Statut</dt>
                     <dd className="text-ardoise">
-                      {LIBELLES_STATUT_COLIS[c.statut] ?? c.statut}
+                      {libelleStatutColis(c)}
                     </dd>
                   </div>
                   <div>
@@ -171,7 +186,7 @@ export function TableauColis({
               </td>
               <td className="py-2.5 pr-3">
                 <Badge variante={VARIANTES_STATUT_COLIS[c.statut] ?? "neutre"}>
-                  {LIBELLES_STATUT_COLIS[c.statut] ?? c.statut}
+                  {libelleStatutColis(c)}
                 </Badge>
               </td>
               <td className="py-2.5 pr-3 text-center font-medium text-ardoise">
