@@ -121,19 +121,17 @@ def _est_chauffeur(utilisateur: Utilisateur) -> bool:
 
 async def _auditer_logistique(
     session: AsyncSession,
-    requete: Request,
+    requete: Request | None,
     utilisateur: Utilisateur,
     type_evenement: TypesEvenementAudit,
     description: str,
     donnees: dict | None = None,
 ) -> None:
-    """Trace un geste du référentiel roulant dans le journal d'audit.
+    """Trace une action logistique réussie dans le journal d'audit.
 
-    Répond au besoin de terrain « qui a enregistré ce car, qui l'a affecté à qui,
-    qui a planifié ce départ ». Le geste métier est déjà validé et enregistré
-    quand on arrive ici : une panne du journal ne doit donc pas faire échouer
-    l'action du guichet ou du chauffeur, mais elle ne doit pas passer inaperçue
-    non plus (d'où le `journal.error`).
+    L'action métier est déjà validée et enregistrée quand on arrive ici : une
+    panne du journal ne doit donc pas la faire échouer, mais elle ne doit pas
+    passer inaperçue non plus (d'où le `journal.error`).
 
     On écrit sous point de sauvegarde : un échec de l'audit n'annule que
     l'audit, jamais la réponse (l'objet métier déjà committé reste exploitable).
@@ -146,8 +144,14 @@ async def _auditer_logistique(
                 description=description,
                 utilisateur_id=utilisateur.id,
                 role_acteur=utilisateur.role,
-                adresse_ip=requete.client.host if requete.client else None,
-                agent_utilisateur=requete.headers.get("user-agent"),
+                adresse_ip=(
+                    requete.client.host
+                    if requete is not None and requete.client
+                    else None
+                ),
+                agent_utilisateur=(
+                    requete.headers.get("user-agent") if requete is not None else None
+                ),
                 donnees_supplementaires=donnees,
             )
         await session.commit()
@@ -323,10 +327,18 @@ routeur_gares = APIRouter(prefix="/gares", tags=["Logistique — Gares"])
 @require_permission("logistique.ecrire")
 async def creer_gare(
     donnees: schemas.GareCreate,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
-    return await service.creer_gare(session, donnees)
+    gare = await service.creer_gare(session, donnees)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.GARE_CREEE,
+        f"Création de la gare {gare.nom} ({gare.ville})",
+        {"gare_id": str(gare.id), "nom": gare.nom, "ville": gare.ville},
+    )
+    return gare
 
 
 @routeur_gares.get("", response_model=schemas.ReponseListe[schemas.GareResponse],
@@ -358,22 +370,41 @@ async def obtenir_gare(
 @require_permission("logistique.ecrire")
 async def modifier_gare(
     donnees: schemas.GareUpdate,
+    requete: Request,
     gare: Gare = Depends(obtenir_gare_ou_404),
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
-    return await service.modifier_gare(session, gare.id, donnees)
+    gare_id = gare.id
+    gare = await service.modifier_gare(session, gare_id, donnees)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.GARE_MODIFIEE,
+        f"Modification de la gare {gare.nom} ({gare.ville})",
+        {
+            "gare_id": str(gare.id),
+            "modifications": donnees.model_dump(exclude_unset=True, mode="json"),
+        },
+    )
+    return gare
 
 
 @routeur_gares.delete("/{gare_id}", status_code=status.HTTP_204_NO_CONTENT,
                       summary="Supprimer une gare")
 @require_permission("logistique.supprimer")
 async def supprimer_gare(
+    requete: Request,
     gare: Gare = Depends(obtenir_gare_ou_404),
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
+    gare_id = gare.id
+    description = f"Suppression de la gare {gare.nom} ({gare.ville})"
     await service.supprimer_gare(session, gare.id)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant, TypesEvenementAudit.GARE_SUPPRIMEE,
+        description, {"gare_id": str(gare_id)},
+    )
 
 
 # ─── Lignes ──────────────────────────────────────────────────────────
@@ -386,10 +417,20 @@ routeur_lignes = APIRouter(prefix="/lignes", tags=["Logistique — Lignes"])
 @require_permission("logistique.trajet.ecrire")
 async def creer_ligne(
     donnees: schemas.LigneCreate,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     ligne = await service.creer_ligne(session, donnees)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant, TypesEvenementAudit.LIGNE_CREEE,
+        f"Création de la ligne {ligne.id}",
+        {
+            "ligne_id": str(ligne.id),
+            "gare_depart_id": str(ligne.gare_depart_id),
+            "gare_arrivee_id": str(ligne.gare_arrivee_id),
+        },
+    )
     return await _enrichir_ligne(session, ligne)
 
 
@@ -425,11 +466,20 @@ async def obtenir_ligne(
 @require_permission("logistique.trajet.ecrire")
 async def modifier_ligne(
     donnees: schemas.LigneUpdate,
+    requete: Request,
     ligne: Ligne = Depends(obtenir_ligne_ou_404),
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     ligne = await service.modifier_ligne(session, ligne.id, donnees)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant, TypesEvenementAudit.LIGNE_MODIFIEE,
+        f"Modification de la ligne {ligne.id}",
+        {
+            "ligne_id": str(ligne.id),
+            "modifications": donnees.model_dump(exclude_unset=True, mode="json"),
+        },
+    )
     return await _enrichir_ligne(session, ligne)
 
 
@@ -437,11 +487,17 @@ async def modifier_ligne(
                        summary="Supprimer une ligne")
 @require_permission("logistique.supprimer")
 async def supprimer_ligne(
+    requete: Request,
     ligne: Ligne = Depends(obtenir_ligne_ou_404),
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
+    ligne_id = ligne.id
     await service.supprimer_ligne(session, ligne.id)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant, TypesEvenementAudit.LIGNE_SUPPRIMEE,
+        f"Suppression de la ligne {ligne_id}", {"ligne_id": str(ligne_id)},
+    )
 
 
 # ─── Arrêts intermédiaires d'une ligne ──────────────────────────────
@@ -472,10 +528,16 @@ async def lister_arrets_ligne(
 async def creer_arret_ligne(
     ligne_id: UUID,
     donnees: schemas.ArretLigneCreate,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     arret = await service.creer_arret(session, ligne_id, donnees)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant, TypesEvenementAudit.ARRET_LIGNE_CREE,
+        f"Ajout de l'arrêt {arret.id} à la ligne {ligne_id}",
+        {"ligne_id": str(ligne_id), "arret_id": str(arret.id), "gare_id": str(arret.gare_id)},
+    )
     fiche = schemas.ArretLigneResponse.model_validate(arret)
     fiche.gare_nom = await _nom_gare(session, arret.gare_id)
     return fiche
@@ -489,10 +551,20 @@ async def modifier_arret_ligne(
     ligne_id: UUID,
     arret_id: UUID,
     donnees: schemas.ArretLigneUpdate,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     arret = await service.modifier_arret(session, arret_id, donnees)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant, TypesEvenementAudit.ARRET_LIGNE_MODIFIE,
+        f"Modification de l'arrêt {arret.id} de la ligne {ligne_id}",
+        {
+            "ligne_id": str(ligne_id),
+            "arret_id": str(arret.id),
+            "modifications": donnees.model_dump(exclude_unset=True, mode="json"),
+        },
+    )
     fiche = schemas.ArretLigneResponse.model_validate(arret)
     fiche.gare_nom = await _nom_gare(session, arret.gare_id)
     return fiche
@@ -505,10 +577,16 @@ async def modifier_arret_ligne(
 async def supprimer_arret_ligne(
     ligne_id: UUID,
     arret_id: UUID,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     await service.supprimer_arret(session, arret_id)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant, TypesEvenementAudit.ARRET_LIGNE_SUPPRIME,
+        f"Suppression de l'arrêt {arret_id} de la ligne {ligne_id}",
+        {"ligne_id": str(ligne_id), "arret_id": str(arret_id)},
+    )
 
 
 # ─── Véhicules ───────────────────────────────────────────────────────
@@ -875,7 +953,7 @@ async def modifier_voyage(
     voyage = await service.modifier_voyage(session, voyage.id, donnees)
     await _auditer_logistique(
         session, requete, utilisateur_courant,
-        TypesEvenementAudit.REMISE_COLIS_CONFIRMEE,
+        TypesEvenementAudit.VOYAGE_MODIFIE,
         f"Modification du départ (voyage {voyage.id})",
         donnees={
             "voyage_id": str(voyage.id),
@@ -899,11 +977,17 @@ async def modifier_voyage(
                         summary="Supprimer un voyage")
 @require_permission("logistique.supprimer")
 async def supprimer_voyage(
+    requete: Request,
     voyage: Voyage = Depends(obtenir_voyage_ou_404),
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
+    voyage_id = voyage.id
     await service.supprimer_voyage(session, voyage.id)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant, TypesEvenementAudit.VOYAGE_SUPPRIME,
+        f"Suppression du voyage {voyage_id}", {"voyage_id": str(voyage_id)},
+    )
 
 
 # ─── Actions groupées du chauffeur (passagers ET colis) ──────────────
@@ -914,11 +998,12 @@ async def supprimer_voyage(
 @require_permission("logistique.voyage.valider")
 async def valider_depart_voyage(
     voyage_id: UUID,
+    requete: Request,
     donnees: schemas.ActionLotVoyageRequest | None = None,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
-    return await service.valider_depart_voyage(
+    resultat = await service.valider_depart_voyage(
         session,
         voyage_id,
         utilisateur_courant,
@@ -926,6 +1011,17 @@ async def valider_depart_voyage(
             donnees.confirmer_colis_non_valides if donnees is not None else False
         ),
     )
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.VOYAGE_DEPART_VALIDE,
+        f"Départ du voyage {voyage_id} validé",
+        {
+            "voyage_id": str(voyage_id),
+            "nb_colis": resultat.get("nb_colis"),
+            "nb_passagers": resultat.get("nb_passagers"),
+        },
+    )
+    return resultat
 
 
 @routeur_voyages.post("/{voyage_id}/arrivee",
@@ -934,17 +1030,31 @@ async def valider_depart_voyage(
 @require_permission("logistique.voyage.valider")
 async def marquer_arrivee_voyage(
     voyage_id: UUID,
+    requete: Request,
     donnees: schemas.ActionLotVoyageRequest | None = None,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     donnees = donnees or schemas.ActionLotVoyageRequest()
-    return await service.marquer_arrivee_voyage(
+    resultat = await service.marquer_arrivee_voyage(
         session, voyage_id, utilisateur_courant,
         gare_id=donnees.gare_id,
         arret_id=donnees.arret_id,
         localisation=donnees.localisation,
     )
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.VOYAGE_ARRIVEE_MARQUEE,
+        f"Arrivée marquée pour le voyage {voyage_id}",
+        {
+            "voyage_id": str(voyage_id),
+            "gare_id": str(donnees.gare_id) if donnees.gare_id else None,
+            "arret_id": str(donnees.arret_id) if donnees.arret_id else None,
+            "nb_colis": resultat.get("nb_colis"),
+            "nb_passagers": resultat.get("nb_passagers"),
+        },
+    )
+    return resultat
 
 
 @routeur_voyages.post("/{voyage_id}/pre-alerte",
@@ -953,14 +1063,22 @@ async def marquer_arrivee_voyage(
 @require_permission("logistique.scan")
 async def pre_alerte_voyage(
     voyage_id: UUID,
+    requete: Request,
     donnees: schemas.PreAlerteRequest | None = None,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     donnees = donnees or schemas.PreAlerteRequest()
-    return await service.envoyer_pre_alerte_voyage(
+    resultat = await service.envoyer_pre_alerte_voyage(
         session, voyage_id, utilisateur_courant, delai_minutes=donnees.delai_minutes
     )
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.VOYAGE_PRE_ALERTE_ENVOYEE,
+        f"Pré-alerte envoyée pour le voyage {voyage_id}",
+        {"voyage_id": str(voyage_id), "delai_minutes": donnees.delai_minutes},
+    )
+    return resultat
 
 
 # ─── Acteurs logistiques ─────────────────────────────────────────────
@@ -973,10 +1091,22 @@ routeur_acteurs = APIRouter(prefix="/acteurs", tags=["Logistique — Acteurs"])
 @require_permission("logistique.ecrire")
 async def creer_acteur(
     donnees: schemas.ActeurCreate,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     acteur = await service.creer_acteur(session, donnees)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.ACTEUR_LOGISTIQUE_CREE,
+        f"Création de l'acteur logistique {acteur.id}",
+        {
+            "acteur_id": str(acteur.id),
+            "utilisateur_id": str(acteur.utilisateur_id),
+            "role": acteur.role,
+            "gare_id": str(acteur.gare_id) if acteur.gare_id else None,
+        },
+    )
     return await _enrichir_acteur(session, acteur)
 
 
@@ -1013,11 +1143,21 @@ async def obtenir_acteur(
 @require_permission("logistique.ecrire")
 async def modifier_acteur(
     donnees: schemas.ActeurUpdate,
+    requete: Request,
     acteur: ActeurLogistique = Depends(obtenir_acteur_ou_404),
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     acteur = await service.modifier_acteur(session, acteur.id, donnees)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.ACTEUR_LOGISTIQUE_MODIFIE,
+        f"Modification de l'acteur logistique {acteur.id}",
+        {
+            "acteur_id": str(acteur.id),
+            "modifications": donnees.model_dump(exclude_unset=True, mode="json"),
+        },
+    )
     return await _enrichir_acteur(session, acteur)
 
 
@@ -1025,11 +1165,19 @@ async def modifier_acteur(
                         summary="Supprimer un acteur")
 @require_permission("logistique.supprimer")
 async def supprimer_acteur(
+    requete: Request,
     acteur: ActeurLogistique = Depends(obtenir_acteur_ou_404),
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
+    acteur_id = acteur.id
     await service.supprimer_acteur(session, acteur.id)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.ACTEUR_LOGISTIQUE_SUPPRIME,
+        f"Suppression de l'acteur logistique {acteur_id}",
+        {"acteur_id": str(acteur_id)},
+    )
 
 
 # ─── Chauffeurs (attribution sans identifiant technique) ────────────
@@ -1185,10 +1333,21 @@ routeur_colis = APIRouter(prefix="/colis", tags=["Logistique — Colis"])
 @require_permission("logistique.colis.creer", "logistique.commercant.colis.creer")
 async def enregistrer_colis(
     donnees: schemas.ColisCreate,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     colis, ticket = await service.creer_colis(session, donnees, utilisateur_courant)
+    await _auditer_logistique(
+        session, requete, utilisateur_courant, TypesEvenementAudit.COLIS_ENREGISTRE,
+        f"Enregistrement du colis {colis.id}",
+        {
+            "colis_id": str(colis.id),
+            "gare_depart_id": str(colis.gare_depart_id),
+            "gare_arrivee_id": str(colis.gare_arrivee_id),
+            "voyage_id": str(colis.voyage_id) if colis.voyage_id else None,
+        },
+    )
     await _enrichir_colis(session, colis)
     ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
     return {"colis": colis, "ticket": ticket}
@@ -1202,6 +1361,7 @@ async def enregistrer_colis(
 @require_permission("logistique.colis.creer")
 async def synchroniser_colis_hors_ligne(
     donnees: list[schemas.ColisHorsLigne],
+    requete: Request = None,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
@@ -1226,6 +1386,7 @@ async def synchroniser_colis_hors_ligne(
         et l'audit du guichet perdrait son sens.
     """
     resultats: list[dict] = []
+    nouveaux_colis: list[str] = []
     for element in donnees:
         deja = await session.execute(
             select(Colis).where(Colis.id_local == element.id_local).limit(1)
@@ -1271,6 +1432,7 @@ async def synchroniser_colis_hors_ligne(
                 )
             resultats.append({"colis": gagnant, "ticket": ticket_gagnant})
             continue
+        nouveaux_colis.append(str(colis.id))
         await _enrichir_colis(session, colis)
         ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
         resultats.append({"colis": colis, "ticket": ticket})
@@ -1278,6 +1440,17 @@ async def synchroniser_colis_hors_ligne(
     journal.info(
         f"Synchronisation hors-ligne : {len(resultats)} colis "
         f"pour {utilisateur_courant.id}"
+    )
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.COLIS_SYNCHRONISE_HORS_LIGNE,
+        f"Synchronisation hors-ligne de {len(donnees)} colis "
+        f"({len(nouveaux_colis)} créé(s))",
+        {
+            "nombre_recu": len(donnees),
+            "nombre_cree": len(nouveaux_colis),
+            "colis_crees_ids": nouveaux_colis,
+        },
     )
     return resultats
 
@@ -1364,6 +1537,7 @@ async def affecter_colis(
 @require_permission("logistique.colis.creer", "logistique.commercant.colis.creer")
 async def ajouter_photo_colis(
     colis_id: UUID,
+    requete: Request,
     fichier: UploadFile = File(...),
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
@@ -1409,6 +1583,12 @@ async def ajouter_photo_colis(
         except OSError as erreur:
             journal.error(f"Suppression de l'ancienne photo du colis {colis.id} impossible: {erreur}")
 
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.COLIS_PHOTO_AJOUTEE,
+        f"Photo ajoutée au colis {colis.id}",
+        {"colis_id": str(colis.id)},
+    )
     return {"photo_url": f"/api/v1/logistique/colis/{colis.id}/photo"}
 
 
@@ -1478,6 +1658,7 @@ async def voir_photo_colis(
 async def modifier_colis(
     colis_id: UUID,
     donnees: schemas.ColisUpdate,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
@@ -1488,6 +1669,14 @@ async def modifier_colis(
     """
     colis = await service.modifier_colis(
         session, colis_id, donnees, utilisateur_courant
+    )
+    await _auditer_logistique(
+        session, requete, utilisateur_courant, TypesEvenementAudit.COLIS_MODIFIE,
+        f"Modification de la fiche du colis {colis.id}",
+        {
+            "colis_id": str(colis.id),
+            "champs_modifies": sorted(donnees.model_dump(exclude_unset=True)),
+        },
     )
     return await _enrichir_colis(session, colis)
 
@@ -1533,12 +1722,23 @@ async def refuser_reception_colis(
 async def remettre_colis_au_guichet(
     colis_id: UUID,
     donnees: schemas.RemiseGuichetRequest,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     """Enregistre le receveur ou gérant qui prend le colis en charge."""
     colis = await service.remettre_colis_au_guichet(
         session, colis_id, utilisateur_courant, donnees.agent_id
+    )
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.COLIS_REMIS_AU_GUICHET,
+        f"Colis {colis.id} remis au guichet d'arrivée",
+        {
+            "colis_id": str(colis.id),
+            "agent_id": str(donnees.agent_id),
+            "gare_id": str(colis.gare_arrivee_id) if colis.gare_arrivee_id else None,
+        },
     )
     return await _enrichir_colis(session, colis)
 
@@ -1621,6 +1821,7 @@ async def lister_notifications_colis(
 @require_permission("logistique.scan")
 async def envoyer_code_remise(
     colis_id: UUID,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
@@ -1635,6 +1836,12 @@ async def envoyer_code_remise(
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Ticket du colis introuvable.")
     expire_le = await service.preparer_code_remise(
         session, colis, ticket, renouveller=True
+    )
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.COLIS_CODE_REMISE_ENVOYE,
+        f"Code de remise envoyé pour le colis {colis.id}",
+        {"colis_id": str(colis.id), "expire_le": expire_le.isoformat()},
     )
     return {
         "message": "Le code a été envoyé dans la notification interne DigiID.",
@@ -1660,7 +1867,7 @@ async def confirmer_remise(
         session,
         requete,
         utilisateur_courant,
-        TypesEvenementAudit.VOYAGE_MODIFIE,
+        TypesEvenementAudit.COLIS_REMISE_CONFIRMEE,
         "Remise d'un colis confirmée par le code du destinataire.",
         {"colis_id": str(colis_id)},
     )
@@ -1696,10 +1903,31 @@ routeur_scans = APIRouter(tags=["Logistique — Scans"])
 @require_permission("logistique.scan")
 async def scanner_ticket(
     donnees: schemas.ScanCreate,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     resultat = await service.enregistrer_scan(session, donnees, utilisateur_courant)
+    evenement = resultat.get("evenement")
+    colis_scan = resultat.get("colis")
+    suivi_scan = resultat.get("suivi")
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.SCAN_LOGISTIQUE_ENREGISTRE,
+        f"Scan logistique « {donnees.type_evenement} » "
+        f"({'passager' if suivi_scan is not None else 'colis'})",
+        {
+            "type_evenement": donnees.type_evenement,
+            "colis_id": str(colis_scan.id) if colis_scan is not None else None,
+            "suivi_familial_id": (
+                str(suivi_scan.id) if suivi_scan is not None else None
+            ),
+            "evenement_id": str(evenement.id) if evenement is not None else None,
+            "succes": resultat.get("succes"),
+            "deja_scanne": resultat.get("deja_scanne", resultat.get("deja_enregistre")),
+            "deja_livre": resultat.get("deja_livre"),
+        },
+    )
     colis = resultat.get("colis")
     if colis is not None:
         await _enrichir_colis(session, colis)
@@ -1728,11 +1956,24 @@ routeur_suivi_familial = APIRouter(
 @require_permission("logistique.colis.creer")
 async def enregistrer_suivi_familial(
     donnees: schemas.SuiviFamilialCreate,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     suivi, ticket, notification_envoyee = await service.creer_suivi_familial(
         session, donnees, utilisateur_courant
+    )
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.SUIVI_FAMILIAL_CREE,
+        f"Création d'un suivi familial {suivi.id}",
+        {
+            "suivi_familial_id": str(suivi.id),
+            "voyage_id": str(suivi.voyage_id) if suivi.voyage_id else None,
+            "gare_depart_id": str(suivi.gare_depart_id),
+            "gare_arrivee_id": str(suivi.gare_arrivee_id),
+            "type_passager": suivi.type_passager,
+        },
     )
     await _enrichir_suivi_familial(session, suivi)
     ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
@@ -1774,6 +2015,7 @@ async def lister_suivi_familial(
 async def affecter_suivi_familial(
     suivi_id: UUID,
     donnees: schemas.AffectationRequest,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
@@ -1785,6 +2027,16 @@ async def affecter_suivi_familial(
     suivi = await service.affecter_suivi_familial(
         session, suivi_id, donnees, utilisateur_courant
     )
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.SUIVI_FAMILIAL_AFFECTE,
+        f"Affectation du suivi familial {suivi.id} au voyage {suivi.voyage_id}",
+        {
+            "suivi_familial_id": str(suivi.id),
+            "voyage_id": str(suivi.voyage_id) if suivi.voyage_id else None,
+            "chauffeur_id": str(suivi.chauffeur_id) if suivi.chauffeur_id else None,
+        },
+    )
     return await _enrichir_suivi_familial(session, suivi)
 
 
@@ -1795,11 +2047,21 @@ async def affecter_suivi_familial(
 async def modifier_suivi_familial(
     suivi_id: UUID,
     donnees: schemas.SuiviFamilialUpdate,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     suivi = await service.modifier_suivi_familial(
         session, suivi_id, donnees, utilisateur_courant
+    )
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.SUIVI_FAMILIAL_MODIFIE,
+        f"Modification de la fiche du suivi familial {suivi.id}",
+        {
+            "suivi_familial_id": str(suivi.id),
+            "champs_modifies": sorted(donnees.model_dump(exclude_unset=True)),
+        },
     )
     return await _enrichir_suivi_familial(session, suivi)
 
@@ -1810,11 +2072,18 @@ async def modifier_suivi_familial(
 @require_permission("logistique.scan")
 async def confirmer_reception_suivi(
     suivi_id: UUID,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     suivi = await service.confirmer_reception_suivi(
         session, suivi_id, utilisateur_courant
+    )
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.SUIVI_FAMILIAL_RECEPTION_CONFIRMEE,
+        f"Réception du suivi familial {suivi.id} confirmée par le chauffeur",
+        {"suivi_familial_id": str(suivi.id), "statut": suivi.statut},
     )
     return await _enrichir_suivi_familial(session, suivi)
 
@@ -1826,11 +2095,22 @@ async def confirmer_reception_suivi(
 async def remettre_suivi_au_guichet(
     suivi_id: UUID,
     donnees: schemas.RemiseGuichetRequest,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     suivi = await service.remettre_suivi_au_guichet(
         session, suivi_id, utilisateur_courant, donnees.agent_id
+    )
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.SUIVI_FAMILIAL_REMIS_AU_GUICHET,
+        f"Suivi familial {suivi.id} remis au guichet",
+        {
+            "suivi_familial_id": str(suivi.id),
+            "agent_id": str(donnees.agent_id),
+            "gare_id": str(suivi.gare_arrivee_id),
+        },
     )
     return await _enrichir_suivi_familial(session, suivi)
 
@@ -1886,11 +2166,26 @@ async def lister_notifications_suivi(
 async def enregistrer_evenement_suivi(
     suivi_id: UUID,
     donnees: schemas.SuiviFamilialEvenementCreate,
+    requete: Request,
     utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
     session: AsyncSession = Depends(obtenir_session),
 ):
     resultat = await service.enregistrer_evenement_suivi(
         session, suivi_id, donnees, utilisateur_courant
+    )
+    await _auditer_logistique(
+        session, requete, utilisateur_courant,
+        TypesEvenementAudit.SUIVI_FAMILIAL_ETAPE_ENREGISTREE,
+        f"Étape « {donnees.type_evenement} » enregistrée pour le suivi {suivi_id}",
+        {
+            "suivi_familial_id": str(suivi_id),
+            "type_evenement": donnees.type_evenement,
+            "gare_id": str(donnees.gare_id) if donnees.gare_id else None,
+            "evenement_id": (
+                str(resultat["evenement"].id) if resultat.get("evenement") else None
+            ),
+            "deja_enregistre": resultat.get("deja_enregistre", False),
+        },
     )
     suivi = resultat.get("suivi")
     if suivi is not None:

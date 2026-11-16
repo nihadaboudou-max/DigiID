@@ -137,6 +137,7 @@ class TestSynchroniserColisHorsLigne:
         """La clé d'idempotence part avec le colis, pas après le commit."""
         utilisateur = _utilisateur()
         recus: list[str | None] = []
+        audits = []
 
         async def faux_creer_colis(session, charge, utilisateur, id_local=None):
             recus.append(id_local)
@@ -144,7 +145,13 @@ class TestSynchroniserColisHorsLigne:
             colis.ticket_id = None
             return colis, _ticket()
 
+        async def faux_auditer(
+            _session, _requete, _utilisateur, type_evenement, _description, donnees
+        ):
+            audits.append((type_evenement.value, donnees))
+
         monkeypatch.setattr(service, "creer_colis", faux_creer_colis)
+        monkeypatch.setattr(routes, "_auditer_logistique", faux_auditer)
 
         session = SessionFactice()
         depart, arrivee = uuid.uuid4(), uuid.uuid4()
@@ -160,6 +167,16 @@ class TestSynchroniserColisHorsLigne:
         # Plus aucune affectation/commit après coup : tout se joue dans le service.
         assert session.commits == 0
         assert resultats[0]["colis"].id_local == "poste-0001"
+        assert audits == [
+            (
+                "colis_synchronise_hors_ligne",
+                {
+                    "nombre_recu": 1,
+                    "nombre_cree": 1,
+                    "colis_crees_ids": [str(resultats[0]["colis"].id)],
+                },
+            )
+        ]
 
     def test_colis_deja_synchronise_n_est_pas_recree(self, monkeypatch):
         """Rejouer la file deux fois ne crée pas de doublon."""
