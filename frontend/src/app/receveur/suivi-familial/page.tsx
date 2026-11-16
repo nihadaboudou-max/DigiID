@@ -62,6 +62,8 @@ function Contenu() {
   const [remisesConfirmees, setRemisesConfirmees] = useState<Set<string>>(
     () => new Set(),
   );
+  const [codesRemise, setCodesRemise] = useState<Record<string, string>>({});
+  const [motifsSansCode, setMotifsSansCode] = useState<Record<string, string>>({});
   /** Suivi dont on est en train de (ré)affecter le chauffeur (panneau ouvert). */
   const [affectationPour, setAffectationPour] = useState<string | null>(null);
 
@@ -129,7 +131,11 @@ function Contenu() {
   }, [chargerCompteurs]);
 
   /** Confirme la remise à la famille après le dépôt du chauffeur au guichet. */
-  async function confirmerRemise(suivi: SuiviFamilial) {
+  async function confirmerRemise(
+    suivi: SuiviFamilial,
+    code?: string,
+    motifSansCode?: string,
+  ) {
     setActionEnCours(`${suivi.id}:livraison`);
     setErreur(null);
     setMessage(null);
@@ -140,9 +146,13 @@ function Contenu() {
           type_evenement: "livraison",
           gare_id: suivi.gare_arrivee_id,
           idempotency_key: `livraison-${suivi.id}`,
+          ...(code ? { code_confirmation: code } : {}),
+          ...(motifSansCode ? { motif_sans_code: motifSansCode.trim() } : {}),
         },
       );
       setRemisesConfirmees((precedentes) => new Set(precedentes).add(suivi.id));
+      setCodesRemise((precedents) => ({ ...precedents, [suivi.id]: "" }));
+      setMotifsSansCode((precedents) => ({ ...precedents, [suivi.id]: "" }));
       setMessage(`${suivi.enfant_nom} — ${resultat.message}`);
       await charger();
       await chargerCompteurs();
@@ -151,6 +161,26 @@ function Contenu() {
         e instanceof ErreurAPI
           ? e.message_utilisateur
           : "Échec de l'enregistrement de l'étape. Réessayez.",
+      );
+    } finally {
+      setActionEnCours(null);
+    }
+  }
+
+  async function renvoyerCodeRemise(suivi: SuiviFamilial) {
+    setActionEnCours(`${suivi.id}:code`);
+    setErreur(null);
+    setMessage(null);
+    try {
+      const resultat = await logistiqueAPI.suiviFamilial.renvoyerCodeRemise(
+        suivi.id,
+      );
+      setMessage(resultat.message);
+    } catch (e) {
+      setErreur(
+        e instanceof ErreurAPI
+          ? e.message_utilisateur
+          : "Impossible de renvoyer le code de remise.",
       );
     } finally {
       setActionEnCours(null);
@@ -240,9 +270,15 @@ function Contenu() {
           <ul className="space-y-3">
             {suivis.map((suivi) => {
               const arrive = suivi.statut === "arrive";
+              const peutRemiseSansCode = [
+                "gerant_gare",
+                "super_admin",
+                "super_administrateur",
+              ].includes(utilisateur?.role ?? "");
               const remiseConfiee =
-                suivi.remis_guichet_le != null &&
-                suivi.remis_guichet_a_id === utilisateur?.id;
+                peutRemiseSansCode ||
+                (suivi.remis_guichet_le != null &&
+                  suivi.remis_guichet_a_id === utilisateur?.id);
               return (
                 <li
                   key={suivi.id}
@@ -314,16 +350,92 @@ function Contenu() {
                     <div className="flex flex-col items-stretch gap-2">
                       {remiseConfiee &&
                         arrive &&
+                        suivi.type_passager === "enfant" &&
                         !remisesConfirmees.has(suivi.id) && (
-                        <Bouton
-                          variante="succes"
-                          taille="petit"
-                          chargement={actionEnCours === `${suivi.id}:livraison`}
-                          disabled={actionEnCours !== null}
-                          onClick={() => void confirmerRemise(suivi)}
-                        >
-                          <IconeCheck className="h-4 w-4" /> Confirmer la remise à la famille
-                        </Bouton>
+                        <div className="min-w-60 space-y-2">
+                          <label
+                            className="block text-xs font-medium text-ardoise"
+                            htmlFor={`code-remise-${suivi.id}`}
+                          >
+                            Code de remise à six chiffres
+                          </label>
+                          <input
+                            id={`code-remise-${suivi.id}`}
+                            className="champ-saisie"
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            maxLength={6}
+                            value={codesRemise[suivi.id] ?? ""}
+                            onChange={(event) =>
+                              setCodesRemise((precedents) => ({
+                                ...precedents,
+                                [suivi.id]: event.target.value.replace(/\D/g, "").slice(0, 6),
+                              }))
+                            }
+                          />
+                          <Bouton
+                            variante="succes"
+                            taille="petit"
+                            chargement={actionEnCours === `${suivi.id}:livraison`}
+                            disabled={
+                              actionEnCours !== null ||
+                              !/^\d{6}$/.test(codesRemise[suivi.id] ?? "")
+                            }
+                            onClick={() =>
+                              void confirmerRemise(suivi, codesRemise[suivi.id])
+                            }
+                          >
+                            <IconeCheck className="h-4 w-4" /> Remettre l'enfant
+                          </Bouton>
+                          <Bouton
+                            variante="ghost"
+                            taille="petit"
+                            chargement={actionEnCours === `${suivi.id}:code`}
+                            disabled={actionEnCours !== null}
+                            onClick={() => void renvoyerCodeRemise(suivi)}
+                          >
+                            Renvoyer le code
+                          </Bouton>
+                          {peutRemiseSansCode && (
+                            <>
+                              <label
+                                className="block text-xs font-medium text-ardoise"
+                                htmlFor={`motif-remise-${suivi.id}`}
+                              >
+                                Motif obligatoire — remise sans code
+                              </label>
+                              <textarea
+                                id={`motif-remise-${suivi.id}`}
+                                className="champ-saisie"
+                                maxLength={500}
+                                value={motifsSansCode[suivi.id] ?? ""}
+                                onChange={(event) =>
+                                  setMotifsSansCode((precedents) => ({
+                                    ...precedents,
+                                    [suivi.id]: event.target.value,
+                                  }))
+                                }
+                              />
+                              <Bouton
+                                variante="danger"
+                                taille="petit"
+                                disabled={
+                                  actionEnCours !== null ||
+                                  (motifsSansCode[suivi.id] ?? "").trim().length < 5
+                                }
+                                onClick={() =>
+                                  void confirmerRemise(
+                                    suivi,
+                                    undefined,
+                                    motifsSansCode[suivi.id],
+                                  )
+                                }
+                              >
+                                Remise exceptionnelle sans code
+                              </Bouton>
+                            </>
+                          )}
+                        </div>
                       )}
                       {!arrive && suivi.statut !== "annule" && (
                         <Bouton

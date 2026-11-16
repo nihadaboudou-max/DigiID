@@ -617,6 +617,7 @@ def envoyer_whatsapp(
     nom_template: Optional[str] = None,
     parametres_template: Optional[list[str]] = None,
     parametres_bouton_url: Optional[list[str]] = None,
+    langue_template: Optional[str] = None,
 ) -> ResultatEnvoiWhatsApp:
     """Envoie un message texte via WhatsApp Cloud API.
 
@@ -678,7 +679,10 @@ def envoyer_whatsapp(
                         "template": {
                             "name": nom_template,
                             "language": {
-                                "code": parametres.whatsapp_template_language
+                                "code": (
+                                    langue_template
+                                    or parametres.whatsapp_template_language
+                                )
                             },
                             "components": composants,
                         },

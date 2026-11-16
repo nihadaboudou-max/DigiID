@@ -588,6 +588,7 @@ function Contenu() {
             voyageId={voyage.id}
             gareDepartId={ligne?.gare_depart_id ?? null}
             gareArriveeId={ligne?.gare_arrivee_id ?? null}
+            arrets={arrets}
             surSucces={() => setRafraichir((nombre) => nombre + 1)}
           />
         ) : (

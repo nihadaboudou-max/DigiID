@@ -15,7 +15,7 @@
  *  - la gare de départ et d'arrivée sont celles du voyage : le chauffeur ne
  *    choisit rien, il ne peut donc pas se tromper.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Alerte } from "@/composants/commun/Alerte";
 import { Bouton } from "@/composants/commun/Bouton";
@@ -25,6 +25,7 @@ import { IconeCheck } from "@/composants/commun/Icones";
 import { ErreurAPI } from "@/services/client_api";
 import {
   logistiqueAPI,
+  type ArretLigne,
   type ColisEnregistre,
   type SuiviFamilialEnregistre,
 } from "@/services/logistique_api";
@@ -50,6 +51,8 @@ interface Proprietes {
   gareDepartId: string | null;
   /** Gare d'arrivée du voyage (imposée). */
   gareArriveeId: string | null;
+  /** Arrêts intermédiaires du trajet, dans l'ordre de passage. */
+  arrets?: ArretLigne[];
   /** Appelé après un enregistrement réussi (rafraîchit le manifeste). */
   surSucces?: () => void;
 }
@@ -57,7 +60,8 @@ interface Proprietes {
 export function EnregistrementDirectChauffeur({
   voyageId,
   gareDepartId,
-  gareArriveeId,
+  gareArriveeId: gareArriveeVoyageId,
+  arrets = [],
   surSucces,
 }: Proprietes) {
   const [type, setType] = useState<TypeEnregistrement>("colis");
@@ -71,6 +75,15 @@ export function EnregistrementDirectChauffeur({
   const [fraisFcfa, setFraisFcfa] = useState("");
   const [moyenPaiement, setMoyenPaiement] = useState<MoyenPaiement | null>(null);
   const [telephonePaiement, setTelephonePaiement] = useState("");
+  const [gareArriveeSelectionneeId, setGareArriveeSelectionneeId] = useState(
+    gareArriveeVoyageId ?? "",
+  );
+  const [arretDestinationId, setArretDestinationId] = useState("");
+
+  useEffect(() => {
+    setGareArriveeSelectionneeId(gareArriveeVoyageId ?? "");
+    setArretDestinationId("");
+  }, [voyageId, gareArriveeVoyageId]);
 
   // Passager
   const [age, setAge] = useState("");
@@ -92,7 +105,10 @@ export function EnregistrementDirectChauffeur({
   const telephoneExpediteurNormalise = normaliserTelephone(expediteurTelephone);
   const expediteurValide =
     expediteurNom.trim().length >= 2 && telephoneExpediteurNormalise !== null;
-  const garesOk = !!gareDepartId && !!gareArriveeId && gareDepartId !== gareArriveeId;
+  const garesOk =
+    !!gareDepartId &&
+    !!gareArriveeSelectionneeId &&
+    gareDepartId !== gareArriveeSelectionneeId;
   const telephonePaiementNormalise = normaliserTelephone(telephonePaiement);
   const paiementValide =
     moyenPaiement === "especes" ||
@@ -125,12 +141,14 @@ export function EnregistrementDirectChauffeur({
     setSexe("");
     setProcheNom("");
     setProcheTelephone("");
+    setGareArriveeSelectionneeId(gareArriveeVoyageId ?? "");
+    setArretDestinationId("");
     setErreur(null);
     setResultat(null);
   }
 
   async function enregistrer() {
-    if (!gareDepartId || !gareArriveeId) {
+    if (!gareDepartId || !gareArriveeSelectionneeId) {
       setErreur("Ce voyage n'a pas de trajet défini : impossible d'enregistrer en route.");
       return;
     }
@@ -155,7 +173,8 @@ export function EnregistrementDirectChauffeur({
           destinataire_nom: nom.trim(),
           destinataire_tel: telephone.trim(),
           gare_depart_id: gareDepartId,
-          gare_arrivee_id: gareArriveeId,
+          gare_arrivee_id: gareArriveeSelectionneeId,
+          arret_destination_id: arretDestinationId || null,
           description: description.trim() || null,
           nombre_articles: articles,
           nombre_bagages: nombreBagages,
@@ -191,7 +210,8 @@ export function EnregistrementDirectChauffeur({
               ? telephonePaiementNormalise
               : null,
           gare_depart_id: gareDepartId,
-          gare_arrivee_id: gareArriveeId,
+          gare_arrivee_id: gareArriveeSelectionneeId,
+          arret_destination_id: arretDestinationId || null,
           voyage_id: voyageId,
           enregistrement_direct: true,
         });
@@ -283,6 +303,41 @@ export function EnregistrementDirectChauffeur({
             Ce voyage n&apos;a pas de trajet (gares de départ et d&apos;arrivée) défini :
             l&apos;enregistrement en route est impossible.
           </Alerte>
+        )}
+
+        {arrets.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <label
+              htmlFor="arrivee-en-route"
+              className="text-sm font-medium text-ardoise"
+            >
+              Arrêt de descente
+            </label>
+            <select
+              id="arrivee-en-route"
+              className="champ-saisie"
+              value={arretDestinationId || "terminus"}
+              onChange={(e) => {
+                const valeur = e.target.value;
+                setArretDestinationId(valeur === "terminus" ? "" : valeur);
+                const arret = arrets.find((element) => element.id === valeur);
+                setGareArriveeSelectionneeId(
+                  arret?.gare_id ?? gareArriveeVoyageId ?? "",
+                );
+              }}
+            >
+              {arrets.map((arret) => (
+                <option key={arret.id} value={arret.id}>
+                  {arret.ordre}. {arret.gare_nom ?? "Arrêt"}
+                </option>
+              ))}
+              <option value="terminus">Terminus du trajet</option>
+            </select>
+            <p className="text-xs italic text-ardoise-clair">
+              L&apos;arrivée est pré-remplie au terminus; choisissez un arrêt si le
+              passager ou le colis descend avant.
+            </p>
+          </div>
         )}
 
         {type === "colis" && (

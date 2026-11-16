@@ -25,6 +25,7 @@ from src.config import parametres
 from src.middleware.gestionnaires_erreurs import enregistrer_gestionnaires_erreurs
 from src.middleware.headers_securite import MiddlewareHeadersSecurite
 from src.middleware.journal_requetes import MiddlewareJournalRequetes
+from src.modules.logistique.taches import boucle_pre_alertes_automatiques
 from src.noyau import journal
 from src.noyau.journal import configurer_journal
 
@@ -152,11 +153,19 @@ async def cycle_de_vie(application: FastAPI):
         application.state.initialisation_terminee = initialisation_terminee
     
     asyncio.create_task(demarrer())
+    tache_pre_alertes = asyncio.create_task(
+        boucle_pre_alertes_automatiques()
+    )
 
     yield  # === Application en service (accepte les requêtes immédiatement) ===
 
     # === ARRÊT ===
     journal.info("=== Arrêt de l'application ===")
+    tache_pre_alertes.cancel()
+    try:
+        await tache_pre_alertes
+    except asyncio.CancelledError:
+        pass
     await fermer_moteur()
 
 

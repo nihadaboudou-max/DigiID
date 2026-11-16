@@ -38,7 +38,7 @@ export function EnTete() {
         const resultat = await listerMesNotifications(false, {
           page: 1,
           parPage: 1,
-          categorie: "logistique_colis",
+          categorie: "logistique_colis,logistique_suivi",
         });
         if (!annule) setNombreMessagesNonLus(resultat.non_lues);
       } catch {

@@ -4,7 +4,7 @@
  *
  * Accessible **sans connexion** depuis le code clair imprimé sur le ticket
  * (`…/suivi/DKR-2025-000001`) ou depuis le QR Code collé sur le colis. Elle
- * rassure la famille : trajet, statut, timeline et rappel des **SMS** envoyés.
+ * rassure la famille : trajet, statut, timeline et notifications envoyées.
  *
  * Un même écran sert pour un **colis** et pour un **enfant voyageant seul** :
  * le backend renvoie une vue unifiée (`type: "colis" | "enfant"`).
@@ -17,6 +17,7 @@ import { Alerte } from "@/composants/commun/Alerte";
 import { Badge, type BadgeVariante } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
+import { IconeFlecheRetour } from "@/composants/commun/Icones";
 import { formaterDateHeure } from "@/composants/logistique/format";
 import { CarteTrajet } from "@/composants/logistique/CarteTrajet";
 import { ErreurAPI } from "@/services/client_api";
@@ -48,6 +49,7 @@ const VARIANTES_STATUT: Record<string, BadgeVariante> = {
   livre: "succes",
   annule: "terre",
 };
+const TAILLE_PAGE_NOTIFICATIONS = 5;
 
 /** Libellés d'événements (colis + enfant fusionnés). */
 const LIBELLES_EVENEMENT_PUBLIC: Record<string, string> = {
@@ -75,6 +77,7 @@ export default function PageSuiviPublic() {
   const code = Array.isArray(parametres.code) ? parametres.code[0] : parametres.code;
 
   const [suivi, setSuivi] = useState<SuiviPublic | null>(null);
+  const [pageNotifications, setPageNotifications] = useState(1);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -85,6 +88,7 @@ export default function PageSuiviPublic() {
     try {
       const resultat = await logistiqueAPI.suiviPublic.parCode(code);
       setSuivi(resultat);
+      setPageNotifications(1);
     } catch (e) {
       setErreur(
         e instanceof ErreurAPI
@@ -122,6 +126,18 @@ export default function PageSuiviPublic() {
     : erreur
       ? `Attention. ${erreur}`
       : undefined;
+  const totalPagesNotifications = suivi
+    ? Math.max(
+        1,
+        Math.ceil(suivi.notifications.length / TAILLE_PAGE_NOTIFICATIONS),
+      )
+    : 1;
+  const notificationsAffichees = suivi
+    ? suivi.notifications.slice(
+        (pageNotifications - 1) * TAILLE_PAGE_NOTIFICATIONS,
+        pageNotifications * TAILLE_PAGE_NOTIFICATIONS,
+      )
+    : [];
 
   return (
     <div
@@ -295,40 +311,82 @@ export default function PageSuiviPublic() {
               )}
             </Carte>
 
-            {/* SMS envoyés (rendus visibles en mode mock) */}
+            {/* Messages envoyés (y compris les envois simulés) */}
             <Carte
-              titre="Notifications SMS"
+              titre="Notifications"
               description={
                 suivi.nb_personnes_notifiees > 0
-                  ? `${suivi.nb_personnes_notifiees} personne(s) prévenue(s) par SMS.`
-                  : "Aucun SMS envoyé pour le moment."
+                  ? `${suivi.nb_personnes_notifiees} personne(s) prévenue(s).`
+                  : "Aucune personne prévenue pour le moment."
               }
             >
               {suivi.notifications.length === 0 ? (
                 <p className="text-sm italic text-ardoise-clair">
-                  Les SMS de départ et d&apos;arrivée apparaîtront ici une fois envoyés.
+                  Les notifications de départ et d&apos;arrivée apparaîtront ici.
                 </p>
               ) : (
-                <ul className="space-y-3">
-                  {suivi.notifications.map((notification, index) => (
-                    <li
-                      key={`${notification.type_evenement}-${index}`}
-                      className="rounded-xl border border-ardoise-clair/10 bg-sable/60 p-3"
+                <>
+                  <ul className="space-y-3">
+                    {notificationsAffichees.map((notification, index) => (
+                      <li
+                        key={`${notification.type_evenement}-${notification.canal}-${notification.cree_le}-${index}`}
+                        className="rounded-xl border border-ardoise-clair/10 bg-sable/60 p-3"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-lagune">
+                            {LIBELLES_EVENEMENT_PUBLIC[notification.type_evenement] ??
+                              notification.type_evenement}
+                          </span>
+                          <span className="text-[11px] text-ardoise-clair">
+                            {notification.canal.toUpperCase()} ·{" "}
+                            {notification.telephone_masque ?? "—"} ·{" "}
+                            {formaterDateHeure(notification.cree_le)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-sm text-ardoise">
+                          {notification.message}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                  {totalPagesNotifications > 1 && (
+                    <nav
+                      aria-label="Pagination des notifications"
+                      className="mt-4 flex flex-wrap items-center justify-between gap-3"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-lagune">
-                          {LIBELLES_EVENEMENT_PUBLIC[notification.type_evenement] ??
-                            notification.type_evenement}
-                        </span>
-                        <span className="text-[11px] text-ardoise-clair">
-                          {notification.telephone_masque ?? "—"} ·{" "}
-                          {formaterDateHeure(notification.cree_le)}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-sm text-ardoise">{notification.message}</p>
-                    </li>
-                  ))}
-                </ul>
+                      <Bouton
+                        type="button"
+                        variante="ghost"
+                        disabled={pageNotifications <= 1}
+                        onClick={() =>
+                          setPageNotifications((page) => Math.max(1, page - 1))
+                        }
+                      >
+                        <IconeFlecheRetour className="h-5 w-5" aria-hidden="true" />
+                        Précédent
+                      </Bouton>
+                      <span className="font-semibold text-ardoise">
+                        Page {pageNotifications} sur {totalPagesNotifications}
+                      </span>
+                      <Bouton
+                        type="button"
+                        variante="ghost"
+                        disabled={pageNotifications >= totalPagesNotifications}
+                        onClick={() =>
+                          setPageNotifications((page) =>
+                            Math.min(totalPagesNotifications, page + 1),
+                          )
+                        }
+                      >
+                        Suivant
+                        <IconeFlecheRetour
+                          className="h-5 w-5 rotate-180"
+                          aria-hidden="true"
+                        />
+                      </Bouton>
+                    </nav>
+                  )}
+                </>
               )}
             </Carte>
 

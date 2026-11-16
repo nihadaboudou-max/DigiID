@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Modèle SuiviFamilial — enfants voyageant seuls, rassurés par SMS (Plan B, S7).
+Modèle SuiviFamilial — enfants voyageant seuls, suivis par notification (Plan B, S7).
 
 Fort impact social : une famille confie un enfant à un transporteur ; DigiID
-émet un **ticket ``type=ENFANT``** (QR + numéro en clair) et prévient le parent
-par **SMS au départ puis à l'arrivée**. L'enfant reste identifié dans le temps
+émet un **ticket ``type=ENFANT``** (QR + numéro en clair) et prévient les contacts
+par WhatsApp au départ puis à l'arrivée, avec un SMS de secours configuré.
+L'enfant reste identifié dans le temps
 via le ticket polymorphe, exactement comme un colis.
 """
 import uuid
@@ -29,7 +30,7 @@ MODES_ENREGISTREMENT_SUIVI = ("guichet", "chauffeur_direct")
 
 
 class SuiviFamilial(Base, MelangeTracabilite):
-    """Enfant confié à un voyage, suivi par la famille (page publique + SMS)."""
+    """Enfant confié à un voyage, suivi par la famille (page publique + notifications)."""
 
     __tablename__ = "suivi_familial"
     __table_args__ = (
@@ -71,6 +72,18 @@ class SuiviFamilial(Base, MelangeTracabilite):
     # Proche de confiance à prévenir (en plus du parent/passager).
     proche_nom: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     proche_telephone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    telephone_recuperation: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    code_remise_hash: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    code_remise_chiffre: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    code_remise_expire_le: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    code_remise_tentatives: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    code_remise_confirme_le: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Nombre de sacs (1 à 10) — traçabilité + anti-fraude, **sans impact** sur le prix.
     nombre_bagages: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
@@ -81,8 +94,7 @@ class SuiviFamilial(Base, MelangeTracabilite):
         ForeignKey("utilisateur.id", ondelete="SET NULL"),
         nullable=True,
     )
-    # Pré-alerte d'arrivée imminente (bouton « Prévenir de l'approche ») :
-    # garde-fou pour n'envoyer les SMS qu'une seule fois.
+    # Pré-alerte d'arrivée imminente (bouton « Prévenir de l'approche »).
     pre_alerte_envoyee: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
@@ -118,7 +130,7 @@ class SuiviFamilial(Base, MelangeTracabilite):
     # Moyen de paiement choisi **à l'inscription** (avant le QR) : espèces au
     # guichet ou opérateur mobile money. Le guichet ne demande plus l'argent après coup.
     moyen_paiement: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    # Garde-fous : un SMS de départ / d'arrivée ne part qu'une seule fois.
+    # Garde-fous : une notification de départ / d'arrivée ne part qu'une fois.
     sms_depart_envoye: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )

@@ -402,6 +402,7 @@ export interface DonneesSuiviFamilial {
   /** Proche de confiance à prévenir (obligatoire). */
   proche_nom?: string | null;
   proche_telephone: string;
+  telephone_recuperation?: string | null;
   /** Nombre de sacs. */
   nombre_bagages: number;
   gare_depart_id: string;
@@ -455,9 +456,11 @@ export interface ResultatActionLot {
 export interface DonneesPreAlerte {
   delai_minutes?: number | null;
   localisation?: string | null;
+  arret_id?: string | null;
+  gare_id?: string | null;
 }
 
-/** Résultat d'une pré-alerte (SMS émis). */
+/** Résultat d'une pré-alerte (notifications émises). */
 export interface ResultatPreAlerte {
   succes: boolean;
   message: string;
@@ -473,6 +476,8 @@ export interface DonneesEvenementSuivi {
   gare_id?: string | null;
   localisation?: string | null;
   idempotency_key?: string | null;
+  code_confirmation?: string;
+  motif_sans_code?: string;
 }
 
 /** Résultat d'un événement de suivi (idempotent). */
@@ -528,9 +533,10 @@ export interface EvenementSuiviPublic {
   gare_nom: string | null;
 }
 
-/** SMS visible par la famille (numéro masqué). */
+/** Notification visible par la famille (numéro masqué). */
 export interface NotificationSuiviPublic {
   type_evenement: string;
+  canal: string;
   destinataire_role: string | null;
   telephone_masque: string | null;
   message: string;

@@ -51,6 +51,39 @@ def test_envoyer_whatsapp_ajoute_le_parametre_du_bouton_url(monkeypatch):
     ]
 
 
+def test_envoyer_whatsapp_peut_forcer_la_langue_du_template(monkeypatch):
+    requetes = []
+    monkeypatch.setattr(notification.parametres, "whatsapp_active", True)
+    monkeypatch.setattr(notification.parametres, "whatsapp_access_token", "token")
+    monkeypatch.setattr(notification.parametres, "whatsapp_phone_number_id", "123")
+    monkeypatch.setattr(notification.parametres, "whatsapp_template_language", "en")
+    monkeypatch.setattr(notification.journal, "warning", lambda *args, **kwargs: None)
+    monkeypatch.setattr(notification.journal, "info", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        notification.httpx,
+        "post",
+        lambda *args, **kwargs: (
+            requetes.append(kwargs)
+            or SimpleNamespace(
+                status_code=200,
+                text="{}",
+                json=lambda: {"messages": [{"id": "wamid.test-123"}]},
+            )
+        ),
+    )
+
+    resultat = notification.envoyer_whatsapp(
+        "+2290167958834",
+        "Message",
+        nom_template="digiid_depart_passager",
+        parametres_template=["Enfant", "Aïcha"],
+        langue_template="fr",
+    )
+
+    assert resultat.accepte is True
+    assert requetes[0]["json"]["template"]["language"] == {"code": "fr"}
+
+
 def test_envoyer_whatsapp_retourne_les_details_d_erreur_meta(monkeypatch):
     monkeypatch.setattr(notification.parametres, "whatsapp_active", True)
     monkeypatch.setattr(notification.parametres, "whatsapp_access_token", "token")

@@ -48,7 +48,11 @@ import {
 import { ControleurBagages } from "./ControleurBagages";
 import { formaterFcfa } from "./format";
 import { RechercheCarteDigiID } from "./RechercheCarteDigiID";
-import { SelectionVoyage, libelleVoyage } from "./SelectionVoyage";
+import {
+  SelectionVoyage,
+  libelleVoyage,
+  ordreGareSurLigne,
+} from "./SelectionVoyage";
 import { TicketImprimable } from "./TicketImprimable";
 import {
   fraisServicePourArticles,
@@ -268,7 +272,7 @@ export function EnregistrementColis({
         setLignes(reponseLignes.elements);
 
         // Pré-remplit la gare de départ depuis la fiche acteur du receveur.
-        if (utilisateur?.id) {
+        if (utilisateur?.id && !voyageImposeId) {
           // Hors-ligne, cette fiche n'est pas disponible : ce n'est pas bloquant.
           const gare = await gareDeLActeur(utilisateur.id).catch(() => null);
           if (!annule && gare) {
@@ -294,7 +298,7 @@ export function EnregistrementColis({
     return () => {
       annule = true;
     };
-  }, [utilisateur?.id]);
+  }, [utilisateur?.id, voyageImposeId]);
 
   const gareParId = useMemo(() => {
     const index = new Map<string, Gare>();
@@ -314,6 +318,26 @@ export function EnregistrementColis({
         ? lignes.find((l) => l.id === voyageSelectionne.ligne_id) ?? null
         : null,
     [lignes, voyageSelectionne],
+  );
+  useEffect(() => {
+    if (!voyageImposeId || !ligneVoyage) return;
+    setGareDepartId(ligneVoyage.gare_depart_id);
+    setGareArriveeId(ligneVoyage.gare_arrivee_id);
+    setArretDestinationId("terminus");
+  }, [voyageImposeId, ligneVoyage]);
+  const ordreDepartSurLigne = useMemo(
+    () =>
+      ligneVoyage && gareDepartId
+        ? ordreGareSurLigne(ligneVoyage, gareDepartId)
+        : null,
+    [ligneVoyage, gareDepartId],
+  );
+  const arretsApresDepart = useMemo(
+    () =>
+      ordreDepartSurLigne === null
+        ? []
+        : arretsLigne.filter((arret) => arret.ordre > ordreDepartSurLigne),
+    [arretsLigne, ordreDepartSurLigne],
   );
 
   // Arrêts de la ligne du voyage (pour associer la destination précise).
@@ -420,8 +444,10 @@ export function EnregistrementColis({
     setFraisFcfa("");
     setVoyageId(voyageImposeId ?? "");
     setAffecterPlusTard(false);
-    setGareArriveeId("");
-    setArretDestinationId("");
+    setGareArriveeId(
+      voyageImposeId ? ligneVoyage?.gare_arrivee_id ?? "" : "",
+    );
+    setArretDestinationId(voyageImposeId ? "terminus" : "");
     setMoyenPaiement(null);
     setPayeurFrais("commercant");
     setTelephonePaiement("");
@@ -429,7 +455,9 @@ export function EnregistrementColis({
     setPhotoColis(null);
     setErreurPhoto(null);
     setEnvoiPhoto(false);
-    setGareDepartId(gareGuichet?.id ?? "");
+    setGareDepartId(
+      voyageImposeId ? ligneVoyage?.gare_depart_id ?? "" : gareGuichet?.id ?? "",
+    );
     setErreur(null);
     setPaiementCommercant(null);
     setCleIdempotencePaiement(null);
@@ -936,7 +964,13 @@ export function EnregistrementColis({
                     <select
                       className="champ-saisie"
                       value={gareDepartId}
-                      onChange={(e) => setGareDepartId(e.target.value)}
+                      disabled={Boolean(voyageImposeId)}
+                      onChange={(e) => {
+                        setGareDepartId(e.target.value);
+                        setGareArriveeId("");
+                        setArretDestinationId("");
+                        if (!voyageImposeId) setVoyageId("");
+                      }}
                     >
                       <option value="">— Choisir —</option>
                       {gares.map((g) => (
@@ -959,7 +993,12 @@ export function EnregistrementColis({
                     <select
                       className="champ-saisie"
                       value={gareArriveeId}
-                      onChange={(e) => setGareArriveeId(e.target.value)}
+                      disabled={Boolean(voyageImposeId)}
+                      onChange={(e) => {
+                        setGareArriveeId(e.target.value);
+                        setArretDestinationId("");
+                        if (!voyageImposeId) setVoyageId("");
+                      }}
                     >
                       <option value="">— Choisir —</option>
                       {gares
@@ -1129,12 +1168,14 @@ export function EnregistrementColis({
                       }}
                     >
                       <option value="">— Choisir l&apos;arrêt de descente —</option>
-                      {arretsLigne.map((a) => (
+                      {arretsApresDepart.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.ordre}. {a.gare_nom ?? "Arrêt"}
                         </option>
                       ))}
-                      {ligneVoyage && (
+                      {ligneVoyage &&
+                        ordreDepartSurLigne !== null &&
+                        gareDepartId !== ligneVoyage.gare_arrivee_id && (
                         <option value="terminus">
                           Terminus — {ligneVoyage.gare_arrivee_nom ?? "Arrivée"}
                         </option>

@@ -7,8 +7,8 @@
  * les colis du voyage :
  *
  *   1. « Valider le Départ »       → tous les passagers + colis passent en route.
- *   2. « Prévenir de l'approche »  → SMS de pré-alerte (familles, proches,
- *      destinataires) ~45 min avant l'arrivée, pour qu'ils se déplacent à temps.
+ *   2. « Prévenir de l'approche »  → WhatsApp et notification plateforme aux
+ *      personnes qui descendent à l'arrêt sélectionné.
  *   3. « Arrivés »                 → colis/passagers de l'arrêt (ou gare) ciblé.
  *
  * Chaque action reste traçable (un événement par passager/colis) et idempotente.
@@ -72,9 +72,9 @@ const CONFIG: Record<
   approche: {
     titre: "Prévenir de l'approche ?",
     description:
-      "Les familles, proches et destinataires seront prévenus (SMS) que le bus approche.",
+      "Les personnes qui descendent à l'arrêt choisi seront prévenues par WhatsApp et dans la plateforme.",
     messageAlerte:
-      "Envoyez cette pré-alerte environ 45 minutes à 1 heure avant l'arrivée, pour que chacun se rende à la gare.",
+      "L'envoi WhatsApp est prioritaire. Un SMS est utilisé en secours s'il est configuré.",
     texteBouton: "Envoyer la pré-alerte",
   },
   arrivee: {
@@ -116,7 +116,6 @@ export function ActionsVoyageChauffeur({
     chargeABord &&
     (statut === "en_cours" || (statut === "planifie" && jourDepartAtteint));
   const peutApproche = chargeABord && statut === "en_cours";
-  const peutArrivee = chargeABord && statut === "en_cours";
 
   const optionsArrivee: PointArrivee[] =
     pointsArrivee.length > 0
@@ -126,12 +125,26 @@ export function ActionsVoyageChauffeur({
           libelle: g.nom,
           gare_id: g.id,
         }));
+  const selectionArriveeObligatoire = optionsArrivee.some((point) => point.arret_id);
+  const selectionApprocheObligatoire = selectionArriveeObligatoire;
+  const peutArrivee =
+    chargeABord &&
+    statut === "en_cours" &&
+    (!selectionArriveeObligatoire || pointCle !== "");
 
   async function confirmer() {
     if (!action) return;
     if (action === "depart" && statut === "planifie" && !jourDepartAtteint) {
       setErreur("Le départ ne peut être validé qu'à partir du jour planifié.");
       setAction(null);
+      return;
+    }
+    if (action === "arrivee" && selectionArriveeObligatoire && !pointCle) {
+      setErreur("Choisissez l'arrêt où vous vous trouvez.");
+      return;
+    }
+    if (action === "approche" && selectionApprocheObligatoire && !pointCle) {
+      setErreur("Choisissez l'arrêt à prévenir.");
       return;
     }
     setChargement(true);
@@ -143,7 +156,11 @@ export function ActionsVoyageChauffeur({
         });
         setSucces(r.message);
       } else if (action === "approche") {
-        const r = await logistiqueAPI.voyages.preAlerte(voyageId, {});
+        const point = optionsArrivee.find((p) => p.cle === pointCle);
+        const r = await logistiqueAPI.voyages.preAlerte(voyageId, {
+          arret_id: point?.arret_id ?? null,
+          gare_id: point?.arret_id ? null : (point?.gare_id ?? null),
+        });
         setSucces(r.message);
       } else {
         const point = optionsArrivee.find((p) => p.cle === pointCle);
@@ -154,6 +171,9 @@ export function ActionsVoyageChauffeur({
         setSucces(r.message);
       }
       setAction(null);
+      if (action === "arrivee" && selectionArriveeObligatoire) {
+        setPointCle("");
+      }
       surSucces?.();
     } catch (e) {
       setErreur(
@@ -269,6 +289,7 @@ export function ActionsVoyageChauffeur({
             disabled={!peutApproche}
             onClick={() => {
               setSucces(null);
+              setPointCle("");
               setAction("approche");
             }}
           >
@@ -279,6 +300,7 @@ export function ActionsVoyageChauffeur({
             disabled={!peutArrivee}
             onClick={() => {
               setSucces(null);
+              setPointCle("");
               setAction("arrivee");
             }}
           >
@@ -295,9 +317,13 @@ export function ActionsVoyageChauffeur({
               className="champ-saisie"
               value={pointCle}
               onChange={(e) => setPointCle(e.target.value)}
-              disabled={!peutArrivee}
+              disabled={!chargeABord || statut !== "en_cours"}
             >
-              <option value="">Tous les arrêts du voyage</option>
+              <option value="">
+                {selectionArriveeObligatoire
+                  ? "— Choisir l'arrêt —"
+                  : "Tous les arrêts du voyage"}
+              </option>
               {optionsArrivee.map((p) => (
                 <option key={p.cle} value={p.cle}>
                   {p.libelle}
@@ -321,6 +347,36 @@ export function ActionsVoyageChauffeur({
         texteBoutonConfirmer={config?.texteBouton ?? "Confirmer"}
         couleurBoutonConfirmer="succes"
         chargement={chargement}
+        desactive={
+          action === "approche" &&
+          selectionApprocheObligatoire &&
+          !pointCle
+        }
+        contenuCorps={
+          action === "approche" && selectionApprocheObligatoire ? (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-ardoise">
+                Arrêt ou gare à prévenir
+              </label>
+              <select
+                className="champ-saisie"
+                value={pointCle}
+                onChange={(e) => setPointCle(e.target.value)}
+                disabled={chargement}
+              >
+                <option value="">— Choisir l'arrêt —</option>
+                {optionsArrivee.map((point) => (
+                  <option key={point.cle} value={point.cle}>
+                    {point.libelle}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-ardoise-clair">
+                Seuls les passagers et colis destinés à cet arrêt seront prévenus.
+              </p>
+            </div>
+          ) : undefined
+        }
         surAnnulation={() => setAction(null)}
         surConfirmation={confirmer}
       />

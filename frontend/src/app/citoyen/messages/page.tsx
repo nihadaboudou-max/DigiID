@@ -58,7 +58,7 @@ function Contenu() {
         page,
         parPage: TAILLE_PAGE,
         recherche,
-        categorie: "logistique_colis",
+        categorie: "logistique_colis,logistique_suivi",
       });
       setNotifications(resultat.notifications);
       setTotal(resultat.total);
@@ -88,9 +88,13 @@ function Contenu() {
     try {
       if (!notification.est_lue) await marquerNotificationLue(notification.id);
       const code = codeSuivi(notification);
-      router.push(
-        code ? `/citoyen/envois?code=${encodeURIComponent(code)}` : "/citoyen/envois",
-      );
+      if (notification.categorie === "logistique_suivi" && code) {
+        router.push(`/suivi/${encodeURIComponent(code)}`);
+      } else {
+        router.push(
+          code ? `/citoyen/envois?code=${encodeURIComponent(code)}` : "/citoyen/envois",
+        );
+      }
     } catch (e) {
       setErreur(
         e instanceof ErreurAPI
@@ -109,7 +113,7 @@ function Contenu() {
       const resultat = await listerMesNotifications(false, {
         page,
         parPage: TAILLE_PAGE,
-        categorie: "logistique_colis",
+        categorie: notification.categorie,
         recherche,
         revelerCodeNotificationId: notification.id,
       });
@@ -141,7 +145,9 @@ function Contenu() {
       <header>
         <p className="text-ocre font-semibold uppercase tracking-wide">Mes informations</p>
         <h1 className="mt-1">Messages</h1>
-        <p className="mt-1 text-ardoise-clair">Les nouvelles de tes colis et de tes envois.</p>
+        <p className="mt-1 text-ardoise-clair">
+          Les nouvelles de tes colis et des passagers suivis.
+        </p>
       </header>
 
       <Carte>
@@ -162,12 +168,14 @@ function Contenu() {
 
       {erreur && <Alerte variante="erreur" titre="Action impossible">{erreur}</Alerte>}
 
-      <section aria-label="Messages de colis" className="space-y-3">
+      <section aria-label="Messages logistiques" className="space-y-3">
         {chargement ? (
           <Carte><p className="py-4 text-center text-ardoise-clair">Chargement des messages…</p></Carte>
         ) : notifications.length === 0 ? (
           <Carte>
-            <p className="text-center text-ardoise">Aucun message de colis pour le moment.</p>
+            <p className="text-center text-ardoise">
+              Aucun message de colis ou de passager pour le moment.
+            </p>
             <div className="mt-4 flex justify-center">
               <Bouton
                 type="button"
@@ -183,6 +191,7 @@ function Contenu() {
         ) : (
           notifications.map((notification) => {
             const estCodeRemise = notification.titre.toLowerCase().includes("code de remise");
+            const estSuiviFamilial = notification.categorie === "logistique_suivi";
             const code = codesReveles[notification.id];
             return (
               <Carte
@@ -216,7 +225,7 @@ function Contenu() {
                     onClick={() => void ouvrirEnvoi(notification)}
                   >
                     <IconeColis className="h-5 w-5" aria-hidden="true" />
-                    Ouvrir dans Mes envois
+                    {estSuiviFamilial ? "Ouvrir le suivi du passager" : "Ouvrir dans Mes envois"}
                   </Bouton>
                   {estCodeRemise && !code && (
                     <Bouton

@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """Routes API du domaine logistique (référentiel + colis de bout en bout)."""
 import unicodedata
+import re
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -41,6 +42,7 @@ from src.modules.logistique.dependances import (
 )
 from src.config.constantes import TypesEvenementAudit
 from src.noyau import dechiffrer_donnee, journal
+from src.noyau.notification import masquer_telephone
 from src.noyau.constantes_roles import RoleUtilisateur
 from src.noyau.journal import enregistrer_evenement_audit
 from src.noyau.permissions import require_permission
@@ -284,7 +286,7 @@ async def _enrichir_evenement(
 
 async def _enrichir_suivi_familial(
     session: AsyncSession, suivi: SuiviFamilial
-) -> SuiviFamilial:
+) -> schemas.SuiviFamilialResponse:
     suivi.gare_depart_nom = await _nom_gare(session, suivi.gare_depart_id)
     suivi.gare_arrivee_nom = await _nom_gare(session, suivi.gare_arrivee_id)
     suivi.enregistre_par_nom = await _nom_utilisateur(session, suivi.enregistre_par_id)
@@ -307,7 +309,17 @@ async def _enrichir_suivi_familial(
         session, suivi.remis_guichet_a_id
     )
     suivi.bagages = await _bagages_enrichis(session, suivi_familial_id=suivi.id)
-    return suivi
+    resultat = schemas.SuiviFamilialResponse.model_validate(suivi)
+    for champ in (
+        "telephone_parent",
+        "telephone_passager",
+        "acheteur_tel",
+        "proche_telephone",
+    ):
+        valeur = getattr(resultat, champ)
+        if valeur:
+            setattr(resultat, champ, masquer_telephone(valeur))
+    return resultat
 
 
 async def _enrichir_evenement_suivi(
@@ -1070,13 +1082,23 @@ async def pre_alerte_voyage(
 ):
     donnees = donnees or schemas.PreAlerteRequest()
     resultat = await service.envoyer_pre_alerte_voyage(
-        session, voyage_id, utilisateur_courant, delai_minutes=donnees.delai_minutes
+        session,
+        voyage_id,
+        utilisateur_courant,
+        delai_minutes=donnees.delai_minutes,
+        arret_id=donnees.arret_id,
+        gare_id=donnees.gare_id,
     )
     await _auditer_logistique(
         session, requete, utilisateur_courant,
         TypesEvenementAudit.VOYAGE_PRE_ALERTE_ENVOYEE,
         f"Pré-alerte envoyée pour le voyage {voyage_id}",
-        {"voyage_id": str(voyage_id), "delai_minutes": donnees.delai_minutes},
+        {
+            "voyage_id": str(voyage_id),
+            "delai_minutes": donnees.delai_minutes,
+            "arret_id": str(donnees.arret_id) if donnees.arret_id else None,
+            "gare_id": str(donnees.gare_id) if donnees.gare_id else None,
+        },
     )
     return resultat
 
@@ -1975,10 +1997,10 @@ async def enregistrer_suivi_familial(
             "type_passager": suivi.type_passager,
         },
     )
-    await _enrichir_suivi_familial(session, suivi)
+    suivi_reponse = await _enrichir_suivi_familial(session, suivi)
     ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
     return {
-        "suivi": suivi,
+        "suivi": suivi_reponse,
         "ticket": ticket,
         "notification_envoyee": notification_envoyee,
     }
@@ -2003,8 +2025,9 @@ async def lister_suivi_familial(
         utilisateur=utilisateur_courant,
         statuts=statuts,
     )
-    for suivi in suivis:
-        await _enrichir_suivi_familial(session, suivi)
+    suivis = [
+        await _enrichir_suivi_familial(session, suivi) for suivi in suivis
+    ]
     return schemas.ReponseListe(elements=suivis, total=total, page=page, par_page=par_page)
 
 
@@ -2115,6 +2138,36 @@ async def remettre_suivi_au_guichet(
     return await _enrichir_suivi_familial(session, suivi)
 
 
+@routeur_suivi_familial.post(
+    "/{suivi_id}/code-remise",
+    response_model=schemas.CodeRemiseEnfantResponse,
+    summary="Renvoyer le code de remise d'un enfant",
+)
+@require_permission("logistique.scan")
+async def renvoyer_code_remise_suivi(
+    suivi_id: UUID,
+    requete: Request,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    expire_le = await service.renvoyer_code_remise_suivi(
+        session, suivi_id, utilisateur_courant
+    )
+    await _auditer_logistique(
+        session,
+        requete,
+        utilisateur_courant,
+        TypesEvenementAudit.SUIVI_FAMILIAL_CODE_REMISE_ENVOYE,
+        f"Renvoi du code de remise pour le suivi {suivi_id}.",
+        {"suivi_familial_id": str(suivi_id), "renvoi": True},
+    )
+    return {
+        "suivi_familial_id": suivi_id,
+        "expire_le": expire_le,
+        "message": "Le code de remise a été renvoyé si un canal est disponible.",
+    }
+
+
 @routeur_suivi_familial.get("/{suivi_id}",
                             response_model=schemas.SuiviFamilialResponse,
                             summary="Obtenir un suivi familial")
@@ -2147,7 +2200,7 @@ async def lister_evenements_suivi(
 
 @routeur_suivi_familial.get("/{suivi_id}/notifications",
                             response_model=list[schemas.NotificationLogistiqueResponse],
-                            summary="SMS envoyés pour un suivi familial")
+                            summary="Notifications envoyées pour un suivi familial")
 @require_permission("logistique.lire")
 async def lister_notifications_suivi(
     suivi_id: UUID,
@@ -2161,7 +2214,7 @@ async def lister_notifications_suivi(
 
 @routeur_suivi_familial.post("/{suivi_id}/evenement",
                              response_model=schemas.SuiviFamilialEvenementResultat,
-                             summary="Marquer une étape (départ / arrivée) + SMS au parent")
+                             summary="Marquer une étape (départ / arrivée) et notifier les contacts")
 @require_permission("logistique.scan")
 async def enregistrer_evenement_suivi(
     suivi_id: UUID,
@@ -2173,9 +2226,26 @@ async def enregistrer_evenement_suivi(
     resultat = await service.enregistrer_evenement_suivi(
         session, suivi_id, donnees, utilisateur_courant
     )
+    remise_sans_code = (
+        donnees.type_evenement == "livraison"
+        and donnees.motif_sans_code is not None
+    )
+    type_audit = (
+        TypesEvenementAudit.SUIVI_FAMILIAL_REMISE_SANS_CODE
+        if remise_sans_code
+        else TypesEvenementAudit.SUIVI_FAMILIAL_ETAPE_ENREGISTREE
+    )
+    motif_auditable = None
+    if remise_sans_code:
+        motif = (donnees.motif_sans_code or "").strip()
+        motif_auditable = re.sub(
+            r"(?<!\d)(?:\+?229)?[\s().-]*\d(?:[\s().-]*\d){5,}(?!\d)",
+            "[donnée masquée]",
+            motif,
+        )
     await _auditer_logistique(
         session, requete, utilisateur_courant,
-        TypesEvenementAudit.SUIVI_FAMILIAL_ETAPE_ENREGISTREE,
+        type_audit,
         f"Étape « {donnees.type_evenement} » enregistrée pour le suivi {suivi_id}",
         {
             "suivi_familial_id": str(suivi_id),
@@ -2185,6 +2255,7 @@ async def enregistrer_evenement_suivi(
                 str(resultat["evenement"].id) if resultat.get("evenement") else None
             ),
             "deja_enregistre": resultat.get("deja_enregistre", False),
+            "motif_sans_code": motif_auditable,
         },
     )
     suivi = resultat.get("suivi")

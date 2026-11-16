@@ -169,7 +169,7 @@ async def lister_notifications(
     details = []
     for notification in notifs:
         detail = NotificationDetail.model_validate(notification)
-        if notification.categorie == "logistique_colis":
+        if notification.categorie in ("logistique_colis", "logistique_suivi"):
             detail.message = re.sub(
                 r"(?<!\d)\d{6}(?!\d)", "••••••", detail.message
             )

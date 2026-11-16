@@ -571,7 +571,7 @@ class ScanCreate(BaseModel):
     """Payload d'un scan : soit un token QR, soit le code clair (repli manuel)."""
     token: Optional[str] = Field(None, max_length=200)
     code_clair: Optional[str] = Field(None, max_length=40)
-    code_confirmation: Optional[str] = Field(None, pattern=r"^\d{6}$")
+    code_confirmation: Optional[str] = None
     type_evenement: TypeEvenementScan = "livraison"
     gare_id: Optional[UUID] = None
     voyage_id: Optional[UUID] = None
@@ -658,6 +658,8 @@ class SuiviFamilialCreate(BaseModel):
     # Proche de confiance à prévenir (obligatoire dans les deux cas).
     proche_nom: Optional[str] = Field(None, max_length=150)
     proche_telephone: str = Field(..., min_length=6, max_length=30)
+    # Enfant : personne autorisée à le récupérer (pas nécessairement le proche).
+    telephone_recuperation: Optional[str] = Field(None, min_length=6, max_length=30)
     # Nombre de sacs (1 à 10) — traçabilité, **sans impact** sur le prix.
     nombre_bagages: int = Field(1, ge=1)
     # Moyen de paiement **choisi à l'inscription** (avant la génération du QR).
@@ -686,6 +688,7 @@ class SuiviFamilialCreate(BaseModel):
         "telephone_passager",
         "acheteur_tel",
         "proche_telephone",
+        "telephone_recuperation",
         "telephone_paiement",
         mode="before",
     )
@@ -711,6 +714,8 @@ class SuiviFamilialCreate(BaseModel):
                 raise ValueError("Le nom de l'acheteur du ticket est obligatoire pour un enfant")
             if not self.acheteur_tel:
                 raise ValueError("Le numéro de l'acheteur du ticket est obligatoire pour un enfant")
+            if not self.telephone_recuperation:
+                raise ValueError("Le numéro de la personne qui récupère l'enfant est obligatoire")
             if not self.telephone_parent:
                 self.telephone_parent = self.acheteur_tel
         # En **enregistrement direct**, le chauffeur connaît forcément son
@@ -731,6 +736,18 @@ class SuiviFamilialEvenementCreate(BaseModel):
     localisation: Optional[str] = Field(None, max_length=200)
     idempotency_key: Optional[str] = Field(None, max_length=120)
     horodatage: Optional[datetime] = None
+    code_confirmation: Optional[str] = Field(None, pattern=r"^\d{6}$")
+    motif_sans_code: Optional[str] = Field(None, min_length=5, max_length=500)
+
+    @field_validator("motif_sans_code")
+    @classmethod
+    def _motif_non_vide(cls, valeur: Optional[str]) -> Optional[str]:
+        if valeur is None:
+            return None
+        valeur = valeur.strip()
+        if len(valeur) < 5:
+            raise ValueError("Le motif doit contenir au moins 5 caractères.")
+        return valeur
 
 
 class SuiviFamilialEvenementResponse(BaseModel):
@@ -842,6 +859,7 @@ class SuiviFamilialUpdate(BaseModel):
     acheteur_tel: Optional[str] = Field(None, min_length=6, max_length=30)
     proche_nom: Optional[str] = Field(None, max_length=150)
     proche_telephone: Optional[str] = Field(None, min_length=6, max_length=30)
+    telephone_recuperation: Optional[str] = Field(None, min_length=6, max_length=30)
     nombre_bagages: Optional[int] = Field(None, ge=1)
     arret_destination_id: Optional[UUID] = None
 
@@ -850,6 +868,7 @@ class SuiviFamilialUpdate(BaseModel):
         "telephone_passager",
         "acheteur_tel",
         "proche_telephone",
+        "telephone_recuperation",
         mode="before",
     )
     @classmethod
@@ -869,6 +888,12 @@ class SuiviFamilialEvenementResultat(BaseModel):
     evenement: Optional[SuiviFamilialEvenementResponse] = None
 
 
+class CodeRemiseEnfantResponse(BaseModel):
+    suivi_familial_id: UUID
+    expire_le: datetime
+    message: str
+
+
 # ─── Suivi public (sans connexion) ───────────────────────────────────
 
 class EvenementSuiviPublic(BaseModel):
@@ -880,6 +905,7 @@ class EvenementSuiviPublic(BaseModel):
 
 class NotificationSuiviPublic(BaseModel):
     type_evenement: str
+    canal: str
     destinataire_role: Optional[str] = None
     telephone_masque: Optional[str] = None
     message: str
@@ -959,10 +985,12 @@ class PreAlerteRequest(BaseModel):
     """Pré-alerte d'arrivée imminente (« Prévenir de l'approche »)."""
     delai_minutes: Optional[int] = Field(None, ge=1, le=600)
     localisation: Optional[str] = Field(None, max_length=200)
+    arret_id: Optional[UUID] = None
+    gare_id: Optional[UUID] = None
 
 
 class PreAlerteResponse(BaseModel):
-    """SMS de pré-alerte émis (passagers, proches de confiance, destinataires)."""
+    """Notifications d'approche émises aux passagers et destinataires."""
     succes: bool = True
     message: str
     voyage_id: Optional[UUID] = None

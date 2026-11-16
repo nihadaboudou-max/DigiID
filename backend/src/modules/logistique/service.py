@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
+from math import ceil
 import re
 import secrets
 from urllib.parse import parse_qs, urlparse
@@ -10,7 +11,7 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import (
@@ -21,6 +22,7 @@ from src.modeles import (
 from src.modeles.paiement import TransactionPaiement
 from src.modules.logistique import schemas
 from src.modules.gamification.service_notifications import creer_notification
+from src.modules.identite_digiid.service import nom_complet
 from src.noyau import dechiffrer_donnee, journal
 from src.noyau.constantes_roles import RoleUtilisateur
 from src.noyau.journal import enregistrer_evenement_audit
@@ -34,10 +36,10 @@ from src.noyau.notification import (
     envoyer_whatsapp,
     construire_message_colis,
     construire_message_suivi_familial,
-    construire_message_pre_alerte,
     masquer_telephone,
 )
 from src.config import parametres
+from src.config.constantes import TypesEvenementAudit
 from src.modules.logistique.stockage_colis import chemin_photo_colis
 from src.modules.paiement.tarification import frais_service
 
@@ -1967,12 +1969,6 @@ async def affecter_colis(
 
     voyage = await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
     if colis.arret_destination_id is not None:
-        ligne = await session.get(Ligne, voyage.ligne_id)
-        if ligne is not None and ligne.gare_depart_id != colis.gare_depart_id:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail="Ce voyage ne part pas de la gare de départ du colis.",
-            )
         await _verifier_arret_du_voyage(
             session, voyage, colis.arret_destination_id, colis.gare_depart_id
         )
@@ -3052,6 +3048,275 @@ def _ajouter_notification(
     return notification
 
 
+def _ajouter_notification_code_remise_enfant(
+    session: AsyncSession,
+    suivi: SuiviFamilial,
+    telephone: str,
+    message_whatsapp: str,
+    message_secours: str,
+    parametres_template: list[str],
+    *,
+    renouveller: bool,
+) -> None:
+    """Envoie WhatsApp puis utilise le SMS uniquement en secours."""
+    type_evenement = (
+        "code_remise_enfant_renvoi" if renouveller else "code_remise_enfant"
+    )
+    try:
+        telephone_normalise = normaliser_numero_tiers(telephone)
+    except ValueError:
+        telephone_masque = masquer_telephone(telephone)
+        journal.warning(
+            "[NOTIFICATION] Code enfant non envoyé: numéro invalide "
+            f"destinataire={telephone_masque}"
+        )
+        session.add(
+            NotificationLogistique(
+                canal="whatsapp",
+                type_cible="suivi_familial",
+                cible_id=suivi.id,
+                type_evenement=type_evenement,
+                destinataire_role="personne_recuperation",
+                telephone=telephone_masque,
+                message="Code de remise envoyé au responsable.",
+                envoye=False,
+                whatsapp_statut="failed",
+                whatsapp_erreur_code="numero_invalide",
+            )
+        )
+        return
+
+    telephone_masque = masquer_telephone(telephone_normalise)
+    message_journalise = "Code de remise envoyé au responsable."
+    whatsapp_accepte = False
+    if parametres.whatsapp_active:
+        resultat = envoyer_whatsapp(
+            telephone_normalise,
+            message_whatsapp,
+            nom_template=parametres.whatsapp_template_code_remise_enfant_name,
+            parametres_template=parametres_template,
+            parametres_bouton_url=parametres_template,
+            langue_template="fr",
+        )
+        whatsapp_accepte = resultat.accepte
+        session.add(
+            NotificationLogistique(
+                canal="whatsapp",
+                type_cible="suivi_familial",
+                cible_id=suivi.id,
+                type_evenement=type_evenement,
+                destinataire_role="personne_recuperation",
+                telephone=telephone_masque,
+                message=message_journalise,
+                envoye=resultat.accepte,
+                whatsapp_message_id=resultat.message_id,
+                whatsapp_statut="accepted" if resultat.accepte else "failed",
+                whatsapp_erreur_code=resultat.erreur_code,
+            )
+        )
+    else:
+        journal.warning(
+            "[WHATSAPP] Code de remise enfant non envoyé: "
+            "WHATSAPP_ACTIVE=false"
+        )
+        session.add(
+            NotificationLogistique(
+                canal="whatsapp",
+                type_cible="suivi_familial",
+                cible_id=suivi.id,
+                type_evenement=type_evenement,
+                destinataire_role="personne_recuperation",
+                telephone=telephone_masque,
+                message=message_journalise,
+                envoye=False,
+                whatsapp_statut="failed",
+                whatsapp_erreur_code="whatsapp_non_configure",
+            )
+        )
+
+    if not whatsapp_accepte:
+        envoye_sms = envoyer_sms(telephone_normalise, message_secours)
+        session.add(
+            NotificationLogistique(
+                canal="sms",
+                type_cible="suivi_familial",
+                cible_id=suivi.id,
+                type_evenement=type_evenement,
+                destinataire_role="personne_recuperation",
+                telephone=telephone_masque,
+                message=message_journalise,
+                envoye=envoye_sms,
+            )
+        )
+
+
+async def preparer_code_remise_suivi(
+    session: AsyncSession,
+    suivi: SuiviFamilial,
+    ticket: Ticket,
+    *,
+    renouveller: bool = False,
+) -> datetime | None:
+    """Crée et transmet le code de remise d'un enfant, sans le journaliser."""
+    if suivi.type_passager != "enfant":
+        return None
+    if not suivi.telephone_recuperation:
+        journal.warning(
+            f"[NOTIFICATION] Aucun responsable joignable pour le suivi {suivi.id}."
+        )
+        return None
+    try:
+        telephone_recuperation = normaliser_numero_tiers(
+            suivi.telephone_recuperation
+        )
+    except ValueError:
+        journal.warning(
+            "[NOTIFICATION] Numéro de récupération invalide pour le suivi "
+            f"{suivi.id}: {masquer_telephone(suivi.telephone_recuperation)}"
+        )
+        return None
+    if not telephone_recuperation:
+        return None
+
+    maintenant = datetime.now(timezone.utc)
+    notifications_code = select(NotificationLogistique.id).where(
+        NotificationLogistique.type_cible == "suivi_familial",
+        NotificationLogistique.cible_id == suivi.id,
+        NotificationLogistique.type_evenement.in_(
+            ("code_remise_enfant", "code_remise_enfant_renvoi")
+        ),
+        NotificationLogistique.canal == "whatsapp",
+    )
+    if not renouveller:
+        if (
+            suivi.code_remise_hash
+            and suivi.code_remise_expire_le
+            and suivi.code_remise_expire_le > maintenant
+        ):
+            return suivi.code_remise_expire_le
+        if await session.scalar(notifications_code.limit(1)) is not None:
+            return None
+    else:
+        nombre_envois = await session.scalar(
+            select(func.count()).select_from(NotificationLogistique).where(
+                NotificationLogistique.type_cible == "suivi_familial",
+                NotificationLogistique.cible_id == suivi.id,
+                NotificationLogistique.type_evenement == "code_remise_enfant_renvoi",
+                NotificationLogistique.canal == "whatsapp",
+                NotificationLogistique.cree_le
+                >= maintenant - timedelta(hours=1),
+            )
+        ) or 0
+        if nombre_envois >= 3:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="La limite de renvois du code est atteinte. Réessayez plus tard.",
+            )
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    expire_le = maintenant + timedelta(minutes=30)
+    from src.noyau.chiffrement import chiffrer_donnee
+
+    suivi.code_remise_hash = hashlib.sha256(code.encode("ascii")).hexdigest()
+    suivi.code_remise_chiffre = chiffrer_donnee(code)
+    suivi.code_remise_expire_le = expire_le
+    suivi.code_remise_tentatives = 0
+    session.add(
+        SuiviFamilialEvenement(
+            suivi_familial_id=suivi.id,
+            type_evenement=(
+                "code_remise_renvoye" if renouveller else "code_remise_genere"
+            ),
+            acteur_id=None,
+            horodatage=maintenant,
+        )
+    )
+    prenom = (suivi.enfant_nom.strip().split() or ["Enfant"])[0]
+    message_secours = (
+        f"DigiID : code de remise de {prenom} (ticket {ticket.code_clair}) : "
+        f"{code}. Ne le donnez qu'à la personne présente devant vous pour "
+        "récupérer l'enfant. Valable 30 minutes."
+    )
+    message_whatsapp = f"{code} est votre code de vérification."
+    _ajouter_notification_code_remise_enfant(
+        session,
+        suivi,
+        telephone_recuperation,
+        message_whatsapp,
+        message_secours,
+        [code],
+        renouveller=renouveller,
+    )
+
+    utilisateur = await session.scalar(
+        select(Utilisateur).where(
+            Utilisateur.telephone_hash == hasher_telephone(telephone_recuperation)
+        )
+    )
+    if utilisateur is not None:
+        await creer_notification(
+            session,
+            utilisateur,
+            type_notification="info",
+            categorie="logistique_suivi",
+            titre="Code de remise de l'enfant",
+            message=(
+                "Un code de remise a été envoyé à la personne autorisée. "
+                "Touchez « Afficher » dans Messages pour le consulter."
+            ),
+            lien_action=f"/suivi/{ticket.code_clair}",
+        )
+    return expire_le
+
+
+async def renvoyer_code_remise_suivi(
+    session: AsyncSession, suivi_id: UUID, utilisateur: Utilisateur
+) -> datetime:
+    """Renvoie le code actif d'un enfant, avec contrôle d'accès et de fréquence."""
+    suivi = await obtenir_suivi_familial(session, suivi_id)
+    if suivi.type_passager != "enfant":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Le code de remise concerne uniquement les enfants.",
+        )
+    admin = utilisateur.role in ("gerant_gare", "super_admin", "super_administrateur")
+    autorise = (
+        admin
+        or suivi.chauffeur_id == utilisateur.id
+        or suivi.remis_guichet_a_id == utilisateur.id
+    )
+    if not autorise:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Vous n'êtes pas autorisé à renvoyer ce code.",
+        )
+    if not suivi.pre_alerte_envoyee and suivi.statut != "arrive":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Le code ne peut être envoyé qu'à l'approche ou à l'arrivée.",
+        )
+    if not suivi.telephone_recuperation:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Le numéro de la personne qui récupère l'enfant est manquant.",
+        )
+    ticket = await obtenir_ticket_du_suivi(session, suivi)
+    if ticket is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="Le ticket du passager est indisponible."
+        )
+    expire_le = await preparer_code_remise_suivi(
+        session, suivi, ticket, renouveller=True
+    )
+    await session.commit()
+    if expire_le is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Le code de remise n'a pas pu être envoyé.",
+        )
+    return expire_le
+
+
 async def _notifier_scan_colis(
     session: AsyncSession,
     colis: Colis,
@@ -3123,7 +3388,7 @@ async def _notifier_scan_colis(
 async def lister_notifications(
     session: AsyncSession, type_cible: str, cible_id: UUID
 ) -> list[NotificationLogistique]:
-    """Notifications (SMS) déjà émises pour une cible (colis ou suivi familial)."""
+    """Notifications déjà émises pour une cible (colis ou suivi familial)."""
     resultat = await session.execute(
         select(NotificationLogistique)
         .where(
@@ -3171,10 +3436,9 @@ async def creer_suivi_familial(
         _exiger_voyage_ouvert(voyage)
         if arret_destination_id is not None:
             ligne = await session.get(Ligne, voyage.ligne_id)
-            if ligne is not None and ligne.gare_depart_id != donnees.gare_depart_id:
-                raise HTTPException(
-                    status.HTTP_400_BAD_REQUEST,
-                    detail="Ce voyage ne part pas de la gare de départ déclarée.",
+            if ligne is not None:
+                await _ordre_gare_sur_ligne(
+                    session, ligne, donnees.gare_depart_id
                 )
             await _verifier_arret_du_voyage(
                 session, voyage, arret_destination_id, donnees.gare_depart_id
@@ -3235,6 +3499,9 @@ async def creer_suivi_familial(
         acheteur_tel=(donnees.acheteur_tel or "").strip() or None,
         proche_nom=(donnees.proche_nom or "").strip() or None,
         proche_telephone=(donnees.proche_telephone or "").strip() or None,
+        telephone_recuperation=(
+            (donnees.telephone_recuperation or "").strip() or None
+        ),
         nombre_bagages=max(1, int(donnees.nombre_bagages or 1)),
         parent_id=donnees.parent_id,
         gare_depart_id=donnees.gare_depart_id,
@@ -3289,13 +3556,13 @@ async def creer_suivi_familial(
     )
     session.add(evenement)
 
-    # SMS de confirmation : le responsable + le proche de confiance reçoivent le
+    # Confirmation : le responsable + le proche de confiance reçoivent le
     # code de suivi public.
     quoi = "l'enfant" if suivi.type_passager == "enfant" else "le passager"
     message = (
         f"DigiID — Suivi activé pour {quoi} {suivi.enfant_nom}. "
         f"Code de suivi : {code_clair}. "
-        "Vous recevrez un SMS au départ, avant l'arrivée puis à l'arrivée."
+        "Vous recevrez une notification au départ, à l'approche puis à l'arrivée."
     )
     notifications_envoyees = 0
     notifications_plateforme: set[UUID] = set()
@@ -3378,12 +3645,6 @@ async def affecter_suivi_familial(
 
     voyage = await _verifier_existe(session, Voyage, donnees.voyage_id, "Voyage")
     if suivi.arret_destination_id is not None:
-        ligne = await session.get(Ligne, voyage.ligne_id)
-        if ligne is not None and ligne.gare_depart_id != suivi.gare_depart_id:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail="Ce voyage ne part pas de la gare de départ du passager.",
-            )
         await _verifier_arret_du_voyage(
             session, voyage, suivi.arret_destination_id, suivi.gare_depart_id
         )
@@ -3660,10 +3921,11 @@ def _verifier_evenement_suivi_autorise(
     """Le chauffeur peut remettre directement ; le guichet ne livre que ce qui lui est confié."""
     exiger_acces_suivi_familial(utilisateur)
     if utilisateur.role == RoleUtilisateur.GERANT_GARE.value:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            detail="Le gérant supervise la gare ; les étapes de transport relèvent du chauffeur et la remise au receveur.",
-        )
+        if donnees.type_evenement != "livraison":
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail="Le gérant ne peut intervenir que pour une remise exceptionnelle.",
+            )
     if utilisateur.role == RoleUtilisateur.CHAUFFEUR.value:
         if donnees.type_evenement == "livraison":
             if suivi.remis_guichet_le is not None:
@@ -3679,7 +3941,9 @@ def _verifier_evenement_suivi_autorise(
     if (
         donnees.type_evenement == "livraison"
         and utilisateur.role not in ROLES_GUICHET_SUIVI
-        and utilisateur.role not in ("super_admin", "super_administrateur")
+        and utilisateur.role not in (
+            "gerant_gare", "super_admin", "super_administrateur"
+        )
     ):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
@@ -3730,10 +3994,10 @@ async def enregistrer_evenement_suivi(
     donnees: schemas.SuiviFamilialEvenementCreate,
     utilisateur: Utilisateur,
 ) -> dict:
-    """Marque une étape du voyage d'un enfant et prévient le parent par SMS.
+    """Marque une étape du voyage d'un enfant et prévient ses contacts.
 
     Idempotent (``idempotency_key``) : un même événement n'est jamais dupliqué et
-    le SMS de départ / d'arrivée ne part qu'une seule fois (flags ``sms_*_envoye``).
+    la notification de départ / d'arrivée ne part qu'une seule fois.
     """
     suivi = await obtenir_suivi_familial(session, suivi_id)
     _verifier_evenement_suivi_autorise(suivi, donnees, utilisateur)
@@ -3773,6 +4037,115 @@ async def enregistrer_evenement_suivi(
                 status.HTTP_403_FORBIDDEN,
                 detail="Cet enfant a été confié à un autre agent du guichet.",
             )
+
+    override_sans_code = False
+    if donnees.motif_sans_code and suivi.type_passager != "enfant":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="La remise sans code concerne uniquement un enfant.",
+        )
+    if (
+        donnees.type_evenement == "livraison"
+        and suivi.type_passager != "enfant"
+        and utilisateur.role in (
+            "gerant_gare", "super_admin", "super_administrateur"
+        )
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="La remise exceptionnelle ne concerne que les enfants.",
+        )
+    if donnees.type_evenement == "livraison" and suivi.type_passager == "enfant":
+        if suivi.statut != "arrive":
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail="L'enfant doit d'abord être marqué arrivé avant sa remise.",
+            )
+        if donnees.motif_sans_code and donnees.code_confirmation:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Choisissez la remise avec code ou la dérogation, pas les deux.",
+            )
+        if donnees.motif_sans_code:
+            if utilisateur.role not in (
+                "gerant_gare", "super_admin", "super_administrateur"
+            ):
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    detail="La remise sans code est réservée au gérant ou au super-administrateur.",
+                )
+            override_sans_code = True
+            suivi.code_remise_hash = None
+            suivi.code_remise_chiffre = None
+            suivi.code_remise_expire_le = None
+        else:
+            if not donnees.code_confirmation:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    detail="Le code de remise à six chiffres est obligatoire.",
+                )
+            maintenant_code = datetime.now(timezone.utc)
+            if not suivi.code_remise_hash or not suivi.code_remise_expire_le:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT, detail="Aucun code de remise actif."
+                )
+            if suivi.code_remise_expire_le <= maintenant_code:
+                suivi.code_remise_hash = None
+                suivi.code_remise_chiffre = None
+                suivi.code_remise_expire_le = None
+                await enregistrer_evenement_audit(
+                    session,
+                    type_evenement=TypesEvenementAudit.SUIVI_FAMILIAL_CODE_REMISE_ECHEC.value,
+                    description=f"Code de remise expiré pour le suivi {suivi.id}.",
+                    utilisateur_id=utilisateur.id,
+                    role_acteur=utilisateur.role,
+                    donnees_supplementaires={"suivi_familial_id": str(suivi.id)},
+                )
+                await session.commit()
+                raise HTTPException(
+                    status.HTTP_410_GONE, detail="Le code de remise a expiré."
+                )
+            if suivi.code_remise_tentatives >= parametres.nombre_max_tentatives_code_remise:
+                raise HTTPException(
+                    status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Trop de tentatives. Demandez un nouveau code.",
+                )
+            code_formate = bool(
+                re.fullmatch(r"[0-9]{6}", donnees.code_confirmation)
+            )
+            empreinte = (
+                hashlib.sha256(donnees.code_confirmation.encode("ascii")).hexdigest()
+                if code_formate
+                else ""
+            )
+            if not code_formate or not hmac.compare_digest(
+                suivi.code_remise_hash, empreinte
+            ):
+                suivi.code_remise_tentatives += 1
+                tentatives = suivi.code_remise_tentatives
+                if tentatives >= parametres.nombre_max_tentatives_code_remise:
+                    suivi.code_remise_hash = None
+                    suivi.code_remise_chiffre = None
+                    suivi.code_remise_expire_le = None
+                await enregistrer_evenement_audit(
+                    session,
+                    type_evenement=TypesEvenementAudit.SUIVI_FAMILIAL_CODE_REMISE_ECHEC.value,
+                    description=f"Tentative de code invalide pour le suivi {suivi.id}.",
+                    utilisateur_id=utilisateur.id,
+                    role_acteur=utilisateur.role,
+                    donnees_supplementaires={
+                        "suivi_familial_id": str(suivi.id),
+                        "tentatives": tentatives,
+                    },
+                )
+                await session.commit()
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, detail="Code de remise incorrect."
+                )
+            suivi.code_remise_confirme_le = maintenant_code
+            suivi.code_remise_hash = None
+            suivi.code_remise_chiffre = None
+            suivi.code_remise_expire_le = None
 
     maintenant = donnees.horodatage or datetime.now(timezone.utc)
     evenement = SuiviFamilialEvenement(
@@ -3844,7 +4217,11 @@ async def enregistrer_evenement_suivi(
     libelles = {
         "depart": "Départ enregistré.",
         "arrivee": "Arrivée enregistrée. Le parent a été prévenu.",
-        "livraison": f"Passager {suivi.enfant_nom} remis à sa famille avec succès.",
+        "livraison": (
+            f"Passager {suivi.enfant_nom} remis à sa famille."
+            if override_sans_code
+            else f"Passager {suivi.enfant_nom} remis à sa famille avec succès."
+        ),
         "incident": "Incident signalé.",
     }
     return {
@@ -3907,7 +4284,7 @@ async def valider_depart_voyage(
     """« Valider le Départ » : marque **tous** les passagers et colis d'un clic.
 
     Un seul bouton côté chauffeur enregistre le départ de tous les colis du
-    voyage **et** fait passer tous les passagers en route (SMS au parent).
+    voyage **et** fait passer tous les passagers en route (notifications aux contacts).
     """
     voyage = await obtenir_voyage(session, voyage_id)
     if voyage.statut in ("termine", "annule"):
@@ -4043,7 +4420,9 @@ async def valider_depart_voyage(
         if suivi.reception_confirmee_le is None:
             suivi.reception_confirmee_le = maintenant
             suivi.reception_confirmee_par_id = utilisateur.id
-        await _notifier_suivi(session, suivi, "depart", suivi.gare_depart_id)
+        await _notifier_suivi(
+            session, suivi, "depart", suivi.gare_depart_id, maintenant
+        )
         nb_passagers += 1
 
     if nb_colis == 0 and nb_passagers == 0:
@@ -4125,6 +4504,13 @@ async def marquer_arrivee_voyage(
             ),
         )
 
+    ligne = await session.get(Ligne, voyage.ligne_id)
+    if ligne is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail="Ligne du voyage introuvable.",
+        )
+
     colis_voyage = await _colis_du_voyage(session, voyage_id)
     passagers_voyage = await _passagers_du_voyage(session, voyage_id)
     _exiger_charge_a_bord(
@@ -4146,6 +4532,38 @@ async def marquer_arrivee_voyage(
                 detail="Cet arrêt n'appartient pas au trajet de ce voyage.",
             )
         gare_effective = arret.gare_id
+    elif gare_effective is not None:
+        ordre_gare = await _ordre_gare_sur_ligne(session, ligne, gare_effective)
+        if ordre_gare == 0:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="La gare de départ ne peut pas être marquée comme arrivée.",
+            )
+
+    a_des_arrets_intermediaires = await session.scalar(
+        select(ArretLigne.id)
+        .where(
+            ArretLigne.ligne_id == ligne.id,
+            ArretLigne.actif.is_(True),
+        )
+        .limit(1)
+    ) is not None
+    if (
+        a_des_arrets_intermediaires
+        and arret_id is None
+        and gare_id is None
+    ):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Choisissez l'arrêt ou la gare où vous vous trouvez.",
+        )
+    arrivee_finale = gare_effective == ligne.gare_arrivee_id
+    if (
+        not a_des_arrets_intermediaires
+        and arret_id is None
+        and gare_id is None
+    ):
+        arrivee_finale = True
 
     lieu = await _libelle_gare(session, gare_effective)
 
@@ -4187,7 +4605,9 @@ async def marquer_arrivee_voyage(
             localisation=localisation, horodatage=maintenant,
         ))
         suivi.statut = "arrive"
-        await _notifier_suivi(session, suivi, "arrivee", gare_evt)
+        await _notifier_suivi(
+            session, suivi, "arrivee", gare_evt, maintenant
+        )
         nb_passagers += 1
 
     if nb_colis == 0 and nb_passagers == 0:
@@ -4205,7 +4625,7 @@ async def marquer_arrivee_voyage(
     ) or any(
         p.statut not in ("arrive", "annule") for p in passagers_voyage
     )
-    if not encore_en_charge:
+    if arrivee_finale and not encore_en_charge:
         voyage.statut = "termine"
         if voyage.date_arrivee is None:
             voyage.date_arrivee = maintenant
@@ -4226,94 +4646,668 @@ async def marquer_arrivee_voyage(
     }
 
 
+def _delai_approche_libelle(minutes: int) -> str:
+    heures, reste = divmod(minutes, 60)
+    if heures and reste:
+        return f"{heures} h {reste:02d}"
+    if heures:
+        return f"{heures} h"
+    return f"{minutes} minute" if minutes == 1 else f"{minutes} minutes"
+
+
+async def _approche_deja_envoyee(
+    session: AsyncSession,
+    type_cible: str,
+    cible_id: UUID,
+    telephone: str,
+) -> bool:
+    return (
+        await session.scalar(
+            select(NotificationLogistique.id)
+            .where(
+                NotificationLogistique.type_cible == type_cible,
+                NotificationLogistique.cible_id == cible_id,
+                NotificationLogistique.type_evenement == "approche",
+                NotificationLogistique.telephone == masquer_telephone(telephone),
+            )
+            .limit(1)
+        )
+    ) is not None
+
+
+def _ajouter_notification_approche(
+    session: AsyncSession,
+    *,
+    type_cible: str,
+    cible_id: UUID,
+    destinataire_role: str,
+    telephone: str,
+    message: str,
+    parametres_template: list[str],
+) -> bool:
+    """Envoie WhatsApp, puis SMS de secours configuré, sans exposer les codes."""
+    if type_cible == "colis" and len(parametres_template) > 1:
+        message = message.replace(parametres_template[1], "[code masqué]")
+    message_journalise = re.sub(
+        r"(?<!\d)\d{6}(?!\d)|\b[A-Z0-9]{2,}(?:-[A-Z0-9]{2,})+\b",
+        "[code masqué]",
+        message,
+    )[:500]
+    try:
+        telephone_normalise = normaliser_numero_tiers(telephone)
+    except ValueError:
+        telephone_normalise = None
+
+    telephone_masque = masquer_telephone(telephone_normalise or telephone)
+    if telephone_normalise is None:
+        session.add(
+            NotificationLogistique(
+                canal="whatsapp",
+                type_cible=type_cible,
+                cible_id=cible_id,
+                type_evenement="approche",
+                destinataire_role=destinataire_role,
+                telephone=telephone_masque,
+                message=message_journalise,
+                envoye=False,
+                whatsapp_statut="failed",
+                whatsapp_erreur_code="NUMERO_INVALIDE",
+            )
+        )
+        journal.warning(
+            f"[WHATSAPP] Pré-alerte ignorée: numéro invalide "
+            f"destinataire={telephone_masque}"
+        )
+        return True
+
+    resultat_whatsapp = envoyer_whatsapp(
+        telephone_normalise,
+        message,
+        nom_template=parametres.whatsapp_template_approche_name,
+        parametres_template=parametres_template,
+        langue_template="fr",
+    )
+    session.add(
+        NotificationLogistique(
+            canal="whatsapp",
+            type_cible=type_cible,
+            cible_id=cible_id,
+            type_evenement="approche",
+            destinataire_role=destinataire_role,
+            telephone=telephone_masque,
+            message=message_journalise,
+            envoye=resultat_whatsapp.accepte,
+            whatsapp_message_id=resultat_whatsapp.message_id,
+            whatsapp_statut=(
+                "accepted" if resultat_whatsapp.accepte else "failed"
+            ),
+            whatsapp_erreur_code=resultat_whatsapp.erreur_code,
+        )
+    )
+    if resultat_whatsapp.accepte:
+        return True
+
+    sms_configure = bool(
+        parametres.sms_twilio_account_sid
+        and parametres.sms_twilio_auth_token
+        and parametres.sms_twilio_from
+    )
+    if not sms_configure:
+        journal.warning(
+            f"[SMS] Repli non effectué: aucun fournisseur SMS configuré "
+            f"evenement=approche destinataire={telephone_masque}"
+        )
+        return True
+
+    session.add(
+        NotificationLogistique(
+            canal="sms",
+            type_cible=type_cible,
+            cible_id=cible_id,
+            type_evenement="approche",
+            destinataire_role=destinataire_role,
+            telephone=telephone_masque,
+            message=message_journalise,
+            envoye=envoyer_sms(telephone_normalise, message),
+        )
+    )
+    return True
+
+
+async def _notifier_plateforme_approche(
+    session: AsyncSession,
+    ticket: Ticket | None,
+    message: str,
+    telephones_cibles: set[str],
+) -> None:
+    utilisateurs_vus: set[UUID] = set()
+    for cle_telephone in telephones_cibles:
+        utilisateur = await _compte_par_telephone(session, cle_telephone)
+        if utilisateur is None or utilisateur.id in utilisateurs_vus:
+            continue
+        await creer_notification(
+            session,
+            utilisateur,
+            type_notification="info",
+            categorie="logistique_suivi",
+            titre="Approche du passager",
+            message=message,
+            lien_action=(
+                f"/suivi/{ticket.code_clair}" if ticket is not None else None
+            ),
+        )
+        utilisateurs_vus.add(utilisateur.id)
+
+
 async def envoyer_pre_alerte_voyage(
     session: AsyncSession,
     voyage_id: UUID,
-    utilisateur: Utilisateur,
+    utilisateur: Utilisateur | None,
     delai_minutes: int | None = None,
+    *,
+    arret_id: UUID | None = None,
+    gare_id: UUID | None = None,
+    heure_estimee: datetime | None = None,
+    automatique: bool = False,
 ) -> dict:
-    """« Prévenir de l'approche » : SMS de pré-alerte aux familles et destinataires.
-
-    ~45 min / 1h avant l'arrivée, un seul clic prévient : les passagers, leurs
-    proches de confiance (et l'acheteur pour un enfant) **ainsi que** les
-    destinataires des colis, pour qu'ils se rendent à la gare à temps.
-    """
+    """Pré-alerte les personnes qui descendent à l'arrêt sélectionné."""
+    if not automatique and utilisateur is None:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail="Un acteur authentifié est requis pour envoyer la pré-alerte.",
+        )
     voyage = await obtenir_voyage(session, voyage_id)
+    voyage_verrouille = await session.scalar(
+        select(Voyage)
+        .where(Voyage.id == voyage_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if voyage_verrouille is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail="Voyage introuvable"
+        )
+    voyage = voyage_verrouille
     if voyage.statut in ("termine", "annule"):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            detail=(
-                f"Ce voyage est « {voyage.statut} » : plus de pré-alerte à envoyer."
-            ),
+            detail=f"Ce voyage est « {voyage.statut} » : plus de pré-alerte à envoyer.",
+        )
+
+    ligne = await session.get(Ligne, voyage.ligne_id)
+    if ligne is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail="Ligne du voyage introuvable."
+        )
+
+    arrets = list(
+        (
+            await session.scalars(
+                select(ArretLigne)
+                .where(
+                    ArretLigne.ligne_id == ligne.id,
+                    ArretLigne.actif.is_(True),
+                )
+                .order_by(ArretLigne.ordre)
+            )
+        ).all()
+    )
+    gare_cible = gare_id
+    if arret_id is not None:
+        arret = await session.get(ArretLigne, arret_id)
+        if (
+            arret is None
+            or arret.ligne_id != ligne.id
+            or arret.actif is False
+        ):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="L'arrêt de pré-alerte ne fait pas partie du trajet.",
+            )
+        if gare_id is not None and gare_id != arret.gare_id:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="La gare ne correspond pas à l'arrêt sélectionné.",
+            )
+        gare_cible = arret.gare_id
+    elif gare_cible is not None:
+        ordre = await _ordre_gare_sur_ligne(session, ligne, gare_cible)
+        if ordre == 0:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="La gare de départ ne peut pas être ciblée pour l'approche.",
+            )
+    elif arrets:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Choisissez l'arrêt ou la gare où les passagers descendent.",
+        )
+    else:
+        gare_cible = ligne.gare_arrivee_id
+
+    if not arrets and gare_cible != ligne.gare_arrivee_id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Sans arrêt intermédiaire, seule l'arrivée finale peut être ciblée.",
         )
 
     colis_voyage = await _colis_du_voyage(session, voyage_id)
     passagers_voyage = await _passagers_du_voyage(session, voyage_id)
-    _exiger_charge_a_bord(
-        colis_voyage, passagers_voyage, action="envoyer la pré-alerte"
+    delai_minutes = (
+        parametres.approche_delai_minutes
+        if delai_minutes is None
+        else delai_minutes
     )
+    heure_estimee = _en_utc(heure_estimee) if heure_estimee else (
+        datetime.now(timezone.utc) + timedelta(minutes=delai_minutes)
+    )
+    delai_libelle = _delai_approche_libelle(delai_minutes)
+    lieu = await _libelle_gare(session, gare_cible) or "l'arrêt prévu"
+    depart = await _libelle_gare(session, ligne.gare_depart_id) or "départ"
+    arrivee = await _libelle_gare(session, ligne.gare_arrivee_id) or "arrivée"
+    trajet = f"{depart} → {arrivee}"
+    heure_libelle = heure_estimee.astimezone(
+        timezone(timedelta(hours=1))
+    ).strftime("%H:%M")
 
-    nb_sms = 0
+    nb_notifications = 0
     nb_passagers = 0
     nb_colis = 0
+    nb_codes_remise = 0
+    cible_presente = False
 
     for colis in colis_voyage:
-        if colis.statut in ("livre", "annule"):
+        if colis.statut in ("arrive", "livre", "annule"):
             continue
+        if not _destine_a_larret(
+            colis, arret_id=arret_id, gare_id=gare_cible
+        ):
+            continue
+        cible_presente = True
         ticket = await obtenir_ticket_du_colis(session, colis)
-        lieu = await _libelle_gare(session, colis.gare_arrivee_id)
-        message = construire_message_pre_alerte(
-            "colis", ticket.code_clair if ticket else "", lieu, delai_minutes
+        code_ou_nom = ticket.code_clair if ticket is not None else "Colis"
+        message = (
+            f"DigiID : préparez-vous. Le colis {code_ou_nom} arrive à {lieu} "
+            f"dans environ {delai_libelle}, vers {heure_libelle}. "
+            f"Trajet : {trajet}. Merci d'être sur place."
         )
+        template = [
+            "Le colis",
+            code_ou_nom,
+            lieu,
+            delai_libelle,
+            heure_libelle,
+            trajet,
+        ]
+        telephones_vus: set[str] = set()
         for role, telephone in (
             ("destinataire", colis.destinataire_tel),
             ("expediteur", colis.expediteur_tel),
         ):
             if not telephone:
                 continue
-            _ajouter_notification(
-                session, type_cible="colis", cible_id=colis.id,
-                type_evenement="pre_alerte", destinataire_role=role,
-                telephone=telephone, message=message,
-            )
-            nb_sms += 1
+            try:
+                cle_telephone = normaliser_numero_tiers(telephone)
+            except ValueError:
+                cle_telephone = telephone.strip()
+            if not cle_telephone or cle_telephone in telephones_vus:
+                continue
+            telephones_vus.add(cle_telephone)
+            if await _approche_deja_envoyee(
+                session, "colis", colis.id, cle_telephone
+            ):
+                continue
+            if _ajouter_notification_approche(
+                session,
+                type_cible="colis",
+                cible_id=colis.id,
+                destinataire_role=role,
+                telephone=telephone,
+                message=message,
+                parametres_template=template,
+            ):
+                nb_notifications += 1
         nb_colis += 1
 
     for suivi in passagers_voyage:
-        if suivi.statut in ("arrive", "annule"):
+        if suivi.statut in ("arrive", "annule") or (
+            automatique and suivi.pre_alerte_envoyee
+        ):
             continue
+        if not _destine_a_larret(
+            suivi, arret_id=arret_id, gare_id=gare_cible
+        ):
+            continue
+        cible_presente = True
         ticket = await obtenir_ticket_du_suivi(session, suivi)
-        lieu = await _libelle_gare(session, suivi.gare_arrivee_id)
-        message = construire_message_pre_alerte(
-            "passager", ticket.code_clair if ticket else "", lieu, delai_minutes
+        prenom = (suivi.enfant_nom.strip().split() or ["Passager"])[0]
+        libelle_cible = "L'enfant" if suivi.type_passager == "enfant" else "Le passager"
+        message = (
+            f"DigiID : préparez-vous. {libelle_cible} {prenom} arrive à {lieu} "
+            f"dans environ {delai_libelle}, vers {heure_libelle}. "
+            f"Trajet : {trajet}. Merci d'être sur place."
         )
-        for role, telephone in (
-            ("parent" if suivi.type_passager == "enfant" else "passager", suivi.telephone_parent),
+        template = [
+            libelle_cible,
+            prenom,
+            lieu,
+            delai_libelle,
+            heure_libelle,
+            trajet,
+        ]
+        telephones_vus: set[str] = set()
+        telephones_nouveaux: set[str] = set()
+        destinataires = (
+            (
+                "parent" if suivi.type_passager == "enfant" else "passager",
+                suivi.telephone_parent,
+            ),
             ("acheteur", suivi.acheteur_tel),
             ("proche", suivi.proche_telephone),
-        ):
+        )
+        for role, telephone in destinataires:
             if not telephone:
                 continue
-            _ajouter_notification(
-                session, type_cible="suivi_familial", cible_id=suivi.id,
-                type_evenement="pre_alerte", destinataire_role=role,
-                telephone=telephone, message=message,
+            try:
+                cle_telephone = normaliser_numero_tiers(telephone)
+            except ValueError:
+                cle_telephone = telephone.strip()
+            if not cle_telephone or cle_telephone in telephones_vus:
+                continue
+            telephones_vus.add(cle_telephone)
+            if not await _approche_deja_envoyee(
+                session, "suivi_familial", suivi.id, cle_telephone
+            ):
+                if _ajouter_notification_approche(
+                    session,
+                    type_cible="suivi_familial",
+                    cible_id=suivi.id,
+                    destinataire_role=role,
+                    telephone=telephone,
+                    message=message,
+                    parametres_template=template,
+                ):
+                    nb_notifications += 1
+                    telephones_nouveaux.add(cle_telephone)
+        if telephones_nouveaux:
+            await _notifier_plateforme_approche(
+                session, ticket, message, telephones_nouveaux
             )
-            nb_sms += 1
+        if suivi.type_passager == "enfant" and ticket is not None:
+            notification_code_existante = await session.scalar(
+                select(NotificationLogistique.id).where(
+                    NotificationLogistique.type_cible == "suivi_familial",
+                    NotificationLogistique.cible_id == suivi.id,
+                    NotificationLogistique.type_evenement == "code_remise_enfant",
+                    NotificationLogistique.canal == "whatsapp",
+                ).limit(1)
+            )
+            code_expire_le = await preparer_code_remise_suivi(session, suivi, ticket)
+            if code_expire_le is not None and notification_code_existante is None:
+                nb_codes_remise += 1
+                await enregistrer_evenement_audit(
+                    session,
+                    type_evenement=(
+                        TypesEvenementAudit.SUIVI_FAMILIAL_CODE_REMISE_ENVOYE.value
+                    ),
+                    description=(
+                        f"Code de remise envoyé pour le suivi familial {suivi.id}."
+                    ),
+                    utilisateur_id=utilisateur.id if utilisateur else None,
+                    role_acteur=utilisateur.role if utilisateur else "systeme",
+                    donnees_supplementaires={
+                        "suivi_familial_id": str(suivi.id),
+                        "expiration": code_expire_le.isoformat(),
+                    },
+                )
         suivi.pre_alerte_envoyee = True
         nb_passagers += 1
 
     await session.commit()
+    if automatique and (nb_notifications or nb_codes_remise):
+        try:
+            async with session.begin_nested():
+                await enregistrer_evenement_audit(
+                    session,
+                    type_evenement=(
+                        TypesEvenementAudit.VOYAGE_PRE_ALERTE_ENVOYEE.value
+                    ),
+                    description=(
+                        f"Pré-alerte automatique du voyage {voyage_id} "
+                        f"à {lieu}."
+                    ),
+                    role_acteur="systeme",
+                    donnees_supplementaires={
+                        "voyage_id": str(voyage_id),
+                        "arret_id": str(arret_id) if arret_id else None,
+                        "gare_id": str(gare_cible) if gare_cible else None,
+                        "nb_passagers": nb_passagers,
+                        "nb_colis": nb_colis,
+                        "nb_codes_remise": nb_codes_remise,
+                    },
+                )
+                await session.flush()
+            await session.commit()
+        except SQLAlchemyError as erreur:
+            await session.rollback()
+            journal.error(
+                "Échec de l'audit d'une pré-alerte automatique "
+                f"(type={type(erreur).__name__})."
+            )
+
+    if not cible_presente:
+        message_resultat = "Personne ne descend ici."
+    elif nb_notifications == 0:
+        message_resultat = "Aucune nouvelle pré-alerte à envoyer pour cet arrêt."
+    else:
+        message_resultat = (
+            f"Pré-alerte envoyée à {nb_notifications} contact(s) "
+            f"({nb_passagers} passager(s), {nb_colis} colis)."
+        )
     return {
         "voyage_id": voyage_id,
-        "nb_sms": nb_sms,
+        "nb_sms": nb_notifications,
         "nb_passagers": nb_passagers,
         "nb_colis": nb_colis,
-        "message": (
-            f"Pré-alerte envoyée : {nb_sms} SMS ({nb_passagers} passager(s), "
-            f"{nb_colis} colis)."
-        ),
+        "message": message_resultat,
     }
+
+
+async def envoyer_pre_alertes_automatiques(
+    session: AsyncSession,
+    maintenant: datetime | None = None,
+) -> int:
+    """Envoie une pré-alerte dans la fenêtre configurée pour chaque arrêt."""
+    maintenant = _en_utc(maintenant or datetime.now(timezone.utc))
+    voyages = list(
+        (
+            await session.scalars(
+                select(Voyage).where(Voyage.statut == "en_cours")
+            )
+        ).all()
+    )
+    nb_alertes = 0
+    for voyage in voyages:
+        ligne = await session.get(Ligne, voyage.ligne_id)
+        if ligne is None or not ligne.duree_min or ligne.duree_min <= 0:
+            continue
+        arrets = list(
+            (
+                await session.scalars(
+                    select(ArretLigne)
+                    .where(
+                        ArretLigne.ligne_id == ligne.id,
+                        ArretLigne.actif.is_(True),
+                    )
+                    .order_by(ArretLigne.ordre)
+                )
+            ).all()
+        )
+        nb_segments = len(arrets) + 1
+        groupes: dict[tuple[UUID | None, UUID], datetime] = {}
+        enregistrements = (
+            await _colis_du_voyage(session, voyage.id)
+            + await _passagers_du_voyage(session, voyage.id)
+        )
+        for enregistrement in enregistrements:
+            if enregistrement.statut in ("arrive", "livre", "annule"):
+                continue
+            if (
+                isinstance(enregistrement, SuiviFamilial)
+                and enregistrement.pre_alerte_envoyee
+            ):
+                continue
+            gare_destination = enregistrement.gare_arrivee_id
+            arret_cible = next(
+                (
+                    arret
+                    for arret in arrets
+                    if arret.id == enregistrement.arret_destination_id
+                    or arret.gare_id == gare_destination
+                ),
+                None,
+            )
+            if arret_cible is not None:
+                gare_destination = arret_cible.gare_id
+            position = (
+                arrets.index(arret_cible) + 1
+                if arret_cible is not None
+                else (nb_segments if gare_destination == ligne.gare_arrivee_id else 0)
+            )
+            if position == 0:
+                continue
+            minutes_trajet = ceil(ligne.duree_min * position / nb_segments)
+            heure_estimee = _en_utc(voyage.date_depart) + timedelta(
+                minutes=minutes_trajet
+            )
+            secondes_restantes = (heure_estimee - maintenant).total_seconds()
+            delai_configure = parametres.approche_delai_minutes
+            if not 0 < secondes_restantes <= delai_configure * 60:
+                continue
+            groupes[(arret_cible.id if arret_cible else None, gare_destination)] = (
+                heure_estimee
+            )
+
+        for (arret_id, gare_id), heure_estimee in groupes.items():
+            delai_restant = max(
+                1, ceil((heure_estimee - maintenant).total_seconds() / 60)
+            )
+            try:
+                resultat = await envoyer_pre_alerte_voyage(
+                    session,
+                    voyage.id,
+                    None,
+                    delai_minutes=delai_restant,
+                    arret_id=arret_id,
+                    gare_id=gare_id,
+                    heure_estimee=heure_estimee,
+                    automatique=True,
+                )
+            except HTTPException as erreur:
+                journal.warning(
+                    "Pré-alerte automatique ignorée pour "
+                    f"voyage={voyage.id} (statut={erreur.status_code})."
+                )
+                continue
+            if resultat["nb_sms"]:
+                nb_alertes += 1
+    return nb_alertes
+
+
+def _ajouter_notification_passager(
+    session: AsyncSession,
+    suivi: SuiviFamilial,
+    type_evenement: str,
+    destinataire_role: str,
+    telephone: str,
+    message: str,
+    nom_template: str,
+    parametres_template: list[str],
+) -> None:
+    """Envoie WhatsApp puis, en secours, SMS et journalise les canaux tentés."""
+    message_journalise = re.sub(
+        r"(?<!\d)\d{6}(?!\d)|\b[A-Z0-9]{2,}(?:-[A-Z0-9]{2,})+\b",
+        "[code masqué]",
+        message,
+    )[:500]
+    try:
+        telephone_normalise = normaliser_numero_tiers(telephone)
+    except ValueError:
+        telephone_normalise = None
+    if telephone_normalise is None:
+        telephone_masque = masquer_telephone(telephone)
+        journal.warning(
+            f"[WHATSAPP] Notification passager ignorée: numéro invalide "
+            f"evenement={type_evenement} destinataire={telephone_masque}"
+        )
+        session.add(
+            NotificationLogistique(
+                canal="whatsapp",
+                type_cible="suivi_familial",
+                cible_id=suivi.id,
+                type_evenement=type_evenement,
+                destinataire_role=destinataire_role,
+                telephone=telephone_masque,
+                message=message_journalise,
+                envoye=False,
+                whatsapp_statut="failed",
+                whatsapp_erreur_code="NUMERO_INVALIDE",
+            )
+        )
+        return
+
+    telephone_masque = masquer_telephone(telephone_normalise)
+    resultat_whatsapp = envoyer_whatsapp(
+        telephone_normalise,
+        message,
+        nom_template=nom_template,
+        parametres_template=parametres_template,
+        langue_template="fr",
+    )
+    session.add(
+        NotificationLogistique(
+            canal="whatsapp",
+            type_cible="suivi_familial",
+            cible_id=suivi.id,
+            type_evenement=type_evenement,
+            destinataire_role=destinataire_role,
+            telephone=telephone_masque,
+            message=message_journalise,
+            envoye=resultat_whatsapp.accepte,
+            whatsapp_message_id=resultat_whatsapp.message_id,
+            whatsapp_statut=(
+                "accepted" if resultat_whatsapp.accepte else "failed"
+            ),
+            whatsapp_erreur_code=resultat_whatsapp.erreur_code,
+        )
+    )
+    if resultat_whatsapp.accepte:
+        return
+
+    sms_configure = bool(
+        parametres.sms_twilio_account_sid
+        and parametres.sms_twilio_auth_token
+        and parametres.sms_twilio_from
+    )
+    if not sms_configure:
+        journal.warning(
+            f"[SMS] Repli non effectué: aucun fournisseur SMS configuré "
+            f"evenement={type_evenement} destinataire={telephone_masque}"
+        )
+        return
+
+    session.add(
+        NotificationLogistique(
+            canal="sms",
+            type_cible="suivi_familial",
+            cible_id=suivi.id,
+            type_evenement=type_evenement,
+            destinataire_role=destinataire_role,
+            telephone=telephone_masque,
+            message=message_journalise,
+            envoye=envoyer_sms(telephone_normalise, message),
+        )
+    )
 
 
 async def _notifier_suivi(
@@ -4321,26 +5315,112 @@ async def _notifier_suivi(
     suivi: SuiviFamilial,
     type_evenement: str,
     gare_id: UUID | None,
+    horodatage: datetime,
 ) -> None:
-    """Prévient par SMS le responsable ET le proche de confiance d'un passager."""
+    """Notifie les contacts du passager par WhatsApp, SMS de secours et in-app."""
     if type_evenement == "depart" and suivi.sms_depart_envoye:
         return
     if type_evenement == "arrivee" and suivi.sms_arrivee_envoye:
         return
-    lieu = await _libelle_gare(session, gare_id)
-    message = construire_message_suivi_familial(
-        suivi.enfant_nom, type_evenement, lieu, suivi.enfant_age
+
+    gare_depart = await _libelle_gare(session, suivi.gare_depart_id)
+    gare_arrivee_id = (
+        suivi.gare_arrivee_id if type_evenement == "depart" else gare_id
     )
-    for role, telephone in (
-        ("parent" if suivi.type_passager == "enfant" else "passager", suivi.telephone_parent),
+    gare_arrivee = await _libelle_gare(session, gare_arrivee_id)
+    ticket = await obtenir_ticket_du_suivi(session, suivi)
+    chauffeur = (
+        await session.get(Utilisateur, suivi.chauffeur_id)
+        if suivi.chauffeur_id is not None
+        else None
+    )
+    nom_chauffeur = nom_complet(chauffeur) if chauffeur is not None else "Chauffeur"
+    type_passager = "Enfant" if suivi.type_passager == "enfant" else "Adulte"
+    prenom_passager = (suivi.enfant_nom.strip().split() or ["Passager"])[0]
+    heure = horodatage.astimezone(timezone(timedelta(hours=1))).strftime("%H:%M")
+    code_ticket = ticket.code_clair if ticket is not None else "indisponible"
+    gare_depart = gare_depart or "gare de départ"
+    gare_arrivee = gare_arrivee or "gare d'arrivée"
+
+    if type_evenement == "depart":
+        message = (
+            f"DigiID : le départ a eu lieu. Passager : {prenom_passager} "
+            f"({type_passager}), de {gare_depart} vers {gare_arrivee}. "
+            f"Départ à {heure}. Ticket : {code_ticket}. "
+            f"Chauffeur : {nom_chauffeur}. "
+            "Vous serez prévenu à l'approche et à l'arrivée."
+        )
+        nom_template = "digiid_depart_passager"
+        titre = "Départ du passager"
+    else:
+        message = (
+            f"DigiID : arrivée confirmée. Passager : {prenom_passager} "
+            f"({type_passager}) est arrivé à {gare_arrivee}, parti de "
+            f"{gare_depart}. Arrivée à {heure}. Ticket : {code_ticket}. "
+            f"Chauffeur : {nom_chauffeur}."
+        )
+        nom_template = "digiid_arrivee_passager"
+        titre = "Arrivée du passager"
+
+    parametres_template = [
+        type_passager,
+        prenom_passager,
+        gare_depart,
+        gare_arrivee,
+        heure,
+        code_ticket,
+        nom_chauffeur,
+    ]
+    destinataires = (
+        (
+            "parent" if suivi.type_passager == "enfant" else "passager",
+            suivi.telephone_parent,
+        ),
+        ("acheteur", suivi.acheteur_tel),
         ("proche", suivi.proche_telephone),
-    ):
+    )
+    telephones_vus: set[str] = set()
+    utilisateurs_notifies: set[UUID] = set()
+    lien_action = f"/suivi/{ticket.code_clair}" if ticket is not None else None
+
+    for role, telephone in destinataires:
         if not telephone:
             continue
-        _ajouter_notification(
-            session, type_cible="suivi_familial", cible_id=suivi.id,
-            type_evenement=type_evenement, destinataire_role=role,
-            telephone=telephone, message=message,
+        try:
+            cle_telephone = normaliser_numero_tiers(telephone)
+        except ValueError:
+            cle_telephone = telephone.strip()
+        if not cle_telephone or cle_telephone in telephones_vus:
+            continue
+        telephones_vus.add(cle_telephone)
+        _ajouter_notification_passager(
+            session,
+            suivi,
+            type_evenement,
+            role,
+            telephone,
+            message,
+            nom_template,
+            parametres_template,
+        )
+        utilisateur = await _compte_par_telephone(session, telephone)
+        if utilisateur is None or utilisateur.id in utilisateurs_notifies:
+            continue
+        await creer_notification(
+            session,
+            utilisateur,
+            type_notification="info",
+            categorie="logistique_suivi",
+            titre=titre,
+            message=message,
+            lien_action=lien_action,
+        )
+        utilisateurs_notifies.add(utilisateur.id)
+
+    if not telephones_vus:
+        journal.warning(
+            f"[NOTIFICATION] Aucun destinataire passager pour "
+            f"evenement={type_evenement} suivi={suivi.id}"
         )
     if type_evenement == "depart":
         suivi.sms_depart_envoye = True
@@ -4386,6 +5466,7 @@ def _notifications_publiques(notifications: list[NotificationLogistique]):
     return [
         schemas.NotificationSuiviPublic(
             type_evenement=n.type_evenement,
+            canal=n.canal,
             destinataire_role=n.destinataire_role,
             telephone_masque=(
                 n.telephone
@@ -4394,7 +5475,11 @@ def _notifications_publiques(notifications: list[NotificationLogistique]):
             ),
             message=(
                 "Code de remise envoyé au destinataire."
-                if n.type_evenement == "code_remise"
+                if n.type_evenement in (
+                    "code_remise",
+                    "code_remise_enfant",
+                    "code_remise_enfant_renvoi",
+                )
                 else re.sub(
                     r"(?<!\d)\d{6}(?!\d)|\b[A-Z0-9]{2,}(?:-[A-Z0-9]{2,})+\b",
                     "[code masqué]",

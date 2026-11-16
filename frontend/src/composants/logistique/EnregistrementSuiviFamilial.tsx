@@ -42,7 +42,11 @@ import {
 import { ControleurBagages } from "./ControleurBagages";
 import { formaterFcfa } from "./format";
 import { RechercheCarteDigiID } from "./RechercheCarteDigiID";
-import { SelectionVoyage, libelleVoyage } from "./SelectionVoyage";
+import {
+  SelectionVoyage,
+  libelleVoyage,
+  ordreGareSurLigne,
+} from "./SelectionVoyage";
 import { TicketSuiviFamilialImprimable } from "./TicketSuiviFamilialImprimable";
 import { LIBELLES_MOYEN, type MoyenPaiement } from "@/types/paiement";
 
@@ -90,6 +94,7 @@ export function EnregistrementSuiviFamilial({
   // Proche de confiance (obligatoire).
   const [procheNom, setProcheNom] = useState("");
   const [procheTelephone, setProcheTelephone] = useState("");
+  const [telephoneRecuperation, setTelephoneRecuperation] = useState("");
   // Bagages (1 à 10).
   const [nombreBagages, setNombreBagages] = useState(1);
   // Attribution : gares + voyage (+ chauffeur déduit du voyage).
@@ -126,7 +131,7 @@ export function EnregistrementSuiviFamilial({
         );
         setLignes(reponseLignes.elements);
 
-        if (utilisateur?.id) {
+        if (utilisateur?.id && !voyageImposeId) {
           const gare = await gareDeLActeur(utilisateur.id);
           if (!annule && gare) {
             setGareGuichet(gare);
@@ -148,7 +153,7 @@ export function EnregistrementSuiviFamilial({
     return () => {
       annule = true;
     };
-  }, [utilisateur?.id]);
+  }, [utilisateur?.id, voyageImposeId]);
 
   // Voyage sélectionné et chauffeur associé (attribution obligatoire).
   const voyageSelectionne = useMemo(
@@ -162,6 +167,26 @@ export function EnregistrementSuiviFamilial({
         ? lignes.find((l) => l.id === voyageSelectionne.ligne_id) ?? null
         : null,
     [lignes, voyageSelectionne],
+  );
+  useEffect(() => {
+    if (!voyageImposeId || !ligneVoyage) return;
+    setGareDepartId(ligneVoyage.gare_depart_id);
+    setGareArriveeId(ligneVoyage.gare_arrivee_id);
+    setArretDestinationId("terminus");
+  }, [voyageImposeId, ligneVoyage]);
+  const ordreDepartSurLigne = useMemo(
+    () =>
+      ligneVoyage && gareDepartId
+        ? ordreGareSurLigne(ligneVoyage, gareDepartId)
+        : null,
+    [ligneVoyage, gareDepartId],
+  );
+  const arretsApresDepart = useMemo(
+    () =>
+      ordreDepartSurLigne === null
+        ? []
+        : arretsLigne.filter((arret) => arret.ordre > ordreDepartSurLigne),
+    [arretsLigne, ordreDepartSurLigne],
   );
 
   useEffect(() => {
@@ -195,9 +220,11 @@ export function EnregistrementSuiviFamilial({
   const telAcheteur = normaliserTelephone(acheteurTel);
   const telPassager = normaliserTelephone(telephonePassager);
   const telProche = normaliserTelephone(procheTelephone);
+  const telRecuperation = normaliserTelephone(telephoneRecuperation);
   const telAcheteurOk = telAcheteur !== null;
   const telPassagerOk = telPassager !== null;
   const telProcheOk = telProche !== null;
+  const telRecuperationOk = telRecuperation !== null;
 
   const ageNombre =
     enfantAge.trim() === "" ? null : Number(enfantAge.replace(/\D/g, ""));
@@ -224,6 +251,7 @@ export function EnregistrementSuiviFamilial({
     ageValide &&
     contactsValides &&
     telProcheOk &&
+    (typePassager !== "enfant" || telRecuperationOk) &&
     !!gareDepartId &&
     !!gareArriveeId &&
     gareDepartId !== gareArriveeId &&
@@ -244,14 +272,19 @@ export function EnregistrementSuiviFamilial({
     setTelephonePassager("");
     setProcheNom("");
     setProcheTelephone("");
+    setTelephoneRecuperation("");
     setNombreBagages(1);
     setVoyageId(voyageImposeId ?? "");
     setAffecterPlusTard(false);
-    setGareArriveeId("");
-    setArretDestinationId("");
+    setGareArriveeId(
+      voyageImposeId ? ligneVoyage?.gare_arrivee_id ?? "" : "",
+    );
+    setArretDestinationId(voyageImposeId ? "terminus" : "");
     setMoyenPaiement(null);
     setTelephonePaiement("");
-    setGareDepartId(gareGuichet?.id ?? "");
+    setGareDepartId(
+      voyageImposeId ? ligneVoyage?.gare_depart_id ?? "" : gareGuichet?.id ?? "",
+    );
     setErreur(null);
   }
 
@@ -282,6 +315,8 @@ export function EnregistrementSuiviFamilial({
         acheteur_tel: typePassager === "enfant" ? telAcheteur : null,
         proche_nom: procheNom.trim() || null,
         proche_telephone: telProche ?? "",
+        telephone_recuperation:
+          typePassager === "enfant" ? telRecuperation : null,
         nombre_bagages: nombreBagages,
         gare_depart_id: gareDepartId,
         gare_arrivee_id: gareArriveeId,
@@ -558,6 +593,23 @@ export function EnregistrementSuiviFamilial({
                   }
                 />
               </div>
+              {typePassager === "enfant" && (
+                <ChampSaisie
+                  libelle="Téléphone de la personne qui récupère l'enfant"
+                  required
+                  value={telephoneRecuperation}
+                  onChange={(e) => setTelephoneRecuperation(e.target.value)}
+                  inputMode="tel"
+                  type="tel"
+                  placeholder="97 12 34 56"
+                  aide="Le code de remise sera envoyé à ce numéro. Il peut être celui du proche de confiance."
+                  erreur={
+                    telRecuperationOk || telephoneRecuperation === ""
+                      ? undefined
+                      : MESSAGE_TELEPHONE_INVALIDE
+                  }
+                />
+              )}
             </div>
           </Carte>
 
@@ -574,7 +626,13 @@ export function EnregistrementSuiviFamilial({
                   <select
                     className="champ-saisie"
                     value={gareDepartId}
-                    onChange={(e) => setGareDepartId(e.target.value)}
+                    disabled={Boolean(voyageImposeId)}
+                    onChange={(e) => {
+                      setGareDepartId(e.target.value);
+                      setGareArriveeId("");
+                      setArretDestinationId("");
+                      if (!voyageImposeId) setVoyageId("");
+                    }}
                   >
                     <option value="">— Choisir —</option>
                     {gares.map((g) => (
@@ -597,7 +655,12 @@ export function EnregistrementSuiviFamilial({
                   <select
                     className="champ-saisie"
                     value={gareArriveeId}
-                    onChange={(e) => setGareArriveeId(e.target.value)}
+                    disabled={Boolean(voyageImposeId)}
+                    onChange={(e) => {
+                      setGareArriveeId(e.target.value);
+                      setArretDestinationId("");
+                      if (!voyageImposeId) setVoyageId("");
+                    }}
                   >
                     <option value="">— Choisir —</option>
                     {gares
@@ -678,12 +741,14 @@ export function EnregistrementSuiviFamilial({
                       }}
                     >
                       <option value="">— Choisir l&apos;arrêt de descente —</option>
-                      {arretsLigne.map((a) => (
+                      {arretsApresDepart.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.ordre}. {a.gare_nom ?? "Arrêt"}
                         </option>
                       ))}
-                      {ligneVoyage && (
+                      {ligneVoyage &&
+                        ordreDepartSurLigne !== null &&
+                        gareDepartId !== ligneVoyage.gare_arrivee_id && (
                         <option value="terminus">
                           Terminus — {ligneVoyage.gare_arrivee_nom ?? "Arrivée"}
                         </option>

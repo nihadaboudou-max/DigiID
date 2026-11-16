@@ -18,6 +18,17 @@ import { IconeUtilisateur } from "@/composants/commun/Icones";
 import type { Ligne, Voyage } from "@/services/logistique_api";
 import { formaterDateHeure } from "./format";
 
+const ORDRE_TERMINUS = 10_000;
+
+export function ordreGareSurLigne(ligne: Ligne, gareId: string): number | null {
+  if (gareId === ligne.gare_depart_id) return 0;
+  if (gareId === ligne.gare_arrivee_id) return ORDRE_TERMINUS;
+  const arret = ligne.arrets?.find(
+    (element) => element.actif && element.gare_id === gareId,
+  );
+  return arret?.ordre ?? null;
+}
+
 /** Libellé lisible d'un voyage : « 12/05 08:00 · AB-1234-RB · Amadou Diallo ». */
 export function libelleVoyage(voyage: Voyage | null | undefined): string {
   if (!voyage) return "Voyage inconnu";
@@ -88,10 +99,15 @@ export function SelectionVoyage({
       if (gareDepartId && gareArriveeId) {
         const ligne = lignes.find((l) => l.id === v.ligne_id);
         if (ligne) {
-          if (
-            ligne.gare_depart_id !== gareDepartId ||
-            ligne.gare_arrivee_id !== gareArriveeId
-          ) {
+          const ordreDepart = ordreGareSurLigne(ligne, gareDepartId);
+          const ordreArrivee = ordreGareSurLigne(ligne, gareArriveeId);
+          const correspond = ligne.arrets?.some((arret) => arret.actif)
+            ? ordreDepart !== null &&
+              ordreArrivee !== null &&
+              ordreDepart < ordreArrivee
+            : ligne.gare_depart_id === gareDepartId &&
+              ligne.gare_arrivee_id === gareArriveeId;
+          if (!correspond) {
             return false;
           }
         }

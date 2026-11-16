@@ -552,6 +552,14 @@ export const logistiqueAPI = {
         opts,
       ),
 
+    /** Renvoie le code de remise à la personne autorisée. */
+    renvoyerCodeRemise: (id: string) =>
+      clientAPI.post<{
+        suivi_familial_id: string;
+        expire_le: string;
+        message: string;
+      }>(`${BASE}/suivi-familial/${id}/code-remise`, {}, opts),
+
     /** Timeline d'un suivi familial. */
     evenements: (id: string) =>
       clientAPI.get<SuiviFamilialEvenement[]>(

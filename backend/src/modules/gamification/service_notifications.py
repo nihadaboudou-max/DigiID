@@ -13,8 +13,17 @@ from fastapi import HTTPException, status
 from sqlalchemy import select, desc, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modeles import Colis, Notification, Ticket, Utilisateur
+from src.modeles import Colis, Notification, SuiviFamilial, Ticket, Utilisateur
 from src.noyau.chiffrement import chiffrer_donnee, dechiffrer_donnee
+from src.noyau.telephone import hasher_telephone
+
+
+def _categories_filtres(categorie: str | None) -> list[str]:
+    return [
+        valeur.strip()
+        for valeur in (categorie or "").split(",")
+        if valeur.strip()
+    ]
 
 
 async def creer_notification(
@@ -56,8 +65,9 @@ async def lister_notifications(
     requete = select(Notification).where(Notification.utilisateur_id == utilisateur.id)
     if seulement_non_lues:
         requete = requete.where(Notification.est_lue == False)
-    if categorie:
-        requete = requete.where(Notification.categorie == categorie)
+    categories = _categories_filtres(categorie)
+    if categories:
+        requete = requete.where(Notification.categorie.in_(categories))
     terme = (recherche or "").strip()
     if terme:
         motif = f"%{terme}%"
@@ -91,8 +101,9 @@ async def compter_notifications(
     )
     if seulement_non_lues:
         requete = requete.where(Notification.est_lue == False)
-    if categorie:
-        requete = requete.where(Notification.categorie == categorie)
+    categories = _categories_filtres(categorie)
+    if categories:
+        requete = requete.where(Notification.categorie.in_(categories))
     terme = (recherche or "").strip()
     if terme:
         motif = f"%{terme}%"
@@ -117,8 +128,9 @@ async def compter_non_lues(
         Notification.utilisateur_id == utilisateur.id,
         Notification.est_lue == False,
     ]
-    if categorie:
-        filtres.append(Notification.categorie == categorie)
+    categories = _categories_filtres(categorie)
+    if categories:
+        filtres.append(Notification.categorie.in_(categories))
     compte = await session.scalar(select(func.count(Notification.id)).where(*filtres))
     return compte or 0
 
@@ -133,7 +145,7 @@ async def obtenir_code_remise_notification(
         select(Notification).where(
             Notification.id == notification_id,
             Notification.utilisateur_id == utilisateur.id,
-            Notification.categorie == "logistique_colis",
+            Notification.categorie.in_(("logistique_colis", "logistique_suivi")),
             Notification.titre.ilike("%code de remise%"),
         )
     )
@@ -151,37 +163,51 @@ async def obtenir_code_remise_notification(
     )
     if ticket is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Code indisponible.")
-    colis = await session.scalar(select(Colis).where(Colis.ticket_id == ticket.id))
-    if colis is None or colis.destinataire_id != utilisateur.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Code indisponible.")
-
     maintenant = datetime.now(timezone.utc)
-    if (
-        not colis.code_remise_hash
-        or not colis.code_remise_expire_le
-        or colis.code_remise_expire_le <= maintenant
-    ):
+    if notification.categorie == "logistique_colis":
+        colis = await session.scalar(select(Colis).where(Colis.ticket_id == ticket.id))
+        if colis is None or colis.destinataire_id != utilisateur.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Code indisponible.")
+        code_hash = colis.code_remise_hash
+        code_chiffre = colis.code_remise_chiffre
+        expire_le = colis.code_remise_expire_le
+    else:
+        suivi = await session.scalar(
+            select(SuiviFamilial).where(SuiviFamilial.ticket_id == ticket.id)
+        )
+        if (
+            suivi is None
+            or not suivi.telephone_recuperation
+            or hasher_telephone(suivi.telephone_recuperation)
+            != utilisateur.telephone_hash
+        ):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Code indisponible.")
+        code_hash = suivi.code_remise_hash
+        code_chiffre = suivi.code_remise_chiffre
+        expire_le = suivi.code_remise_expire_le
+
+    if not code_hash or not expire_le or expire_le <= maintenant:
         raise HTTPException(
             status.HTTP_410_GONE,
             detail="Le code a expiré. Demandez un nouveau code au guichet.",
         )
 
     code = None
-    if colis.code_remise_chiffre:
-        code = dechiffrer_donnee(colis.code_remise_chiffre)
-    else:
+    if code_chiffre:
+        code = dechiffrer_donnee(code_chiffre)
+    elif notification.categorie == "logistique_colis":
         ancienne_valeur = re.search(r"\best\s+(\d{6})\b", notification.message)
         if ancienne_valeur:
             code = ancienne_valeur.group(1)
 
     empreinte = hashlib.sha256(code.encode("ascii")).hexdigest() if code else ""
-    if not code or not hmac.compare_digest(colis.code_remise_hash, empreinte):
+    if not code or not hmac.compare_digest(code_hash, empreinte):
         raise HTTPException(
             status.HTTP_410_GONE,
             detail="Le code est indisponible. Demandez un nouveau code au guichet.",
         )
 
-    if not colis.code_remise_chiffre:
+    if notification.categorie == "logistique_colis" and not code_chiffre:
         colis.code_remise_chiffre = chiffrer_donnee(code)
         notification.message = re.sub(
             r"(?<!\d)\d{6}(?!\d)", "••••••", notification.message
@@ -189,7 +215,7 @@ async def obtenir_code_remise_notification(
         session.add_all([colis, notification])
         await session.commit()
 
-    return code, colis.code_remise_expire_le
+    return code, expire_le
 
 
 async def marquer_comme_lue(

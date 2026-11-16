@@ -177,6 +177,14 @@ class ParametresApplication(BaseSettings):
     sendgrid_api_key: str = ""
 
     # --- SMS (Twilio) ---
+    approche_delai_minutes: int = Field(
+        default=105,
+        ge=1,
+        le=600,
+        validation_alias=AliasChoices(
+            "APPROCHE_DELAI_MINUTES", "approche_delai_minutes"
+        ),
+    )
     sms_twilio_account_sid: str = Field(
         default="",
         validation_alias=AliasChoices("SMS_TWILIO_ACCOUNT_SID", "sms_twilio_account_sid"),
@@ -248,6 +256,13 @@ class ParametresApplication(BaseSettings):
             "whatsapp_template_code_remise_name",
         ),
     )
+    whatsapp_template_code_remise_enfant_name: str = Field(
+        default="digiid_code_remise_enfant_auth",
+        validation_alias=AliasChoices(
+            "WHATSAPP_TEMPLATE_CODE_REMISE_ENFANT_NAME",
+            "whatsapp_template_code_remise_enfant_name",
+        ),
+    )
     whatsapp_template_depart_name: str = Field(
         default="",
         validation_alias=AliasChoices(
@@ -260,6 +275,13 @@ class ParametresApplication(BaseSettings):
         validation_alias=AliasChoices(
             "WHATSAPP_TEMPLATE_ARRIVEE_NAME",
             "whatsapp_template_arrivee_name",
+        ),
+    )
+    whatsapp_template_approche_name: str = Field(
+        default="digiid_approche_v2",
+        validation_alias=AliasChoices(
+            "WHATSAPP_TEMPLATE_APPROCHE_NAME",
+            "whatsapp_template_approche_name",
         ),
     )
     whatsapp_support_phone: str = Field(
