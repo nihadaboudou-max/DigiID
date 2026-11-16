@@ -212,6 +212,14 @@ COLONNES_A_VERIFIER = [
     ("suivi_familial", "remis_guichet_le", "TIMESTAMP WITH TIME ZONE"),
     ("suivi_familial", "remis_guichet_par_id",
      "UUID REFERENCES utilisateur(id) ON DELETE SET NULL"),
+    # Validation de remise sécurisée des enfants (migration Alembic
+    # 20261121_0900), également nécessaire aux bases existantes stampées HEAD.
+    ("suivi_familial", "telephone_recuperation", "VARCHAR(30)"),
+    ("suivi_familial", "code_remise_hash", "VARCHAR(128)"),
+    ("suivi_familial", "code_remise_chiffre", "VARCHAR(128)"),
+    ("suivi_familial", "code_remise_expire_le", "TIMESTAMP WITH TIME ZONE"),
+    ("suivi_familial", "code_remise_tentatives", "INTEGER NOT NULL DEFAULT 0"),
+    ("suivi_familial", "code_remise_confirme_le", "TIMESTAMP WITH TIME ZONE"),
 ]
 
 
