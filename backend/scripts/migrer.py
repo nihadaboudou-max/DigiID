@@ -23,6 +23,7 @@ from sqlalchemy import create_engine, inspect, text as sa_text
 from alembic.config import Config as AlembicConfig
 from alembic import command as alembic_command
 from src.config import parametres
+from src.base_donnees.vues_analytiques import synchroniser_vues_analytiques
 
 # ⚠️ CRITIQUE : enregistre TOUS les modèles dans Base.metadata.
 # Sans cet import, Base.metadata.tables est VIDE → create_all ne crée
@@ -657,6 +658,14 @@ def executer_migrations():
             revision = _obtenir_revision_head()
             logger.info("Tables existantes → stamp %s (sans upgrade, inutile)...", revision)
             _stamp_sync(url_sync, revision)
+
+        moteur = create_engine(url_sync)
+        try:
+            with moteur.begin() as connexion:
+                synchroniser_vues_analytiques(connexion)
+            logger.info("✅ Vues analytiques logistiques synchronisées")
+        finally:
+            moteur.dispose()
 
         logger.info("✅ Migration terminée avec succès")
 
