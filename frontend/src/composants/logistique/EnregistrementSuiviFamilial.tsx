@@ -391,30 +391,29 @@ export function EnregistrementSuiviFamilial({
             description="Renseignez le passager, l'acheteur du ticket (pour un enfant) et un proche de confiance à prévenir."
           >
             <div className="space-y-4 [&_label]:font-semibold">
-              {/* La personne au guichet présente sa carte : le nom et le téléphone du
-                  responsable sont remplis exactement — c'est ce qui garantit que les
-                  SMS de suivi partiront au bon numéro. */}
-              <RechercheCarteDigiID
-                libelle="DigiID du responsable (facultatif)"
-                titre="La personne au guichet a une carte DigiID ?"
-                rechercheInitiale={digiidInitial}
-                description={
-                  typePassager === "enfant"
-                    ? "Présentez sa carte : le nom et le téléphone de l'acheteur du ticket seront pré-remplis."
-                    : "Présentez sa carte : le nom et le téléphone du passager seront pré-remplis."
-                }
-                surSelection={(contact) => {
-                  if (!contact) return;
-                  if (typePassager === "enfant") {
-                    setAcheteurNom(contact.nom_complet);
-                    if (contact.telephone) setAcheteurTel(contact.telephone);
-                    if (!procheNom) setProcheNom(contact.nom_complet);
-                  } else {
-                    setEnfantNom(contact.nom_complet);
-                    if (contact.telephone) setTelephonePassager(contact.telephone);
+              {!enregistrementDirect && (
+                <RechercheCarteDigiID
+                  libelle="DigiID du responsable (facultatif)"
+                  titre="La personne au guichet a une carte DigiID ?"
+                  rechercheInitiale={digiidInitial}
+                  description={
+                    typePassager === "enfant"
+                      ? "Présentez sa carte : le nom et le téléphone de l'acheteur du ticket seront pré-remplis."
+                      : "Présentez sa carte : le nom et le téléphone du passager seront pré-remplis."
                   }
-                }}
-              />
+                  surSelection={(contact) => {
+                    if (!contact) return;
+                    if (typePassager === "enfant") {
+                      setAcheteurNom(contact.nom_complet);
+                      if (contact.telephone) setAcheteurTel(contact.telephone);
+                      if (!procheNom) setProcheNom(contact.nom_complet);
+                    } else {
+                      setEnfantNom(contact.nom_complet);
+                      if (contact.telephone) setTelephonePassager(contact.telephone);
+                    }
+                  }}
+                />
+              )}
               {/* Type de passager */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-semibold text-ardoise">
@@ -522,19 +521,19 @@ export function EnregistrementSuiviFamilial({
                 </div>
               ) : null}
 
-              {/* Le proche de confiance a lui aussi le droit au scan : un numéro
-                  mal recopié, et c'est le parent qui n'est pas prévenu. */}
-              <RechercheCarteDigiID
-                libelle="DigiID du proche de confiance (facultatif)"
-                titre="Le proche de confiance a une carte DigiID ?"
-                description="Scannez son QR dynamique (ou saisissez son DigiID) : son nom et son téléphone se remplissent automatiquement."
-                compact
-                surSelection={(contact) => {
-                  if (!contact) return;
-                  setProcheNom(contact.nom_complet);
-                  if (contact.telephone) setProcheTelephone(contact.telephone);
-                }}
-              />
+              {!enregistrementDirect && (
+                <RechercheCarteDigiID
+                  libelle="DigiID du proche de confiance (facultatif)"
+                  titre="Le proche de confiance a une carte DigiID ?"
+                  description="Scannez son QR dynamique (ou saisissez son DigiID) : son nom et son téléphone se remplissent automatiquement."
+                  compact
+                  surSelection={(contact) => {
+                    if (!contact) return;
+                    setProcheNom(contact.nom_complet);
+                    if (contact.telephone) setProcheTelephone(contact.telephone);
+                  }}
+                />
+              )}
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <ChampSaisie

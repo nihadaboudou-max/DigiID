@@ -415,7 +415,6 @@ export function BarreLaterale() {
       { href: "/chauffeur/voyages", libelle: "Planifier un voyage", Icone: IconeCamion },
       { href: "/chauffeur/colis", libelle: "Mes colis", Icone: IconeTicket },
       { href: "/chauffeur/passagers", libelle: "Mes passagers", Icone: IconeIdentite },
-      { href: "/chauffeur/passagers/nouveau", libelle: "Enregistrer un passager", Icone: IconeIdentite },
       { href: "/chauffeur/scan", libelle: "Scanner / Livrer", Icone: IconeScan },
       { href: "/identite/carte", libelle: "Mon QR code DigiID", Icone: IconeIdentite },
       { href: "/logistique/profil", libelle: "Mon dossier pro", Icone: IconeUtilisateur },

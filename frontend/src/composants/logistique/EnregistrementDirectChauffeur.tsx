@@ -18,18 +18,22 @@
 import { useState } from "react";
 
 import { Alerte } from "@/composants/commun/Alerte";
-import { Badge } from "@/composants/commun/Badge";
 import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import { ChampSaisie } from "@/composants/commun/ChampSaisie";
 import { IconeCheck } from "@/composants/commun/Icones";
 import { ErreurAPI } from "@/services/client_api";
-import { logistiqueAPI } from "@/services/logistique_api";
+import {
+  logistiqueAPI,
+  type ColisEnregistre,
+  type SuiviFamilialEnregistre,
+} from "@/services/logistique_api";
 import {
   ControleurBagages,
 } from "@/composants/logistique/ControleurBagages";
-import { RechercheCarteDigiID } from "@/composants/logistique/RechercheCarteDigiID";
 import { normaliserTelephone } from "@/services/telephone";
+import { TicketImprimable } from "./TicketImprimable";
+import { TicketSuiviFamilialImprimable } from "./TicketSuiviFamilialImprimable";
 import {
   fraisServicePourArticles,
   LIBELLES_MOYEN,
@@ -58,6 +62,8 @@ export function EnregistrementDirectChauffeur({
 }: Proprietes) {
   const [type, setType] = useState<TypeEnregistrement>("colis");
 
+  const [expediteurNom, setExpediteurNom] = useState("");
+  const [expediteurTelephone, setExpediteurTelephone] = useState("");
   const [nom, setNom] = useState("");
   const [telephone, setTelephone] = useState("");
   const [description, setDescription] = useState("");
@@ -74,11 +80,18 @@ export function EnregistrementDirectChauffeur({
 
   const [enregistrement, setEnregistrement] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
-  const [codeCree, setCodeCree] = useState<string | null>(null);
+  const [resultat, setResultat] = useState<
+    | { type: "colis"; donnees: ColisEnregistre }
+    | { type: "passager"; donnees: SuiviFamilialEnregistre }
+    | null
+  >(null);
 
   const nombreChiffresTel = telephone.replace(/\D/g, "").length;
   const telOk = nombreChiffresTel >= 6;
   const nomOk = nom.trim().length >= 2;
+  const telephoneExpediteurNormalise = normaliserTelephone(expediteurTelephone);
+  const expediteurValide =
+    expediteurNom.trim().length >= 2 && telephoneExpediteurNormalise !== null;
   const garesOk = !!gareDepartId && !!gareArriveeId && gareDepartId !== gareArriveeId;
   const telephonePaiementNormalise = normaliserTelephone(telephonePaiement);
   const paiementValide =
@@ -95,9 +108,12 @@ export function EnregistrementDirectChauffeur({
     nomOk &&
     telOk &&
     paiementValide &&
+    (type === "passager" || expediteurValide) &&
     (type === "colis" || procheTelephone.replace(/\D/g, "").length >= 6);
 
   function reinitialiser() {
+    setExpediteurNom("");
+    setExpediteurTelephone("");
     setNom("");
     setTelephone("");
     setDescription("");
@@ -110,7 +126,7 @@ export function EnregistrementDirectChauffeur({
     setProcheNom("");
     setProcheTelephone("");
     setErreur(null);
-    setCodeCree(null);
+    setResultat(null);
   }
 
   async function enregistrer() {
@@ -127,9 +143,15 @@ export function EnregistrementDirectChauffeur({
         setErreur("Choisissez un moyen de paiement valide avant de confirmer.");
         return;
       }
+      if (type === "colis" && !expediteurValide) {
+        setErreur("Renseignez le nom et le téléphone de l'expéditeur.");
+        return;
+      }
 
       if (type === "colis") {
         const reponse = await logistiqueAPI.colis.creer({
+          expediteur_nom: expediteurNom.trim(),
+          expediteur_tel: telephoneExpediteurNormalise,
           destinataire_nom: nom.trim(),
           destinataire_tel: telephone.trim(),
           gare_depart_id: gareDepartId,
@@ -148,7 +170,7 @@ export function EnregistrementDirectChauffeur({
           // impossible) de connaître son propre UUID côté téléphone.
           enregistrement_direct: true,
         });
-        setCodeCree(reponse.ticket.code_clair);
+        setResultat({ type: "colis", donnees: reponse });
       } else {
         const ageNombre = age.trim() === "" ? null : Number(age.replace(/\D/g, ""));
         const reponse = await logistiqueAPI.suiviFamilial.creer({
@@ -173,7 +195,7 @@ export function EnregistrementDirectChauffeur({
           voyage_id: voyageId,
           enregistrement_direct: true,
         });
-        setCodeCree(reponse.ticket.code_clair);
+        setResultat({ type: "passager", donnees: reponse });
       }
       surSucces?.();
     } catch (e) {
@@ -187,32 +209,42 @@ export function EnregistrementDirectChauffeur({
     }
   }
 
-  if (codeCree) {
+  if (resultat) {
+    const ticket = resultat.donnees.ticket;
     return (
       <Carte
-        titre="Client enregistré en route"
+        titre={resultat.type === "colis" ? "Colis enregistré en route" : "Passager enregistré en route"}
         variante="accent"
       >
         <Alerte variante="succes" titre="Enregistrement réussi">
-          Le client peut désormais suivre son envoi avec le code ci-dessous, et les
-          SMS de suivi partiront automatiquement.
+          Le ticket et son code QR sont prêts. Vous pouvez les imprimer ou partager
+          le code de suivi.
         </Alerte>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Badge variante="lagune" taille="moyen">
-            {codeCree}
-          </Badge>
+        <div className="mt-4">
+          {resultat.type === "colis" ? (
+            <TicketImprimable
+              ticket={ticket}
+              colis={resultat.donnees.colis}
+            />
+          ) : (
+            <TicketSuiviFamilialImprimable
+              ticket={ticket}
+              suivi={resultat.donnees.suivi}
+            />
+          )}
+        </div>
+        <div className="no-print mt-4 flex flex-wrap gap-3">
           <a
-            href={`/suivi/${encodeURIComponent(codeCree)}`}
+            href={`/suivi/${encodeURIComponent(ticket.code_clair)}`}
             target="_blank"
             rel="noreferrer"
-            className="text-sm font-medium text-lagune hover:underline"
+            className="inline-flex min-h-11 items-center rounded-lg px-4 font-medium text-lagune hover:underline"
           >
             Ouvrir la page de suivi
           </a>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-3">
           <Bouton variante="primaire" onClick={reinitialiser}>
-            <IconeCheck className="w-4 h-4" /> Enregistrer un autre client
+            <IconeCheck className="w-4 h-4" />
+            {resultat.type === "colis" ? "Enregistrer un autre colis" : "Enregistrer un autre passager"}
           </Bouton>
         </div>
       </Carte>
@@ -233,7 +265,7 @@ export function EnregistrementDirectChauffeur({
               type="button"
               onClick={() => {
                 setType(valeur);
-                setCodeCree(null);
+                setResultat(null);
               }}
               className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
                 type === valeur
@@ -253,19 +285,29 @@ export function EnregistrementDirectChauffeur({
           </Alerte>
         )}
 
-        {/* Le client présente sa carte : tout se remplit sans faute de frappe. */}
-        {type === "passager" && (
-          <RechercheCarteDigiID
-            libelle="DigiID du passager (facultatif)"
-            titre="Le passager a une carte DigiID ?"
-            description="Scannez sa carte ou saisissez son DigiID pour remplir ses coordonnées."
-            compact
-            surSelection={(contact) => {
-              if (!contact) return;
-              setNom(contact.nom_complet);
-              if (contact.telephone) setTelephone(contact.telephone);
-            }}
-          />
+        {type === "colis" && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <ChampSaisie
+              libelle="Nom de l'expéditeur"
+              required
+              value={expediteurNom}
+              onChange={(e) => setExpediteurNom(e.target.value)}
+              placeholder="Ex. Moussa Diallo"
+            />
+            <ChampSaisie
+              libelle="Téléphone de l'expéditeur"
+              required
+              value={expediteurTelephone}
+              onChange={(e) => setExpediteurTelephone(e.target.value)}
+              inputMode="tel"
+              placeholder="Ex. 97 12 34 56"
+              erreur={
+                expediteurTelephone === "" || telephoneExpediteurNormalise
+                  ? undefined
+                  : "Numéro de téléphone invalide"
+              }
+            />
+          </div>
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -334,19 +376,6 @@ export function EnregistrementDirectChauffeur({
                 </select>
               </div>
             </div>
-            {/* Le proche du passager se remplit de la même façon : scan du QR
-                dynamique, ou saisie du code s'il n'a pas d'écran. */}
-            <RechercheCarteDigiID
-              libelle="DigiID du proche (facultatif)"
-              titre="Le proche à prévenir a une carte DigiID ?"
-              description="Scannez son QR dynamique (ou saisissez son DigiID) : son nom et son téléphone se remplissent automatiquement."
-              surSelection={(contact) => {
-                if (!contact) return;
-                setProcheNom(contact.nom_complet);
-                if (contact.telephone) setProcheTelephone(contact.telephone);
-              }}
-            />
-
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <ChampSaisie
                 libelle="Proche de confiance (nom)"
