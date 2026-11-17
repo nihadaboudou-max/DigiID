@@ -178,7 +178,7 @@ class ParametresApplication(BaseSettings):
 
     # --- SMS (Twilio) ---
     approche_delai_minutes: int = Field(
-        default=105,
+        default=45,
         ge=1,
         le=600,
         validation_alias=AliasChoices(

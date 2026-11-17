@@ -113,6 +113,8 @@ services:
         value: "120"
       - key: LIMITE_REQUETES_PAR_MINUTE_ADMIN
         value: "300"
+      - key: APPROCHE_DELAI_MINUTES
+        value: "45"
 
       # --- Seed super admin (PREMIÈRE CONNEXION) ---
       - key: SEED_SUPER_ADMIN_EMAIL
