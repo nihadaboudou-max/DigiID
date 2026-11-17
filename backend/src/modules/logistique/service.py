@@ -4647,12 +4647,7 @@ async def marquer_arrivee_voyage(
 
 
 def _delai_approche_libelle(minutes: int) -> str:
-    heures, reste = divmod(minutes, 60)
-    if heures and reste:
-        return f"{heures} h {reste:02d}"
-    if heures:
-        return f"{heures} h"
-    return f"{minutes} minute" if minutes == 1 else f"{minutes} minutes"
+    return f"{minutes} min"
 
 
 async def _approche_deja_envoyee(

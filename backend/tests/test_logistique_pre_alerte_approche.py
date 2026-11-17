@@ -192,7 +192,7 @@ def test_pre_alerte_cible_un_arret_et_notifie_par_whatsapp_et_plateforme(monkeyp
             "L'enfant",
             "Aïcha",
             "Arrêt Bohicon",
-            "1 h 45",
+            "105 min",
             "11:00",
             "Gare départ (Cotonou) → Gare arrivée (Parakou)",
         ],
@@ -200,7 +200,7 @@ def test_pre_alerte_cible_un_arret_et_notifie_par_whatsapp_et_plateforme(monkeyp
     }
     assert message == (
         "DigiID : préparez-vous. L'enfant Aïcha arrive à Arrêt Bohicon "
-        "dans environ 1 h 45, vers 11:00. Trajet : Gare départ (Cotonou) "
+        "dans environ 105 min, vers 11:00. Trajet : Gare départ (Cotonou) "
         "→ Gare arrivée (Parakou). Merci d'être sur place."
     )
     notifications_plateforme = [
@@ -288,7 +288,7 @@ def test_code_colis_est_masque_dans_le_journal_de_notification(monkeypatch):
             "Le colis",
             "TICKET123ABC",
             "Bohicon",
-            "45 minutes",
+            "45 min",
             "10:00",
             "Cotonou → Parakou",
         ],
