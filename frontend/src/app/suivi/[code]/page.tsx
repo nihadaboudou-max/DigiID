@@ -55,6 +55,7 @@ const TAILLE_PAGE_NOTIFICATIONS = 5;
 const LIBELLES_EVENEMENT_PUBLIC: Record<string, string> = {
   ...LIBELLES_EVENEMENT,
   ...LIBELLES_EVENEMENT_SUIVI,
+  validation: "Prise en charge confirmée",
 };
 
 /** Icône sobre par type d'événement. */
@@ -63,13 +64,22 @@ const ICONES_EVENEMENT: Record<string, string> = {
   affectation: "🟠",
   desaffectation: "↩️",
   reception: "✅",
+  validation: "✅",
   refus_reception: "❌",
+  annulation_voyage: "↩️",
   retrait_depart: "↩️",
   depart: "🚚",
   mise_en_transit: "🛣️",
   arrivee: "📍",
   livraison: "✅",
   incident: "⚠️",
+};
+const LIBELLES_ROLE_NOTIFICATION: Record<string, string> = {
+  chauffeur: "Chauffeur",
+  guichet: "Guichet",
+  destinataire: "Destinataire",
+  parent: "Parent",
+  personne_recuperation: "Personne chargée de la récupération",
 };
 
 export default function PageSuiviPublic() {
@@ -311,18 +321,18 @@ export default function PageSuiviPublic() {
               )}
             </Carte>
 
-            {/* Messages envoyés (y compris les envois simulés) */}
+            {/* Historique des tentatives SMS/WhatsApp réellement consignées. */}
             <Carte
-              titre="Notifications"
+              titre="Notifications SMS / WhatsApp"
               description={
                 suivi.nb_personnes_notifiees > 0
-                  ? `${suivi.nb_personnes_notifiees} personne(s) prévenue(s).`
-                  : "Aucune personne prévenue pour le moment."
+                  ? `${suivi.nb_personnes_notifiees} destinataire(s) avec au moins un envoi accepté.`
+                  : "Aucun envoi SMS ou WhatsApp accepté pour le moment."
               }
             >
               {suivi.notifications.length === 0 ? (
                 <p className="text-sm italic text-ardoise-clair">
-                  Les notifications de départ et d&apos;arrivée apparaîtront ici.
+                  Les tentatives d&apos;envoi SMS et WhatsApp apparaîtront ici.
                 </p>
               ) : (
                 <>
@@ -337,11 +347,28 @@ export default function PageSuiviPublic() {
                             {LIBELLES_EVENEMENT_PUBLIC[notification.type_evenement] ??
                               notification.type_evenement}
                           </span>
-                          <span className="text-[11px] text-ardoise-clair">
-                            {notification.canal.toUpperCase()} ·{" "}
-                            {notification.telephone_masque ?? "—"} ·{" "}
-                            {formaterDateHeure(notification.cree_le)}
-                          </span>
+                          <div className="flex flex-wrap items-center justify-end gap-2 text-[11px]">
+                            <span
+                              className={
+                                notification.envoye
+                                  ? "font-semibold text-green-700"
+                                  : "font-semibold text-terre"
+                              }
+                            >
+                              {notification.envoye
+                                ? "Acceptée par le fournisseur"
+                                : "Échec / non envoyée"}
+                            </span>
+                            <span className="text-ardoise-clair">
+                              {notification.canal.toUpperCase()} ·{" "}
+                              {notification.destinataire_role
+                                ? `${LIBELLES_ROLE_NOTIFICATION[notification.destinataire_role] ??
+                                    notification.destinataire_role} · `
+                                : ""}
+                              {notification.telephone_masque ?? "—"} ·{" "}
+                              {formaterDateHeure(notification.cree_le)}
+                            </span>
+                          </div>
                         </div>
                         <p className="mt-1 text-sm text-ardoise">
                           {notification.message}

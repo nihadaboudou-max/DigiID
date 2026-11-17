@@ -1116,9 +1116,13 @@ async def prochains_departs_par_chauffeur(
 
 
 async def modifier_voyage(session: AsyncSession, voyage_id: UUID,
-                          donnees: schemas.VoyageUpdate) -> Voyage:
+                          donnees: schemas.VoyageUpdate,
+                          utilisateur: Utilisateur | None = None) -> Voyage:
     voyage = await obtenir_voyage(session, voyage_id)
     valeurs = donnees.model_dump(exclude_unset=True)
+    annulation_confirmee = (
+        valeurs.get("statut") == "annule" and voyage.statut == "planifie"
+    )
     if valeurs.get("vehicule_id") is not None:
         await _verifier_existe(session, Vehicule, valeurs["vehicule_id"], "Véhicule")
     if "chauffeur_id" in valeurs and valeurs["chauffeur_id"] is not None:
@@ -1162,6 +1166,8 @@ async def modifier_voyage(session: AsyncSession, voyage_id: UUID,
         )
     for champ, valeur in valeurs.items():
         setattr(voyage, champ, valeur)
+    if annulation_confirmee:
+        await _notifier_annulation_voyage(session, voyage, utilisateur)
     await session.commit()
     await session.refresh(voyage)
     return voyage
@@ -1382,6 +1388,39 @@ async def _notifier_chauffeur_affectation(
     )
 
 
+async def _notifier_chauffeur_affectation_suivi(
+    session: AsyncSession,
+    suivi: SuiviFamilial,
+    chauffeur: Utilisateur,
+) -> None:
+    prenom = (suivi.enfant_nom.strip().split() or ["Passager"])[0]
+    message = (
+        f"Le passager {prenom} vous a été affecté. Confirmez sa prise en charge "
+        "dans le manifeste de votre voyage."
+    )
+    await creer_notification(
+        session,
+        chauffeur,
+        type_notification="info",
+        categorie="logistique_suivi",
+        titre="Passager à valider",
+        message=message,
+        lien_action="/chauffeur/voyages",
+    )
+    if not chauffeur.telephone_chiffre:
+        return
+    telephone = dechiffrer_donnee(chauffeur.telephone_chiffre)
+    _ajouter_notification(
+        session,
+        type_cible="suivi_familial",
+        cible_id=suivi.id,
+        type_evenement="affectation",
+        destinataire_role="chauffeur",
+        telephone=telephone,
+        message=message,
+    )
+
+
 async def _notifier_guichet_colis(
     session: AsyncSession,
     colis: Colis,
@@ -1390,38 +1429,215 @@ async def _notifier_guichet_colis(
     message: str,
     type_evenement: str,
 ) -> None:
-    utilisateur_id = getattr(colis, "enregistre_par_id", None) or getattr(
-        colis, "receveur_id", None
-    )
-    if utilisateur_id is None:
+    identifiants = {
+        identifiant
+        for identifiant in (
+            getattr(colis, "enregistre_par_id", None),
+            getattr(colis, "receveur_id", None),
+        )
+        if identifiant is not None
+    }
+    if not identifiants:
         journal.warning(
             f"Notification guichet {type_evenement} impossible pour le colis "
             f"{colis.id} : aucun agent d'enregistrement n'est associé."
         )
-        return
-    utilisateur = await session.get(Utilisateur, utilisateur_id)
-    if utilisateur is None:
-        journal.warning(
-            f"Notification guichet {type_evenement} impossible pour le colis "
-            f"{colis.id} : agent {utilisateur_id} introuvable."
-        )
-        return
     ticket = await obtenir_ticket_du_colis(session, colis)
-    code = ticket.code_clair if ticket is not None else None
-    await _notifier_utilisateur_colis(
-        session,
-        utilisateur,
-        colis,
-        titre=titre,
-        message=message,
-        destinataire_role="guichet",
-        type_evenement=type_evenement,
-        lien_action=(
-            f"/receveur/tickets/{code}"
-            if code
-            else f"/receveur/tickets?colis={colis.id}"
-        ),
+    code = getattr(ticket, "code_clair", None) if ticket is not None else None
+    lien = (
+        f"/receveur/tickets/{code}"
+        if code
+        else f"/receveur/tickets?colis={colis.id}"
     )
+    for utilisateur_id in identifiants:
+        utilisateur = await session.get(Utilisateur, utilisateur_id)
+        if utilisateur is None:
+            journal.warning(
+                f"Notification guichet {type_evenement} impossible pour le colis "
+                f"{colis.id} : agent {utilisateur_id} introuvable."
+            )
+            continue
+        await _notifier_utilisateur_colis(
+            session,
+            utilisateur,
+            colis,
+            titre=titre,
+            message=message,
+            destinataire_role="guichet",
+            type_evenement=type_evenement,
+            lien_action=lien,
+        )
+    for gerant in await _gerants_de_gare(session, colis.gare_depart_id):
+        if gerant.id in identifiants:
+            continue
+        await creer_notification(
+            session,
+            gerant,
+            type_notification="info",
+            categorie="logistique_colis",
+            titre=titre,
+            message=message,
+            lien_action=lien,
+        )
+
+
+async def _gerants_de_gare(
+    session: AsyncSession, gare_id: UUID | None
+) -> list[Utilisateur]:
+    if gare_id is None:
+        return []
+    resultat = await session.scalars(
+        select(Utilisateur)
+        .join(
+            ProfilLogistique,
+            ProfilLogistique.utilisateur_id == Utilisateur.id,
+        )
+        .where(
+            ProfilLogistique.type_profil == "gerant_gare",
+            ProfilLogistique.gare_id == gare_id,
+            Utilisateur.est_actif.is_(True),
+        )
+    )
+    return list(resultat.all())
+
+
+async def _notifier_guichet_suivi(
+    session: AsyncSession,
+    suivi: SuiviFamilial,
+    *,
+    titre: str,
+    message: str,
+    type_evenement: str,
+) -> None:
+    ticket = await obtenir_ticket_du_suivi(session, suivi)
+    code = ticket.code_clair if ticket is not None else None
+    lien = f"/suivi/{code}" if code else "/receveur/suivi-familial"
+    identifiant_agent = suivi.enregistre_par_id
+    if identifiant_agent is not None:
+        agent = await session.get(Utilisateur, identifiant_agent)
+        if agent is not None:
+            await creer_notification(
+                session,
+                agent,
+                type_notification="info",
+                categorie="logistique_suivi",
+                titre=titre,
+                message=message,
+                lien_action="/receveur/suivi-familial",
+            )
+        else:
+            journal.warning(
+                f"Notification guichet {type_evenement} impossible pour le suivi "
+                f"{suivi.id} : agent {identifiant_agent} introuvable."
+            )
+    else:
+        journal.warning(
+            f"Notification guichet {type_evenement} impossible pour le suivi "
+            f"{suivi.id} : aucun agent d'enregistrement n'est associé."
+        )
+    for gerant in await _gerants_de_gare(session, suivi.gare_depart_id):
+        if gerant.id == identifiant_agent:
+            continue
+        await creer_notification(
+            session,
+            gerant,
+            type_notification="info",
+            categorie="logistique_suivi",
+            titre=titre,
+            message=message,
+            lien_action=lien,
+        )
+
+
+async def _notifier_comptes_suivi(
+    session: AsyncSession,
+    suivi: SuiviFamilial,
+    *,
+    titre: str,
+    message: str,
+) -> None:
+    identifiants = {suivi.parent_id} if suivi.parent_id is not None else set()
+    for telephone in (
+        suivi.telephone_parent,
+        suivi.telephone_passager,
+        suivi.acheteur_tel,
+        suivi.proche_telephone,
+        suivi.telephone_recuperation,
+    ):
+        compte = await _compte_par_telephone(session, telephone)
+        if compte is not None:
+            identifiants.add(compte.id)
+    if not identifiants:
+        return
+    ticket = await obtenir_ticket_du_suivi(session, suivi)
+    lien = f"/suivi/{ticket.code_clair}" if ticket is not None else None
+    utilisateurs = await session.scalars(
+        select(Utilisateur).where(Utilisateur.id.in_(identifiants))
+    )
+    for utilisateur in utilisateurs:
+        await creer_notification(
+            session,
+            utilisateur,
+            type_notification="info",
+            categorie="logistique_suivi",
+            titre=titre,
+            message=message,
+            lien_action=lien,
+        )
+
+
+async def _notifier_annulation_voyage(
+    session: AsyncSession,
+    voyage: Voyage,
+    utilisateur: Utilisateur | None,
+) -> None:
+    message = (
+        "Le voyage prévu a été annulé par le chauffeur. "
+        "Le guichet doit réaffecter les colis et passagers."
+    )
+    colis_voyage = await _colis_du_voyage(session, voyage.id)
+    passagers_voyage = await _passagers_du_voyage(session, voyage.id)
+    maintenant = datetime.now(timezone.utc)
+    for colis in colis_voyage:
+        session.add(
+            ColisEvenement(
+                colis_id=colis.id,
+                type_evenement="annulation_voyage",
+                acteur_id=utilisateur.id if utilisateur is not None else None,
+                gare_id=colis.gare_depart_id,
+                horodatage=maintenant,
+            )
+        )
+        await _notifier_guichet_colis(
+            session,
+            colis,
+            titre="Voyage annulé",
+            message=message,
+            type_evenement="annulation_voyage",
+        )
+        await _notifier_comptes_colis(
+            session, colis, "Voyage annulé", message
+        )
+    for suivi in passagers_voyage:
+        session.add(
+            SuiviFamilialEvenement(
+                suivi_familial_id=suivi.id,
+                type_evenement="annulation_voyage",
+                acteur_id=utilisateur.id if utilisateur is not None else None,
+                gare_id=suivi.gare_depart_id,
+                horodatage=maintenant,
+            )
+        )
+        await _notifier_guichet_suivi(
+            session,
+            suivi,
+            titre="Voyage annulé",
+            message=message,
+            type_evenement="annulation_voyage",
+        )
+        await _notifier_comptes_suivi(
+            session, suivi, titre="Voyage annulé", message=message
+        )
 
 
 async def _auditer_transition_colis(
@@ -1682,7 +1898,9 @@ async def creer_colis(
         )
 
     chauffeur = (
-        await _verifier_existe(session, Utilisateur, chauffeur_id, "Chauffeur")
+        await _verifier_existe(
+            session, Utilisateur, chauffeur_id, "Chauffeur"
+        )
         if chauffeur_id is not None
         else None
     )
@@ -2146,6 +2364,12 @@ async def confirmer_reception_colis(
             message="Le chauffeur a confirmé la réception du colis.",
             type_evenement="validation",
         )
+        await _notifier_comptes_colis(
+            session,
+            colis,
+            "Colis pris en charge",
+            "Le chauffeur a confirmé la prise en charge de votre colis.",
+        )
         await session.commit()
         await session.refresh(colis)
     return colis
@@ -2212,6 +2436,12 @@ async def refuser_reception_colis(
         titre="Réception refusée",
         message=f"Le chauffeur a refusé le colis. Motif : {motif.strip()}",
         type_evenement="refus_reception",
+    )
+    await _notifier_comptes_colis(
+        session,
+        colis,
+        "Prise en charge refusée",
+        "Le chauffeur n'a pas pris en charge le colis. Le guichet doit le réaffecter.",
     )
     await session.commit()
     await session.refresh(colis)
@@ -3470,7 +3700,9 @@ async def creer_suivi_familial(
         statut_initial = "enregistre"
 
     chauffeur = (
-        await _verifier_existe(session, Utilisateur, chauffeur_id, "Chauffeur")
+        await _verifier_existe(
+            session, Utilisateur, chauffeur_id, "Chauffeur"
+        )
         if chauffeur_id is not None
         else None
     )
@@ -3667,7 +3899,9 @@ async def affecter_suivi_familial(
             status.HTTP_400_BAD_REQUEST,
             detail="Le chauffeur indiqué ne correspond pas à celui du voyage",
         )
-    await _verifier_existe(session, Utilisateur, chauffeur_id, "Chauffeur")
+    chauffeur = await _verifier_existe(
+        session, Utilisateur, chauffeur_id, "Chauffeur"
+    )
 
     suivi.voyage_id = voyage.id
     suivi.chauffeur_id = chauffeur_id
@@ -3686,6 +3920,7 @@ async def affecter_suivi_familial(
             horodatage=datetime.now(timezone.utc),
         )
     )
+    await _notifier_chauffeur_affectation_suivi(session, suivi, chauffeur)
     await session.commit()
     await session.refresh(suivi)
     return suivi
@@ -3760,8 +3995,91 @@ async def confirmer_reception_suivi(
                 horodatage=suivi.reception_confirmee_le,
             )
         )
+        message = "Le chauffeur a confirmé la prise en charge du passager."
+        await _notifier_guichet_suivi(
+            session,
+            suivi,
+            titre="Prise en charge confirmée",
+            message=message,
+            type_evenement="validation",
+        )
+        await _notifier_comptes_suivi(
+            session,
+            suivi,
+            titre="Passager pris en charge",
+            message=message,
+        )
         await session.commit()
         await session.refresh(suivi)
+    return suivi
+
+
+async def refuser_reception_suivi(
+    session: AsyncSession,
+    suivi_id: UUID,
+    utilisateur: Utilisateur,
+    motif: str,
+) -> SuiviFamilial:
+    """Désaffecte un passager que le chauffeur refuse avant le départ."""
+    suivi = await obtenir_suivi_familial(session, suivi_id)
+    if suivi.chauffeur_id != utilisateur.id:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Ce passager ne vous est pas affecté : seul son chauffeur peut le refuser.",
+        )
+    if suivi.mode_enregistrement == "chauffeur_direct":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Un passager enregistré directement par vous ne peut pas être refusé.",
+        )
+    if suivi.statut not in ("enregistre", "enregistre_direct"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Ce passager ne peut plus être refusé après le départ.",
+        )
+
+    maintenant = datetime.now(timezone.utc)
+    suivi.statut = "enregistre"
+    suivi.voyage_id = None
+    suivi.chauffeur_id = None
+    suivi.reception_confirmee_le = None
+    suivi.reception_confirmee_par_id = None
+    ticket = await obtenir_ticket_du_suivi(session, suivi)
+    if ticket is not None:
+        ticket.voyage_id = None
+        session.add(ticket)
+    session.add(
+        SuiviFamilialEvenement(
+            suivi_familial_id=suivi.id,
+            type_evenement="refus_reception",
+            acteur_id=utilisateur.id,
+            gare_id=suivi.gare_depart_id,
+            localisation=motif.strip(),
+            horodatage=maintenant,
+        )
+    )
+    message_guichet = (
+        f"Le chauffeur a refusé la prise en charge du passager. "
+        f"Motif : {motif.strip()}"
+    )
+    await _notifier_guichet_suivi(
+        session,
+        suivi,
+        titre="Prise en charge refusée",
+        message=message_guichet,
+        type_evenement="refus_reception",
+    )
+    await _notifier_comptes_suivi(
+        session,
+        suivi,
+        titre="Passager à réaffecter",
+        message=(
+            "Le chauffeur n'a pas pris en charge le passager. "
+            "Le guichet doit lui affecter un autre voyage."
+        ),
+    )
+    await session.commit()
+    await session.refresh(suivi)
     return suivi
 
 
@@ -5475,18 +5793,21 @@ def _notifications_publiques(notifications: list[NotificationLogistique]):
                     "code_remise_enfant",
                     "code_remise_enfant_renvoi",
                 )
-                else re.sub(
-                    r"(?<!\d)\d{6}(?!\d)|\b[A-Z0-9]{2,}(?:-[A-Z0-9]{2,})+\b",
-                    "[code masqué]",
-                    n.message,
+                else (
+                    "Le chauffeur a refusé la prise en charge. "
+                    "Le guichet doit réaffecter le colis."
+                    if n.type_evenement == "refus_reception"
+                    else re.sub(
+                        r"(?<!\d)\d{6}(?!\d)|\b[A-Z0-9]{2,}(?:-[A-Z0-9]{2,})+\b",
+                        "[code masqué]",
+                        n.message,
+                    )
                 )
             ),
             envoye=n.envoye,
             cree_le=n.cree_le,
         )
         for n in notifications
-        if n.type_evenement
-        not in {"affectation", "validation", "refus_reception", "retrait_depart"}
     ]
 
 

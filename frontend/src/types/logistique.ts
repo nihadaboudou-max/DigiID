@@ -38,6 +38,7 @@ export type TypeEvenementColis =
   | "desaffectation"
   | "reception"
   | "refus_reception"
+  | "annulation_voyage"
   | "retrait_depart";
 
 /** Étiquette QR d'un sac (une par sac — traçabilité, sans impact sur le prix). */
@@ -268,6 +269,7 @@ export const LIBELLES_EVENEMENT: Record<TypeEvenementColis, string> = {
   mise_en_transit: "Mise en transit",
   arrivee: "Arrivée à destination",
   livraison: "Remise au destinataire",
+  annulation_voyage: "Voyage annulé",
 };
 
 // ─── Voyages (espace chauffeur — S4) ─────────────────────────────────
@@ -517,6 +519,9 @@ export const LIBELLES_STATUT_SUIVI: Record<StatutSuiviFamilial, string> = {
 export const LIBELLES_EVENEMENT_SUIVI: Record<string, string> = {
   affectation: "Affectation au chauffeur",
   enregistrement: "Enregistrement de l'enfant",
+  reception: "Prise en charge confirmée par le chauffeur",
+  refus_reception: "Prise en charge refusée par le chauffeur",
+  annulation_voyage: "Voyage annulé",
   depart: "Départ",
   arrivee: "Arrivée à destination",
   livraison: "Remis à la personne désignée",

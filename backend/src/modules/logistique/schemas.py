@@ -635,7 +635,9 @@ class NotificationLogistiqueResponse(BaseModel):
 # ─── Suivi familial (enfants seuls) ──────────────────────────────────
 
 StatutSuiviFamilial = Literal["enregistre", "enregistre_direct", "en_route", "arrive", "annule"]
-TypeEvenementSuivi = Literal["depart", "arrivee", "livraison", "incident"]
+TypeEvenementSuivi = Literal[
+    "depart", "arrivee", "livraison", "incident", "refus_reception"
+]
 
 
 class SuiviFamilialCreate(BaseModel):

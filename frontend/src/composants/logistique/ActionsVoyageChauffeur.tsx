@@ -129,8 +129,7 @@ export function ActionsVoyageChauffeur({
   const selectionApprocheObligatoire = selectionArriveeObligatoire;
   const peutArrivee =
     chargeABord &&
-    statut === "en_cours" &&
-    (!selectionArriveeObligatoire || pointCle !== "");
+    statut === "en_cours";
 
   async function confirmer() {
     if (!action) return;
@@ -308,34 +307,6 @@ export function ActionsVoyageChauffeur({
           </Bouton>
         </div>
 
-        {optionsArrivee.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-ardoise">
-              Arrêt ou gare d&apos;arrivée
-            </label>
-            <select
-              className="champ-saisie"
-              value={pointCle}
-              onChange={(e) => setPointCle(e.target.value)}
-              disabled={!chargeABord || statut !== "en_cours"}
-            >
-              <option value="">
-                {selectionArriveeObligatoire
-                  ? "— Choisir l'arrêt —"
-                  : "Tous les arrêts du voyage"}
-              </option>
-              {optionsArrivee.map((p) => (
-                <option key={p.cle} value={p.cle}>
-                  {p.libelle}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs italic text-ardoise-clair">
-              Choisissez votre position actuelle : seuls les colis et passagers
-              destinés à cet arrêt seront marqués arrivés.
-            </p>
-          </div>
-        )}
       </div>
 
       <ModalConfirmation
@@ -348,8 +319,8 @@ export function ActionsVoyageChauffeur({
         couleurBoutonConfirmer="succes"
         chargement={chargement}
         desactive={
-          action === "approche" &&
-          selectionApprocheObligatoire &&
+          ((action === "approche" && selectionApprocheObligatoire) ||
+            (action === "arrivee" && selectionArriveeObligatoire)) &&
           !pointCle
         }
         contenuCorps={
@@ -373,6 +344,32 @@ export function ActionsVoyageChauffeur({
               </select>
               <p className="text-xs text-ardoise-clair">
                 Seuls les passagers et colis destinés à cet arrêt seront prévenus.
+              </p>
+            </div>
+          ) : action === "arrivee" && optionsArrivee.length > 0 ? (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-ardoise">
+                Arrêt ou gare d&apos;arrivée
+              </label>
+              <select
+                className="champ-saisie"
+                value={pointCle}
+                onChange={(e) => setPointCle(e.target.value)}
+                disabled={chargement}
+              >
+                <option value="">
+                  {selectionArriveeObligatoire
+                    ? "— Choisir l'arrêt —"
+                    : "Tous les arrêts du voyage"}
+                </option>
+                {optionsArrivee.map((point) => (
+                  <option key={point.cle} value={point.cle}>
+                    {point.libelle}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-ardoise-clair">
+                Seuls les passagers et colis destinés à cet arrêt seront marqués arrivés.
               </p>
             </div>
           ) : undefined

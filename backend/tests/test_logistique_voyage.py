@@ -124,6 +124,32 @@ class TestAnnulerEtCharge:
         assert erreur.value.status_code == 409
         assert "annuler" in erreur.value.detail.lower()
 
+    def test_annulation_planifiee_notifie_les_personnes_concernees(self, monkeypatch):
+        from src.modules.logistique import schemas
+
+        voyage = _voyage(statut="planifie")
+        chauffeur = _utilisateur("Awa", "Fall")
+        session = SessionFactice({(Voyage, voyage.id): voyage})
+        notifications = []
+
+        async def notifier(_session, voyage_annule, acteur):
+            notifications.append((voyage_annule, acteur))
+
+        monkeypatch.setattr(service, "_notifier_annulation_voyage", notifier)
+
+        asyncio.run(
+            service.modifier_voyage(
+                session,
+                voyage.id,
+                schemas.VoyageUpdate(statut="annule"),
+                chauffeur,
+            )
+        )
+
+        assert voyage.statut == "annule"
+        assert notifications == [(voyage, chauffeur)]
+        assert session.commits == 1
+
     def test_depart_refuse_si_car_vide(self):
         voyage = _voyage(statut="planifie")
         session = SessionFactice({(Voyage, voyage.id): voyage})

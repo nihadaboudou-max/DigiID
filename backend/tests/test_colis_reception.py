@@ -8,8 +8,10 @@ import pytest
 from fastapi import HTTPException
 
 from src.modules.logistique import schemas, service
+from src.modules.logistique import routes
 from src.modeles.logistique.colis import Colis
 from src.modeles.logistique.colis_evenement import ColisEvenement
+from src.modeles.logistique.suivi_familial_evenement import SuiviFamilialEvenement
 from src.modeles.audit import JournalAudit
 
 
@@ -79,16 +81,31 @@ def _colis(chauffeur_id, **valeurs):
         "gare_depart_id": uuid.uuid4(),
         "gare_arrivee_id": uuid.uuid4(),
         "arret_destination_id": None,
+        "ticket_id": None,
+        "expediteur_id": None,
+        "destinataire_id": None,
     }
     attributs.update(valeurs)
     return SimpleNamespace(**attributs)
 
 
-def test_confirmation_par_chauffeur_affecte_fait_passer_a_recu():
+def test_confirmation_par_chauffeur_affecte_fait_passer_a_recu(monkeypatch):
     chauffeur = _chauffeur()
     colis = _colis(chauffeur.id)
     session = SessionCapture(colis)
 
+    async def aucun_gerant(*_args):
+        return []
+
+    async def aucun_ticket(*_args):
+        return None
+
+    async def aucune_notification(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(service, "_gerants_de_gare", aucun_gerant)
+    monkeypatch.setattr(service, "obtenir_ticket_du_colis", aucun_ticket)
+    monkeypatch.setattr(service, "_notifier_comptes_colis", aucune_notification)
     asyncio.run(service.confirmer_reception_colis(session, colis.id, chauffeur))
 
     assert colis.statut == "recu_chauffeur"
@@ -132,13 +149,21 @@ def test_refus_remet_le_colis_non_attribue_et_detache_le_ticket(monkeypatch):
         reception_confirmee_le=object(),
         reception_confirmee_par_id=chauffeur.id,
     )
-    ticket = SimpleNamespace(voyage_id=colis.voyage_id)
+    ticket = SimpleNamespace(voyage_id=colis.voyage_id, code_clair=None)
     session = SessionCapture(colis)
 
     async def obtenir_ticket(_session, _colis):
         return ticket
 
+    async def aucun_gerant(*_args):
+        return []
+
+    async def aucune_notification(*_args, **_kwargs):
+        return None
+
     monkeypatch.setattr(service, "obtenir_ticket_du_colis", obtenir_ticket)
+    monkeypatch.setattr(service, "_gerants_de_gare", aucun_gerant)
+    monkeypatch.setattr(service, "_notifier_comptes_colis", aucune_notification)
 
     asyncio.run(
         service.refuser_reception_colis(
@@ -167,6 +192,54 @@ def test_refus_remet_le_colis_non_attribue_et_detache_le_ticket(monkeypatch):
     assert audit.donnees_supplementaires["ancien_statut"] == "recu_chauffeur"
     assert audit.donnees_supplementaires["nouveau_statut"] == "non_attribue"
     assert "Colis absent du chargement" not in str(audit.donnees_supplementaires)
+
+
+def test_refus_reception_passager_desaffecte_et_notifie_les_personnes_concernees(
+    monkeypatch,
+):
+    chauffeur = _chauffeur()
+    suivi = SimpleNamespace(
+        id=uuid.uuid4(),
+        chauffeur_id=chauffeur.id,
+        voyage_id=uuid.uuid4(),
+        mode_enregistrement="guichet",
+        statut="enregistre",
+        gare_depart_id=uuid.uuid4(),
+        reception_confirmee_le=None,
+        reception_confirmee_par_id=None,
+    )
+    session = SessionCapture(None)
+    session.utilisateurs[suivi.id] = suivi
+    notifications = []
+
+    async def notifier(*args, **kwargs):
+        notifications.append((args, kwargs))
+
+    async def aucun_ticket(*_args):
+        return None
+
+    monkeypatch.setattr(service, "_notifier_guichet_suivi", notifier)
+    monkeypatch.setattr(service, "_notifier_comptes_suivi", notifier)
+    monkeypatch.setattr(service, "obtenir_ticket_du_suivi", aucun_ticket)
+
+    asyncio.run(
+        service.refuser_reception_suivi(
+            session, suivi.id, chauffeur, "Passager absent au départ"
+        )
+    )
+
+    assert suivi.statut == "enregistre"
+    assert suivi.voyage_id is None
+    assert suivi.chauffeur_id is None
+    assert len(notifications) == 2
+    evenement = next(
+        objet
+        for objet in session.ajoutes
+        if isinstance(objet, SuiviFamilialEvenement)
+    )
+    assert evenement.type_evenement == "refus_reception"
+    assert evenement.localisation == "Passager absent au départ"
+    assert session.commits == 1
 
 
 def test_affectation_notifie_le_chauffeur_et_audite_le_changement(monkeypatch):
@@ -263,10 +336,14 @@ def test_notification_de_refus_est_adressee_au_guichet(monkeypatch):
     async def obtenir_ticket(_session, _colis):
         return SimpleNamespace(code_clair="COLIS-TEST")
 
+    async def aucun_gerant(*_args):
+        return []
+
     monkeypatch.setattr(service, "creer_notification", creer_notification)
     monkeypatch.setattr(service, "_ajouter_notification", ajouter_notification)
     monkeypatch.setattr(service, "dechiffrer_donnee", lambda _valeur: "+22901000000")
     monkeypatch.setattr(service, "obtenir_ticket_du_colis", obtenir_ticket)
+    monkeypatch.setattr(service, "_gerants_de_gare", aucun_gerant)
 
     asyncio.run(
         service._notifier_guichet_colis(
@@ -284,7 +361,7 @@ def test_notification_de_refus_est_adressee_au_guichet(monkeypatch):
     assert notifications_externes[0]["type_evenement"] == "refus_reception"
 
 
-def test_suivi_public_masque_le_motif_du_refus():
+def test_suivi_public_affiche_les_notifications_reelles_sans_exposer_le_motif():
     gare_id = uuid.uuid4()
     evenement = SimpleNamespace(
         type_evenement="refus_reception",
@@ -298,18 +375,56 @@ def test_suivi_public_masque_le_motif_du_refus():
     assert public[0].localisation is None
     assert public[0].horodatage == evenement.horodatage
     assert not hasattr(public[0], "acteur_nom")
-    assert service._notifications_publiques(
+    notifications = service._notifications_publiques(
         [
             SimpleNamespace(
                 type_evenement="refus_reception",
+                canal="sms",
                 destinataire_role="guichet",
                 telephone="+22901000000",
                 message="Motif privé",
                 envoye=True,
                 cree_le=datetime.now(timezone.utc),
-            )
+            ),
+            SimpleNamespace(
+                type_evenement="affectation",
+                canal="whatsapp",
+                destinataire_role="chauffeur",
+                telephone="**0000",
+                message="Colis affecté",
+                envoye=False,
+                cree_le=datetime.now(timezone.utc),
+            ),
         ]
-    ) == []
+    )
+
+    assert len(notifications) == 2
+    assert notifications[0].message == (
+        "Le chauffeur a refusé la prise en charge. "
+        "Le guichet doit réaffecter le colis."
+    )
+    assert notifications[0].telephone_masque != "+22901000000"
+    assert notifications[1].type_evenement == "affectation"
+    assert notifications[1].envoye is False
+
+
+def test_participant_associe_par_telephone_peut_acceder_au_recu(monkeypatch):
+    utilisateur = SimpleNamespace(id=uuid.uuid4())
+    colis = SimpleNamespace(
+        expediteur_id=None,
+        destinataire_id=None,
+        expediteur_tel="+22901000000",
+        destinataire_tel="+22902000000",
+    )
+
+    async def trouver_compte(_session, telephone):
+        return utilisateur if telephone == colis.expediteur_tel else None
+
+    monkeypatch.setattr(service, "_compte_par_telephone", trouver_compte)
+
+    assert asyncio.run(
+        routes._est_participant_colis(object(), colis, utilisateur)
+    )
 
 
 def test_colis_recu_ne_peut_pas_etre_reaffecte_sans_refus():
@@ -394,9 +509,13 @@ def test_depart_retire_les_colis_non_valides_et_ne_fait_partir_que_les_valides(
     async def notifier(*_args, **_kwargs):
         return None
 
+    async def aucun_gerant(*_args):
+        return []
+
     monkeypatch.setattr(service, "obtenir_ticket_du_colis", obtenir_ticket)
     monkeypatch.setattr(service, "_notifier_comptes_colis", notifier)
     monkeypatch.setattr(service, "_notifier_scan_colis", notifier)
+    monkeypatch.setattr(service, "_gerants_de_gare", aucun_gerant)
     session = SessionDepartCapture(voyage, [en_attente, recu, direct])
 
     resultat = asyncio.run(

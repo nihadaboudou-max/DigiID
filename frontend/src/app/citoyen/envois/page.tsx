@@ -14,8 +14,11 @@ import {
   IconeRecherche,
 } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
+import { TicketImprimable } from "@/composants/logistique/TicketImprimable";
 import { identiteAPI, type VoyageCitoyen } from "@/services/identite_api";
 import { ErreurAPI } from "@/services/client_api";
+import { logistiqueAPI } from "@/services/logistique_api";
+import type { ColisEnregistre } from "@/types/logistique";
 
 const TAILLE_PAGE = 5;
 
@@ -45,6 +48,9 @@ function Contenu() {
   const [elements, setElements] = useState<VoyageCitoyen[]>([]);
   const [total, setTotal] = useState(0);
   const [selection, setSelection] = useState<VoyageCitoyen | null>(null);
+  const [recuColis, setRecuColis] = useState<ColisEnregistre | null>(null);
+  const [chargementRecu, setChargementRecu] = useState(false);
+  const [erreurRecu, setErreurRecu] = useState<string | null>(null);
   const codeInitial = useRef<string | null>(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -87,6 +93,41 @@ function Contenu() {
       setChargement(false);
     }
   }, [page, recherche]);
+
+  useEffect(() => {
+    if (!selection || selection.type !== "colis") {
+      setRecuColis(null);
+      setErreurRecu(null);
+      setChargementRecu(false);
+      return;
+    }
+
+    let ignore = false;
+    setRecuColis(null);
+    setErreurRecu(null);
+    setChargementRecu(true);
+    logistiqueAPI.colis
+      .pourMonCompte(selection.id)
+      .then((recu) => {
+        if (!ignore) setRecuColis(recu);
+      })
+      .catch((e: unknown) => {
+        if (!ignore) {
+          setErreurRecu(
+            e instanceof ErreurAPI
+              ? e.message_utilisateur
+              : "Impossible de charger le reçu de ce colis.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!ignore) setChargementRecu(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [selection]);
 
   useEffect(() => {
     const minuteur = window.setTimeout(() => void charger(), 250);
@@ -173,6 +214,25 @@ function Contenu() {
         </Carte>
       )}
 
+      {selection?.type === "colis" && (
+        <Carte titre="Reçu du colis">
+          {chargementRecu ? (
+            <p className="py-4 text-center text-ardoise-clair">
+              Chargement du reçu…
+            </p>
+          ) : erreurRecu ? (
+            <Alerte variante="erreur" titre="Reçu indisponible">
+              {erreurRecu}
+            </Alerte>
+          ) : recuColis ? (
+            <TicketImprimable
+              ticket={recuColis.ticket}
+              colis={recuColis.colis}
+            />
+          ) : null}
+        </Carte>
+      )}
+
       <section aria-label="Liste de mes envois" className="space-y-3">
         {chargement ? (
           <Carte><p className="py-4 text-center text-ardoise-clair">Chargement de tes envois…</p></Carte>
@@ -217,7 +277,7 @@ function Contenu() {
                 onClick={() => setSelection(element)}
               >
                 <IconeFlecheRetour className="h-5 w-5 rotate-180" aria-hidden="true" />
-                Voir les étapes
+                {element.type === "colis" ? "Ouvrir le reçu et les étapes" : "Voir les étapes"}
               </Bouton>
             </Carte>
           ))

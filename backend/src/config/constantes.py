@@ -225,6 +225,7 @@ class TypesEvenementAudit(str, Enum):
     SUIVI_FAMILIAL_AFFECTE = "suivi_familial_affecte"
     SUIVI_FAMILIAL_MODIFIE = "suivi_familial_modifie"
     SUIVI_FAMILIAL_RECEPTION_CONFIRMEE = "suivi_familial_reception_confirmee"
+    SUIVI_FAMILIAL_RECEPTION_REFUSEE = "suivi_familial_reception_refusee"
     SUIVI_FAMILIAL_REMIS_AU_GUICHET = "suivi_familial_remis_au_guichet"
     SUIVI_FAMILIAL_ETAPE_ENREGISTREE = "suivi_familial_etape_enregistree"
     SUIVI_FAMILIAL_CODE_REMISE_ENVOYE = "suivi_familial_code_remise_envoye"

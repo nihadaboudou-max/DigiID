@@ -25,6 +25,7 @@ TYPES_EVENEMENT_COLIS = (
     # Prise en charge physique par le chauffeur (fige la fiche).
     "reception",
     "refus_reception",
+    "annulation_voyage",
     "retrait_depart",
     "depart",
     "mise_en_transit",

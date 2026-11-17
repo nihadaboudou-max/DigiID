@@ -23,6 +23,8 @@ TYPES_EVENEMENT_SUIVI = (
     "affectation",
     # Prise en charge à bord par le chauffeur (fige la fiche).
     "reception",
+    "refus_reception",
+    "annulation_voyage",
     "depart",
     "arrivee",
     # Le chauffeur remet l'enfant au guichet d'arrivée.

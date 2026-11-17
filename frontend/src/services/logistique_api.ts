@@ -590,6 +590,14 @@ export const logistiqueAPI = {
     confirmerReception: (id: string) =>
       clientAPI.post<SuiviFamilial>(`${BASE}/suivi-familial/${id}/reception`, {}, opts),
 
+    /** Le chauffeur refuse le passager avant le départ et le rend au guichet. */
+    refuserReception: (id: string, motif: string) =>
+      clientAPI.post<SuiviFamilial>(
+        `${BASE}/suivi-familial/${id}/refus-reception`,
+        { motif },
+        opts,
+      ),
+
     /** Le chauffeur remet le passager au guichet d'arrivée. */
     remettreGuichet: (id: string, agentId: string) =>
       clientAPI.post<SuiviFamilial>(

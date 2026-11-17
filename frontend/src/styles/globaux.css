@@ -73,12 +73,13 @@
   .citoyen-contenu input,
   .citoyen-contenu select,
   .citoyen-contenu textarea {
-    font-size: 18px;
+    font-size: 16px;
+    min-height: 54px;
   }
 
   .citoyen-contenu button {
-    min-height: 56px;
-    font-size: 18px;
+    min-height: 54px;
+    font-size: 16px;
   }
 
   /* === Boutons === */

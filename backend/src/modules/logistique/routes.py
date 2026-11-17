@@ -962,7 +962,9 @@ async def modifier_voyage(
         "chauffeur_id": str(voyage.chauffeur_id) if voyage.chauffeur_id else None,
         "statut": voyage.statut,
     }
-    voyage = await service.modifier_voyage(session, voyage.id, donnees)
+    voyage = await service.modifier_voyage(
+        session, voyage.id, donnees, utilisateur_courant
+    )
     await _auditer_logistique(
         session, requete, utilisateur_courant,
         TypesEvenementAudit.VOYAGE_MODIFIE,
@@ -1614,11 +1616,22 @@ async def ajouter_photo_colis(
     return {"photo_url": f"/api/v1/logistique/colis/{colis.id}/photo"}
 
 
-def _est_participant_colis(colis: Colis, utilisateur: Utilisateur) -> bool:
-    return utilisateur.id in {
+async def _est_participant_colis(
+    session: AsyncSession, colis: Colis, utilisateur: Utilisateur
+) -> bool:
+    if utilisateur.id in {
         colis.expediteur_id,
         colis.destinataire_id,
-    }
+    }:
+        return True
+
+    # Certains comptes sont rattachés au colis par leur téléphone, sans que
+    # l'identifiant ait été enregistré sur la fiche au moment de l'envoi.
+    for telephone in (colis.expediteur_tel, colis.destinataire_tel):
+        compte = await service._compte_par_telephone(session, telephone)
+        if compte is not None and compte.id == utilisateur.id:
+            return True
+    return False
 
 
 @routeur_colis.get(
@@ -1632,7 +1645,7 @@ async def voir_mon_ticket_colis(
     session: AsyncSession = Depends(obtenir_session),
 ):
     colis = await service.obtenir_colis(session, colis_id)
-    if not _est_participant_colis(colis, utilisateur_courant):
+    if not await _est_participant_colis(session, colis, utilisateur_courant):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Colis introuvable")
     ticket = await session.get(Ticket, colis.ticket_id) if colis.ticket_id else None
     if ticket is None:
@@ -1653,7 +1666,7 @@ async def voir_photo_colis(
 ):
     colis = await service.obtenir_colis(session, colis_id)
     if (
-        not _est_participant_colis(colis, utilisateur_courant)
+        not await _est_participant_colis(session, colis, utilisateur_courant)
         and colis.enregistre_par_id != utilisateur_courant.id
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Photo introuvable")
@@ -2106,6 +2119,33 @@ async def confirmer_reception_suivi(
         session, requete, utilisateur_courant,
         TypesEvenementAudit.SUIVI_FAMILIAL_RECEPTION_CONFIRMEE,
         f"Réception du suivi familial {suivi.id} confirmée par le chauffeur",
+        {"suivi_familial_id": str(suivi.id), "statut": suivi.statut},
+    )
+    return await _enrichir_suivi_familial(session, suivi)
+
+
+@routeur_suivi_familial.post(
+    "/{suivi_id}/refus-reception",
+    response_model=schemas.SuiviFamilialResponse,
+    summary="Chauffeur : refuser la prise en charge d'un passager",
+)
+@require_permission("logistique.scan")
+async def refuser_reception_suivi(
+    suivi_id: UUID,
+    donnees: schemas.RefusReceptionRequest,
+    requete: Request,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    suivi = await service.refuser_reception_suivi(
+        session, suivi_id, utilisateur_courant, donnees.motif
+    )
+    await _auditer_logistique(
+        session,
+        requete,
+        utilisateur_courant,
+        TypesEvenementAudit.SUIVI_FAMILIAL_RECEPTION_REFUSEE,
+        f"Prise en charge du suivi familial {suivi.id} refusée par le chauffeur",
         {"suivi_familial_id": str(suivi.id), "statut": suivi.statut},
     )
     return await _enrichir_suivi_familial(session, suivi)

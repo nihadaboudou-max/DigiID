@@ -49,6 +49,9 @@ export function ManifesteVoyage({
   const [pagePassagers, setPagePassagers] = useState(1);
   const [actionEnCours, setActionEnCours] = useState<string | null>(null);
   const [ligneEnRemise, setLigneEnRemise] = useState<LigneManifeste | null>(null);
+  const [ligneEnRefus, setLigneEnRefus] = useState<LigneManifeste | null>(null);
+  const [motifRefus, setMotifRefus] = useState("");
+  const [erreurRefus, setErreurRefus] = useState<string | null>(null);
   const [guichetiers, setGuichetiers] = useState<GuichetDisponible[]>([]);
   const [agentChoisi, setAgentChoisi] = useState("");
   const [rechercheAgent, setRechercheAgent] = useState("");
@@ -113,9 +116,18 @@ export function ManifesteVoyage({
     }
   }
 
-  async function agir(ligne: LigneManifeste, type: "reception" | "remise") {
+  async function agir(
+    ligne: LigneManifeste,
+    type: "reception" | "remise" | "refus",
+  ) {
     if (type === "remise") {
       await choisirAgentGuichet(ligne);
+      return;
+    }
+    if (type === "refus") {
+      setLigneEnRefus(ligne);
+      setMotifRefus("");
+      setErreurRefus(null);
       return;
     }
     const cle = `${ligne.type}-${ligne.id}-${type}`;
@@ -133,6 +145,37 @@ export function ManifesteVoyage({
         e instanceof ErreurAPI
           ? e.message_utilisateur
           : "Impossible d'enregistrer ce geste.",
+      );
+    } finally {
+      setActionEnCours(null);
+    }
+  }
+
+  async function confirmerRefus() {
+    if (!ligneEnRefus || motifRefus.trim().length < 3) {
+      setErreurRefus("Indiquez un motif d'au moins 3 caractères.");
+      return;
+    }
+    const ligne = ligneEnRefus;
+    const cle = `${ligne.type}-${ligne.id}-refus`;
+    setActionEnCours(cle);
+    setErreurRefus(null);
+    try {
+      if (ligne.type === "colis") {
+        await logistiqueAPI.colis.refuserReception(ligne.id, motifRefus.trim());
+      } else {
+        await logistiqueAPI.suiviFamilial.refuserReception(
+          ligne.id,
+          motifRefus.trim(),
+        );
+      }
+      setLigneEnRefus(null);
+      await charger();
+    } catch (e) {
+      setErreurRefus(
+        e instanceof ErreurAPI
+          ? e.message_utilisateur
+          : "Impossible d'enregistrer le refus de prise en charge.",
       );
     } finally {
       setActionEnCours(null);
@@ -171,6 +214,9 @@ export function ManifesteVoyage({
   );
   const remiseEnCours = ligneEnRemise
     ? `${ligneEnRemise.type}-${ligneEnRemise.id}-remise`
+    : null;
+  const refusEnCours = ligneEnRefus
+    ? `${ligneEnRefus.type}-${ligneEnRefus.id}-refus`
     : null;
 
   return (
@@ -346,6 +392,58 @@ export function ManifesteVoyage({
           ) : null}
         </div>
       </Modal>
+      <Modal
+        ouvert={ligneEnRefus !== null}
+        surFermeture={() => {
+          if (actionEnCours !== refusEnCours) setLigneEnRefus(null);
+        }}
+        titre="Refuser la prise en charge"
+        description={
+          ligneEnRefus
+            ? `Le ${ligneEnRefus.type === "passager" ? "passager" : "colis"} sera rendu au guichet pour être réaffecté.`
+            : undefined
+        }
+      >
+        <div className="space-y-3">
+          {erreurRefus && (
+            <Alerte variante="erreur" titre="Refus impossible">
+              {erreurRefus}
+            </Alerte>
+          )}
+          <label className="block space-y-1">
+            <span className="text-sm font-medium text-ardoise">
+              Motif du refus
+            </span>
+            <textarea
+              className="champ-saisie min-h-24"
+              value={motifRefus}
+              onChange={(e) => setMotifRefus(e.target.value)}
+              maxLength={200}
+              disabled={actionEnCours === refusEnCours}
+              autoFocus
+            />
+          </label>
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+            <Bouton
+              variante="ghost"
+              onClick={() => setLigneEnRefus(null)}
+              disabled={actionEnCours === refusEnCours}
+            >
+              Retour
+            </Bouton>
+            <Bouton
+              variante="primaire"
+              onClick={() => void confirmerRefus()}
+              disabled={
+                motifRefus.trim().length < 3 || actionEnCours === refusEnCours
+              }
+              chargement={actionEnCours === refusEnCours}
+            >
+              Confirmer le refus
+            </Bouton>
+          </div>
+        </div>
+      </Modal>
     </Carte>
   );
 }
@@ -361,7 +459,10 @@ function TableauManifeste({
   lignes: LigneManifeste[];
   vide: string;
   actionEnCours: string | null;
-  surAction: (ligne: LigneManifeste, type: "reception" | "remise") => void;
+  surAction: (
+    ligne: LigneManifeste,
+    type: "reception" | "remise" | "refus",
+  ) => void;
 }) {
   if (lignes.length === 0) {
     return (
@@ -399,6 +500,7 @@ function TableauManifeste({
               {lignesArret.map((ligne) => {
                 const cle = `${ligne.type}-${ligne.id}-reception`;
                 const cleRemise = `${ligne.type}-${ligne.id}-remise`;
+                const cleRefus = `${ligne.type}-${ligne.id}-refus`;
                 return (
                   <li
                     key={`${ligne.type}-${ligne.id}`}
@@ -473,6 +575,7 @@ function TableauManifeste({
                           actionEnCours={actionEnCours}
                           cleReception={cle}
                           cleRemise={cleRemise}
+                          cleRefus={cleRefus}
                           surAction={surAction}
                         />
                       </div>
@@ -498,6 +601,7 @@ function TableauManifeste({
                   {lignesArret.map((ligne) => {
                     const cle = `${ligne.type}-${ligne.id}-reception`;
                     const cleRemise = `${ligne.type}-${ligne.id}-remise`;
+                    const cleRefus = `${ligne.type}-${ligne.id}-refus`;
                     return (
                       <tr
                         key={`${ligne.type}-${ligne.id}`}
@@ -545,6 +649,7 @@ function TableauManifeste({
                             actionEnCours={actionEnCours}
                             cleReception={cle}
                             cleRemise={cleRemise}
+                            cleRefus={cleRefus}
                             surAction={surAction}
                           />
                         </td>
@@ -575,24 +680,44 @@ function GestesManifeste({
   actionEnCours,
   cleReception,
   cleRemise,
+  cleRefus,
   surAction,
 }: {
   ligne: LigneManifeste;
   actionEnCours: string | null;
   cleReception: string;
   cleRemise: string;
-  surAction: (ligne: LigneManifeste, type: "reception" | "remise") => void;
+  cleRefus: string;
+  surAction: (
+    ligne: LigneManifeste,
+    type: "reception" | "remise" | "refus",
+  ) => void;
 }) {
   if (!ligne.reception_confirmee) {
     return (
-      <Bouton
-        variante="ghost"
-        taille="petit"
-        chargement={actionEnCours === cleReception}
-        onClick={() => surAction(ligne, "reception")}
-      >
-        Prendre en charge
-      </Bouton>
+      <div className="flex flex-wrap gap-2">
+        <Bouton
+          variante="ghost"
+          taille="petit"
+          chargement={actionEnCours === cleReception}
+          disabled={actionEnCours !== null}
+          onClick={() => surAction(ligne, "reception")}
+        >
+          Prendre en charge
+        </Bouton>
+        {ligne.mode_enregistrement !== "chauffeur_direct" &&
+          !["en_route", "arrive", "annule"].includes(ligne.statut) && (
+            <Bouton
+              variante="secondaire"
+              taille="petit"
+              chargement={actionEnCours === cleRefus}
+              disabled={actionEnCours !== null}
+              onClick={() => surAction(ligne, "refus")}
+            >
+              Refuser
+            </Bouton>
+          )}
+      </div>
     );
   }
 
