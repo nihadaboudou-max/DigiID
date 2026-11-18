@@ -103,6 +103,51 @@ def test_code_telephone_est_envoye_avec_le_template_configure_sans_sms(monkeypat
     assert options == {
         "nom_template": "digiid_notification_logistique",
         "parametres_template": ["123456"],
+        "parametres_bouton_url": None,
+        "langue_template": "fr",
+    }
+
+
+def test_code_telephone_alimente_le_bouton_url_du_template_remise(monkeypatch):
+    session = _SessionVerification()
+    appels_whatsapp = []
+    utilisateur = SimpleNamespace(id=uuid.uuid4(), prenom_chiffre=None)
+
+    def envoyer_whatsapp(telephone, message, **options):
+        appels_whatsapp.append((telephone, message, options))
+        return SimpleNamespace(accepte=True)
+
+    monkeypatch.setattr(
+        verification_code,
+        "generer_code_verification",
+        lambda _taille: "654321",
+    )
+    monkeypatch.setattr(verification_code, "envoyer_whatsapp", envoyer_whatsapp)
+    monkeypatch.setattr(parametres, "whatsapp_template_name", "digiid_code_remise")
+    monkeypatch.setattr(
+        parametres,
+        "whatsapp_template_code_remise_name",
+        "digiid_code_remise",
+    )
+    monkeypatch.setattr(parametres, "whatsapp_template_language", "fr")
+    monkeypatch.setattr(parametres, "cle_secrete_jwt", "secret-de-test")
+
+    resultat = asyncio.run(
+        verification_code.generer_et_envoyer_code(
+            session=session,
+            utilisateur=utilisateur,
+            email=None,
+            telephone="+22901000000",
+            canal=verification_code.CANAL_WHATSAPP,
+            type_verification="changement_telephone",
+        )
+    )
+
+    assert resultat["succes_envoi"] is True
+    assert appels_whatsapp[0][2] == {
+        "nom_template": "digiid_code_remise",
+        "parametres_template": ["654321"],
+        "parametres_bouton_url": ["654321"],
         "langue_template": "fr",
     }
 

@@ -195,11 +195,17 @@ async def generer_et_envoyer_code(
             "Pour votre sécurité, ne le partagez pas."
         )
         if parametres.whatsapp_template_name:
+            nom_template = parametres.whatsapp_template_name
             resultat_whatsapp = envoyer_whatsapp(
                 destination,
                 message,
-                nom_template=parametres.whatsapp_template_name,
+                nom_template=nom_template,
                 parametres_template=[code],
+                parametres_bouton_url=(
+                    [code]
+                    if nom_template == parametres.whatsapp_template_code_remise_name
+                    else None
+                ),
                 langue_template=parametres.whatsapp_template_language,
             )
             succes = bool(resultat_whatsapp)
