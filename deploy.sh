@@ -65,10 +65,10 @@ echo "🧹 Cache de build..."
 docker builder prune -f || true
 
 echo "🏗️  [1/2] BACKEND..."
-docker compose build --progress plain $NO_CACHE backend worker_celery beat_celery
+docker compose --progress plain build $NO_CACHE backend worker_celery beat_celery
 
 echo "🏗️  [2/2] FRONTEND..."
-docker compose build --progress plain $NO_CACHE frontend
+docker compose --progress plain build $NO_CACHE frontend
 
 # ────────────────────────────────────────────────────────────────
 # 3. Arrêt + vérifications

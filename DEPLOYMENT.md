@@ -95,7 +95,7 @@ cd ~/DigiID && ./deploy.sh
 1. Vérifie `.env` et les ressources disque/mémoire (alerte < 5 Go libres)
 2. `git fetch` + `git reset --hard origin/main`
 3. Nettoie le cache Next.js
-4. `docker compose build --progress plain --no-cache backend worker_celery beat_celery frontend`
+4. `docker compose --progress plain build --no-cache backend worker_celery beat_celery frontend`
 5. **`docker compose down`** — arrête les anciens conteneurs AVANT de vérifier les ports
    (sans cela, l'ancien nginx Docker occupe déjà 80/443 et bloque le redéploiement)
 6. Vérifie que les certificats SSL existent sur l'hôte (sinon nginx crash-loop)
@@ -108,7 +108,7 @@ cd ~/DigiID && ./deploy.sh
 ```bash
 cd ~/DigiID
 git fetch origin && git reset --hard origin/main
-docker compose build --progress plain --no-cache backend worker_celery beat_celery frontend
+docker compose --progress plain build --no-cache backend worker_celery beat_celery frontend
 docker compose down   # ← obligatoire : libère les ports 80/443 occupés par l'ancien nginx
 docker compose up -d
 docker exec digiid_nginx nginx -t
