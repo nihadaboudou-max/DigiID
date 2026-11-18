@@ -5,8 +5,8 @@
  *
  * Le client (ou sa famille) saisit le code du ticket reçu au guichet ou par
  * SMS, et retrouve l'état de l'envoi : enregistré → en route → arrivé, avec les
- * gares de départ et d'arrivée. **Aucune donnée personnelle** n'est affichée :
- * ni nom, ni téléphone, ni adresse — le code du ticket suffit.
+ * gares de départ et d'arrivée. Les coordonnées du chauffeur ne sont affichées
+ * qu'avec le jeton opaque du QR code, jamais avec le seul code imprimé.
  *
  * Cette page ne demande pas de compte : c'est l'entrée des personnes qui ne
  * connaissent pas DigiID et qui viennent d'envoyer un colis.

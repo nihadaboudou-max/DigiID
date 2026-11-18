@@ -766,7 +766,10 @@ def envoyer_sms_verification(telephone: str, code: str) -> bool:
 # =============================================================================
 
 def construire_message_colis(
-    code_clair: str, type_evenement: str, lieu: Optional[str] = None
+    code_clair: str,
+    type_evenement: str,
+    lieu: Optional[str] = None,
+    lien_recu: Optional[str] = None,
 ) -> str:
     """Compose le SMS d'information du destinataire/expéditeur d'un colis."""
     suffixe = f" {lieu}" if lieu else ""
@@ -781,10 +784,11 @@ def construire_message_colis(
             " Vous pouvez venir le retirer au guichet."
         )
     if type_evenement == "depart":
-        return (
+        message = (
             f"DigiID — Votre colis {code_clair} a QUITTÉ{suffixe}."
             " Vous serez prévenu(e) de son arrivée."
         )
+        return f"{message} Reçu du colis : {lien_recu}" if lien_recu else message
     if type_evenement == "mise_en_transit":
         return (
             f"DigiID — Votre colis {code_clair} est EN ROUTE{suffixe}."

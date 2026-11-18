@@ -3577,7 +3577,16 @@ async def _notifier_scan_colis(
         )
         return
     lieu = await _libelle_gare(session, gare_id)
-    message = construire_message_colis(ticket.code_clair, type_evenement, lieu)
+    lien_recu = (
+        construire_url_qr_durable(
+            ticket.qr_token, base_url=parametres.url_frontend
+        )
+        if type_evenement == "depart"
+        else None
+    )
+    message = construire_message_colis(
+        ticket.code_clair, type_evenement, lieu, lien_recu=lien_recu
+    )
     if type_evenement == "depart":
         lieu_template = (
             await _libelle_gare(session, colis.gare_arrivee_id) or "destination"
@@ -5820,7 +5829,10 @@ def _nb_personnes_notifiees(notifications: list[NotificationLogistique]) -> int:
 
 
 async def _suivi_public_colis(
-    session: AsyncSession, ticket: Ticket
+    session: AsyncSession,
+    ticket: Ticket,
+    *,
+    inclure_chauffeur: bool = False,
 ) -> schemas.SuiviPublicResponse:
     colis = await session.get(Colis, ticket.reference_id) if ticket.reference_id else None
     if colis is None:
@@ -5834,6 +5846,36 @@ async def _suivi_public_colis(
     )
     voyage = await session.get(Voyage, colis.voyage_id) if colis.voyage_id else None
     vehicule = await session.get(Vehicule, voyage.vehicule_id) if voyage else None
+    chauffeur_nom = None
+    chauffeur_telephone = None
+    if inclure_chauffeur:
+        chauffeur_id = (
+            voyage.chauffeur_id
+            if voyage is not None and voyage.chauffeur_id is not None
+            else colis.chauffeur_id
+        )
+        chauffeur = (
+            await session.get(Utilisateur, chauffeur_id)
+            if chauffeur_id is not None
+            else None
+        )
+        if chauffeur is not None:
+            prenom = (
+                dechiffrer_donnee(chauffeur.prenom_chiffre)
+                if chauffeur.prenom_chiffre
+                else None
+            )
+            nom = (
+                dechiffrer_donnee(chauffeur.nom_chiffre)
+                if chauffeur.nom_chiffre
+                else None
+            )
+            chauffeur_nom = " ".join(part for part in (prenom, nom) if part) or "Chauffeur"
+            chauffeur_telephone = (
+                dechiffrer_donnee(chauffeur.telephone_chiffre)
+                if chauffeur.telephone_chiffre
+                else None
+            )
     return schemas.SuiviPublicResponse(
         type="colis",
         code=ticket.code_clair,
@@ -5842,6 +5884,8 @@ async def _suivi_public_colis(
         gare_arrivee_nom=noms.get(colis.gare_arrivee_id),
         date_depart=voyage.date_depart if voyage else None,
         vehicule_immatriculation=vehicule.immatriculation if vehicule else None,
+        chauffeur_nom=chauffeur_nom,
+        chauffeur_telephone=chauffeur_telephone,
         nb_personnes_notifiees=_nb_personnes_notifiees(notifications),
         colis=schemas.ColisPublicInfo(
             destinataire_nom=colis.destinataire_nom,
@@ -5900,6 +5944,7 @@ async def construire_suivi_public(
     ticket = await session.scalar(
         select(Ticket).where(Ticket.code_clair == valeur.upper())
     )
+    acces_par_token = ticket is None
     if ticket is None:
         ticket = await session.scalar(select(Ticket).where(Ticket.qr_token == valeur))
     if ticket is None:
@@ -5907,4 +5952,6 @@ async def construire_suivi_public(
                             detail="Aucun suivi trouvé pour ce code")
     if ticket.type == "ENFANT":
         return await _suivi_public_enfant(session, ticket)
-    return await _suivi_public_colis(session, ticket)
+    return await _suivi_public_colis(
+        session, ticket, inclure_chauffeur=acces_par_token
+    )

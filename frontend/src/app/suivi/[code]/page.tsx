@@ -2,9 +2,8 @@
 /**
  * Page publique de suivi (Plan B, étape S7) — « Suivi familial ».
  *
- * Accessible **sans connexion** depuis le code clair imprimé sur le ticket
- * (`…/suivi/DKR-2025-000001`) ou depuis le QR Code collé sur le colis. Elle
- * rassure la famille : trajet, statut, timeline et notifications envoyées.
+ * Accessible **sans connexion** depuis le code clair ou le QR Code imprimé.
+ * Seul le lien QR opaque peut révéler le nom et le téléphone du chauffeur.
  *
  * Un même écran sert pour un **colis** et pour un **enfant voyageant seul** :
  * le backend renvoie une vue unifiée (`type: "colis" | "enfant"`).
@@ -279,6 +278,59 @@ export default function PageSuiviPublic() {
                 </p>
               )}
             </Carte>
+
+            {suivi.type === "colis" && (
+              <Carte
+                titre="Reçu résumé"
+                description="Informations utiles pour le suivi du colis."
+              >
+                <dl className="space-y-3 text-sm">
+                  <div>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-ardoise-clair">
+                      Code du colis
+                    </dt>
+                    <dd className="font-semibold text-ardoise">{suivi.code}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-ardoise-clair">
+                      Trajet
+                    </dt>
+                    <dd className="font-semibold text-ardoise">
+                      {suivi.gare_depart_nom ?? "Départ"} →{" "}
+                      {suivi.gare_arrivee_nom ?? "Arrivée"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-ardoise-clair">
+                      Chauffeur
+                    </dt>
+                    <dd className="font-semibold text-ardoise">
+                      {suivi.chauffeur_nom ?? "Non renseigné"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-ardoise-clair">
+                      Téléphone du chauffeur
+                    </dt>
+                    <dd>
+                      {suivi.chauffeur_telephone ? (
+                        <a
+                          href={`tel:${suivi.chauffeur_telephone}`}
+                          className="font-semibold text-lagune underline"
+                        >
+                          {suivi.chauffeur_telephone}
+                        </a>
+                      ) : (
+                        <span className="text-ardoise-clair">
+                          Ouvrez le lien reçu par SMS ou scannez le QR du ticket
+                          pour afficher ces coordonnées.
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+              </Carte>
+            )}
 
             {/* Timeline */}
             <Carte titre="Étapes du voyage">

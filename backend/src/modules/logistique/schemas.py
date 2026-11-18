@@ -933,7 +933,7 @@ class EnfantPublicInfo(BaseModel):
 
 
 class SuiviPublicResponse(BaseModel):
-    """Vue publique d'un suivi (colis ou enfant) — sans données sensibles."""
+    """Vue publique; coordonnées chauffeur incluses seulement via le QR secret."""
     type: Literal["colis", "enfant"]
     code: str
     statut: str
@@ -941,6 +941,8 @@ class SuiviPublicResponse(BaseModel):
     gare_arrivee_nom: Optional[str] = None
     date_depart: Optional[datetime] = None
     vehicule_immatriculation: Optional[str] = None
+    chauffeur_nom: Optional[str] = None
+    chauffeur_telephone: Optional[str] = None
     nb_personnes_notifiees: int = 0
     colis: Optional[ColisPublicInfo] = None
     enfant: Optional[EnfantPublicInfo] = None

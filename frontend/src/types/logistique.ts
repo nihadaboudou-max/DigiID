@@ -577,6 +577,8 @@ export interface SuiviPublic {
   gare_arrivee_nom: string | null;
   date_depart: string | null;
   vehicule_immatriculation: string | null;
+  chauffeur_nom: string | null;
+  chauffeur_telephone: string | null;
   nb_personnes_notifiees: number;
   colis: ColisPublicInfo | null;
   enfant: EnfantPublicInfo | null;

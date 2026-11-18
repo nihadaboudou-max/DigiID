@@ -278,6 +278,9 @@ class TestPartageChauffeurGuichet:
     def test_depart_et_arrivee_incluent_les_trois_variables_meta(
         self, monkeypatch, type_evenement, gare_notification
     ):
+        monkeypatch.setattr(
+            service.parametres, "url_frontend", "https://digiid.example"
+        )
         appels = []
         monkeypatch.setattr(
             service,
@@ -297,7 +300,7 @@ class TestPartageChauffeurGuichet:
             service._notifier_scan_colis(
                 session,
                 colis,
-                SimpleNamespace(code_clair="COL-123"),
+                SimpleNamespace(code_clair="COL-123", qr_token="opaque-token"),
                 type_evenement,
                 gare_id,
             )
@@ -309,6 +312,13 @@ class TestPartageChauffeurGuichet:
             "COL-123",
             "Gare centrale (Cotonou)",
         ]
+        if type_evenement == "depart":
+            assert (
+                "Reçu du colis : "
+                "https://digiid.example/suivi?token=opaque-token"
+            ) in appels[0]["message"]
+        else:
+            assert "Reçu du colis :" not in appels[0]["message"]
 
     @pytest.mark.parametrize(
         ("type_evenement", "attribut_template", "nom_template"),
