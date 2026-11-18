@@ -36,13 +36,13 @@ services:
     image: redis:7-alpine
     container_name: digiid_redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    environment:
+      REDIS_MOT_DE_PASSE: ${REDIS_MOT_DE_PASSE:?Définissez REDIS_MOT_DE_PASSE avant de démarrer Redis}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass \"$${REDIS_MOT_DE_PASSE}\""]
     volumes:
       - donnees_redis:/data
-    ports:
-      - "6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$${REDIS_MOT_DE_PASSE}\" redis-cli ping | grep -q PONG"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -93,6 +93,7 @@ services:
       # Overrides réseau Docker (prioritaires sur un .env configuré pour le dev local)
       - POSTGRES_HOST=base_donnees
       - REDIS_HOST=cache
+      - REDIS_MOT_DE_PASSE=${REDIS_MOT_DE_PASSE:?Définissez REDIS_MOT_DE_PASSE avant de démarrer Redis}
       - OLLAMA_URL=http://ollama:11434
       - CHROMADB_HOST=base_vectorielle
       - PYTHONPATH=/home/digiid/.local/lib/python3.11/site-packages:/app
@@ -123,6 +124,7 @@ services:
     environment:
       - POSTGRES_HOST=base_donnees
       - REDIS_HOST=cache
+      - REDIS_MOT_DE_PASSE=${REDIS_MOT_DE_PASSE:?Définissez REDIS_MOT_DE_PASSE avant de démarrer Redis}
       - PYTHONPATH=/home/digiid/.local/lib/python3.11/site-packages:/app
     depends_on:
       - base_donnees
@@ -145,6 +147,7 @@ services:
     environment:
       - POSTGRES_HOST=base_donnees
       - REDIS_HOST=cache
+      - REDIS_MOT_DE_PASSE=${REDIS_MOT_DE_PASSE:?Définissez REDIS_MOT_DE_PASSE avant de démarrer Redis}
       - PYTHONPATH=/home/digiid/.local/lib/python3.11/site-packages:/app
     depends_on:
       - base_donnees

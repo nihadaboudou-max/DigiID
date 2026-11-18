@@ -1619,6 +1619,8 @@ async def ajouter_photo_colis(
 async def _est_participant_colis(
     session: AsyncSession, colis: Colis, utilisateur: Utilisateur
 ) -> bool:
+    if not utilisateur.est_telephone_verifie:
+        return False
     if utilisateur.id in {
         colis.expediteur_id,
         colis.destinataire_id,

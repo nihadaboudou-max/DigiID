@@ -141,6 +141,9 @@ async def obtenir_code_remise_notification(
     notification_id: UUID,
 ) -> tuple[str, datetime]:
     """Révèle le code actif d'une notification appartenant à son destinataire."""
+    if not utilisateur.est_telephone_verifie:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Code indisponible.")
+
     notification = await session.scalar(
         select(Notification).where(
             Notification.id == notification_id,

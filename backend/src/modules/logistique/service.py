@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlparse
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, false, func, or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1282,6 +1282,7 @@ async def _compte_par_telephone(
         select(Utilisateur).where(
             Utilisateur.telephone_hash == hasher_telephone(telephone_normalise),
             Utilisateur.est_actif.is_(True),
+            Utilisateur.est_telephone_verifie.is_(True),
         )
     )
 
@@ -1315,7 +1316,10 @@ async def _notifier_comptes_colis(
         return
 
     utilisateurs = await session.scalars(
-        select(Utilisateur).where(Utilisateur.id.in_(identifiants))
+        select(Utilisateur).where(
+            Utilisateur.id.in_(identifiants),
+            Utilisateur.est_telephone_verifie.is_(True),
+        )
     )
     lien = f"/suivi/{code_clair}" if code_clair else f"/horaires?colis={colis.id}"
     for utilisateur in utilisateurs:
@@ -1572,7 +1576,10 @@ async def _notifier_comptes_suivi(
     ticket = await obtenir_ticket_du_suivi(session, suivi)
     lien = f"/suivi/{ticket.code_clair}" if ticket is not None else None
     utilisateurs = await session.scalars(
-        select(Utilisateur).where(Utilisateur.id.in_(identifiants))
+        select(Utilisateur).where(
+            Utilisateur.id.in_(identifiants),
+            Utilisateur.est_telephone_verifie.is_(True),
+        )
     )
     for utilisateur in utilisateurs:
         await creer_notification(
@@ -2691,25 +2698,28 @@ async def lister_colis(
         )
         requete = requete.where(Colis.voyage_id.in_(voyages_du_chauffeur))
     elif utilisateur is not None and utilisateur.role == RoleUtilisateur.CITOYEN.value:
-        # Un colis peut avoir été enregistré avant la création du compte du
-        # destinataire : le téléphone normalisé reste alors la clé de rattachement.
-        conditions = [
-            Colis.expediteur_id == utilisateur.id,
-            Colis.destinataire_id == utilisateur.id,
-        ]
-        if utilisateur.telephone_chiffre:
-            try:
-                telephone = normaliser_numero_tiers(
-                    dechiffrer_donnee(utilisateur.telephone_chiffre)
-                )
-            except ValueError:
-                telephone = None
-            if telephone:
-                conditions.extend([
-                    Colis.expediteur_tel == telephone,
-                    Colis.destinataire_tel == telephone,
-                ])
-        requete = requete.where(or_(*conditions))
+        if not utilisateur.est_telephone_verifie:
+            requete = requete.where(false())
+        else:
+            # Un colis peut avoir été enregistré avant la création du compte du
+            # destinataire : le téléphone vérifié reste la clé de rattachement.
+            conditions = [
+                Colis.expediteur_id == utilisateur.id,
+                Colis.destinataire_id == utilisateur.id,
+            ]
+            if utilisateur.telephone_chiffre:
+                try:
+                    telephone = normaliser_numero_tiers(
+                        dechiffrer_donnee(utilisateur.telephone_chiffre)
+                    )
+                except ValueError:
+                    telephone = None
+                if telephone:
+                    conditions.extend([
+                        Colis.expediteur_tel == telephone,
+                        Colis.destinataire_tel == telephone,
+                    ])
+            requete = requete.where(or_(*conditions))
     requete = requete.order_by(Colis.cree_le.desc(), Colis.id.desc())
     return await _paginer(session, requete, page, par_page)
 
@@ -3478,11 +3488,7 @@ async def preparer_code_remise_suivi(
         renouveller=renouveller,
     )
 
-    utilisateur = await session.scalar(
-        select(Utilisateur).where(
-            Utilisateur.telephone_hash == hasher_telephone(telephone_recuperation)
-        )
-    )
+    utilisateur = await _compte_par_telephone(session, telephone_recuperation)
     if utilisateur is not None:
         await creer_notification(
             session,
@@ -3818,10 +3824,8 @@ async def creer_suivi_familial(
             notifications_envoyees += 1
         telephone_normalise = normaliser_numero_tiers(telephone)
         if telephone_normalise:
-            utilisateur_notifie = await session.scalar(
-                select(Utilisateur).where(
-                    Utilisateur.telephone_hash == hasher_telephone(telephone_normalise)
-                )
+            utilisateur_notifie = await _compte_par_telephone(
+                session, telephone_normalise
             )
             if (
                 utilisateur_notifie is not None

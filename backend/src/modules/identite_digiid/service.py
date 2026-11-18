@@ -661,6 +661,11 @@ async def mes_voyages_paginees(
     recherche: str | None = None,
 ) -> schemas.MesVoyagesPagineesResponse:
     """Recherche et pagine côté serveur les colis et proches liés au citoyen."""
+    if not utilisateur.est_telephone_verifie:
+        return schemas.MesVoyagesPagineesResponse(
+            elements=[], total=0, page=page, par_page=par_page
+        )
+
     mon_tel = telephone(utilisateur)
     conditions_colis = [Colis.expediteur_id == utilisateur.id]
     if mon_tel:
@@ -987,6 +992,9 @@ async def mes_voyages(
       - passagers dont il est le **responsable**, l'**acheteur**, le **proche de
         confiance** ou le parent rattaché à son compte.
     """
+    if not utilisateur.est_telephone_verifie:
+        return schemas.MesVoyagesResponse(colis=[], passagers=[])
+
     mon_tel = telephone(utilisateur)
 
     conditions_colis = [Colis.expediteur_id == utilisateur.id]

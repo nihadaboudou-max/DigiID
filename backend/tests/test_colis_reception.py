@@ -409,7 +409,7 @@ def test_suivi_public_affiche_les_notifications_reelles_sans_exposer_le_motif():
 
 
 def test_participant_associe_par_telephone_peut_acceder_au_recu(monkeypatch):
-    utilisateur = SimpleNamespace(id=uuid.uuid4())
+    utilisateur = SimpleNamespace(id=uuid.uuid4(), est_telephone_verifie=True)
     colis = SimpleNamespace(
         expediteur_id=None,
         destinataire_id=None,
@@ -425,6 +425,53 @@ def test_participant_associe_par_telephone_peut_acceder_au_recu(monkeypatch):
     assert asyncio.run(
         routes._est_participant_colis(object(), colis, utilisateur)
     )
+
+
+def test_participant_non_verifie_ne_peut_pas_acceder_au_recu_par_identifiant():
+    utilisateur = SimpleNamespace(
+        id=uuid.uuid4(),
+        est_telephone_verifie=False,
+    )
+    colis = SimpleNamespace(
+        expediteur_id=utilisateur.id,
+        destinataire_id=None,
+        expediteur_tel=None,
+        destinataire_tel=None,
+    )
+
+    assert not asyncio.run(
+        routes._est_participant_colis(object(), colis, utilisateur)
+    )
+
+
+def test_recherche_de_compte_par_telephone_exige_un_numero_verifie():
+    class SessionCaptureRequete:
+        requete = None
+
+        async def scalar(self, requete):
+            self.requete = requete
+            return None
+
+    session = SessionCaptureRequete()
+
+    assert asyncio.run(
+        service._compte_par_telephone(session, "+2290199000011")
+    ) is None
+    sql = str(session.requete.compile()).lower()
+    assert "utilisateur.est_telephone_verifie is true" in sql
+
+
+def test_compte_non_verifie_ne_peut_pas_reveler_un_code_de_remise():
+    from src.modules.gamification.service_notifications import (
+        obtenir_code_remise_notification,
+    )
+
+    utilisateur = SimpleNamespace(est_telephone_verifie=False)
+
+    with pytest.raises(HTTPException) as erreur:
+        asyncio.run(obtenir_code_remise_notification(object(), utilisateur, uuid.uuid4()))
+
+    assert erreur.value.status_code == 404
 
 
 def test_colis_recu_ne_peut_pas_etre_reaffecte_sans_refus():

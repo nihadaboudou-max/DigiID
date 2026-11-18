@@ -2,8 +2,10 @@
 import asyncio
 import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from src.modeles import Utilisateur
+from src.modules.identite_digiid import service as service_identite
 from src.modules.logistique import service
 from src.noyau.constantes_roles import RoleUtilisateur
 
@@ -16,6 +18,16 @@ def _chauffeur() -> Utilisateur:
     utilisateur = Utilisateur()
     utilisateur.id = uuid.uuid4()
     utilisateur.role = RoleUtilisateur.CHAUFFEUR.value
+    return utilisateur
+
+
+def _citoyen(numero_verifie: bool) -> Utilisateur:
+    utilisateur = Utilisateur()
+    utilisateur.id = uuid.uuid4()
+    utilisateur.role = RoleUtilisateur.CITOYEN.value
+    utilisateur.telephone_chiffre = "telephone-chiffre"
+    utilisateur.mode_commercant_actif = False
+    utilisateur.est_telephone_verifie = numero_verifie
     return utilisateur
 
 
@@ -77,6 +89,42 @@ def test_lister_colis_filtre_intervalle_de_creation(monkeypatch):
     assert "colis.cree_le <" in sql
     assert debut in parametres.values()
     assert fin in parametres.values()
+
+
+def test_lister_colis_ne_rattache_par_telephone_que_si_verifie(monkeypatch):
+    monkeypatch.setattr(service, "dechiffrer_donnee", lambda _valeur: "+2290199000011")
+
+    for numero_verifie in (False, True):
+        capture = _capturer_requete(monkeypatch)
+        asyncio.run(
+            service.lister_colis(
+                _SessionCapture(),
+                1,
+                5,
+                utilisateur=_citoyen(numero_verifie),
+            )
+        )
+        sql = str(capture["requete"].compile()).lower()
+        filtres = str(capture["requete"].whereclause).lower()
+        assert ("colis.expediteur_tel =" in filtres) is numero_verifie
+        assert ("colis.destinataire_tel =" in filtres) is numero_verifie
+
+
+def test_mes_voyages_ne_retourne_rien_sans_telephone_verifie():
+    utilisateur = SimpleNamespace(est_telephone_verifie=False)
+
+    pagines = asyncio.run(
+        service_identite.mes_voyages_paginees(
+            _SessionCapture(), utilisateur, page=2, par_page=5
+        )
+    )
+    complets = asyncio.run(service_identite.mes_voyages(_SessionCapture(), utilisateur))
+
+    assert pagines.elements == []
+    assert pagines.total == 0
+    assert pagines.page == 2
+    assert complets.colis == []
+    assert complets.passagers == []
 
 
 def test_lister_passagers_recherche_et_perimetre_chauffeur(monkeypatch):
