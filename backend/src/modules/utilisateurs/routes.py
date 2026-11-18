@@ -7,13 +7,14 @@ Préfixe : /api/v1/utilisateur
 Phase 1 — endpoints de base. Les modules profil, score et chatbot
 viendront dans les phases suivantes.
 """
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.base_donnees.session import obtenir_session
+from src.config import parametres
 from src.config.constantes import PREFIXE_API_UTILISATEUR
 from src.modeles import Utilisateur
 from src.modules.authentification.dependances import utilisateur_courant
@@ -53,7 +54,10 @@ class ModificationTelephone(BaseModel):
         max_length=20,
         description="Numéro béninois : +229 01 XX XX XX XX",
     )
-    canal: str = Field("sms", pattern="^(sms|appel)$")
+    canal: Literal["whatsapp"] = Field(
+        default="whatsapp",
+        description="Le code de vérification est envoyé par WhatsApp.",
+    )
 
 
 # =============================================================================
@@ -140,12 +144,26 @@ async def modifier_telephone(
     session: Annotated[AsyncSession, Depends(obtenir_session)],
     utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)],
 ):
-    """Enregistre le numéro normalisé puis envoie un code OTP par SMS/appel.
+    """Enregistre le numéro normalisé puis envoie un code OTP par WhatsApp.
 
     - Format international Bénin obligatoire (``+229XXXXXXXXXX``) ;
     - Unicité stricte : un numéro = un seul compte ;
     - ``est_telephone_verifie`` repasse à ``False`` jusqu'à validation de l'OTP.
     """
+    if not (
+        parametres.whatsapp_active
+        and parametres.whatsapp_access_token
+        and parametres.whatsapp_phone_number_id
+        and parametres.whatsapp_template_name
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "La vérification WhatsApp n'est pas configurée. "
+                "Aucun SMS de secours ne sera envoyé."
+            ),
+        )
+
     from datetime import datetime, timezone
 
     from sqlalchemy import select
@@ -189,12 +207,23 @@ async def modifier_telephone(
         canal=donnees.canal,
         type_verification="inscription",
     )
+    if not envoi["succes_envoi"]:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "WhatsApp n'a pas accepté l'envoi du code. "
+                "Aucun SMS de secours n'a été tenté."
+            ),
+        )
 
     return {
         "succes": True,
         "telephone": masquer_telephone(numero),
         "est_telephone_verifie": False,
-        "message": "Code envoyé. Validez-le pour vérifier votre numéro.",
+        "message": (
+            "Demande d'envoi WhatsApp acceptée. "
+            "Vérifiez la réception du code dans WhatsApp."
+        ),
         "destination_masquee": envoi.get("destination_masquee"),
         "duree_validite_minutes": envoi.get("duree_validite_minutes"),
     }

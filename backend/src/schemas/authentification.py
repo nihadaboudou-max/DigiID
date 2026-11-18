@@ -187,9 +187,9 @@ class InscriptionReponse(BaseModel):
 
 class VerificationEnvoyerRequete(BaseModel):
     """Requête pour envoyer/renvoyer un code de vérification."""
-    canal: str = Field(
+    canal: Literal["email", "whatsapp"] = Field(
         default="email",
-        description="Canal : 'email', 'whatsapp', 'sms' ou 'appel'",
+        description="Canal : 'email' ou 'whatsapp'",
     )
 
 
@@ -204,7 +204,7 @@ class VerificationEnvoyerReponse(BaseModel):
 class VerificationVerifierRequete(BaseModel):
     """Requête pour vérifier un code saisi."""
     code: str = Field(..., min_length=6, max_length=6)
-    canal: str = Field(default="email")
+    canal: Literal["email", "whatsapp"] = Field(default="email")
 
 
 class VerificationVerifierReponse(BaseModel):

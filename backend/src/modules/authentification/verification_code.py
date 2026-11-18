@@ -190,17 +190,19 @@ async def generer_et_envoyer_code(
     elif canal == CANAL_APPEL:
         succes = passer_appel_verification(destination, code)
     elif canal == CANAL_WHATSAPP:
-        template_auth = parametres.whatsapp_template_auth_name
-        if template_auth:
-            succes = bool(envoyer_whatsapp(
-                destination,
-                f"Ton code de confirmation DigiID est {code}.",
-                nom_template=template_auth,
-                parametres_template=[code],
-                parametres_bouton_url=[code],
-            ))
+        message = f"Ton code de confirmation DigiID est {code}."
+        if parametres.whatsapp_template_name:
+            succes = bool(
+                envoyer_whatsapp(
+                    destination,
+                    message,
+                    nom_template=parametres.whatsapp_template_name,
+                    parametres_template=[message],
+                    langue_template=parametres.whatsapp_template_language,
+                )
+            )
         else:
-            journal.warning("[WHATSAPP] Modèle d'authentification non configuré")
+            journal.warning("[WHATSAPP] Modèle de notification non configuré")
 
     if not succes:
         nouveau_code.est_utilise = True

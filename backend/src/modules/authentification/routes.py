@@ -533,17 +533,21 @@ async def envoyer_code_verification(
         },
     )
     await session.commit()
+    if resultat["succes_envoi"]:
+        message = (
+            "Demande d'envoi WhatsApp acceptée."
+            if donnees.canal == "whatsapp"
+            else "Code de vérification envoyé."
+        )
+    else:
+        message = (
+            "WhatsApp indisponible. Essaie par e-mail."
+            if donnees.canal == "whatsapp"
+            else "Impossible d'envoyer le code avec ce moyen."
+        )
     return VerifEnvoyerRep(
         succes=resultat["succes_envoi"],
-        message=(
-            "Code de vérification envoyé."
-            if resultat["succes_envoi"]
-            else (
-                "WhatsApp indisponible. Essaie par e-mail."
-                if donnees.canal == "whatsapp"
-                else "Impossible d'envoyer le code avec ce moyen."
-            )
-        ),
+        message=message,
         destination_masquee=resultat["destination_masquee"],
         duree_validite_minutes=resultat["duree_validite_minutes"],
     )

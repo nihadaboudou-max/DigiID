@@ -5,7 +5,7 @@
  * Contraintes appliquées :
  *  - format international Bénin **obligatoire** (indicatif +229 fixe) ;
  *  - unicité stricte côté serveur (un numéro = un compte) ;
- *  - le numéro n'est **vérifié** qu'après validation du code OTP/SMS.
+ *  - le numéro n'est **vérifié** qu'après validation du code OTP WhatsApp.
  *
  * Design : indicateur de statut coloré + un seul champ, pas de texte explicatif.
  */
@@ -29,7 +29,6 @@ interface ReponseEnvoi {
   telephone: string;
   destination_masquee?: string;
   duree_validite_minutes?: number;
-  code_dev?: string;
 }
 
 function normaliserLocal(saisie: string): string {
@@ -67,7 +66,7 @@ export function CarteTelephone() {
     try {
       const reponse = await clientAPI.put<ReponseEnvoi>(
         "/api/v1/utilisateur/telephone",
-        { telephone: `${INDICATIF}01${chiffres}`, canal: "sms" },
+        { telephone: `${INDICATIF}01${chiffres}`, canal: "whatsapp" },
         OPTIONS_AUTH,
       );
       setEnvoi(reponse);
@@ -87,7 +86,7 @@ export function CarteTelephone() {
     try {
       await clientAPI.post(
         "/api/v1/auth/verification/verifier",
-        { code: code.trim(), canal: "sms" },
+        { code: code.trim(), canal: "whatsapp" },
         OPTIONS_AUTH,
       );
       await rafraichirProfil();
@@ -156,6 +155,9 @@ export function CarteTelephone() {
               className="flex-1"
             />
           </div>
+          <p className="text-xs text-ardoise-clair">
+            Le code de vérification sera envoyé par WhatsApp. Aucun SMS de secours ne sera envoyé.
+          </p>
           <div className="flex gap-2">
             <Bouton
               variante="primaire"
@@ -181,19 +183,13 @@ export function CarteTelephone() {
         <div className="mt-4 space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <ChampSaisie
-              libelle={`Code reçu par SMS${envoi?.destination_masquee ? ` (${envoi.destination_masquee})` : ""}`}
+              libelle={`Code reçu par WhatsApp${envoi?.destination_masquee ? ` (${envoi.destination_masquee})` : ""}`}
               value={code}
               onChange={(evenement) => setCode(evenement.target.value)}
               placeholder="123456"
               inputMode="numeric"
               className="flex-1"
             />
-            {envoi?.code_dev && (
-              <p className="rounded-lg border border-ambre/30 bg-ambre/10 px-3 py-2 text-sm text-ardoise sm:mb-1">
-                Code temporaire (SMS indisponible) :{" "}
-                <code className="font-bold tracking-wider">{envoi.code_dev}</code>
-              </p>
-            )}
           </div>
           <div className="flex gap-2">
             <Bouton

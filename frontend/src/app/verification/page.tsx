@@ -22,9 +22,11 @@ import { cheminTableauDeBord } from "@/types/api";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type Etape = "choix" | "code" | "termine";
-type Canal = "email" | "sms" | "appel";
+type Canal = "email" | "whatsapp";
 
 interface ReponseEnvoi {
+  succes: boolean;
+  message: string;
   destination_masquee: string;
   code_dev?: string | null;
 }
@@ -50,16 +52,10 @@ const OPTIONS_CANAUX: OptionCanal[] = [
     description: "Reçois un code à 6 chiffres sur ta boîte mail",
   },
   {
-    canal: "sms",
+    canal: "whatsapp",
     icone: "💬",
-    titre: "Par SMS",
-    description: "Reçois un code par message texte",
-  },
-  {
-    canal: "appel",
-    icone: "📞",
-    titre: "Par appel",
-    description: "Écoute le code dicté par téléphone",
+    titre: "Par WhatsApp",
+    description: "Reçois un code à 6 chiffres sur WhatsApp",
   },
 ];
 
@@ -100,7 +96,7 @@ export default function PageVerification() {
 
   // ── Envoi du code ────────────────────────────────────────────────────────
 
-  async function envoyerCode() {
+  async function envoyerCode(canalDemande: Canal = canal) {
     setChargement(true);
     setMessage(null);
     setErreur(null);
@@ -108,16 +104,18 @@ export default function PageVerification() {
     try {
       const reponse = await clientAPI.post<ReponseEnvoi>(
         "/api/v1/auth/verification/envoyer",
-        { canal },
+        { canal: canalDemande },
         { authentifie: true },
       );
+      if (!reponse.succes) {
+        setErreur(reponse.message || "Impossible d'envoyer le code.");
+        return;
+      }
       setDestinationMasquee(reponse.destination_masquee);
       setMessage(
-        canal === "email"
+        canalDemande === "email"
           ? "Un code à 6 chiffres a été envoyé par email."
-          : canal === "sms"
-            ? "Un code à 6 chiffres a été envoyé par SMS."
-            : "Tu vas recevoir un appel avec le code dicté.",
+          : "WhatsApp a accepté la demande d'envoi du code.",
       );
       // Mode développement : le code est renvoyé directement
       if (reponse.code_dev) {
@@ -237,9 +235,7 @@ export default function PageVerification() {
               </p>
 
               {OPTIONS_CANAUX.map((opt) => {
-                // Désactiver SMS et appel si pas de téléphone
-                const desactive =
-                  (opt.canal === "sms" || opt.canal === "appel") && !aTelephone;
+                const desactive = opt.canal === "whatsapp" && !aTelephone;
                 return (
                   <button
                     key={opt.canal}
@@ -251,7 +247,7 @@ export default function PageVerification() {
                       setMessage(null);
                       setErreur(null);
                       setCodeVisible(null);
-                      envoyerCode();
+                      void envoyerCode(opt.canal);
                     }}
                     className={`w-full p-4 rounded-xl border-2 text-left transition-all flex items-center gap-4 ${
                       desactive
@@ -305,9 +301,7 @@ export default function PageVerification() {
               <p className="text-sm text-ardoise-clair">
                 {canal === "email"
                   ? `Un code a été envoyé à ${destinationMasquee || "ton email"}.`
-                  : canal === "sms"
-                    ? `Un code a été envoyé par SMS au ${destinationMasquee || "téléphone"}.`
-                    : "Tu vas recevoir un appel avec le code dicté."}
+                  : `Demande d'envoi acceptée par WhatsApp pour ${destinationMasquee || "ton téléphone"}.`}
               </p>
 
               {/* Code visible en mode développement */}
@@ -366,7 +360,7 @@ export default function PageVerification() {
                 ) : (
                   <button
                     type="button"
-                    onClick={envoyerCode}
+                    onClick={() => void envoyerCode()}
                     className="text-sm text-lagune hover:underline"
                   >
                     Renvoyer le code

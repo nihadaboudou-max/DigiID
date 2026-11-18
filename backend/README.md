@@ -51,10 +51,12 @@ backend/
 
 ## Confirmation à l'inscription
 
-Le nom du modèle WhatsApp d'authentification est configurable avec
-`WHATSAPP_TEMPLATE_AUTH_NAME` dans `.env`. Configurez dans Meta un modèle
-approuvé de catégorie **Authentification** avec le code dans le corps et un
-bouton « Copier le code ». Aucun code OTP n'est renvoyé par l'API.
+La vérification du numéro utilise le template WhatsApp existant configuré avec
+`WHATSAPP_TEMPLATE_NAME` dans `.env`. Son corps doit accepter une variable
+`{{1}}`, qui reçoit le texte contenant le code OTP. Aucun SMS de secours n'est
+envoyé; si WhatsApp est inactif, mal configuré ou refuse le template, l'API
+signale l'échec et le numéro reste non vérifié. Aucun code OTP n'est renvoyé par
+l'API.
 
 ## Mot de passe oublié
 
