@@ -195,17 +195,15 @@ async def generer_et_envoyer_code(
             "Pour votre sécurité, ne le partagez pas."
         )
         if parametres.whatsapp_template_name:
-            nom_template = parametres.whatsapp_template_name
+            # ✅ Le template OTP (catégorie AUTHENTICATION) possède un bouton
+            # « Copier le code » : Meta EXIGE le code en paramètre du bouton,
+            # sinon erreur 131008. On l'envoie donc TOUJOURS, sans condition.
             resultat_whatsapp = envoyer_whatsapp(
                 destination,
                 message,
-                nom_template=nom_template,
+                nom_template=parametres.whatsapp_template_name,
                 parametres_template=[code],
-                parametres_bouton_url=(
-                    [code]
-                    if nom_template == parametres.whatsapp_template_code_remise_name
-                    else None
-                ),
+                parametres_bouton_url=[code],
                 langue_template=parametres.whatsapp_template_language,
             )
             succes = bool(resultat_whatsapp)
@@ -354,8 +352,10 @@ async def verifier_code(
 
         # 📱 OTP/SMS (ou appel) : le NUMÉRO est prouvé — condition d'activation
         # du compte (contrainte S3 : « validé par OTP/SMS avant activation »).
+        # ✅ PAS d'import local de datetime ici : il rendrait datetime/timezone
+        # locaux à TOUTE la fonction → UnboundLocalError à la requête du début.
+        # L'import global en tête de fichier suffit.
         if canal in (CANAL_SMS, CANAL_APPEL, CANAL_WHATSAPP) and not utilisateur.est_telephone_verifie:
-            from datetime import datetime, timezone
             utilisateur.est_telephone_verifie = True
             utilisateur.date_verification_telephone = datetime.now(timezone.utc)
             resultat_verification["est_telephone_verifie"] = True
