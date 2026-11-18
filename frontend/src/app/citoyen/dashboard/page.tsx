@@ -167,7 +167,17 @@ function Contenu() {
           </p>
         ) : elements.length === 0 ? (
           <p className="py-4 text-center text-lg text-ardoise">
-            Tu n'as pas encore d'envoi à suivre.
+            {utilisateur?.est_telephone_verifie === true ? (
+              "Tu n'as pas encore d'envoi à suivre."
+            ) : (
+              <>
+                Vérifie ton numéro de téléphone dans ton{" "}
+                <Link href="/profil" className="font-semibold text-lagune underline">
+                  profil
+                </Link>{" "}
+                pour retrouver les envois associés à ton compte.
+              </>
+            )}
           </p>
         ) : (
           <ul className="space-y-3">

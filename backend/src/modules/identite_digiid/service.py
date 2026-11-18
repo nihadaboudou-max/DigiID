@@ -667,7 +667,10 @@ async def mes_voyages_paginees(
         )
 
     mon_tel = telephone(utilisateur)
-    conditions_colis = [Colis.expediteur_id == utilisateur.id]
+    conditions_colis = [
+        Colis.expediteur_id == utilisateur.id,
+        Colis.destinataire_id == utilisateur.id,
+    ]
     if mon_tel:
         conditions_colis.append(Colis.destinataire_tel == mon_tel)
 
@@ -997,7 +1000,10 @@ async def mes_voyages(
 
     mon_tel = telephone(utilisateur)
 
-    conditions_colis = [Colis.expediteur_id == utilisateur.id]
+    conditions_colis = [
+        Colis.expediteur_id == utilisateur.id,
+        Colis.destinataire_id == utilisateur.id,
+    ]
     if mon_tel:
         conditions_colis.append(Colis.destinataire_tel == mon_tel)
 

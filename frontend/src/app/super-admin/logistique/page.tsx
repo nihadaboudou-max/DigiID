@@ -974,15 +974,48 @@ function SectionVoyage({
   supprimer: (id: string) => void;
 }) {
   const { notifier } = useNotifications();
-  const [f, setF] = useState({ ligne_id: "", vehicule_id: "", chauffeur_id: "", date_depart: "", statut: "planifie" });
+  const [f, setF] = useState({
+    ligne_id: "",
+    gare_depart_id: "",
+    gare_arrivee_id: "",
+    vehicule_id: "",
+    chauffeur_id: "",
+    date_depart: "",
+    statut: "planifie",
+  });
   const [enCours, setEnCours] = useState(false);
   // Chauffeurs proposés à partir de la gare de départ de la ligne choisie.
   const [chauffeurs, setChauffeurs] = useState<ChauffeurDisponible[]>([]);
   const [rechercheChauffeur, setRechercheChauffeur] = useState("");
   const [chargementChauffeurs, setChargementChauffeurs] = useState(false);
 
-  const gareDepartId =
-    lignes.find((l) => l.id === f.ligne_id)?.gare_depart_id ?? null;
+  const gareDepartId = f.gare_depart_id || null;
+  const lignesDepart = lignes.filter(
+    (ligne) =>
+      ligne.gare_depart_id === f.gare_depart_id &&
+      (ligne.actif || ligne.id === f.ligne_id),
+  );
+  const optionsGaresDepart = Array.from(
+    new Map(
+      lignes
+        .filter((ligne) => ligne.actif || ligne.id === f.ligne_id)
+        .map((ligne) => [
+          ligne.gare_depart_id,
+          ligne.gare_depart_nom ?? ligne.gare_depart_id,
+        ]),
+    ).entries(),
+    ([valeur, libelle]) => ({ valeur, libelle }),
+  );
+  const optionsGaresArrivee = Array.from(
+    new Map(
+      lignesDepart.map((ligne) => [
+        ligne.gare_arrivee_id,
+        ligne.gare_arrivee_nom ?? ligne.gare_arrivee_id,
+      ]),
+    ).entries(),
+    ([valeur, libelle]) => ({ valeur, libelle }),
+  );
+  const ligneChoisie = lignes.find((ligne) => ligne.id === f.ligne_id);
 
   useEffect(() => {
     let annule = false;
@@ -1008,14 +1041,14 @@ function SectionVoyage({
   const chauffeurChoisi =
     chauffeurs.find((c) => c.utilisateur_id === f.chauffeur_id) ?? null;
 
-  const optionsLignes = lignes.map((l) => ({
-    valeur: l.id,
-    libelle: `${l.gare_depart_nom ?? "?"} → ${l.gare_arrivee_nom ?? "?"}`,
-  }));
   const optionsVehicules = vehicules.map((v) => ({ valeur: v.id, libelle: v.immatriculation }));
 
   const soumettre = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!f.ligne_id) {
+      notifier("Choisissez les gares d'un trajet déclaré avant de créer le voyage.", "erreur");
+      return;
+    }
     setEnCours(true);
     try {
       await api.voyages.creer({
@@ -1026,7 +1059,15 @@ function SectionVoyage({
         statut: f.statut,
       });
       notifier("Voyage créé", "succes");
-      setF({ ligne_id: "", vehicule_id: "", chauffeur_id: "", date_depart: "", statut: "planifie" });
+      setF({
+        ligne_id: "",
+        gare_depart_id: "",
+        gare_arrivee_id: "",
+        vehicule_id: "",
+        chauffeur_id: "",
+        date_depart: "",
+        statut: "planifie",
+      });
       rafraichir();
     } catch (err) {
       notifier(err instanceof ErreurAPI ? err.message_utilisateur : "Erreur", "erreur");
@@ -1040,7 +1081,60 @@ function SectionVoyage({
       <Carte>
         <h2 className="font-semibold mb-3">Nouveau voyage</h2>
         <form onSubmit={soumettre} className="space-y-3">
-          <ChampSelect libelle="Ligne" value={f.ligne_id} onChange={(v) => setF({ ...f, ligne_id: v })} options={optionsLignes} requis />
+          <ChampSelect
+            libelle="Gare de départ"
+            value={f.gare_depart_id}
+            onChange={(gareDepartId) =>
+              setF((precedent) => {
+                const ligneConservee = lignes.find(
+                  (ligne) =>
+                    ligne.gare_depart_id === gareDepartId &&
+                    ligne.gare_arrivee_id === precedent.gare_arrivee_id &&
+                    (ligne.actif || ligne.id === precedent.ligne_id),
+                );
+                return {
+                  ...precedent,
+                  gare_depart_id: gareDepartId,
+                  gare_arrivee_id: ligneConservee
+                    ? precedent.gare_arrivee_id
+                    : "",
+                  ligne_id: ligneConservee?.id ?? "",
+                  chauffeur_id: "",
+                };
+              })
+            }
+            options={optionsGaresDepart}
+            requis
+          />
+          <ChampSelect
+            libelle="Gare d'arrivée"
+            value={f.gare_arrivee_id}
+            onChange={(gareArriveeId) =>
+              setF((precedent) => {
+                const routes = lignes.filter(
+                  (ligne) =>
+                    ligne.gare_depart_id === precedent.gare_depart_id &&
+                    ligne.gare_arrivee_id === gareArriveeId,
+                );
+                const ligne = routes.find(
+                  (element) => element.id === precedent.ligne_id,
+                ) ?? routes.find((element) => element.actif) ?? routes[0];
+                return {
+                  ...precedent,
+                  gare_arrivee_id: gareArriveeId,
+                  ligne_id: ligne?.id ?? "",
+                  chauffeur_id: "",
+                };
+              })
+            }
+            options={optionsGaresArrivee}
+            requis
+          />
+          <p className="text-xs text-ardoise-clair">
+            {ligneChoisie
+              ? `Trajet : ${ligneChoisie.gare_depart_nom ?? "Départ"} → ${ligneChoisie.gare_arrivee_nom ?? "Arrivée"}`
+              : "Aucune ligne déclarée pour ces deux gares."}
+          </p>
           <ChampSelect libelle="Véhicule" value={f.vehicule_id} onChange={(v) => setF({ ...f, vehicule_id: v })} options={optionsVehicules} requis />
           {/* Annuaire des chauffeurs : on choisit une personne, pas un UUID. */}
           <ChampSimple

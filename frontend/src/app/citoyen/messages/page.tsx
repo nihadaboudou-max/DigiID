@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { Alerte } from "@/composants/commun/Alerte";
@@ -8,6 +9,7 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import { IconeCloche, IconeColis, IconeFlecheRetour, IconeVue } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
+import { useAuthentification } from "@/contextes/authentification";
 import {
   listerMesNotifications,
   marquerNotificationLue,
@@ -40,6 +42,7 @@ export default function PageMessagesCitoyen() {
 }
 
 function Contenu() {
+  const { utilisateur } = useAuthentification();
   const router = useRouter();
   const [notifications, setNotifications] = useState<NotificationDetail[]>([]);
   const [total, setTotal] = useState(0);
@@ -167,6 +170,17 @@ function Contenu() {
       </Carte>
 
       {erreur && <Alerte variante="erreur" titre="Action impossible">{erreur}</Alerte>}
+
+      {utilisateur?.est_telephone_verifie !== true && (
+        <Alerte variante="avertissement" titre="Vérification du téléphone requise">
+          Les notifications de colis et de passagers sont protégées par la
+          vérification téléphonique. Vérifie ton numéro depuis ton{" "}
+          <Link href="/profil" className="font-semibold underline">
+            profil
+          </Link>{" "}
+          pour les recevoir sur ton compte.
+        </Alerte>
+      )}
 
       <section aria-label="Messages logistiques" className="space-y-3">
         {chargement ? (

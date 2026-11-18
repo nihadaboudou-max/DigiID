@@ -51,6 +51,8 @@ interface Proprietes {
   gareDepartId: string | null;
   /** Gare d'arrivée du voyage (imposée). */
   gareArriveeId: string | null;
+  gareDepartNom?: string | null;
+  gareArriveeNom?: string | null;
   /** Arrêts intermédiaires du trajet, dans l'ordre de passage. */
   arrets?: ArretLigne[];
   /** Appelé après un enregistrement réussi (rafraîchit le manifeste). */
@@ -61,6 +63,8 @@ export function EnregistrementDirectChauffeur({
   voyageId,
   gareDepartId,
   gareArriveeId: gareArriveeVoyageId,
+  gareDepartNom,
+  gareArriveeNom,
   arrets = [],
   surSucces,
 }: Proprietes) {
@@ -114,6 +118,10 @@ export function EnregistrementDirectChauffeur({
     moyenPaiement === "especes" ||
     ((moyenPaiement === "mtn" || moyenPaiement === "moov") &&
       telephonePaiementNormalise !== null);
+  const gareArriveeAffichee =
+    arrets.find((arret) => arret.gare_id === gareArriveeSelectionneeId)?.gare_nom ??
+    gareArriveeNom ??
+    "Gare d'arrivée du voyage";
   const fraisService =
     type === "colis"
       ? fraisServicePourArticles(nombreBagages).frais_fcfa
@@ -303,6 +311,27 @@ export function EnregistrementDirectChauffeur({
             Ce voyage n&apos;a pas de trajet (gares de départ et d&apos;arrivée) défini :
             l&apos;enregistrement en route est impossible.
           </Alerte>
+        )}
+
+        {garesOk && (
+          <div className="grid gap-3 rounded-xl border border-ardoise/10 bg-sable/40 p-3 sm:grid-cols-2">
+            <div>
+              <p className="text-xs font-semibold uppercase text-ardoise-clair">
+                Gare de départ
+              </p>
+              <p className="mt-1 text-sm font-medium text-ardoise">
+                {gareDepartNom ?? "Gare de départ du voyage"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase text-ardoise-clair">
+                Gare d&apos;arrivée
+              </p>
+              <p className="mt-1 text-sm font-medium text-ardoise">
+                {gareArriveeAffichee}
+              </p>
+            </div>
+          </div>
         )}
 
         {arrets.length > 0 && (

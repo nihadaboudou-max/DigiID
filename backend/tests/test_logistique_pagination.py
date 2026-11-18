@@ -14,6 +14,27 @@ class _SessionCapture:
     pass
 
 
+class _ResultatVide:
+    def scalars(self):
+        return self
+
+    def all(self):
+        return []
+
+
+class _SessionIdentiteCapture:
+    def __init__(self):
+        self.requetes = []
+
+    async def scalar(self, requete):
+        self.requetes.append(requete)
+        return 0
+
+    async def execute(self, requete):
+        self.requetes.append(requete)
+        return _ResultatVide()
+
+
 def _chauffeur() -> Utilisateur:
     utilisateur = Utilisateur()
     utilisateur.id = uuid.uuid4()
@@ -125,6 +146,30 @@ def test_mes_voyages_ne_retourne_rien_sans_telephone_verifie():
     assert pagines.page == 2
     assert complets.colis == []
     assert complets.passagers == []
+
+
+def test_mes_voyages_paginees_inclut_le_destinataire_par_identifiant(monkeypatch):
+    session = _SessionIdentiteCapture()
+    utilisateur = _citoyen(numero_verifie=True)
+    monkeypatch.setattr(
+        service_identite,
+        "telephone",
+        lambda _utilisateur: "+2290199000011",
+    )
+
+    asyncio.run(
+        service_identite.mes_voyages_paginees(
+            session, utilisateur, page=1, par_page=5
+        )
+    )
+
+    sql_colis = "\n".join(str(requete) for requete in session.requetes)
+    assert "colis.destinataire_id =" in sql_colis
+
+    session.requetes.clear()
+    asyncio.run(service_identite.mes_voyages(session, utilisateur))
+    sql_colis_complets = "\n".join(str(requete) for requete in session.requetes)
+    assert "colis.destinataire_id =" in sql_colis_complets
 
 
 def test_lister_passagers_recherche_et_perimetre_chauffeur(monkeypatch):

@@ -208,6 +208,8 @@ export const logistiqueAPI = {
   },
   lignes: {
     lister: () => clientAPI.get<ReponseListe<Ligne>>(`${BASE}/lignes?par_page=100`, opts),
+    obtenir: (ligneId: string) =>
+      clientAPI.get<Ligne>(`${BASE}/lignes/${ligneId}`, opts),
     creer: (d: Record<string, unknown>) => clientAPI.post<Ligne>(`${BASE}/lignes`, d, opts),
     /**
      * Modifie une ligne (trajet) — le chauffeur ajuste ses dessertes.

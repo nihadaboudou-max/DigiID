@@ -101,19 +101,11 @@ function Contenu() {
       setChargement(true);
       setErreur(null);
       try {
-        const [voyageCharge, repLignes] = await Promise.all([
-          logistiqueAPI.voyages.obtenir(voyageId),
-          logistiqueAPI.lignes.lister(),
+        const voyageCharge = await logistiqueAPI.voyages.obtenir(voyageId);
+        const [ligneTrouvee, listeArrets] = await Promise.all([
+          logistiqueAPI.lignes.obtenir(voyageCharge.ligne_id),
+          logistiqueAPI.lignes.arrets.lister(voyageCharge.ligne_id),
         ]);
-        if (annule) return;
-        const ligneTrouvee =
-          repLignes.elements.find((element) => element.id === voyageCharge.ligne_id) ??
-          null;
-        const listeArrets = ligneTrouvee
-          ? ligneTrouvee.arrets?.length
-            ? ligneTrouvee.arrets
-            : await logistiqueAPI.lignes.arrets.lister(ligneTrouvee.id)
-          : [];
         if (annule) return;
         setVoyage(voyageCharge);
         setLigne(ligneTrouvee);
@@ -588,6 +580,8 @@ function Contenu() {
             voyageId={voyage.id}
             gareDepartId={ligne?.gare_depart_id ?? null}
             gareArriveeId={ligne?.gare_arrivee_id ?? null}
+            gareDepartNom={ligne?.gare_depart_nom}
+            gareArriveeNom={ligne?.gare_arrivee_nom}
             arrets={arrets}
             surSucces={() => setRafraichir((nombre) => nombre + 1)}
           />

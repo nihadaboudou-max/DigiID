@@ -108,6 +108,8 @@ function Contenu() {
   // ── Planification d'un départ ──
   const [plan, setPlan] = useState({
     ligne_id: "",
+    gare_depart_id: "",
+    gare_arrivee_id: "",
     vehicule_id: "",
     date_depart: "",
     duree_min: "",
@@ -160,7 +162,25 @@ function Contenu() {
       setPlan((precedent) => ({
         ...precedent,
         date_depart: precedent.date_depart || prochainDepartLocal(),
-        ligne_id: precedent.ligne_id || repLignes.elements[0]?.id || "",
+        ligne_id:
+          precedent.ligne_id ||
+          repLignes.elements.find((ligne) => ligne.actif)?.id ||
+          repLignes.elements[0]?.id ||
+          "",
+        gare_depart_id:
+          precedent.gare_depart_id ||
+          repLignes.elements.find((ligne) => ligne.id === precedent.ligne_id)
+            ?.gare_depart_id ||
+          repLignes.elements.find((ligne) => ligne.actif)?.gare_depart_id ||
+          repLignes.elements[0]?.gare_depart_id ||
+          "",
+        gare_arrivee_id:
+          precedent.gare_arrivee_id ||
+          repLignes.elements.find((ligne) => ligne.id === precedent.ligne_id)
+            ?.gare_arrivee_id ||
+          repLignes.elements.find((ligne) => ligne.actif)?.gare_arrivee_id ||
+          repLignes.elements[0]?.gare_arrivee_id ||
+          "",
         vehicule_id: precedent.vehicule_id || mesVehicules[0]?.id || "",
       }));
     } catch (e) {
@@ -213,12 +233,50 @@ function Contenu() {
     )
     .sort((a, b) => triChronologique(b, a));
 
+  const lignesDepartDisponibles = lignes.filter(
+    (ligne) =>
+      ligne.gare_depart_id === plan.gare_depart_id &&
+      (ligne.actif || ligne.id === plan.ligne_id),
+  );
+  const garesDepartDisponibles = Array.from(
+    new Map(
+      lignes
+        .filter((ligne) => ligne.actif || ligne.id === plan.ligne_id)
+        .map((ligne) => [
+          ligne.gare_depart_id,
+          ligne.gare_depart_nom ?? gares.find((gare) => gare.id === ligne.gare_depart_id)?.nom ?? "Gare",
+        ]),
+    ).entries(),
+    ([valeur, libelle]) => ({ valeur, libelle }),
+  );
+  const garesArriveeDisponibles = Array.from(
+    new Map(
+      lignesDepartDisponibles.map((ligne) => [
+        ligne.gare_arrivee_id,
+        ligne.gare_arrivee_nom ??
+          gares.find((gare) => gare.id === ligne.gare_arrivee_id)?.nom ??
+          "Gare",
+      ]),
+    ).entries(),
+    ([valeur, libelle]) => ({ valeur, libelle }),
+  );
+  const lignePlanifiee = lignes.find((ligne) => ligne.id === plan.ligne_id);
+
   // ─── Actions ───────────────────────────────────────────────────────
 
   const planifier = async () => {
     const departISO = versISO(plan.date_depart);
-    if (!plan.ligne_id || !plan.vehicule_id || !departISO) {
-      notifier("Choisissez une ligne, un car et l'heure de départ.", "erreur");
+    if (
+      !plan.gare_depart_id ||
+      !plan.gare_arrivee_id ||
+      !plan.ligne_id ||
+      !plan.vehicule_id ||
+      !departISO
+    ) {
+      notifier(
+        "Choisissez les gares du trajet, un car et l'heure de départ.",
+        "erreur",
+      );
       return;
     }
     setPlanification(true);
@@ -368,29 +426,91 @@ function Contenu() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase text-ardoise-clair">
-              Ligne (trajet)
+              Gare de départ
             </label>
             <select
-              value={creationLigne ? "__nouvelle_ligne__" : plan.ligne_id}
+              value={plan.gare_depart_id}
               onChange={(e) => {
-                if (e.target.value === "__nouvelle_ligne__") {
-                  setCreationLigne(true);
-                  return;
-                }
-                setCreationLigne(false);
-                setPlan((p) => ({ ...p, ligne_id: e.target.value }));
+                const gareDepartId = e.target.value;
+                setPlan((precedent) => {
+                  const ligneConservee = lignes.find(
+                    (ligne) =>
+                      ligne.gare_depart_id === gareDepartId &&
+                      ligne.gare_arrivee_id === precedent.gare_arrivee_id &&
+                      (ligne.actif || ligne.id === precedent.ligne_id),
+                  );
+                  return {
+                    ...precedent,
+                    gare_depart_id: gareDepartId,
+                    gare_arrivee_id: ligneConservee
+                      ? precedent.gare_arrivee_id
+                      : "",
+                    ligne_id: ligneConservee?.id ?? "",
+                  };
+                });
               }}
               className="w-full rounded-lg border border-ardoise-clair/20 px-3 py-2 text-sm"
             >
-              {lignes.length === 0 && <option value="">— Aucune ligne —</option>}
-              {lignes.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {libelleLigne(l)}
-                  {l.actif ? "" : " (retirée)"}
+              <option value="">— Choisir —</option>
+              {garesDepartDisponibles.map((gare) => (
+                <option key={gare.valeur} value={gare.valeur}>
+                  {gare.libelle}
                 </option>
               ))}
-              <option value="__nouvelle_ligne__">＋ Déclarer une nouvelle ligne…</option>
             </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase text-ardoise-clair">
+              Gare d&apos;arrivée
+            </label>
+            <select
+              value={plan.gare_arrivee_id}
+              disabled={!plan.gare_depart_id}
+              onChange={(e) => {
+                const gareArriveeId = e.target.value;
+                setPlan((precedent) => {
+                  const routes = lignes.filter(
+                    (ligne) =>
+                      ligne.gare_depart_id === precedent.gare_depart_id &&
+                      ligne.gare_arrivee_id === gareArriveeId,
+                  );
+                  const ligneCorrespondante =
+                    routes.find((ligne) => ligne.id === precedent.ligne_id) ??
+                    routes.find((ligne) => ligne.actif) ??
+                    routes[0];
+                  return {
+                    ...precedent,
+                    gare_arrivee_id: gareArriveeId,
+                    ligne_id: ligneCorrespondante?.id ?? "",
+                  };
+                });
+              }}
+              className="w-full rounded-lg border border-ardoise-clair/20 px-3 py-2 text-sm disabled:bg-sable/50"
+            >
+              <option value="">— Choisir —</option>
+              {garesArriveeDisponibles.map((gare) => (
+                <option key={gare.valeur} value={gare.valeur}>
+                  {gare.libelle}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-ardoise-clair">
+              {lignePlanifiee
+                ? `Trajet : ${libelleLigne(lignePlanifiee)}`
+                : "Aucune ligne déclarée pour ces deux gares."}
+            </p>
+            <Bouton
+              type="button"
+              variante="ghost"
+              taille="petit"
+              onClick={() => setCreationLigne((ouverte) => !ouverte)}
+            >
+              {creationLigne ? "Fermer" : "＋ Déclarer une ligne"}
+            </Bouton>
           </div>
 
           <div>
@@ -446,7 +566,13 @@ function Contenu() {
             onAnnuler={() => setCreationLigne(false)}
             onCree={(ligne) => {
               setCreationLigne(false);
-              setPlan((p) => ({ ...p, ligne_id: ligne.id }));
+              setLignes((precedentes) => [...precedentes, ligne]);
+              setPlan((p) => ({
+                ...p,
+                ligne_id: ligne.id,
+                gare_depart_id: ligne.gare_depart_id,
+                gare_arrivee_id: ligne.gare_arrivee_id,
+              }));
             }}
           />
         )}

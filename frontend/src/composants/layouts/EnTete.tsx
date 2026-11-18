@@ -27,7 +27,7 @@ export function EnTete() {
   const estCitoyen = utilisateur?.role === "citoyen";
 
   useEffect(() => {
-    if (!estCitoyen || !utilisateur?.id) {
+    if (!utilisateur?.id) {
       setNombreMessagesNonLus(0);
       return;
     }
@@ -38,7 +38,9 @@ export function EnTete() {
         const resultat = await listerMesNotifications(false, {
           page: 1,
           parPage: 1,
-          categorie: "logistique_colis,logistique_suivi",
+          ...(estCitoyen
+            ? { categorie: "logistique_colis,logistique_suivi" }
+            : {}),
         });
         if (!annule) setNombreMessagesNonLus(resultat.non_lues);
       } catch {
@@ -84,27 +86,25 @@ export function EnTete() {
           <BoutonMuet />
           {estConnecte && utilisateur ? (
             <>
-              {estCitoyen && (
-                <Link
-                  href="/citoyen/messages"
-                  aria-label={
-                    nombreMessagesNonLus > 0
-                      ? `Messages, ${nombreMessagesNonLus} non lus`
-                      : "Messages"
-                  }
-                  className="relative flex min-h-14 min-w-11 items-center justify-center rounded-xl px-2 text-lagune hover:bg-sable focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lagune/50"
-                  title="Messages"
-                >
-                  <IconeCloche className="h-6 w-6" />
-                  <span className="sr-only">Messages</span>
-                  {nombreMessagesNonLus > 0 && (
-                    <span
-                      className="absolute right-1 top-2 h-2.5 w-2.5 rounded-full bg-terre ring-2 ring-white"
-                      aria-hidden="true"
-                    />
-                  )}
-                </Link>
-              )}
+              <Link
+                href={estCitoyen ? "/citoyen/messages" : "/notifications"}
+                aria-label={
+                  nombreMessagesNonLus > 0
+                    ? `Notifications, ${nombreMessagesNonLus} non lues`
+                    : "Notifications"
+                }
+                className="relative flex min-h-14 min-w-11 items-center justify-center rounded-xl px-2 text-lagune hover:bg-sable focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lagune/50"
+                title="Notifications"
+              >
+                <IconeCloche className="h-6 w-6" />
+                <span className="sr-only">Notifications</span>
+                {nombreMessagesNonLus > 0 && (
+                  <span
+                    className="absolute right-1 top-2 h-2.5 w-2.5 rounded-full bg-terre ring-2 ring-white"
+                    aria-hidden="true"
+                  />
+                )}
+              </Link>
               <Link
                 href={cheminTableauDeBord}
                 className="flex items-center gap-2 px-2.5 py-2 rounded-xl hover:bg-sable transition-all duration-200 group"

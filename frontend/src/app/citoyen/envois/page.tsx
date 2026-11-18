@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { Alerte } from "@/composants/commun/Alerte";
@@ -15,6 +16,7 @@ import {
 } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
 import { TicketImprimable } from "@/composants/logistique/TicketImprimable";
+import { useAuthentification } from "@/contextes/authentification";
 import { identiteAPI, type VoyageCitoyen } from "@/services/identite_api";
 import { ErreurAPI } from "@/services/client_api";
 import { logistiqueAPI } from "@/services/logistique_api";
@@ -42,6 +44,7 @@ export default function PageMesEnvois() {
 }
 
 function Contenu() {
+  const { utilisateur } = useAuthentification();
   const router = useRouter();
   const [recherche, setRecherche] = useState("");
   const [page, setPage] = useState(1);
@@ -178,6 +181,17 @@ function Contenu() {
       </Carte>
 
       {erreur && <Alerte variante="erreur" titre="Envois indisponibles">{erreur}</Alerte>}
+
+      {utilisateur?.est_telephone_verifie !== true && (
+        <Alerte variante="avertissement" titre="Vérification du téléphone requise">
+          Les envois et notifications associés à ton numéro sont protégés par la
+          vérification téléphonique. Vérifie ton numéro depuis ton{" "}
+          <Link href="/profil" className="font-semibold underline">
+            profil
+          </Link>{" "}
+          pour les retrouver ici.
+        </Alerte>
+      )}
 
       {selection && (
         <Carte titre="Les étapes de ton envoi" description={`Code : ${selection.code}`}>
