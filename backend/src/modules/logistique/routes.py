@@ -19,7 +19,7 @@ from src.base_donnees.session import obtenir_session
 from src.modeles import (
     Gare, Ligne, ArretLigne, Vehicule, Voyage, ActeurLogistique, Utilisateur,
     Ticket, Colis, ColisEvenement,
-    SuiviFamilial, SuiviFamilialEvenement,
+    SuiviFamilial, SuiviFamilialEvenement, NotificationLogistique,
 )
 from src.modules.authentification.dependances import utilisateur_courant
 from src.modules.logistique import (
@@ -233,6 +233,17 @@ async def _bagages_enrichis(
 
 
 async def _enrichir_colis(session: AsyncSession, colis: Colis) -> Colis:
+    colis.pre_alerte_envoyee = (
+        await session.scalar(
+            select(NotificationLogistique.id)
+            .where(
+                NotificationLogistique.type_cible == "colis",
+                NotificationLogistique.cible_id == colis.id,
+                NotificationLogistique.type_evenement == "approche",
+            )
+            .limit(1)
+        )
+    ) is not None
     colis.gare_depart_nom = await _nom_gare(session, colis.gare_depart_id)
     colis.gare_arrivee_nom = await _nom_gare(session, colis.gare_arrivee_id)
     # Nom d'expéditeur saisi au guichet ; repli sur le compte DigiID s'il est vide.

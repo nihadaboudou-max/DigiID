@@ -4900,9 +4900,14 @@ async def marquer_arrivee_voyage(
 
     nb_colis = 0
     for colis in colis_voyage:
-        if colis.statut not in ("enregistre", "enregistre_direct", "en_transit"):
+        if colis.statut in ("arrive", "livre", "annule"):
             continue
-        if not _destine_a_larret(colis, arret_id=arret_id, gare_id=gare_effective):
+        if not arrivee_finale and (
+            colis.statut not in ("enregistre", "enregistre_direct", "en_transit")
+            or not _destine_a_larret(
+                colis, arret_id=arret_id, gare_id=gare_effective
+            )
+        ):
             continue
         gare_evt = gare_effective or colis.gare_arrivee_id
         session.add(ColisEvenement(
@@ -4925,9 +4930,14 @@ async def marquer_arrivee_voyage(
 
     nb_passagers = 0
     for suivi in passagers_voyage:
-        if suivi.statut not in ("enregistre", "enregistre_direct", "en_route"):
+        if suivi.statut in ("arrive", "annule"):
             continue
-        if not _destine_a_larret(suivi, arret_id=arret_id, gare_id=gare_effective):
+        if not arrivee_finale and (
+            suivi.statut not in ("enregistre", "enregistre_direct", "en_route")
+            or not _destine_a_larret(
+                suivi, arret_id=arret_id, gare_id=gare_effective
+            )
+        ):
             continue
         gare_evt = gare_effective or suivi.gare_arrivee_id
         session.add(SuiviFamilialEvenement(
@@ -4941,7 +4951,7 @@ async def marquer_arrivee_voyage(
         )
         nb_passagers += 1
 
-    if nb_colis == 0 and nb_passagers == 0:
+    if nb_colis == 0 and nb_passagers == 0 and not arrivee_finale:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail=(
@@ -4950,13 +4960,7 @@ async def marquer_arrivee_voyage(
             ),
         )
 
-    # Plus personne / rien en charge (sur les instances déjà chargées) → terminé.
-    encore_en_charge = any(
-        c.statut not in ("arrive", "livre", "annule") for c in colis_voyage
-    ) or any(
-        p.statut not in ("arrive", "annule") for p in passagers_voyage
-    )
-    if arrivee_finale and not encore_en_charge:
+    if arrivee_finale:
         voyage.statut = "termine"
         if voyage.date_arrivee is None:
             voyage.date_arrivee = maintenant

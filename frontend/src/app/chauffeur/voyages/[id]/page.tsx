@@ -421,6 +421,11 @@ function Contenu() {
                         >
                           {LIBELLES_STATUT_SUIVI[statutPassager] ?? passager.statut}
                         </Badge>
+                        {passager.pre_alerte_envoyee && (
+                          <span className="mt-1 block">
+                            <Badge variante="info">Approche signalée</Badge>
+                          </span>
+                        )}
                       </div>
                       <p className="mt-2 text-sm text-ardoise">
                         {passager.gare_depart_nom ?? "?"} →{" "}
@@ -515,6 +520,11 @@ function Contenu() {
                               {LIBELLES_STATUT_SUIVI[statutPassager] ??
                                 passager.statut}
                             </Badge>
+                            {passager.pre_alerte_envoyee && (
+                              <span className="mt-1 block">
+                                <Badge variante="info">Approche signalée</Badge>
+                              </span>
+                            )}
                           </td>
                         </tr>
                       );

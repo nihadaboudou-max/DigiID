@@ -82,6 +82,7 @@ export interface Colis {
   receveur_id: string | null;
   chauffeur_id: string | null;
   statut: StatutColis;
+  pre_alerte_envoyee: boolean;
 
   /** Origine de l'enregistrement : guichet ou chauffeur en route. */
   mode_enregistrement: ModeEnregistrement;

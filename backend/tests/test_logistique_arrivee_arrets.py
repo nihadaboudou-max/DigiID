@@ -117,7 +117,22 @@ def test_arrivee_au_terminus_termine_le_voyage(monkeypatch):
     session, voyage, ligne, _arret, _gare_intermediaire_id = _preparer_arrivee(
         monkeypatch, colis
     )
-    colis.gare_arrivee_id = ligne.gare_arrivee_id
+    passager = SimpleNamespace(
+        id=uuid.uuid4(),
+        statut="en_route",
+        arret_destination_id=None,
+        gare_arrivee_id=_arret.gare_id,
+    )
+
+    async def passagers_du_voyage(_session, _voyage_id):
+        return [passager]
+
+    async def notifier_suivi(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(service, "_passagers_du_voyage", passagers_du_voyage)
+    monkeypatch.setattr(service, "_notifier_suivi", notifier_suivi)
+    colis.gare_arrivee_id = _arret.gare_id
     chauffeur = SimpleNamespace(id=uuid.uuid4())
 
     resultat = asyncio.run(
@@ -127,7 +142,9 @@ def test_arrivee_au_terminus_termine_le_voyage(monkeypatch):
     )
 
     assert resultat["nb_colis"] == 1
+    assert resultat["nb_passagers"] == 1
     assert colis.statut == "arrive"
+    assert passager.statut == "arrive"
     assert voyage.statut == "termine"
 
 

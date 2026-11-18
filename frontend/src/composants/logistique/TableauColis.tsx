@@ -75,9 +75,14 @@ export function TableauColis({
                     {c.code_clair || "—"}
                   </span>
                 </span>
-                <Badge variante={VARIANTES_STATUT_COLIS[c.statut] ?? "neutre"}>
-                  {libelleStatutColis(c)}
-                </Badge>
+                <span className="flex flex-col items-end gap-1">
+                  <Badge variante={VARIANTES_STATUT_COLIS[c.statut] ?? "neutre"}>
+                    {libelleStatutColis(c)}
+                  </Badge>
+                  {c.pre_alerte_envoyee && (
+                    <Badge variante="info">Approche signalée</Badge>
+                  )}
+                </span>
               </div>
 
               <p className="mt-2 text-sm text-ardoise">
@@ -185,9 +190,14 @@ export function TableauColis({
                 {c.gare_depart_nom || "—"} → {c.gare_arrivee_nom || "—"}
               </td>
               <td className="py-2.5 pr-3">
-                <Badge variante={VARIANTES_STATUT_COLIS[c.statut] ?? "neutre"}>
-                  {libelleStatutColis(c)}
-                </Badge>
+                <span className="flex flex-col items-start gap-1">
+                  <Badge variante={VARIANTES_STATUT_COLIS[c.statut] ?? "neutre"}>
+                    {libelleStatutColis(c)}
+                  </Badge>
+                  {c.pre_alerte_envoyee && (
+                    <Badge variante="info">Approche signalée</Badge>
+                  )}
+                </span>
               </td>
               <td className="py-2.5 pr-3 text-center font-medium text-ardoise">
                 {c.nombre_articles ?? 1}

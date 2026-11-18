@@ -51,12 +51,13 @@ backend/
 
 ## Confirmation à l'inscription
 
-La vérification du numéro utilise le template WhatsApp existant configuré avec
-`WHATSAPP_TEMPLATE_NAME` dans `.env`. Son corps doit accepter une variable
-`{{1}}`, qui reçoit le texte contenant le code OTP. Aucun SMS de secours n'est
-envoyé; si WhatsApp est inactif, mal configuré ou refuse le template, l'API
-signale l'échec et le numéro reste non vérifié. Aucun code OTP n'est renvoyé par
-l'API.
+La vérification du numéro utilise le template configuré avec
+`WHATSAPP_TEMPLATE_NAME` dans `.env` et lui transmet le code comme unique
+variable de corps. Le corps du template approuvé dans Meta doit être
+`Votre code de vérification est *{{1}}*. Pour votre sécurité, ne le partagez pas.`
+(astérisques simples pour le gras WhatsApp). Aucun SMS de
+secours n'est envoyé; si WhatsApp est inactif, mal configuré ou refuse le
+template, l'API signale l'échec. Aucun code OTP n'est renvoyé par l'API.
 
 ## Mot de passe oublié
 

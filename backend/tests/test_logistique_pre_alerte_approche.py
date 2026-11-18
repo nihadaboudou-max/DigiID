@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modeles import Notification, ArretLigne, Ligne, Voyage
 from src.modeles.logistique.notification_logistique import NotificationLogistique
-from src.modules.logistique import service
+from src.modules.logistique import routes as routes_logistique
+from src.modules.logistique import service, schemas
 
 
 class ResultatScalars:
@@ -210,6 +211,8 @@ def test_pre_alerte_cible_un_arret_et_notifie_par_whatsapp_et_plateforme(monkeyp
     assert notifications_plateforme[0].utilisateur_id == utilisateur.id
     assert notifications_plateforme[0].message == message
     assert resultat["nb_passagers"] == 1
+    assert passagers[0].pre_alerte_envoyee is True
+    assert passagers[1].pre_alerte_envoyee is False
     assert "TICKET-123456" not in resultat["message"]
     assert "+2290190123456" not in resultat["message"]
     logs = [
@@ -221,6 +224,52 @@ def test_pre_alerte_cible_un_arret_et_notifie_par_whatsapp_et_plateforme(monkeyp
     assert logs[0].canal == "whatsapp"
     assert "TICKET-123456" not in logs[0].message
     assert "+2290190123456" not in logs[0].telephone
+
+
+def test_reponse_colis_indique_une_pre_alerte_enregistree(monkeypatch):
+    class SessionEnrichissement:
+        async def scalar(self, _requete):
+            return uuid.uuid4()
+
+        async def get(self, *_args):
+            return None
+
+    async def rien(*_args, **_kwargs):
+        return None
+
+    async def aucun_bagage(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(routes_logistique, "_nom_gare", rien)
+    monkeypatch.setattr(routes_logistique, "_nom_utilisateur", rien)
+    monkeypatch.setattr(service, "obtenir_ticket_du_colis", rien)
+    monkeypatch.setattr(routes_logistique, "_bagages_enrichis", aucun_bagage)
+    monkeypatch.setattr(routes_logistique, "chemin_photo_colis", lambda _chemin: None)
+    colis = SimpleNamespace(
+        id=uuid.uuid4(),
+        destinataire_nom="Destinataire",
+        destinataire_tel="+22901000000",
+        gare_depart_id=uuid.uuid4(),
+        gare_arrivee_id=uuid.uuid4(),
+        statut="en_transit",
+        cree_le=datetime.now(timezone.utc),
+        expediteur_nom="Expéditeur",
+        expediteur_id=None,
+        receveur_id=None,
+        chauffeur_id=None,
+        enregistre_par_id=None,
+        arret_destination_id=None,
+        remis_guichet_par_id=None,
+        remis_guichet_a_id=None,
+        photo_chemin=None,
+        livre_le=None,
+    )
+
+    enrichi = asyncio.run(
+        routes_logistique._enrichir_colis(SessionEnrichissement(), colis)
+    )
+
+    assert schemas.ColisResponse.model_validate(enrichi).pre_alerte_envoyee is True
 
 
 def test_pre_alerte_sans_personne_a_larret_retourne_le_message_attendu(monkeypatch):

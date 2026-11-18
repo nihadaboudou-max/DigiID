@@ -54,7 +54,7 @@ def test_modification_telephone_utilise_whatsapp_uniquement():
         VerificationVerifierRequete(code="123456", canal="sms")
 
 
-def test_code_telephone_est_envoye_avec_le_template_existant_sans_sms(monkeypatch):
+def test_code_telephone_est_envoye_avec_le_template_configure_sans_sms(monkeypatch):
     session = _SessionVerification()
     appels_whatsapp = []
     utilisateur = SimpleNamespace(id=uuid.uuid4(), prenom_chiffre=None)
@@ -96,10 +96,13 @@ def test_code_telephone_est_envoye_avec_le_template_existant_sans_sms(monkeypatc
     assert resultat["succes_envoi"] is True
     telephone, message, options = appels_whatsapp[0]
     assert telephone == "+22901000000"
-    assert message == "Ton code de confirmation DigiID est 123456."
+    assert message == (
+        "Votre code de vérification est 123456. "
+        "Pour votre sécurité, ne le partagez pas."
+    )
     assert options == {
         "nom_template": "digiid_notification_logistique",
-        "parametres_template": [message],
+        "parametres_template": ["123456"],
         "langue_template": "fr",
     }
 

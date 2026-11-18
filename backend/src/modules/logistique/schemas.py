@@ -449,6 +449,7 @@ class ColisResponse(BaseModel):
     receveur_id: Optional[UUID] = None
     chauffeur_id: Optional[UUID] = None
     statut: str
+    pre_alerte_envoyee: bool = False
     frais_fcfa: Optional[int] = None
     livre_le: Optional[datetime] = None
     cree_le: datetime
