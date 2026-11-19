@@ -13,7 +13,7 @@ import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspacePr
 import { ActionsVoyageChauffeur } from "@/composants/logistique/ActionsVoyageChauffeur";
 import { EnregistrementDirectChauffeur } from "@/composants/logistique/EnregistrementDirectChauffeur";
 import { PaginationListe } from "@/composants/logistique/PaginationListe";
-import { formaterDate } from "@/composants/logistique/format";
+import { formaterDate, urlImageQR } from "@/composants/logistique/format";
 import { ManifesteVoyage } from "@/composants/logistique/ManifesteVoyage";
 import { ROLES_CHAUFFEUR } from "@/composants/logistique/roles";
 import { TableauColis } from "@/composants/logistique/TableauColis";
@@ -467,6 +467,7 @@ function Contenu() {
                             valeur={passager.telephone_parent}
                           />
                         </dl>
+                        <DetailsQrPassager passager={passager} />
                       </details>
                     </li>
                   );
@@ -481,6 +482,7 @@ function Contenu() {
                       <th className="py-2 pr-3">Sacs</th>
                       <th className="py-2 pr-3">Responsable</th>
                       <th className="py-2 pr-3">Statut</th>
+                      <th className="py-2 pr-3">Ticket et QR</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -525,6 +527,14 @@ function Contenu() {
                                 <Badge variante="info">Approche signalée</Badge>
                               </span>
                             )}
+                          </td>
+                          <td className="py-2 pr-3">
+                            <details>
+                              <summary className="cursor-pointer rounded-lg border border-ardoise-clair/20 px-2 py-1 text-xs font-medium text-lagune">
+                                Voir
+                              </summary>
+                              <DetailsQrPassager passager={passager} />
+                            </details>
                           </td>
                         </tr>
                       );
@@ -610,6 +620,76 @@ function ChampDetail({ libelle, valeur }: { libelle: string; valeur: string }) {
     <div>
       <dt className="text-xs text-ardoise-clair">{libelle}</dt>
       <dd className="text-ardoise">{valeur}</dd>
+    </div>
+  );
+}
+
+function DetailsQrPassager({ passager }: { passager: SuiviFamilial }) {
+  const qrTicket = urlImageQR(passager.qr_code_url || passager.qr_token);
+
+  return (
+    <div className="mt-3 space-y-3 border-t border-ardoise-clair/10 pt-3">
+      <div className="flex flex-wrap items-start gap-4">
+        <div>
+          <p className="mb-1 text-xs font-semibold text-ardoise-clair">
+            Ticket {passager.code_clair || "—"}
+          </p>
+          {qrTicket ? (
+            <img
+              src={qrTicket}
+              alt={`QR du ticket passager ${passager.code_clair || passager.enfant_nom}`}
+              className="h-36 w-36 rounded border border-ardoise-clair/20 bg-white"
+            />
+          ) : (
+            <p className="text-xs text-ardoise-clair">QR du ticket indisponible.</p>
+          )}
+        </div>
+        <dl className="grid min-w-48 grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+          <ChampDetail
+            libelle="Enregistré par"
+            valeur={passager.enregistre_par_nom || "—"}
+          />
+          <ChampDetail
+            libelle="Téléphone de l'agent"
+            valeur={passager.enregistre_par_telephone || "—"}
+          />
+        </dl>
+      </div>
+
+      {passager.bagages.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-semibold text-ardoise">QR des bagages</p>
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {passager.bagages.map((bagage) => {
+              const qrBagage = urlImageQR(bagage.qr_code_url);
+              return (
+                <li
+                  key={bagage.id}
+                  className="flex items-center gap-3 rounded-lg border border-ardoise-clair/15 p-2"
+                >
+                  {qrBagage ? (
+                    <img
+                      src={qrBagage}
+                      alt={`QR du bagage ${bagage.numero_serie}`}
+                      className="h-24 w-24 rounded border border-ardoise-clair/20 bg-white"
+                    />
+                  ) : (
+                    <p className="flex h-24 w-24 items-center justify-center rounded border border-dashed border-ardoise-clair/30 p-2 text-center text-xs text-ardoise-clair">
+                      QR indisponible
+                    </p>
+                  )}
+                  <div className="min-w-0">
+                    <p className="font-medium text-ardoise">{bagage.numero_serie}</p>
+                    <p className="break-all font-mono text-xs text-ardoise-clair">
+                      {bagage.code_clair || "—"}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

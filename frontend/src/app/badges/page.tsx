@@ -30,7 +30,8 @@ export default function PageBadges() {
     <EnvelopperEspaceProtege rolesAutorises={[      
       "citoyen", "agent_police", "chef_police", "agent_medical", "chef_medical", 
       "agent_ong", "chef_ong", "agent_terrain", "chef_agent", "admin_domaine", 
-      "administrateur", "super_administrateur"]}>
+      "administrateur", "super_administrateur", "super_admin", "gerant_gare",
+      "receveur", "chauffeur", "commercant"]}>
       <Contenu />
     </EnvelopperEspaceProtege>
   );

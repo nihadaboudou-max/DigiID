@@ -28,6 +28,9 @@ from src.modules.logistique import (
     service_confiance,
     service_analyses,
 )
+from src.modules.identite_digiid.service import (
+    telephone as telephone_utilisateur,
+)
 from src.modules.logistique.stockage_colis import (
     TAILLE_MAX_PHOTO,
     chemin_photo_colis,
@@ -96,6 +99,13 @@ def _normaliser_recherche(texte: str) -> str:
 async def _nom_utilisateur(session: AsyncSession, utilisateur_id: UUID | None) -> str | None:
     utilisateur = await _fiche_utilisateur(session, utilisateur_id)
     return _nom_complet(utilisateur) if utilisateur is not None else None
+
+
+async def _telephone_utilisateur(
+    session: AsyncSession, utilisateur_id: UUID | None
+) -> str | None:
+    utilisateur = await _fiche_utilisateur(session, utilisateur_id)
+    return telephone_utilisateur(utilisateur) if utilisateur is not None else None
 
 
 async def _enrichir_ligne(session: AsyncSession, ligne: Ligne) -> Ligne:
@@ -232,6 +242,21 @@ async def _bagages_enrichis(
     return [schemas.BagageResponse.model_validate(b) for b in bagages]
 
 
+def _url_photo_colis(colis: Colis) -> str | None:
+    if chemin_photo_colis(colis.photo_chemin) is None:
+        return None
+    expiration = (
+        colis.livre_le + timedelta(days=7)
+        if colis.livre_le is not None
+        else None
+    )
+    if expiration is not None and expiration.tzinfo is None:
+        expiration = expiration.replace(tzinfo=timezone.utc)
+    if expiration is not None and expiration <= datetime.now(timezone.utc):
+        return None
+    return f"/api/v1/logistique/colis/{colis.id}/photo"
+
+
 async def _enrichir_colis(
     session: AsyncSession,
     colis: Colis,
@@ -263,10 +288,19 @@ async def _enrichir_colis(
     est_proprietaire = (
         utilisateur_id is not None and colis.enregistre_par_id == utilisateur_id
     )
-    colis.qr_token = ticket.qr_token if ticket and est_proprietaire else None
+    est_chauffeur_affecte = (
+        utilisateur_id is not None and colis.chauffeur_id == utilisateur_id
+    )
+    peut_voir_qr = est_proprietaire or est_chauffeur_affecte
+    colis.qr_token = ticket.qr_token if ticket and peut_voir_qr else None
     colis.qr_code_url = (
         construire_url_qr_durable(ticket.qr_token)
-        if ticket and est_proprietaire
+        if ticket and peut_voir_qr
+        else None
+    )
+    colis.enregistre_par_telephone = (
+        await _telephone_utilisateur(session, colis.enregistre_par_id)
+        if est_chauffeur_affecte
         else None
     )
     # Arrêt de descente : le guichet doit lire la destination réelle, pas
@@ -283,25 +317,12 @@ async def _enrichir_colis(
         session, colis.remis_guichet_a_id
     )
     colis.bagages = await _bagages_enrichis(session, colis_id=colis.id)
-    if not est_proprietaire:
+    if not peut_voir_qr:
         colis.bagages = [
             bagage.model_copy(update={"code_clair": None, "qr_code_url": None})
             for bagage in colis.bagages
         ]
-    photo = chemin_photo_colis(colis.photo_chemin)
-    expiration_photo = (
-        colis.livre_le + timedelta(days=7)
-        if colis.livre_le is not None
-        else None
-    )
-    if expiration_photo is not None and expiration_photo.tzinfo is None:
-        expiration_photo = expiration_photo.replace(tzinfo=timezone.utc)
-    colis.photo_url = (
-        f"/api/v1/logistique/colis/{colis.id}/photo"
-        if photo is not None
-        and (expiration_photo is None or expiration_photo > datetime.now(timezone.utc))
-        else None
-    )
+    colis.photo_url = _url_photo_colis(colis)
     return colis
 
 
@@ -313,11 +334,19 @@ async def _enrichir_evenement(
 
 
 async def _enrichir_suivi_familial(
-    session: AsyncSession, suivi: SuiviFamilial
+    session: AsyncSession,
+    suivi: SuiviFamilial,
+    *,
+    utilisateur_id: UUID | None = None,
 ) -> schemas.SuiviFamilialResponse:
     suivi.gare_depart_nom = await _nom_gare(session, suivi.gare_depart_id)
     suivi.gare_arrivee_nom = await _nom_gare(session, suivi.gare_arrivee_id)
     suivi.enregistre_par_nom = await _nom_utilisateur(session, suivi.enregistre_par_id)
+    suivi.enregistre_par_telephone = (
+        await _telephone_utilisateur(session, suivi.enregistre_par_id)
+        if utilisateur_id is not None and suivi.chauffeur_id == utilisateur_id
+        else None
+    )
     suivi.chauffeur_nom = await _nom_utilisateur(session, suivi.chauffeur_id)
     ticket = await service.obtenir_ticket_du_suivi(session, suivi)
     suivi.code_clair = ticket.code_clair if ticket else None
@@ -1754,6 +1783,7 @@ async def consulter_ticket_colis_citoyen(
         "enregistre_par_nom": await _nom_utilisateur(
             session, colis.enregistre_par_id
         ),
+        "photo_url": _url_photo_colis(colis),
         "cree_le": ticket.cree_le,
     }
 
@@ -1768,9 +1798,14 @@ async def voir_photo_colis(
     session: AsyncSession = Depends(obtenir_session),
 ):
     colis = await service.obtenir_colis(session, colis_id)
+    est_chauffeur_affecte = (
+        colis.chauffeur_id == utilisateur_courant.id
+        and service._est_chauffeur_role(utilisateur_courant)
+    )
     if (
         not await _est_participant_colis(session, colis, utilisateur_courant)
         and colis.enregistre_par_id != utilisateur_courant.id
+        and not est_chauffeur_affecte
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Photo introuvable")
 
@@ -2106,6 +2141,65 @@ routeur_suivi_familial = APIRouter(
 )
 
 
+async def _est_participant_suivi_familial(
+    session: AsyncSession,
+    suivi: SuiviFamilial,
+    utilisateur: Utilisateur,
+) -> bool:
+    if not utilisateur.est_telephone_verifie:
+        return False
+    if suivi.parent_id == utilisateur.id:
+        return True
+
+    for telephone in (
+        suivi.telephone_parent,
+        suivi.telephone_passager,
+        suivi.acheteur_tel,
+        suivi.proche_telephone,
+    ):
+        compte = await service._compte_par_telephone(session, telephone)
+        if compte is not None and compte.id == utilisateur.id:
+            return True
+    return False
+
+
+@routeur_suivi_familial.get(
+    "/{suivi_id}/ticket",
+    response_model=schemas.TicketPassagerCitoyenResponse,
+    summary="Consulter le ticket d'un passager associé à mon compte",
+)
+async def consulter_ticket_passager_citoyen(
+    suivi_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    suivi = await service.obtenir_suivi_familial(session, suivi_id)
+    if not await _est_participant_suivi_familial(
+        session, suivi, utilisateur_courant
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Ce ticket passager n'est pas associé à votre compte.",
+        )
+
+    ticket = await service.obtenir_ticket_du_suivi(session, suivi)
+    if ticket is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Ticket introuvable.")
+
+    return {
+        "code_clair": ticket.code_clair,
+        "qr_code_url": construire_url_qr_durable(ticket.qr_token),
+        "type_passager": suivi.type_passager,
+        "passager_nom": suivi.enfant_nom,
+        "gare_depart_nom": await _nom_gare(session, suivi.gare_depart_id),
+        "gare_arrivee_nom": await _nom_gare(session, suivi.gare_arrivee_id),
+        "enregistre_par_nom": await _nom_utilisateur(
+            session, suivi.enregistre_par_id
+        ),
+        "cree_le": ticket.cree_le,
+    }
+
+
 @routeur_suivi_familial.post("", response_model=schemas.SuiviFamilialEnregistre,
                              status_code=status.HTTP_201_CREATED,
                              summary="Enregistrer un enfant suivi (ticket ENFANT + SMS parent)")
@@ -2160,7 +2254,10 @@ async def lister_suivi_familial(
         statuts=statuts,
     )
     suivis = [
-        await _enrichir_suivi_familial(session, suivi) for suivi in suivis
+        await _enrichir_suivi_familial(
+            session, suivi, utilisateur_id=utilisateur_courant.id
+        )
+        for suivi in suivis
     ]
     return schemas.ReponseListe(elements=suivis, total=total, page=page, par_page=par_page)
 
@@ -2340,7 +2437,9 @@ async def obtenir_suivi_familial(
 ):
     service.exiger_acces_suivi_familial(utilisateur_courant)
     suivi = await service.obtenir_suivi_familial(session, suivi_id)
-    return await _enrichir_suivi_familial(session, suivi)
+    return await _enrichir_suivi_familial(
+        session, suivi, utilisateur_id=utilisateur_courant.id
+    )
 
 
 @routeur_suivi_familial.get("/{suivi_id}/evenements",

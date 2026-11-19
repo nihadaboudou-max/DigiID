@@ -89,6 +89,7 @@ export interface Colis {
   /** Qui a matériellement créé le colis (receveur ou chauffeur). */
   enregistre_par_id: string | null;
   enregistre_par_nom: string | null;
+  enregistre_par_telephone: string | null;
 
   /** Prix du transport — facultatif (DigiID ne l'encaisse pas). */
   frais_fcfa: number | null;
@@ -156,6 +157,19 @@ export interface TicketColisCitoyen {
   gare_arrivee_nom: string | null;
   destinataire_nom: string;
   destinataire_tel: string;
+  enregistre_par_nom: string | null;
+  photo_url: string | null;
+  cree_le: string;
+}
+
+/** Ticket passager consultable par un parent ou un contact authentifié. */
+export interface TicketPassagerCitoyen {
+  code_clair: string;
+  qr_code_url: string | null;
+  type_passager: string;
+  passager_nom: string;
+  gare_depart_nom: string | null;
+  gare_arrivee_nom: string | null;
   enregistre_par_nom: string | null;
   cree_le: string;
 }
@@ -369,6 +383,7 @@ export interface SuiviFamilial {
   gare_depart_nom: string | null;
   gare_arrivee_nom: string | null;
   enregistre_par_nom: string | null;
+  enregistre_par_telephone: string | null;
   chauffeur_nom: string | null;
   nb_evenements: number;
   reception_confirmee_le: string | null;

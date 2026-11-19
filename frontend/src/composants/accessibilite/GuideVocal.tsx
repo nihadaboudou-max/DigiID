@@ -107,7 +107,7 @@ export function GuideVocal() {
         aria-hidden={!panneauOuvert}
         role="group"
         aria-label={t("guide.groupe")}
-        className={`${panneauOuvert ? "flex" : "hidden"} w-[min(20rem,calc(100vw-2rem))] max-h-[min(70vh,28rem)] max-w-full flex-col items-stretch gap-2 overflow-y-auto rounded-2xl border border-ardoise-clair/20 bg-white p-3 shadow-xl`}
+        className={`${panneauOuvert ? "flex" : "hidden"} w-[min(17rem,calc(100vw-2rem))] sm:w-80 max-h-[min(70vh,28rem)] max-w-full flex-col items-stretch gap-2 overflow-y-auto rounded-2xl border border-ardoise-clair/20 bg-white p-3 shadow-xl`}
       >
         <button
           type="button"

@@ -17,11 +17,18 @@ import { Bouton } from "@/composants/commun/Bouton";
 import { Carte } from "@/composants/commun/Carte";
 import { IconeScan } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
-import { formaterDateHeure } from "@/composants/logistique/format";
+import {
+  formaterDateHeure,
+  urlImageQR,
+} from "@/composants/logistique/format";
 import { PaginationListe } from "@/composants/logistique/PaginationListe";
 import { ROLES_CHAUFFEUR } from "@/composants/logistique/roles";
 import { SuiviTimeline } from "@/composants/logistique/SuiviTimeline";
-import { TicketImprimable } from "@/composants/logistique/TicketImprimable";
+import {
+  PhotoColisPrivee,
+  TicketImprimable,
+} from "@/composants/logistique/TicketImprimable";
+import { useAuthentification } from "@/contextes/authentification";
 import { ErreurAPI } from "@/services/client_api";
 import { logistiqueAPI } from "@/services/logistique_api";
 import {
@@ -41,6 +48,7 @@ export default function PageColisChauffeur() {
 }
 
 function Contenu() {
+  const { utilisateur } = useAuthentification();
   const params = useParams();
   const code = (() => {
     const brut = String(params?.code ?? "");
@@ -159,6 +167,10 @@ function Contenu() {
     modifie_le: colis.modifie_le,
   };
   const dejaRemis = colis.statut === "livre" || colis.statut === "annule";
+  const estEnregistreParUtilisateur =
+    utilisateur?.id === colis.enregistre_par_id;
+  const estChauffeurAffecte = utilisateur?.id === colis.chauffeur_id;
+  const qrTicket = urlImageQR(colis.qr_code_url || colis.qr_token);
 
   return (
     <div className="space-y-6 apparition">
@@ -198,7 +210,82 @@ function Contenu() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="space-y-6">
-          <TicketImprimable ticket={ticket} colis={colis} />
+          {estEnregistreParUtilisateur ? (
+            <TicketImprimable ticket={ticket} colis={colis} />
+          ) : estChauffeurAffecte ? (
+            <Carte titre="Ticket et étiquettes QR">
+              <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
+                <div className="flex flex-col items-center gap-3">
+                  {qrTicket ? (
+                    <img
+                      src={qrTicket}
+                      alt={`QR code du colis ${ticket.code_clair}`}
+                      className="h-48 w-48 rounded-lg border border-ardoise-clair/20 bg-white"
+                    />
+                  ) : (
+                    <p className="text-sm text-ardoise-clair">
+                      QR du colis indisponible.
+                    </p>
+                  )}
+                  {colis.photo_url && <PhotoColisPrivee url={colis.photo_url} />}
+                </div>
+                <dl className="grid w-full grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                  <Ligne libelle="Code du colis" valeur={ticket.code_clair} />
+                  <Ligne
+                    libelle="Trajet"
+                    valeur={`${colis.gare_depart_nom || "—"} → ${colis.gare_arrivee_nom || "—"}`}
+                  />
+                  <Ligne
+                    libelle="Enregistré par"
+                    valeur={colis.enregistre_par_nom || "—"}
+                  />
+                  <Ligne
+                    libelle="Téléphone de l'agent"
+                    valeur={colis.enregistre_par_telephone || "—"}
+                  />
+                </dl>
+              </div>
+
+              {colis.bagages.length > 0 && (
+                <div className="mt-5 border-t border-ardoise-clair/15 pt-4">
+                  <h3 className="mb-3 text-sm font-semibold text-ardoise">
+                    QR des bagages
+                  </h3>
+                  <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {colis.bagages.map((bagage) => {
+                      const qrBagage = urlImageQR(bagage.qr_code_url);
+                      return (
+                        <li
+                          key={bagage.id}
+                          className="flex items-center gap-3 rounded-xl border border-ardoise-clair/15 p-3"
+                        >
+                          {qrBagage ? (
+                            <img
+                              src={qrBagage}
+                              alt={`QR du bagage ${bagage.numero_serie}`}
+                              className="h-28 w-28 rounded border border-ardoise-clair/20 bg-white"
+                            />
+                          ) : (
+                            <p className="flex h-28 w-28 items-center justify-center rounded border border-dashed border-ardoise-clair/30 p-2 text-center text-xs text-ardoise-clair">
+                              QR indisponible
+                            </p>
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-semibold text-ardoise">
+                              {bagage.numero_serie}
+                            </p>
+                            <p className="break-all font-mono text-xs text-ardoise-clair">
+                              {bagage.code_clair || "Code indisponible"}
+                            </p>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </Carte>
+          ) : null}
         </div>
 
         <div className="space-y-6">
@@ -215,6 +302,10 @@ function Contenu() {
               <Ligne libelle="Sacs" valeur={String(colis.nombre_bagages ?? 1)} />
               <Ligne libelle="Expéditeur" valeur={colis.expediteur_nom || "—"} />
               <Ligne libelle="Enregistré par" valeur={colis.enregistre_par_nom || "—"} />
+              <Ligne
+                libelle="Téléphone de l'agent"
+                valeur={colis.enregistre_par_telephone || "—"}
+              />
               {colis.description && (
                 <div className="sm:col-span-2">
                   <dt className="text-ardoise-clair">Description</dt>

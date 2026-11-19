@@ -15,12 +15,12 @@ interface Proprietes {
   afficherImpression?: boolean;
 }
 
-function PhotoColisPrivee({
+export function PhotoColisPrivee({
   url,
   terminerChargement,
 }: {
   url: string;
-  terminerChargement: () => void;
+  terminerChargement?: () => void;
 }) {
   const [src, setSrc] = useState<string | null>(null);
   const [indisponible, setIndisponible] = useState(false);
@@ -34,13 +34,13 @@ function PhotoColisPrivee({
         if (annule) return;
         urlLocale = URL.createObjectURL(image);
         setSrc(urlLocale);
-        terminerChargement();
+        terminerChargement?.();
       })
       .catch((erreur: unknown) => {
         console.error("Impossible de charger la photo privée du colis.", erreur);
         if (!annule) {
           setIndisponible(true);
-          terminerChargement();
+          terminerChargement?.();
         }
       });
 

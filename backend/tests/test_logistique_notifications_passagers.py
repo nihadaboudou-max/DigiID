@@ -328,3 +328,81 @@ def test_echec_whatsapp_sans_sms_configure_est_journalise_sans_bloquer(
     assert appels_sms == []
     assert any("aucun fournisseur SMS configuré" in message for message in journaux)
     assert all("+2290190123456" not in message for message in journaux)
+
+
+def test_notification_confirmation_suivi_du_chauffeur_ouvre_son_voyage(monkeypatch):
+    chauffeur = SimpleNamespace(
+        id=uuid.uuid4(),
+        role="chauffeur",
+        telephone_chiffre=None,
+    )
+    suivi = SimpleNamespace(
+        id=uuid.uuid4(),
+        enregistre_par_id=chauffeur.id,
+        gare_depart_id=uuid.uuid4(),
+        voyage_id=uuid.uuid4(),
+    )
+    session = SessionNotifications(chauffeur)
+
+    async def ticket_suivi(_session, _suivi):
+        return SimpleNamespace(code_clair="ENF-2026-000123")
+
+    async def aucun_gerant(_session, _gare_id):
+        return []
+
+    monkeypatch.setattr(service, "obtenir_ticket_du_suivi", ticket_suivi)
+    monkeypatch.setattr(service, "_gerants_de_gare", aucun_gerant)
+
+    asyncio.run(
+        service._notifier_guichet_suivi(
+            session,
+            suivi,
+            titre="Prise en charge confirmée",
+            message="Le chauffeur a confirmé la prise en charge du passager.",
+            type_evenement="validation",
+        )
+    )
+
+    notification = next(
+        objet for objet in session.ajoutes if isinstance(objet, Notification)
+    )
+    assert notification.lien_action == f"/chauffeur/voyages/{suivi.voyage_id}"
+
+
+def test_notification_confirmation_colis_du_chauffeur_ouvre_sa_fiche(monkeypatch):
+    chauffeur = SimpleNamespace(
+        id=uuid.uuid4(),
+        role="chauffeur",
+        telephone_chiffre=None,
+    )
+    colis = SimpleNamespace(
+        id=uuid.uuid4(),
+        enregistre_par_id=chauffeur.id,
+        receveur_id=None,
+        gare_depart_id=uuid.uuid4(),
+    )
+    session = SessionNotifications(chauffeur)
+
+    async def ticket_colis(_session, _colis):
+        return SimpleNamespace(code_clair="COL-2026-000123")
+
+    async def aucun_gerant(_session, _gare_id):
+        return []
+
+    monkeypatch.setattr(service, "obtenir_ticket_du_colis", ticket_colis)
+    monkeypatch.setattr(service, "_gerants_de_gare", aucun_gerant)
+
+    asyncio.run(
+        service._notifier_guichet_colis(
+            session,
+            colis,
+            titre="Réception confirmée",
+            message="Le chauffeur a confirmé la réception du colis.",
+            type_evenement="validation",
+        )
+    )
+
+    notification = next(
+        objet for objet in session.ajoutes if isinstance(objet, Notification)
+    )
+    assert notification.lien_action == "/chauffeur/colis/COL-2026-000123"

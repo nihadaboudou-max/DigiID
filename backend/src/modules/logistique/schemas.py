@@ -478,6 +478,7 @@ class ColisResponse(BaseModel):
     mode_enregistrement: str = "guichet"
     enregistre_par_id: Optional[UUID] = None
     enregistre_par_nom: Optional[str] = None
+    enregistre_par_telephone: Optional[str] = None
     # Étiquettes QR générées (une par sac).
     bagages: list[BagageResponse] = []
     model_config = ConfigDict(from_attributes=True)
@@ -505,6 +506,18 @@ class TicketColisCitoyenResponse(BaseModel):
     gare_arrivee_nom: Optional[str] = None
     destinataire_nom: str
     destinataire_tel: str
+    enregistre_par_nom: Optional[str] = None
+    photo_url: Optional[str] = None
+    cree_le: datetime
+
+
+class TicketPassagerCitoyenResponse(BaseModel):
+    code_clair: str
+    qr_code_url: Optional[str] = None
+    type_passager: str
+    passager_nom: str
+    gare_depart_nom: Optional[str] = None
+    gare_arrivee_nom: Optional[str] = None
     enregistre_par_nom: Optional[str] = None
     cree_le: datetime
 
@@ -820,6 +833,7 @@ class SuiviFamilialResponse(BaseModel):
     gare_depart_nom: Optional[str] = None
     gare_arrivee_nom: Optional[str] = None
     enregistre_par_nom: Optional[str] = None
+    enregistre_par_telephone: Optional[str] = None
     chauffeur_nom: Optional[str] = None
     nb_evenements: int = 0
     # Position de l'arrêt de descente dans la tournée (tri du chauffeur).

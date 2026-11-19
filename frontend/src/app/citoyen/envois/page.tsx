@@ -15,14 +15,22 @@ import {
   IconeRecherche,
 } from "@/composants/commun/Icones";
 import { EnvelopperEspaceProtege } from "@/composants/layouts/EnvelopperEspaceProtege";
+import { PhotoColisPrivee } from "@/composants/logistique/TicketImprimable";
 import { urlImageQR, formaterDateHeure } from "@/composants/logistique/format";
 import { useAuthentification } from "@/contextes/authentification";
 import { identiteAPI, type VoyageCitoyen } from "@/services/identite_api";
 import { ErreurAPI } from "@/services/client_api";
 import { logistiqueAPI } from "@/services/logistique_api";
-import type { TicketColisCitoyen } from "@/types/logistique";
+import type {
+  TicketColisCitoyen,
+  TicketPassagerCitoyen,
+} from "@/types/logistique";
 
 const TAILLE_PAGE = 5;
+
+type TicketCitoyen =
+  | { type: "colis"; ticket: TicketColisCitoyen }
+  | { type: "passager"; ticket: TicketPassagerCitoyen };
 
 function progression(statut: string): number {
   const normalise = statut.toLowerCase();
@@ -51,7 +59,7 @@ function Contenu() {
   const [elements, setElements] = useState<VoyageCitoyen[]>([]);
   const [total, setTotal] = useState(0);
   const [selection, setSelection] = useState<VoyageCitoyen | null>(null);
-  const [ticketColis, setTicketColis] = useState<TicketColisCitoyen | null>(null);
+  const [ticketCitoyen, setTicketCitoyen] = useState<TicketCitoyen | null>(null);
   const [chargementRecu, setChargementRecu] = useState(false);
   const [erreurRecu, setErreurRecu] = useState<string | null>(null);
   const codeInitial = useRef<string | null>(null);
@@ -98,21 +106,28 @@ function Contenu() {
   }, [page, recherche]);
 
   useEffect(() => {
-    if (!selection || selection.type !== "colis") {
-      setTicketColis(null);
+    if (!selection) {
+      setTicketCitoyen(null);
       setErreurRecu(null);
       setChargementRecu(false);
       return;
     }
 
     let ignore = false;
-    setTicketColis(null);
+    setTicketCitoyen(null);
     setErreurRecu(null);
     setChargementRecu(true);
-    logistiqueAPI.colis
-      .ticketCitoyen(selection.id)
-      .then((ticket) => {
-        if (!ignore) setTicketColis(ticket);
+    const requeteTicket =
+      selection.type === "colis"
+        ? logistiqueAPI.colis
+            .ticketCitoyen(selection.id)
+            .then((ticket) => ({ type: "colis" as const, ticket }))
+        : logistiqueAPI.suiviFamilial
+            .ticketCitoyen(selection.id)
+            .then((ticket) => ({ type: "passager" as const, ticket }));
+    requeteTicket
+      .then((resultat) => {
+        if (!ignore) setTicketCitoyen(resultat);
       })
       .catch((e: unknown) => {
         if (!ignore) {
@@ -121,7 +136,7 @@ function Contenu() {
               ? e.code_http === 403
                 ? "Ce ticket n'est pas associé à ton compte."
                 : e.message_utilisateur
-              : "Impossible de charger le ticket de ce colis.",
+              : "Impossible de charger ce ticket.",
           );
         }
       })
@@ -140,9 +155,6 @@ function Contenu() {
   }, [charger]);
 
   const totalPages = Math.max(1, Math.ceil(total / TAILLE_PAGE));
-  const qrTicketColis = ticketColis
-    ? urlImageQR(ticketColis.qr_code_url)
-    : null;
 
   function rechercher(value: string) {
     setRecherche(value);
@@ -222,6 +234,11 @@ function Contenu() {
           elements.map((element) => {
             const estSelectionne =
               selection?.id === element.id && selection.type === element.type;
+            const consultation =
+              ticketCitoyen?.type === element.type ? ticketCitoyen : null;
+            const qrTicket = consultation
+              ? urlImageQR(consultation.ticket.qr_code_url)
+              : null;
 
             return (
               <div key={`${element.type}-${element.id}`} className="space-y-2">
@@ -252,7 +269,7 @@ function Contenu() {
                       ? "Masquer les détails"
                       : element.type === "colis"
                         ? "Ouvrir le reçu et les étapes"
-                        : "Voir les étapes"}
+                          : "Ouvrir le ticket et les étapes"}
                   </Bouton>
                 </Carte>
 
@@ -294,65 +311,103 @@ function Contenu() {
                       </ol>
                     </Carte>
 
-                    {element.type === "colis" && (
-                      <Carte titre="Ticket du colis" className="!p-4">
+                    {(element.type === "colis" || element.type === "passager") && (
+                      <Carte
+                        titre={element.type === "colis" ? "Ticket du colis" : "Ticket du passager"}
+                        className="!p-4"
+                      >
                         {chargementRecu ? (
                           <p className="py-4 text-center text-ardoise-clair">Chargement du ticket…</p>
                         ) : erreurRecu ? (
                           <Alerte variante="erreur" titre="Ticket indisponible">
                             {erreurRecu}
                           </Alerte>
-                        ) : ticketColis ? (
+                        ) : consultation ? (
                           <div className="flex flex-col items-center gap-5 rounded-xl border border-ardoise-clair/20 bg-white p-4 sm:flex-row">
-                            {qrTicketColis ? (
-                              <img
-                                src={qrTicketColis}
-                                alt={`QR code du ticket ${ticketColis.code_clair}`}
-                                className="h-48 w-48 rounded-lg border border-ardoise-clair/20 bg-white"
-                              />
-                            ) : (
-                              <div className="flex h-48 w-48 items-center justify-center rounded-lg border-2 border-dashed border-ardoise-clair/30 p-3 text-center text-sm text-ardoise-clair">
-                                QR code indisponible
-                              </div>
-                            )}
+                            <div className="flex flex-col items-center gap-3">
+                              {qrTicket ? (
+                                <img
+                                  src={qrTicket}
+                                  alt={`QR code du ticket ${consultation.ticket.code_clair}`}
+                                  className="h-48 w-48 rounded-lg border border-ardoise-clair/20 bg-white"
+                                />
+                              ) : (
+                                <div className="flex h-48 w-48 items-center justify-center rounded-lg border-2 border-dashed border-ardoise-clair/30 p-3 text-center text-sm text-ardoise-clair">
+                                  QR code indisponible
+                                </div>
+                              )}
+                              {consultation.type === "colis" &&
+                                consultation.ticket.photo_url && (
+                                  <PhotoColisPrivee
+                                    url={consultation.ticket.photo_url}
+                                  />
+                                )}
+                            </div>
                             <div className="w-full min-w-0 space-y-3">
                               <div>
                                 <p className="text-xs font-semibold uppercase tracking-wide text-ardoise-clair">
                                   Numéro du ticket
                                 </p>
                                 <p className="break-all font-mono text-2xl font-bold text-lagune">
-                                  {ticketColis.code_clair}
+                                  {consultation.ticket.code_clair}
                                 </p>
                               </div>
                               <dl className="space-y-2 text-sm">
                                 <div>
                                   <dt className="text-ardoise-clair">Trajet</dt>
                                   <dd className="font-medium">
-                                    {ticketColis.gare_depart_nom || "Départ"} →{" "}
-                                    {ticketColis.gare_arrivee_nom || "Arrivée"}
+                                    {consultation.ticket.gare_depart_nom || "Départ"} →{" "}
+                                    {consultation.ticket.gare_arrivee_nom || "Arrivée"}
                                   </dd>
                                 </div>
-                                <div>
-                                  <dt className="text-ardoise-clair">Destinataire</dt>
-                                  <dd className="font-medium">
-                                    {ticketColis.destinataire_nom}
-                                  </dd>
-                                </div>
-                                <div>
-                                  <dt className="text-ardoise-clair">Téléphone</dt>
-                                  <dd className="font-medium">
-                                    {ticketColis.destinataire_tel}
-                                  </dd>
-                                </div>
-                                <div>
-                                  <dt className="text-ardoise-clair">Enregistré par</dt>
-                                  <dd className="font-medium">
-                                    {ticketColis.enregistre_par_nom || "—"}
-                                  </dd>
-                                </div>
+                                {consultation.type === "colis" ? (
+                                  <>
+                                    <div>
+                                      <dt className="text-ardoise-clair">Destinataire</dt>
+                                      <dd className="font-medium">
+                                        {consultation.ticket.destinataire_nom}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-ardoise-clair">Téléphone</dt>
+                                      <dd className="font-medium">
+                                        {consultation.ticket.destinataire_tel}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-ardoise-clair">Enregistré par</dt>
+                                      <dd className="font-medium">
+                                        {consultation.ticket.enregistre_par_nom || "—"}
+                                      </dd>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div>
+                                      <dt className="text-ardoise-clair">Passager</dt>
+                                      <dd className="font-medium">
+                                        {consultation.ticket.passager_nom}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-ardoise-clair">Type</dt>
+                                      <dd className="font-medium">
+                                        {consultation.ticket.type_passager === "enfant"
+                                          ? "Enfant"
+                                          : "Adulte"}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-ardoise-clair">Enregistré par</dt>
+                                      <dd className="font-medium">
+                                        {consultation.ticket.enregistre_par_nom || "—"}
+                                      </dd>
+                                    </div>
+                                  </>
+                                )}
                               </dl>
                               <p className="text-xs text-ardoise-clair">
-                                Émis le {formaterDateHeure(ticketColis.cree_le)}
+                                Émis le {formaterDateHeure(consultation.ticket.cree_le)}
                               </p>
                             </div>
                           </div>

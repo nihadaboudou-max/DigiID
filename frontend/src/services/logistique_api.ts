@@ -10,7 +10,7 @@ import type {
   DonneesSuiviFamilial, DonneesEvenementSuivi, ResultatEvenementSuivi,
   NotificationLogistique, SuiviPublic, Bagage,
   DonneesActionLot, ResultatActionLot, DonneesPreAlerte, ResultatPreAlerte,
-  TicketColisCitoyen,
+  TicketColisCitoyen, TicketPassagerCitoyen,
 } from "@/types/logistique";
 
 export type {
@@ -19,7 +19,7 @@ export type {
   DonneesSuiviFamilial, DonneesEvenementSuivi, ResultatEvenementSuivi,
   NotificationLogistique, SuiviPublic, Bagage,
   DonneesActionLot, ResultatActionLot, DonneesPreAlerte, ResultatPreAlerte,
-  TicketColisCitoyen,
+  TicketColisCitoyen, TicketPassagerCitoyen,
 } from "@/types/logistique";
 
 export interface ReponseListe<T> {
@@ -554,6 +554,13 @@ export const logistiqueAPI = {
     /** Détail d'un suivi (nom de la gare, agent, ticket). */
     obtenir: (id: string) =>
       clientAPI.get<SuiviFamilial>(`${BASE}/suivi-familial/${id}`, opts),
+
+    /** Ticket de consultation pour le passager, son parent ou un contact lié. */
+    ticketCitoyen: (id: string) =>
+      clientAPI.get<TicketPassagerCitoyen>(
+        `${BASE}/suivi-familial/${id}/ticket`,
+        opts,
+      ),
 
     /** Enregistre un événement de suivi (départ, arrivée ou remise). */
     enregistrerEvenement: (id: string, d: DonneesEvenementSuivi) =>

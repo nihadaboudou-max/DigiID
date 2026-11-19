@@ -1451,11 +1451,7 @@ async def _notifier_guichet_colis(
         )
     ticket = await obtenir_ticket_du_colis(session, colis)
     code = getattr(ticket, "code_clair", None) if ticket is not None else None
-    lien = (
-        f"/receveur/tickets/{code}"
-        if code
-        else f"/receveur/tickets?colis={colis.id}"
-    )
+    lien = f"/receveur/tickets/{code}" if code else "/receveur/tickets"
     for utilisateur_id in identifiants:
         utilisateur = await session.get(Utilisateur, utilisateur_id)
         if utilisateur is None:
@@ -1464,6 +1460,11 @@ async def _notifier_guichet_colis(
                 f"{colis.id} : agent {utilisateur_id} introuvable."
             )
             continue
+        lien_utilisateur = lien
+        if utilisateur.role == "chauffeur":
+            lien_utilisateur = (
+                f"/chauffeur/colis/{code}" if code else "/chauffeur/colis"
+            )
         await _notifier_utilisateur_colis(
             session,
             utilisateur,
@@ -1472,7 +1473,7 @@ async def _notifier_guichet_colis(
             message=message,
             destinataire_role="guichet",
             type_evenement=type_evenement,
-            lien_action=lien,
+            lien_action=lien_utilisateur,
         )
     for gerant in await _gerants_de_gare(session, colis.gare_depart_id):
         if gerant.id in identifiants:
@@ -1523,6 +1524,13 @@ async def _notifier_guichet_suivi(
     if identifiant_agent is not None:
         agent = await session.get(Utilisateur, identifiant_agent)
         if agent is not None:
+            lien_agent = "/receveur/suivi-familial"
+            if agent.role == "chauffeur":
+                lien_agent = (
+                    f"/chauffeur/voyages/{suivi.voyage_id}"
+                    if suivi.voyage_id
+                    else "/chauffeur/voyages"
+                )
             await creer_notification(
                 session,
                 agent,
@@ -1530,7 +1538,7 @@ async def _notifier_guichet_suivi(
                 categorie="logistique_suivi",
                 titre=titre,
                 message=message,
-                lien_action="/receveur/suivi-familial",
+                lien_action=lien_agent,
             )
         else:
             journal.warning(
