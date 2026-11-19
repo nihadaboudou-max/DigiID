@@ -148,6 +148,18 @@ export interface ColisEnregistre {
   ticket: Ticket;
 }
 
+/** Ticket de consultation pour l'expéditeur ou le destinataire authentifié. */
+export interface TicketColisCitoyen {
+  code_clair: string;
+  qr_code_url: string | null;
+  gare_depart_nom: string | null;
+  gare_arrivee_nom: string | null;
+  destinataire_nom: string;
+  destinataire_tel: string;
+  enregistre_par_nom: string | null;
+  cree_le: string;
+}
+
 /** Payload d'enregistrement d'un colis (guichet). */
 export interface DonneesColis {
   destinataire_nom: string;

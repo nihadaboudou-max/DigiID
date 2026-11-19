@@ -10,6 +10,7 @@ import type {
   DonneesSuiviFamilial, DonneesEvenementSuivi, ResultatEvenementSuivi,
   NotificationLogistique, SuiviPublic, Bagage,
   DonneesActionLot, ResultatActionLot, DonneesPreAlerte, ResultatPreAlerte,
+  TicketColisCitoyen,
 } from "@/types/logistique";
 
 export type {
@@ -18,6 +19,7 @@ export type {
   DonneesSuiviFamilial, DonneesEvenementSuivi, ResultatEvenementSuivi,
   NotificationLogistique, SuiviPublic, Bagage,
   DonneesActionLot, ResultatActionLot, DonneesPreAlerte, ResultatPreAlerte,
+  TicketColisCitoyen,
 } from "@/types/logistique";
 
 export interface ReponseListe<T> {
@@ -411,9 +413,16 @@ export const logistiqueAPI = {
       );
     },
 
-    /** Ticket privé accessible uniquement à l'agent qui a enregistré le colis. */
+    /** Ticket complet et imprimable privé à l'agent qui a enregistré le colis. */
     pourMonCompte: (colisId: string) =>
       clientAPI.get<ColisEnregistre>(`${BASE}/colis/mes/${colisId}`, opts),
+
+    /** Consultation du ticket par l'expéditeur ou le destinataire authentifié. */
+    ticketCitoyen: (colisId: string) =>
+      clientAPI.get<TicketColisCitoyen>(
+        `${BASE}/colis/mes/${colisId}/ticket`,
+        opts,
+      ),
 
     /** Liste paginée des colis, avec filtres (statut, gare, voyage). */
     lister: (filtres?: {

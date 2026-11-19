@@ -498,6 +498,17 @@ class ColisEnregistre(BaseModel):
     ticket: TicketResponse
 
 
+class TicketColisCitoyenResponse(BaseModel):
+    code_clair: str
+    qr_code_url: Optional[str] = None
+    gare_depart_nom: Optional[str] = None
+    gare_arrivee_nom: Optional[str] = None
+    destinataire_nom: str
+    destinataire_tel: str
+    enregistre_par_nom: Optional[str] = None
+    cree_le: datetime
+
+
 class PhotoColisResponse(BaseModel):
     photo_url: str
 

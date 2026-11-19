@@ -1724,6 +1724,41 @@ async def voir_mon_ticket_colis(
 
 
 @routeur_colis.get(
+    "/mes/{colis_id}/ticket",
+    response_model=schemas.TicketColisCitoyenResponse,
+    summary="Consulter le ticket d'un colis associé à mon compte",
+)
+async def consulter_ticket_colis_citoyen(
+    colis_id: UUID,
+    utilisateur_courant: Utilisateur = Depends(utilisateur_courant),
+    session: AsyncSession = Depends(obtenir_session),
+):
+    colis = await service.obtenir_colis(session, colis_id)
+    if not await _est_participant_colis(session, colis, utilisateur_courant):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Ce ticket n'est pas associé à votre compte.",
+        )
+
+    ticket = await service.obtenir_ticket_du_colis(session, colis)
+    if ticket is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Ticket introuvable.")
+
+    return {
+        "code_clair": ticket.code_clair,
+        "qr_code_url": construire_url_qr_durable(ticket.qr_token),
+        "gare_depart_nom": await _nom_gare(session, colis.gare_depart_id),
+        "gare_arrivee_nom": await _nom_gare(session, colis.gare_arrivee_id),
+        "destinataire_nom": colis.destinataire_nom,
+        "destinataire_tel": colis.destinataire_tel,
+        "enregistre_par_nom": await _nom_utilisateur(
+            session, colis.enregistre_par_id
+        ),
+        "cree_le": ticket.cree_le,
+    }
+
+
+@routeur_colis.get(
     "/{colis_id}/photo",
     summary="Afficher la photo privée d'un colis",
 )
