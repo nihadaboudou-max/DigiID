@@ -195,61 +195,7 @@ function Contenu() {
         </Alerte>
       )}
 
-      {selection && (
-        <Carte titre="Les étapes de ton envoi" description={`Code : ${selection.code}`}>
-          <button
-            type="button"
-            onClick={() => setSelection(null)}
-            className="mb-5 inline-flex min-h-14 items-center gap-2 rounded-xl border border-ardoise-clair/20 px-4 font-semibold text-lagune"
-          >
-            <IconeFlecheRetour className="h-5 w-5" aria-hidden="true" />
-            Retour à mes envois
-          </button>
-          <ol className="space-y-4">
-            {["Enregistré", "En route", "Arrivé"].map((etape, index) => {
-              const actif = index <= progression(selection.statut);
-              const Icone = index === 0 ? IconeCheck : index === 1 ? IconeCamion : IconeColis;
-              return (
-                <li
-                  key={etape}
-                  className={`flex min-h-16 items-center gap-4 rounded-xl border p-4 ${
-                    actif
-                      ? "border-lagune bg-lagune text-white"
-                      : "border-ardoise-clair/20 bg-sable text-ardoise-clair"
-                  }`}
-                >
-                  <Icone className="h-7 w-7 shrink-0" aria-hidden="true" />
-                  <span className="font-bold">{etape}</span>
-                  {index === progression(selection.statut) && (
-                    <span className="ml-auto text-sm font-semibold">Étape actuelle</span>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-        </Carte>
-      )}
-
-      {selection?.type === "colis" && (
-        <Carte titre="Reçu du colis">
-          {chargementRecu ? (
-            <p className="py-4 text-center text-ardoise-clair">
-              Chargement du reçu…
-            </p>
-          ) : erreurRecu ? (
-            <Alerte variante="erreur" titre="Reçu indisponible">
-              {erreurRecu}
-            </Alerte>
-          ) : recuColis ? (
-            <TicketImprimable
-              ticket={recuColis.ticket}
-              colis={recuColis.colis}
-            />
-          ) : null}
-        </Carte>
-      )}
-
-      <section aria-label="Liste de mes envois" className="space-y-3">
+      <section aria-label="Liste de mes envois" className="space-y-2">
         {chargement ? (
           <Carte><p className="py-4 text-center text-ardoise-clair">Chargement de tes envois…</p></Carte>
         ) : elements.length === 0 ? (
@@ -270,33 +216,104 @@ function Contenu() {
             </div>
           </Carte>
         ) : (
-          elements.map((element) => (
-            <Carte key={`${element.type}-${element.id}`} className="space-y-3">
-              <div className="flex items-start gap-3">
-                <IconeColis className="mt-1 h-6 w-6 shrink-0 text-lagune" aria-hidden="true" />
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-ardoise">
-                    {element.type === "colis" ? "Colis" : "Enfant suivi"}
-                    {element.libelle ? ` — ${element.libelle}` : ""}
-                  </p>
-                  <p className="mt-1 text-ardoise-clair">Code : {element.code}</p>
-                  <p className="mt-1 text-ardoise-clair">
-                    {element.gare_depart_nom || "Départ"} → {element.gare_arrivee_nom || "Arrivée"}
-                  </p>
-                </div>
+          elements.map((element) => {
+            const estSelectionne =
+              selection?.id === element.id && selection.type === element.type;
+
+            return (
+              <div key={`${element.type}-${element.id}`} className="space-y-2">
+                <Carte className="!p-3 space-y-2 sm:!p-4">
+                  <div className="flex items-start gap-3">
+                    <IconeColis className="mt-1 h-6 w-6 shrink-0 text-lagune" aria-hidden="true" />
+                    <div className="min-w-0 flex-1 text-sm">
+                      <p className="font-bold text-ardoise">
+                        {element.type === "colis" ? "Colis" : "Enfant suivi"}
+                        {element.libelle ? ` — ${element.libelle}` : ""}
+                      </p>
+                      <p className="mt-1 text-ardoise-clair">Code : {element.code}</p>
+                      <p className="mt-1 text-ardoise-clair">
+                        {element.gare_depart_nom || "Départ"} → {element.gare_arrivee_nom || "Arrivée"}
+                      </p>
+                    </div>
+                  </div>
+                  <Bouton
+                    type="button"
+                    variante="secondaire"
+                    taille="petit"
+                    className="min-h-11 w-full sm:w-auto"
+                    onClick={() => setSelection(estSelectionne ? null : element)}
+                    aria-expanded={estSelectionne}
+                  >
+                    <IconeFlecheRetour className="h-5 w-5 rotate-180" aria-hidden="true" />
+                    {estSelectionne
+                      ? "Masquer les détails"
+                      : element.type === "colis"
+                        ? "Ouvrir le reçu et les étapes"
+                        : "Voir les étapes"}
+                  </Bouton>
+                </Carte>
+
+                {estSelectionne && (
+                  <>
+                    <Carte
+                      titre="Les étapes de ton envoi"
+                      description={`Code : ${element.code}`}
+                      className="!p-4"
+                    >
+                      <ol className="space-y-2">
+                        {["Enregistré", "En route", "Arrivé"].map((etape, index) => {
+                          const actif = index <= progression(element.statut);
+                          const Icone =
+                            index === 0
+                              ? IconeCheck
+                              : index === 1
+                                ? IconeCamion
+                                : IconeColis;
+                          return (
+                            <li
+                              key={etape}
+                              className={`flex min-h-12 items-center gap-3 rounded-xl border p-3 ${
+                                actif
+                                  ? "border-lagune bg-lagune text-white"
+                                  : "border-ardoise-clair/20 bg-sable text-ardoise-clair"
+                              }`}
+                            >
+                              <Icone className="h-6 w-6 shrink-0" aria-hidden="true" />
+                              <span className="font-bold">{etape}</span>
+                              {index === progression(element.statut) && (
+                                <span className="ml-auto text-xs font-semibold">
+                                  Étape actuelle
+                                </span>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    </Carte>
+
+                    {element.type === "colis" && (
+                      <Carte titre="Reçu du colis" className="!p-4">
+                        {chargementRecu ? (
+                          <p className="py-4 text-center text-ardoise-clair">
+                            Chargement du reçu…
+                          </p>
+                        ) : erreurRecu ? (
+                          <Alerte variante="erreur" titre="Reçu indisponible">
+                            {erreurRecu}
+                          </Alerte>
+                        ) : recuColis ? (
+                          <TicketImprimable
+                            ticket={recuColis.ticket}
+                            colis={recuColis.colis}
+                          />
+                        ) : null}
+                      </Carte>
+                    )}
+                  </>
+                )}
               </div>
-              <Bouton
-                type="button"
-                variante="secondaire"
-                taille="grand"
-                className="w-full"
-                onClick={() => setSelection(element)}
-              >
-                <IconeFlecheRetour className="h-5 w-5 rotate-180" aria-hidden="true" />
-                {element.type === "colis" ? "Ouvrir le reçu et les étapes" : "Voir les étapes"}
-              </Bouton>
-            </Carte>
-          ))
+            );
+          })
         )}
       </section>
 
