@@ -262,7 +262,14 @@ def test_arrivee_passager_utilise_arret_et_sms_en_secours(monkeypatch):
         "11:05",
         "ENF-2025-000123",
         "Amadou Diallo",
+        "+2290123456789",
     ]
+    assert appels_whatsapp[0][1] == (
+        "DigiID : arrivée confirmée. Passager : Aïcha (Enfant) est arrivé à "
+        "Arrêt intermédiaire (Bohicon), parti de Gare départ (Cotonou). "
+        "Arrivée à 11:05. Ticket : ENF-2025-000123. "
+        "Chauffeur : Amadou Diallo, joignable au +2290123456789."
+    )
     assert len(appels_sms) == 1
     assert "arrivé à Arrêt intermédiaire (Bohicon)" in appels_sms[0][1]
     notifications_plateforme = [

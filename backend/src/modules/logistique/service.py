@@ -5705,17 +5705,16 @@ async def _notifier_suivi(
     code_ticket = ticket.code_clair if ticket is not None else "indisponible"
     gare_depart = gare_depart or "gare de départ"
     gare_arrivee = gare_arrivee or "gare d'arrivée"
-    telephone_chauffeur = "numéro non renseigné"
-    if type_evenement == "depart":
-        telephone_chauffeur = (
-            telephone_utilisateur(chauffeur) if chauffeur is not None else None
+    telephone_chauffeur = (
+        telephone_utilisateur(chauffeur) if chauffeur is not None else None
+    )
+    if not telephone_chauffeur:
+        journal.warning(
+            f"[WHATSAPP] Numéro du chauffeur non renseigné "
+            f"pour l'événement {type_evenement} suivi={suivi.id} "
+            f"chauffeur={suivi.chauffeur_id or 'inconnu'}"
         )
-        if not telephone_chauffeur:
-            journal.warning(
-                f"[WHATSAPP] Numéro du chauffeur non renseigné pour le départ "
-                f"suivi={suivi.id} chauffeur={suivi.chauffeur_id or 'inconnu'}"
-            )
-            telephone_chauffeur = "numéro non renseigné"
+        telephone_chauffeur = "numéro non renseigné"
 
     if type_evenement == "depart":
         message = (
@@ -5732,7 +5731,7 @@ async def _notifier_suivi(
             f"DigiID : arrivée confirmée. Passager : {prenom_passager} "
             f"({type_passager}) est arrivé à {gare_arrivee}, parti de "
             f"{gare_depart}. Arrivée à {heure}. Ticket : {code_ticket}. "
-            f"Chauffeur : {nom_chauffeur}."
+            f"Chauffeur : {nom_chauffeur}, joignable au {telephone_chauffeur}."
         )
         nom_template = parametres.whatsapp_template_arrivee_passager_name
         titre = "Arrivée du passager"
@@ -5745,9 +5744,8 @@ async def _notifier_suivi(
         heure,
         code_ticket,
         nom_chauffeur,
+        telephone_chauffeur,
     ]
-    if type_evenement == "depart":
-        parametres_template.append(telephone_chauffeur)
 
     destinataires = (
         (
