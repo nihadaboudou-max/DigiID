@@ -483,6 +483,44 @@
     print-color-adjust: exact !important;
   }
 
+  /* Texte agrandi sur tous les reçus, pour une lecture facile sur papier. */
+  .zone-impression {
+    font-size: 16px !important;
+  }
+  .zone-impression p,
+  .zone-impression dt,
+  .zone-impression dd,
+  .zone-impression code,
+  .zone-impression span {
+    line-height: 1.45 !important;
+  }
+  .zone-impression p,
+  .zone-impression dd,
+  .zone-impression code {
+    font-size: 15px !important;
+  }
+  .zone-impression dt,
+  .zone-impression .text-xs,
+  .zone-impression .text-[10px],
+  .zone-impression .text-[11px] {
+    font-size: 14px !important;
+  }
+  .zone-impression .text-xl,
+  .zone-impression .text-2xl {
+    font-size: 24px !important;
+  }
+  .zone-impression img[src*="qr"] ,
+  .zone-impression img[alt*="QR"] ,
+  .zone-impression img[alt*="Qr"] ,
+  .zone-impression img[alt*="qr"] {
+    width: 220px !important;
+    height: 220px !important;
+  }
+  .etiquette-bagage img[alt*="QR"] {
+    width: 300px !important;
+    height: 300px !important;
+  }
+
   /* 5. Une nouvelle zone commence toujours sur une nouvelle page.
         `data-impression-page` est posé par `preparerImpression()` ; la règle
         `~` couvre le cas où le JavaScript n'a pas tourné. */

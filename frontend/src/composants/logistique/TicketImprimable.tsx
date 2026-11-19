@@ -201,14 +201,29 @@ export function TicketImprimable({
                   {b.numero_serie}
                 </span>
 
+                <div className="mb-4 w-full max-w-md border-y border-dashed border-ardoise-clair/40 py-3 text-center">
+                  <p className="text-base font-semibold text-ardoise">
+                    Départ : {colis.gare_depart_nom || "—"}
+                  </p>
+                  <p className="mb-2 text-base font-semibold text-ardoise">
+                    Destination : {colis.gare_arrivee_nom || "—"}
+                  </p>
+                  <p className="text-base font-bold text-ardoise">
+                    Destinataire : {colis.destinataire_nom || "—"}
+                  </p>
+                  <p className="text-base font-semibold text-ardoise">
+                    Numéro : {colis.destinataire_tel || "—"}
+                  </p>
+                </div>
+
                 {qrBagage ? (
                   <img
                     src={qrBagage}
                     alt={`QR du sac ${b.numero_serie}`}
-                    className="h-48 w-48 border border-ardoise-clair/20 rounded bg-white mb-4"
+                    className="h-64 w-64 border border-ardoise-clair/20 rounded bg-white mb-4"
                   />
                 ) : (
-                  <div className="flex h-48 w-48 items-center justify-center border-2 border-dashed border-ardoise-clair/30 rounded text-center text-xs text-ardoise-clair mb-4">
+                  <div className="flex h-64 w-64 items-center justify-center border-2 border-dashed border-ardoise-clair/30 rounded text-center text-xs text-ardoise-clair mb-4">
                     QR indisponible
                   </div>
                 )}

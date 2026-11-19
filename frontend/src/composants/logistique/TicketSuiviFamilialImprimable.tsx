@@ -162,6 +162,10 @@ export function TicketSuiviFamilialImprimable({
           était illisible (et se faisait couper par la page). */}
       {suivi.bagages?.map((bagage, index) => {
         const qrBagage = urlImageQR(bagage.qr_code_url);
+        const numeroVoyageur =
+          suivi.type_passager === "adulte"
+            ? suivi.telephone_passager || suivi.telephone_parent
+            : suivi.telephone_parent;
         return (
           <div
             key={bagage.id}
@@ -174,7 +178,14 @@ export function TicketSuiviFamilialImprimable({
             <span className="mb-1 text-xl font-bold text-lagune">
               {bagage.numero_serie}
             </span>
-            <p className="mb-4 text-sm text-ardoise">Passager : {suivi.enfant_nom}</p>
+            <div className="mb-4 w-full max-w-md border-y border-dashed border-ardoise-clair/40 py-3 text-center">
+              <p className="text-base font-bold text-ardoise">
+                {suivi.type_passager === "adulte" ? "Voyageur" : "Enfant"} : {suivi.enfant_nom}
+              </p>
+              <p className="text-base font-semibold text-ardoise">
+                Numéro : {numeroVoyageur || "—"}
+              </p>
+            </div>
 
             {qrBagage ? (
               <img

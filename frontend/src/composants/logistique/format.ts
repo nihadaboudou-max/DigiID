@@ -33,7 +33,7 @@ export function formaterDateHeure(iso: string | null | undefined): string {
  */
 export function urlImageQR(contenuQR: string | null | undefined): string | null {
   if (!contenuQR) return null;
-  return `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=8&data=${encodeURIComponent(
+  return `https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=8&data=${encodeURIComponent(
     contenuQR,
   )}`;
 }
