@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Bouton } from "@/composants/commun/Bouton";
 import { IconeTicket } from "@/composants/commun/Icones";
+import { useAuthentification } from "@/contextes/authentification";
 import { imprimer } from "@/services/impression";
 import { clientAPI } from "@/services/client_api";
 import type { Colis, Ticket } from "@/types/logistique";
@@ -69,6 +70,7 @@ export function TicketImprimable({
   colis,
   afficherImpression = true,
 }: Proprietes) {
+  const { utilisateur } = useAuthentification();
   const qrSrc = urlImageQR(ticket.qr_code_url || ticket.qr_token);
   const [photoEnChargement, setPhotoEnChargement] = useState(Boolean(colis?.photo_url));
   const terminerChargementPhoto = useCallback(() => setPhotoEnChargement(false), []);
@@ -76,6 +78,10 @@ export function TicketImprimable({
   useEffect(() => {
     setPhotoEnChargement(Boolean(colis?.photo_url));
   }, [colis?.photo_url]);
+
+  if (!colis || utilisateur?.id !== colis.enregistre_par_id) {
+    return null;
+  }
 
   return (
     <div className="space-y-6">
@@ -179,6 +185,9 @@ export function TicketImprimable({
           <span>DigiID — Suivi logistique</span>
           <span>Réf. {ticket.id.slice(0, 8)}</span>
         </div>
+        <p className="mt-3 text-sm font-semibold text-ardoise">
+          Enregistré et imprimé par : {colis.enregistre_par_nom || "—"}
+        </p>
       </div>
 
       {/* ==========================================

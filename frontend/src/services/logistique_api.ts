@@ -411,7 +411,7 @@ export const logistiqueAPI = {
       );
     },
 
-    /** Ticket privé accessible uniquement à l'expéditeur ou au destinataire. */
+    /** Ticket privé accessible uniquement à l'agent qui a enregistré le colis. */
     pourMonCompte: (colisId: string) =>
       clientAPI.get<ColisEnregistre>(`${BASE}/colis/mes/${colisId}`, opts),
 

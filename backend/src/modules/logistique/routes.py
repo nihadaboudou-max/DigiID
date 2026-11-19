@@ -232,7 +232,12 @@ async def _bagages_enrichis(
     return [schemas.BagageResponse.model_validate(b) for b in bagages]
 
 
-async def _enrichir_colis(session: AsyncSession, colis: Colis) -> Colis:
+async def _enrichir_colis(
+    session: AsyncSession,
+    colis: Colis,
+    *,
+    utilisateur_id: UUID | None = None,
+) -> Colis:
     colis.pre_alerte_envoyee = (
         await session.scalar(
             select(NotificationLogistique.id)
@@ -255,8 +260,15 @@ async def _enrichir_colis(session: AsyncSession, colis: Colis) -> Colis:
     colis.enregistre_par_nom = await _nom_utilisateur(session, colis.enregistre_par_id)
     ticket = await service.obtenir_ticket_du_colis(session, colis)
     colis.code_clair = ticket.code_clair if ticket else None
-    colis.qr_token = ticket.qr_token if ticket else None
-    colis.qr_code_url = construire_url_qr_durable(ticket.qr_token) if ticket else None
+    est_proprietaire = (
+        utilisateur_id is not None and colis.enregistre_par_id == utilisateur_id
+    )
+    colis.qr_token = ticket.qr_token if ticket and est_proprietaire else None
+    colis.qr_code_url = (
+        construire_url_qr_durable(ticket.qr_token)
+        if ticket and est_proprietaire
+        else None
+    )
     # Arrêt de descente : le guichet doit lire la destination réelle, pas
     # seulement le terminus de la ligne.
     if colis.arret_destination_id is not None:
@@ -271,6 +283,11 @@ async def _enrichir_colis(session: AsyncSession, colis: Colis) -> Colis:
         session, colis.remis_guichet_a_id
     )
     colis.bagages = await _bagages_enrichis(session, colis_id=colis.id)
+    if not est_proprietaire:
+        colis.bagages = [
+            bagage.model_copy(update={"code_clair": None, "qr_code_url": None})
+            for bagage in colis.bagages
+        ]
     photo = chemin_photo_colis(colis.photo_chemin)
     expiration_photo = (
         colis.livre_le + timedelta(days=7)
@@ -1383,7 +1400,9 @@ async def enregistrer_colis(
             "voyage_id": str(colis.voyage_id) if colis.voyage_id else None,
         },
     )
-    await _enrichir_colis(session, colis)
+    await _enrichir_colis(
+        session, colis, utilisateur_id=utilisateur_courant.id
+    )
     ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
     return {"colis": colis, "ticket": ticket}
 
@@ -1428,8 +1447,18 @@ async def synchroniser_colis_hors_ligne(
         )
         existant = deja.scalar_one_or_none()
         if existant is not None:
+            if existant.enregistre_par_id != utilisateur_courant.id:
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "Vous ne pouvez pas consulter ce reçu : seul l'agent qui "
+                        "a enregistré le colis peut l'imprimer."
+                    ),
+                )
             ticket_existant = await session.get(Ticket, existant.ticket_id)
-            await _enrichir_colis(session, existant)
+            await _enrichir_colis(
+                session, existant, utilisateur_id=utilisateur_courant.id
+            )
             if ticket_existant is not None:
                 ticket_existant.qr_code_url = construire_url_qr_durable(
                     ticket_existant.qr_token
@@ -1460,7 +1489,17 @@ async def synchroniser_colis_hors_ligne(
                 if gagnant.ticket_id is not None
                 else None
             )
-            await _enrichir_colis(session, gagnant)
+            if gagnant.enregistre_par_id != utilisateur_courant.id:
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "Vous ne pouvez pas consulter ce reçu : seul l'agent qui "
+                        "a enregistré le colis peut l'imprimer."
+                    ),
+                )
+            await _enrichir_colis(
+                session, gagnant, utilisateur_id=utilisateur_courant.id
+            )
             if ticket_gagnant is not None:
                 ticket_gagnant.qr_code_url = construire_url_qr_durable(
                     ticket_gagnant.qr_token
@@ -1468,7 +1507,9 @@ async def synchroniser_colis_hors_ligne(
             resultats.append({"colis": gagnant, "ticket": ticket_gagnant})
             continue
         nouveaux_colis.append(str(colis.id))
-        await _enrichir_colis(session, colis)
+        await _enrichir_colis(
+            session, colis, utilisateur_id=utilisateur_courant.id
+        )
         ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
         resultats.append({"colis": colis, "ticket": ticket})
 
@@ -1524,7 +1565,9 @@ async def lister_colis(
         cree_jusqu_a=cree_jusqu_a,
     )
     for colis in colis_liste:
-        await _enrichir_colis(session, colis)
+        await _enrichir_colis(
+            session, colis, utilisateur_id=utilisateur_courant.id
+        )
     return schemas.ReponseListe(elements=colis_liste, total=total, page=page, par_page=par_page)
 
 
@@ -1538,7 +1581,9 @@ async def lister_mes_colis(
         session, 1, 100, utilisateur=utilisateur_courant
     )
     for colis in colis_liste:
-        await _enrichir_colis(session, colis)
+        await _enrichir_colis(
+            session, colis, utilisateur_id=utilisateur_courant.id
+        )
     return schemas.ReponseListe(elements=colis_liste, total=total, page=1, par_page=100)
 
 
@@ -1559,7 +1604,9 @@ async def affecter_colis(
     découle automatiquement, et l'affectation est tracée dans la timeline.
     """
     colis = await service.affecter_colis(session, colis_id, donnees, utilisateur_courant)
-    await _enrichir_colis(session, colis)
+    await _enrichir_colis(
+        session, colis, utilisateur_id=utilisateur_courant.id
+    )
     return colis
 
 
@@ -1650,7 +1697,7 @@ async def _est_participant_colis(
 @routeur_colis.get(
     "/mes/{colis_id}",
     response_model=schemas.ColisEnregistre,
-    summary="Voir le ticket d'un colis associé à mon compte",
+    summary="Voir le ticket d'un colis que j'ai enregistré",
 )
 async def voir_mon_ticket_colis(
     colis_id: UUID,
@@ -1658,12 +1705,20 @@ async def voir_mon_ticket_colis(
     session: AsyncSession = Depends(obtenir_session),
 ):
     colis = await service.obtenir_colis(session, colis_id)
-    if not await _est_participant_colis(session, colis, utilisateur_courant):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Colis introuvable")
+    if colis.enregistre_par_id != utilisateur_courant.id:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Vous ne pouvez pas consulter ce reçu : seul l'agent qui a "
+                "enregistré le colis peut l'imprimer."
+            ),
+        )
     ticket = await session.get(Ticket, colis.ticket_id) if colis.ticket_id else None
     if ticket is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Ticket introuvable")
-    await _enrichir_colis(session, colis)
+    await _enrichir_colis(
+        session, colis, utilisateur_id=utilisateur_courant.id
+    )
     ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
     return {"colis": colis, "ticket": ticket}
 
@@ -1726,7 +1781,9 @@ async def modifier_colis(
             "champs_modifies": sorted(donnees.model_dump(exclude_unset=True)),
         },
     )
-    return await _enrichir_colis(session, colis)
+    return await _enrichir_colis(
+        session, colis, utilisateur_id=utilisateur_courant.id
+    )
 
 
 @routeur_colis.post("/{colis_id}/reception",
@@ -1742,7 +1799,9 @@ async def confirmer_reception_colis(
     colis = await service.confirmer_reception_colis(
         session, colis_id, utilisateur_courant
     )
-    return await _enrichir_colis(session, colis)
+    return await _enrichir_colis(
+        session, colis, utilisateur_id=utilisateur_courant.id
+    )
 
 
 @routeur_colis.post(
@@ -1760,7 +1819,9 @@ async def refuser_reception_colis(
     colis = await service.refuser_reception_colis(
         session, colis_id, utilisateur_courant, donnees.motif
     )
-    return await _enrichir_colis(session, colis)
+    return await _enrichir_colis(
+        session, colis, utilisateur_id=utilisateur_courant.id
+    )
 
 
 @routeur_colis.post("/{colis_id}/remise-guichet",
@@ -1788,7 +1849,9 @@ async def remettre_colis_au_guichet(
             "gare_id": str(colis.gare_arrivee_id) if colis.gare_arrivee_id else None,
         },
     )
-    return await _enrichir_colis(session, colis)
+    return await _enrichir_colis(
+        session, colis, utilisateur_id=utilisateur_courant.id
+    )
 
 
 @routeur_colis.get("/{colis_id}/evenements",
@@ -1919,7 +1982,9 @@ async def confirmer_remise(
         "Remise d'un colis confirmée par le code du destinataire.",
         {"colis_id": str(colis_id)},
     )
-    return await _enrichir_colis(session, colis)
+    return await _enrichir_colis(
+        session, colis, utilisateur_id=utilisateur_courant.id
+    )
 
 
 @routeur_colis.get("/{code}", response_model=schemas.ColisResponse,
@@ -1937,7 +2002,9 @@ async def obtenir_colis(
         and colis.enregistre_par_id != utilisateur_courant.id
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Colis introuvable")
-    return await _enrichir_colis(session, colis)
+    return await _enrichir_colis(
+        session, colis, utilisateur_id=utilisateur_courant.id
+    )
 
 
 # ─── Scans ──────────────────────────────────────────────────────────
@@ -1978,7 +2045,9 @@ async def scanner_ticket(
     )
     colis = resultat.get("colis")
     if colis is not None:
-        await _enrichir_colis(session, colis)
+        await _enrichir_colis(
+            session, colis, utilisateur_id=utilisateur_courant.id
+        )
     suivi = resultat.get("suivi")
     if suivi is not None:
         resultat["suivi"] = await _enrichir_suivi_familial(session, suivi)
@@ -1987,7 +2056,11 @@ async def scanner_ticket(
         await _enrichir_evenement(session, evenement)
     ticket = resultat.get("ticket")
     if ticket is not None:
-        ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
+        if colis is None or colis.enregistre_par_id == utilisateur_courant.id:
+            ticket.qr_code_url = construire_url_qr_durable(ticket.qr_token)
+        else:
+            ticket.qr_token = ""
+            ticket.qr_code_url = None
     return resultat
 
 

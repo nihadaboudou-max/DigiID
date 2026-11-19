@@ -118,7 +118,9 @@ function Contenu() {
         if (!ignore) {
           setErreurRecu(
             e instanceof ErreurAPI
-              ? e.message_utilisateur
+              ? e.code_http === 403
+                ? "Vous ne pouvez pas consulter ce reçu : seul l'agent qui a enregistré le colis peut l'imprimer."
+                : e.message_utilisateur
               : "Impossible de charger le reçu de ce colis.",
           );
         }
