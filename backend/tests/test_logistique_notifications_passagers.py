@@ -92,6 +92,9 @@ def _preparer_notification(monkeypatch, *, type_passager="enfant"):
     monkeypatch.setattr(service, "obtenir_ticket_du_suivi", ticket_suivi)
     monkeypatch.setattr(service, "_compte_par_telephone", compte_par_telephone)
     monkeypatch.setattr(service, "nom_complet", lambda _utilisateur: "Amadou Diallo")
+    monkeypatch.setattr(
+        service, "telephone_utilisateur", lambda _utilisateur: "+2290123456789"
+    )
     monkeypatch.setattr(service, "envoyer_whatsapp", envoyer_whatsapp)
     monkeypatch.setattr(service, "envoyer_sms", envoyer_sms)
     return (
@@ -117,6 +120,11 @@ def test_depart_passager_envoie_template_et_notification_plateforme_sans_doublon
         appels_whatsapp,
         appels_sms,
     ) = _preparer_notification(monkeypatch)
+    monkeypatch.setattr(
+        service.parametres,
+        "whatsapp_template_depart_passager_name",
+        "template_depart_passager_configure",
+    )
     monkeypatch.setattr(service.parametres, "sms_twilio_account_sid", "")
     monkeypatch.setattr(service.parametres, "sms_twilio_auth_token", "")
     monkeypatch.setattr(service.parametres, "sms_twilio_from", "")
@@ -134,7 +142,7 @@ def test_depart_passager_envoie_template_et_notification_plateforme_sans_doublon
     telephone, message, options = appels_whatsapp[0]
     assert telephone == "+2290190123456"
     assert options == {
-        "nom_template": "digiid_depart_passager",
+        "nom_template": "template_depart_passager_configure",
         "langue_template": "fr",
         "parametres_template": [
             "Enfant",
@@ -144,12 +152,14 @@ def test_depart_passager_envoie_template_et_notification_plateforme_sans_doublon
             "11:05",
             ticket.code_clair,
             "Amadou Diallo",
+            "+2290123456789",
         ],
     }
     assert message == (
         "DigiID : le départ a eu lieu. Passager : Aïcha (Enfant), "
         "de Gare départ (Cotonou) vers Gare arrivée (Parakou). Départ à 11:05. "
-        "Ticket : ENF-2025-000123. Chauffeur : Amadou Diallo. "
+        "Ticket : ENF-2025-000123. Chauffeur : Amadou Diallo, "
+        "joignable au +2290123456789. "
         "Vous serez prévenu à l'approche et à l'arrivée."
     )
     assert appels_sms == []
@@ -208,6 +218,11 @@ def test_arrivee_passager_utilise_arret_et_sms_en_secours(monkeypatch):
         appels_whatsapp,
         appels_sms,
     ) = _preparer_notification(monkeypatch)
+    monkeypatch.setattr(
+        service.parametres,
+        "whatsapp_template_arrivee_passager_name",
+        "template_arrivee_passager_configure",
+    )
     monkeypatch.setattr(service.parametres, "sms_twilio_account_sid", "AC-test")
     monkeypatch.setattr(service.parametres, "sms_twilio_auth_token", "token-test")
     monkeypatch.setattr(service.parametres, "sms_twilio_from", "+22900000000")
@@ -234,7 +249,10 @@ def test_arrivee_passager_utilise_arret_et_sms_en_secours(monkeypatch):
         )
     )
 
-    assert appels_whatsapp[0][2]["nom_template"] == "digiid_arrivee_passager"
+    assert (
+        appels_whatsapp[0][2]["nom_template"]
+        == "template_arrivee_passager_configure"
+    )
     assert appels_whatsapp[0][2]["langue_template"] == "fr"
     assert appels_whatsapp[0][2]["parametres_template"] == [
         "Enfant",

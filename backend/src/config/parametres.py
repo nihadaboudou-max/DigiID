@@ -271,6 +271,20 @@ class ParametresApplication(BaseSettings):
             "whatsapp_template_arrivee_name",
         ),
     )
+    whatsapp_template_depart_passager_name: str = Field(
+        default="digiid_depart_passager",
+        validation_alias=AliasChoices(
+            "WHATSAPP_TEMPLATE_DEPART_PASSAGER_NAME",
+            "whatsapp_template_depart_passager_name",
+        ),
+    )
+    whatsapp_template_arrivee_passager_name: str = Field(
+        default="digiid_arrivee_passager",
+        validation_alias=AliasChoices(
+            "WHATSAPP_TEMPLATE_ARRIVEE_PASSAGER_NAME",
+            "whatsapp_template_arrivee_passager_name",
+        ),
+    )
     whatsapp_template_approche_name: str = Field(
         default="digiid_approche_v2",
         validation_alias=AliasChoices(

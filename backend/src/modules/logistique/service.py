@@ -22,7 +22,10 @@ from src.modeles import (
 from src.modeles.paiement import TransactionPaiement
 from src.modules.logistique import schemas
 from src.modules.gamification.service_notifications import creer_notification
-from src.modules.identite_digiid.service import nom_complet
+from src.modules.identite_digiid.service import (
+    nom_complet,
+    telephone as telephone_utilisateur,
+)
 from src.noyau import dechiffrer_donnee, journal
 from src.noyau.constantes_roles import RoleUtilisateur
 from src.noyau.journal import enregistrer_evenement_audit
@@ -3097,7 +3100,12 @@ async def enregistrer_scan(
     # 5. SMS d'information au destinataire / expéditeur (S7) : départ, mise en
     #    transit, arrivée, livraison. Traçé dans ``notifications_logistique``.
     await _notifier_scan_colis(
-        session, colis, ticket, donnees.type_evenement, donnees.gare_id
+        session,
+        colis,
+        ticket,
+        donnees.type_evenement,
+        donnees.gare_id,
+        acteur=utilisateur,
     )
     messages_evenement = {
         "depart": ("Colis en route", "vient de prendre le départ"),
@@ -3559,6 +3567,8 @@ async def _notifier_scan_colis(
     ticket: Ticket,
     type_evenement: str,
     gare_id: UUID | None,
+    *,
+    acteur: Utilisateur | None = None,
 ) -> None:
     """Alerte par SMS le destinataire (et l'expéditeur) lors d'un scan de colis.
 
@@ -3591,6 +3601,16 @@ async def _notifier_scan_colis(
         lieu_template = (
             await _libelle_gare(session, colis.gare_arrivee_id) or "destination"
         )
+        chauffeur_nom = nom_complet(acteur) if acteur is not None else "Chauffeur"
+        chauffeur_telephone = (
+            telephone_utilisateur(acteur) if acteur is not None else None
+        )
+        if not chauffeur_telephone:
+            journal.warning(
+                f"[WHATSAPP] Numéro du chauffeur non renseigné pour le départ "
+                f"colis={colis.id} acteur={acteur.id if acteur else 'inconnu'}"
+            )
+            chauffeur_telephone = "numéro non renseigné"
     elif type_evenement == "arrivee":
         lieu_template = lieu or "destination"
     else:
@@ -3604,15 +3624,22 @@ async def _notifier_scan_colis(
         if not telephone or telephone in vus:
             continue
         vus.add(telephone)
-        valeurs_template = (
-            [
+        if type_evenement == "depart":
+            valeurs_template = [
+                (nom or "Client").strip() or "Client",
+                ticket.code_clair,
+                lieu_template,
+                chauffeur_nom,
+                chauffeur_telephone,
+            ]
+        elif type_evenement == "arrivee":
+            valeurs_template = [
                 (nom or "Client").strip() or "Client",
                 ticket.code_clair,
                 lieu_template,
             ]
-            if type_evenement in ("depart", "arrivee")
-            else None
-        )
+        else:
+            valeurs_template = None
         _ajouter_notification(
             session,
             type_cible="colis",
@@ -4735,7 +4762,14 @@ async def valider_depart_voyage(
                 f"Votre colis {ticket.code_clair} vient de prendre le départ. "
                 "Touchez pour consulter le ticket.",
             )
-        await _notifier_scan_colis(session, colis, ticket, "depart", colis.gare_depart_id)
+        await _notifier_scan_colis(
+            session,
+            colis,
+            ticket,
+            "depart",
+            colis.gare_depart_id,
+            acteur=utilisateur,
+        )
         nb_colis += 1
 
     nb_passagers = 0
@@ -5671,16 +5705,27 @@ async def _notifier_suivi(
     code_ticket = ticket.code_clair if ticket is not None else "indisponible"
     gare_depart = gare_depart or "gare de départ"
     gare_arrivee = gare_arrivee or "gare d'arrivée"
+    telephone_chauffeur = "numéro non renseigné"
+    if type_evenement == "depart":
+        telephone_chauffeur = (
+            telephone_utilisateur(chauffeur) if chauffeur is not None else None
+        )
+        if not telephone_chauffeur:
+            journal.warning(
+                f"[WHATSAPP] Numéro du chauffeur non renseigné pour le départ "
+                f"suivi={suivi.id} chauffeur={suivi.chauffeur_id or 'inconnu'}"
+            )
+            telephone_chauffeur = "numéro non renseigné"
 
     if type_evenement == "depart":
         message = (
             f"DigiID : le départ a eu lieu. Passager : {prenom_passager} "
             f"({type_passager}), de {gare_depart} vers {gare_arrivee}. "
             f"Départ à {heure}. Ticket : {code_ticket}. "
-            f"Chauffeur : {nom_chauffeur}. "
+            f"Chauffeur : {nom_chauffeur}, joignable au {telephone_chauffeur}. "
             "Vous serez prévenu à l'approche et à l'arrivée."
         )
-        nom_template = "digiid_depart_passager"
+        nom_template = parametres.whatsapp_template_depart_passager_name
         titre = "Départ du passager"
     else:
         message = (
@@ -5689,7 +5734,7 @@ async def _notifier_suivi(
             f"{gare_depart}. Arrivée à {heure}. Ticket : {code_ticket}. "
             f"Chauffeur : {nom_chauffeur}."
         )
-        nom_template = "digiid_arrivee_passager"
+        nom_template = parametres.whatsapp_template_arrivee_passager_name
         titre = "Arrivée du passager"
 
     parametres_template = [
@@ -5701,6 +5746,9 @@ async def _notifier_suivi(
         code_ticket,
         nom_chauffeur,
     ]
+    if type_evenement == "depart":
+        parametres_template.append(telephone_chauffeur)
+
     destinataires = (
         (
             "parent" if suivi.type_passager == "enfant" else "passager",

@@ -275,7 +275,7 @@ class TestPartageChauffeurGuichet:
             ("arrivee", "arrivee"),
         ],
     )
-    def test_depart_et_arrivee_incluent_les_trois_variables_meta(
+    def test_depart_inclut_cinq_variables_et_arrivee_en_garde_trois(
         self, monkeypatch, type_evenement, gare_notification
     ):
         monkeypatch.setattr(
@@ -286,6 +286,10 @@ class TestPartageChauffeurGuichet:
             service,
             "_ajouter_notification",
             lambda *args, **kwargs: appels.append(kwargs),
+        )
+        monkeypatch.setattr(service, "nom_complet", lambda _acteur: "Kossi Mensah")
+        monkeypatch.setattr(
+            service, "telephone_utilisateur", lambda _acteur: "+2290123456789"
         )
         colis = _colis(destinataire_nom="Ada Lovelace")
         gare_depart = uuid.uuid4()
@@ -303,21 +307,29 @@ class TestPartageChauffeurGuichet:
                 SimpleNamespace(code_clair="COL-123", qr_token="opaque-token"),
                 type_evenement,
                 gare_id,
+                acteur=SimpleNamespace(id=uuid.uuid4()),
             )
         )
 
         assert len(appels) == 1
-        assert appels[0]["parametres_template"] == [
-            "Ada Lovelace",
-            "COL-123",
-            "Gare centrale (Cotonou)",
-        ]
         if type_evenement == "depart":
+            assert appels[0]["parametres_template"] == [
+                "Ada Lovelace",
+                "COL-123",
+                "Gare centrale (Cotonou)",
+                "Kossi Mensah",
+                "+2290123456789",
+            ]
             assert (
                 "Reçu du colis : "
                 "https://digiid.example/suivi?token=opaque-token"
             ) in appels[0]["message"]
         else:
+            assert appels[0]["parametres_template"] == [
+                "Ada Lovelace",
+                "COL-123",
+                "Gare centrale (Cotonou)",
+            ]
             assert "Reçu du colis :" not in appels[0]["message"]
 
     @pytest.mark.parametrize(
